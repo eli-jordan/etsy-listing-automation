@@ -61,7 +61,7 @@ genuinely was made by another company), so a wizard can offer them as one
 confirmation rather than four questions.
 
 ``who_made: someone_else`` requires a production partner attached to the
-listing (decision 3) -- not enforced here, since resolving a *name* to a
+listing -- not enforced here, since resolving a *name* to a
 partner needs the shop's live list, which `setup` may not be able to reach.
 `plan` is where an unresolvable or missing partner blocks."""
 
@@ -87,8 +87,8 @@ class SetupAnswers:
     `within_days`), since Etsy gives the resource no title. Built
     from a live pick when the discovery step can reach the Etsy API."""
     etsy_production_partner: str | None = None
-    """By name; omitted when the shop has exactly one (decision 3's
-    resolution ladder), same free-text reasoning as ``etsy_shipping_profile``."""
+    """By name; omitted when the shop has exactly one, and free text as
+    ``etsy_shipping_profile`` is."""
 
 
 ASKED_PRINTIFY_KEYS = ("shop_name", "shop_id", "preferred_print_provider")

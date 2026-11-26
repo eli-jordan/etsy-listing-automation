@@ -144,7 +144,9 @@ class TestConfirm:
         assert _listing(workspace, "cedar-trail-2")["design"] == {
             "default": "designs/cedar-trail-2.png"
         }
-        assert _listing(workspace, "cedar-trail")["design"] == "designs/take-a-hike.png"
+        assert _listing(workspace, "cedar-trail")["design"] == {
+            "default": "designs/take-a-hike.png"
+        }
 
 
 class TestDesignReuse:

@@ -1,11 +1,9 @@
-"""The process's locks for things the workspace keys by name: listings,
-mockup templates and listing templates.
+"""The process's locks for things the workspace keys by name: listings, mockup
+templates and listing templates.
 
-A lock is keyed by the resolved directory its name becomes, casefolded, so
-names differing only in case share one (as Windows makes them one directory),
-and an in-workspace symlink alias shares its target's. The locks do not cover
-a second process, such as the CLI running beside the UI server.
-"""
+A lock is keyed by the resolved, casefolded directory its name becomes, as
+Windows makes case variants one directory, and no lock covers a second process
+such as the CLI beside the UI server."""
 
 from __future__ import annotations
 

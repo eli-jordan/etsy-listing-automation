@@ -1,5 +1,3 @@
-"""ADR-0054."""
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator

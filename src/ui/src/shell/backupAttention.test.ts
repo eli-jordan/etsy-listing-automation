@@ -157,7 +157,7 @@ describe("what runs", () => {
     target: "D:/restored",
     started_at: "2026-11-23T10:00:00Z",
     outcome,
-    percent: 0.5,
+    fraction: 0.5,
   });
 
   it.each([

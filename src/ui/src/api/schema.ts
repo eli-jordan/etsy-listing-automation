@@ -20,10 +20,8 @@ export interface paths {
     head?: never;
     /**
      * Edit Settings
-     * @description Save ``changes`` against ``revision``: 412 when the file changed since,
-     *     422 for an edit it refuses. What the save sets off is ``settings_save``'s;
-     *     this hands it the host's coordinators, and coverage jobs it queues are
-     *     queued after the response.
+     * @description Save ``changes`` against ``revision``. Coverage jobs the save queues
+     *     run after the response.
      */
     patch: operations["edit_settings_api_admin_settings_patch"];
     trace?: never;
@@ -139,8 +137,7 @@ export interface paths {
     put?: never;
     /**
      * Create Ai Run
-     * @description Start a run for a saved listing. A ``409`` either names the active run
-     *     to reattach to, or gives the readiness rule that failed.
+     * @description Start a run for a saved listing.
      */
     post: operations["create_ai_run_api_ai_runs_post"];
     delete?: never;
@@ -218,8 +215,8 @@ export interface paths {
     /**
      * Connect Repository
      * @description Copy an existing repository to local disk, check the password opens
-     *     it, then use it; answers once it is connected. A wrong password or a
-     *     folder that is not a repository is a 422, and nothing is saved.
+     *     it, then use it; answers once it is connected and saves nothing on a
+     *     refusal.
      */
     post: operations["connect_repository_api_backup_connect_post"];
     delete?: never;
@@ -278,8 +275,7 @@ export interface paths {
     /**
      * Create Repository
      * @description Create a new repository while the configured one is missing, save
-     *     its folder, and start the first backup. Refuses a folder that holds
-     *     files (409) and a missing or short password (422).
+     *     its folder, and start the first backup.
      */
     post: operations["create_repository_api_backup_repository_post"];
     delete?: never;
@@ -299,8 +295,7 @@ export interface paths {
     put?: never;
     /**
      * Start Restore
-     * @description Restore a snapshot into a new folder; 409 for the live workspace, a
-     *     folder that holds files or a restore already running.
+     * @description Restore a snapshot into a new folder.
      */
     post: operations["start_restore_api_backup_restore_post"];
     delete?: never;
@@ -340,7 +335,7 @@ export interface paths {
     put?: never;
     /**
      * Back Up Now
-     * @description Start a backup; 409 while another backup operation runs.
+     * @description Start a backup.
      */
     post: operations["back_up_now_api_backup_run_post"];
     delete?: never;
@@ -361,14 +356,12 @@ export interface paths {
     /**
      * Set Up
      * @description Write the ``backup:`` block and the password, create the repository
-     *     and the destination folders, then start the first backup. Refuses a
-     *     short password (422), a folder that holds files (409) and a destination
-     *     whose parent is missing (422), writing nothing.
+     *     and the destination folders, then start the first backup. A refusal
+     *     writes nothing.
      *
      *     When a destination already holds a backup, connects it instead, as
      *     ``/connect`` does, answering once it is copied: ``connected`` names the
-     *     destination. Refuses a password that does not open it (422, field
-     *     ``password``), part of a copy, and two different repositories (422).
+     *     destination.
      */
     post: operations["set_up_api_backup_setup_post"];
     delete?: never;
@@ -539,8 +532,7 @@ export interface paths {
     get?: never;
     /**
      * Set Reviewed
-     * @description Mark reviewed / Mark needs review (spec, *Review workflow*). Refused
-     *     for a row still queued or drafting, deleted, or never created.
+     * @description Mark reviewed / Mark needs review.
      */
     put: operations["set_reviewed_api_batches__batch_id__rows__row__reviewed_put"];
     post?: never;
@@ -878,8 +870,7 @@ export interface paths {
     put?: never;
     /**
      * Create Listing Template
-     * @description Naming the draft is what writes it (UI doc §1). The name is checked
-     *     first, so a bad one is a 400 before any source is read.
+     * @description Naming the draft is what writes it.
      */
     post: operations["create_listing_template_api_listing_templates_post"];
     delete?: never;
@@ -950,11 +941,8 @@ export interface paths {
     put?: never;
     /**
      * Rename Listing Template
-     * @description Move a listing template, whole, to a new name -- double-click the
-     *     name, exactly as a listing (UI doc §3). A taken name is a 409 and never
-     *     suffixed (spec, *Storage and identity*); the staging sessions and
-     *     batches made from it follow it by name
-     *     (:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`).
+     * @description Move a listing template, whole, to a new name. The staging sessions
+     *     and batches made from it follow it.
      */
     post: operations["rename_listing_template_api_listing_templates__name__rename_post"];
     delete?: never;
@@ -1043,13 +1031,8 @@ export interface paths {
     put?: never;
     /**
      * Create Listing
-     * @description Naming a listing is what creates it.
-     *
-     *     Mirrors PATCH exactly, one level up: a document that fails
-     *     ``Listing.model_validate`` is a **200** carrying ``field_errors`` with
-     *     nothing written. The two things a *name* can be wrong about keep their
-     *     status codes instead -- not a single path segment is the 400, and
-     *     already taken (the directory, not just ``listing.yaml``) is a 409.
+     * @description Naming a listing is what creates it. As with PATCH, a document that
+     *     will not validate writes nothing and answers 200 with ``field_errors``.
      */
     post: operations["create_listing_api_listings_post"];
     delete?: never;
@@ -1068,9 +1051,7 @@ export interface paths {
     /**
      * List Listing Media Files
      * @description The *This listing* group: the listing's own files, each with the
-     *     ``./`` ref that names it. A ``404`` for a listing that does not
-     *     exist, rather than an empty group that would look like one with nothing
-     *     in it.
+     *     ``./`` ref that names it.
      */
     get: operations["list_listing_media_files_api_listings__listing__media_files_get"];
     put?: never;
@@ -1129,11 +1110,6 @@ export interface paths {
     /**
      * Delete Listing
      * @description Delete from the listings table.
-     *
-     *     No remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering
-     *     with the row left pending. Published: 409 -- retire it instead. Confirm
-     *     is the UI's. What goes with the listing either way is
-     *     :func:`~etsy_listings.core.application.listing_identity.delete_listing`'s.
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
@@ -1204,10 +1180,8 @@ export interface paths {
     /**
      * Get Market Snapshot
      * @description The listing's latest market research, as the top listings panel shows
-     *     it after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose
-     *     search succeeded, so a failed run leaves the previous one here. 404 until
-     *     the first search -- the panel is not rendered then -- and for a snapshot
-     *     that no longer reads as one, which the next run replaces.
+     *     it after a reload. Written only by an AI run whose search succeeded, so a
+     *     failed run leaves the previous one here.
      */
     get: operations["get_market_snapshot_api_listings__name__market_get"];
     put?: never;
@@ -1341,7 +1315,6 @@ export interface paths {
      *     Position mode draws it: downscaled and with its transparency, unlike a list
      *     thumbnail. Resolved here for the reason :func:`scene_preview` is, so the
      *     picture under a drag and the render that replaces it print the same file.
-     *     ``404`` for a layer left bare.
      */
     get: operations["scene_artwork_picture_api_listings__name__scene_artwork_get"];
     put?: never;
@@ -1543,12 +1516,7 @@ export interface paths {
     put?: never;
     /**
      * Create Run
-     * @description A ``409`` names the run already holding one of these listings, so the
-     *     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-     *     retrying into the same refusal. A workspace or batch apply that is not
-     *     exactly its review is a ``409`` too, carrying the refusal's message, and
-     *     so is a batch plan with nothing to deploy; a batch nobody holds is a
-     *     ``404``.
+     * @description Queue a plan or apply run.
      */
     post: operations["create_run_api_runs_post"];
     delete?: never;
@@ -1570,8 +1538,8 @@ export interface paths {
     post?: never;
     /**
      * Cancel Run
-     * @description Cancel a queued or running **plan**. An ``apply`` is always refused
-     *     (leaving the page never cancels one), and so is a finished run.
+     * @description Cancel a queued or running plan. Leaving the page never cancels an
+     *     apply.
      */
     delete: operations["cancel_run_api_runs__run_id__delete"];
     options?: never;
@@ -1832,8 +1800,7 @@ export interface paths {
     /**
      * Assign Kind
      * @description The first calibration step: say what this template is, and get the
-     *     starting ``template.yaml`` for that shape. Refused for a template that
-     *     already has one -- changing kind would discard its calibration.
+     *     starting ``template.yaml`` for that shape.
      */
     post: operations["assign_kind_api_templates__name__kind_post"];
     delete?: never;
@@ -2001,10 +1968,7 @@ export interface paths {
     put?: never;
     /**
      * Rename Template
-     * @description Move a template, and everything naming it, to a new name
-     *     (:mod:`~etsy_listings.core.application.template_rename`). A taken name, a
-     *     running deploy or a preparing template is a ``409``; an unusable name is a
-     *     ``400``.
+     * @description Move a template, and everything naming it, to a new name.
      */
     post: operations["rename_template_api_templates__name__rename_post"];
     delete?: never;
@@ -2252,12 +2216,18 @@ export interface components {
        * @enum {string}
        */
       phase: "queued" | "running" | "done" | "failed" | "cancelled";
-      /** Started At */
+      /**
+       * Started At
+       * @description When the run began working: ``created_at``, or later when a backup's
+       *     pause held it; ``None`` while it is held.
+       */
       started_at: string | null;
       /** Steps */
       steps: components["schemas"]["WorkflowStep"][];
       /**
        * Waiting For Backup
+       * @description Held by a backup's pause: accepted and queued, starting once the backup
+       *     step ends. Never stored.
        * @default false
        */
       waiting_for_backup: boolean;
@@ -2299,12 +2269,18 @@ export interface components {
        * @enum {string}
        */
       phase: "queued" | "running" | "done" | "failed" | "cancelled";
-      /** Started At */
+      /**
+       * Started At
+       * @description When the run began working: ``created_at``, or later when a backup's
+       *     pause held it; ``None`` while it is held.
+       */
       started_at: string | null;
       /** Steps */
       steps: components["schemas"]["WorkflowStep"][];
       /**
        * Waiting For Backup
+       * @description Held by a backup's pause: accepted and queued, starting once the backup
+       *     step ends. Never stored.
        * @default false
        */
       waiting_for_backup: boolean;
@@ -2337,7 +2313,10 @@ export interface components {
     };
     /** ApplyRunDetail */
     ApplyRunDetail: {
-      /** Batch Id */
+      /**
+       * Batch Id
+       * @description The listing batch a ``batch``-scoped run deploys.
+       */
       batch_id?: string | null;
       /**
        * Created At
@@ -2373,6 +2352,7 @@ export interface components {
       phase: "queued" | "applying" | "applied" | "failed" | "stale";
       /**
        * Publish
+       * @description Whether this run publishes new and still-draft listings.
        * @default false
        */
       publish: boolean;
@@ -2387,13 +2367,18 @@ export interface components {
       seen: boolean;
       /**
        * Waiting For Backup
+       * @description Held by a backup's pause: accepted and queued, starting once the backup
+       *     step ends. Never stored.
        * @default false
        */
       waiting_for_backup: boolean;
     };
     /** ApplyRunSummary */
     ApplyRunSummary: {
-      /** Batch Id */
+      /**
+       * Batch Id
+       * @description The listing batch a ``batch``-scoped run deploys.
+       */
       batch_id?: string | null;
       /**
        * Created At
@@ -2416,6 +2401,7 @@ export interface components {
       phase: "queued" | "applying" | "applied" | "failed" | "stale";
       /**
        * Publish
+       * @description Whether this run publishes new and still-draft listings.
        * @default false
        */
       publish: boolean;
@@ -2430,6 +2416,8 @@ export interface components {
       seen: boolean;
       /**
        * Waiting For Backup
+       * @description Held by a backup's pause: accepted and queued, starting once the backup
+       *     step ends. Never stored.
        * @default false
        */
       waiting_for_backup: boolean;
@@ -2448,13 +2436,22 @@ export interface components {
      *     onto a new machine, by copying it to local disk first.
      */
     BackupConnectRequest: {
-      /** Password */
+      /**
+       * Password
+       * @description Only read when no password is stored.
+       */
       password?: string | null;
-      /** Repository */
+      /**
+       * Repository
+       * @description The local folder to copy into: new or empty.
+       */
       repository: string;
       /** Revision */
       revision: string;
-      /** Source */
+      /**
+       * Source
+       * @description The repository to copy from; only read.
+       */
       source: string;
     };
     /**
@@ -2462,29 +2459,47 @@ export interface components {
      * @description The backup set-up connected instead of creating one.
      */
     BackupConnected: {
-      /** Destination */
+      /**
+       * Destination
+       * @description The destination it was copied from.
+       */
       destination: string;
-      /** Notice */
+      /**
+       * Notice
+       * @description Set when its snapshots name several workspaces, so this workspace
+       *     got a new workspace ID and starts its own retention.
+       */
       notice?: string | null;
       /** Snapshots */
       snapshots: number;
     };
     /** BackupHistoryResponse */
     BackupHistoryResponse: {
-      /** Runs */
+      /**
+       * Runs
+       * @description Newest first, failed runs included.
+       */
       runs: components["schemas"]["HistoryEntry"][];
     };
     /**
      * BackupNewRepositoryRequest
-     * @description Create a new repository while the configured one is missing
-     *     (workspace-backup spec, *Missing repository*).
+     * @description Create a new repository while the configured one is missing.
      */
     BackupNewRepositoryRequest: {
-      /** Password */
+      /**
+       * Password
+       * @description Only read when no password is stored.
+       */
       password?: string | null;
-      /** Repository */
+      /**
+       * Repository
+       * @description The folder the seller confirmed: new or empty.
+       */
       repository: string;
-      /** Revision */
+      /**
+       * Revision
+       * @description ``settings.yaml``'s revision from ``GET /api/admin/settings``.
+       */
       revision: string;
     };
     /** BackupOverview */
@@ -2498,16 +2513,21 @@ export interface components {
       enabled: boolean;
       /** Interval Hours */
       interval_hours?: number | null;
-      /** Last Success */
+      /**
+       * Last Success
+       * @description The newest snapshot's time, from restic.
+       */
       last_success?: string | null;
       /** Next Due */
       next_due?: string | null;
       /**
        * Password Min Length
+       * @description The shortest password set-up and Create a new repository accept.
        * @default 12
        */
       password_min_length: number;
       repository?: components["schemas"]["RepositoryOverview"] | null;
+      /** @description The latest restore since the app started. */
       restore?: components["schemas"]["RestoreStatus"] | null;
       running?: components["schemas"]["RunningBackup"] | null;
       /**
@@ -2521,7 +2541,11 @@ export interface components {
      * @description Set-up's, create's and connect's refusals.
      */
     BackupRefusal: {
-      /** Connect From */
+      /**
+       * Connect From
+       * @description Create refused because this destination holds a repository's copy:
+       *     connect it instead.
+       */
       connect_from?: string | null;
       /** Field Errors */
       field_errors?: {
@@ -2529,6 +2553,8 @@ export interface components {
       };
       /**
        * Kind
+       * @description As a settings save's, plus ``conflict`` (409): a folder that holds
+       *     files or a repository's copy.
        * @enum {string}
        */
       kind: "stale" | "conflict" | "invalid";
@@ -2537,7 +2563,10 @@ export interface components {
     };
     /** BackupRepairRequest */
     BackupRepairRequest: {
-      /** Destination */
+      /**
+       * Destination
+       * @description As ``settings.yaml`` names it.
+       */
       destination: string;
     };
     /** BackupRepairResponse */
@@ -2548,22 +2577,32 @@ export interface components {
       moved: string[];
       /**
        * Outcome
+       * @description How the copy after it went.
        * @enum {string}
        */
       outcome: "copied" | "unreachable" | "changed" | "damaged" | "failed" | "stopped";
-      /** Set Aside */
+      /**
+       * Set Aside
+       * @description ``<destination>-set-aside-<date>``; ``None`` when nothing was moved.
+       */
       set_aside: string | null;
     };
     /** BackupRestoreRequest */
     BackupRestoreRequest: {
-      /** Snapshot */
+      /**
+       * Snapshot
+       * @description An id, its start, or ``latest``.
+       */
       snapshot: string;
-      /** Target */
+      /**
+       * Target
+       * @description A new or empty folder, as a full path.
+       */
       target: string;
     };
     /**
      * BackupSetUpRequest
-     * @description The set-up form (workspace-backup interactions, *Set up and Setup*).
+     * @description The backup set-up form.
      */
     BackupSetUpRequest: {
       /** Destinations */
@@ -2579,7 +2618,10 @@ export interface components {
       /** Repository */
       repository: string;
       retention?: components["schemas"]["RetentionSettings"];
-      /** Revision */
+      /**
+       * Revision
+       * @description ``settings.yaml``'s revision from ``GET /api/admin/settings``.
+       */
       revision: string;
     };
     /**
@@ -2587,6 +2629,10 @@ export interface components {
      * @description The status once set up, and what set-up connected, if anything.
      */
     BackupSetUpResponse: {
+      /**
+       * @description Set when a destination already held a backup: set-up copied it to
+       *     the backup storage folder and uses it, instead of creating one.
+       */
       connected?: components["schemas"]["BackupConnected"] | null;
       /**
        * Destinations
@@ -2597,16 +2643,21 @@ export interface components {
       enabled: boolean;
       /** Interval Hours */
       interval_hours?: number | null;
-      /** Last Success */
+      /**
+       * Last Success
+       * @description The newest snapshot's time, from restic.
+       */
       last_success?: string | null;
       /** Next Due */
       next_due?: string | null;
       /**
        * Password Min Length
+       * @description The shortest password set-up and Create a new repository accept.
        * @default 12
        */
       password_min_length: number;
       repository?: components["schemas"]["RepositoryOverview"] | null;
+      /** @description The latest restore since the app started. */
       restore?: components["schemas"]["RestoreStatus"] | null;
       running?: components["schemas"]["RunningBackup"] | null;
       /**
@@ -2619,12 +2670,13 @@ export interface components {
      * BackupSettings
      * @description The ``backup:`` block. Paths are this machine's, and the block travels
      *     with the workspace, so a path that no longer exists is not refused here:
-     *     the backup reports a missing repository instead (spec, *Missing
-     *     repository*), and the rest of the app keeps loading its settings.
+     *     the backup reports a missing repository instead, and the rest of the app
+     *     keeps loading its settings.
      */
     BackupSettings: {
       /**
        * Destinations
+       * @description Folders the repository is copied to one way, in order.
        * @default []
        */
       destinations: string[];
@@ -2637,12 +2689,21 @@ export interface components {
       /**
        * Repository
        * Format: path
+       * @description The backup storage folder: the local restic repository.
        */
       repository: string;
-      /** Restic Binary */
+      /**
+       * Restic Binary
+       * @description Another restic to run instead of the pinned download.
+       */
       restic_binary?: string | null;
       retention?: components["schemas"]["RetentionSettings"];
-      /** Workspace Id */
+      /**
+       * Workspace Id
+       * @description A random UUID set-up writes once. Every snapshot is tagged with it and
+       *     retention groups this workspace's snapshots by it, so a renamed PC or a
+       *     moved workspace keeps one schedule. Not shown in Setup.
+       */
       workspace_id?: string | null;
     };
     /** BackupSnapshot */
@@ -2651,11 +2712,17 @@ export interface components {
       files?: number | null;
       /** Id */
       id: string;
-      /** Restore Target */
+      /**
+       * Restore Target
+       * @description The restore dialog's suggested folder for it.
+       */
       restore_target: string;
       /** Short Id */
       short_id: string;
-      /** Size */
+      /**
+       * Size
+       * @description Bytes the backup read.
+       */
       size?: number | null;
       /**
        * Time
@@ -2665,19 +2732,29 @@ export interface components {
     };
     /** BackupSnapshotsResponse */
     BackupSnapshotsResponse: {
-      /** Snapshots */
+      /**
+       * Snapshots
+       * @description Every snapshot restic lists, made by the app or by hand, newest first.
+       */
       snapshots: components["schemas"]["BackupSnapshot"][];
-      /** Workspace */
+      /**
+       * Workspace
+       * @description The live workspace, which a restore refuses.
+       */
       workspace: string;
     };
     /** BackupWarning */
     BackupWarning: {
       /**
        * Banner
+       * @description Shown on every other page and as a dot on Admin; all but ``off``.
        * @default true
        */
       banner: boolean;
-      /** Destination */
+      /**
+       * Destination
+       * @description The destination it is about, for ``behind`` and ``changed``.
+       */
       destination?: string | null;
       /**
        * Kind
@@ -2704,6 +2781,8 @@ export interface components {
       listings: string[];
       /**
        * Publish
+       * @description Publish new and still-draft listings on Etsy rather than leave drafts.
+       *     Off unless asked; an apply must repeat what its reviewed plan chose.
        * @default false
        */
       publish: boolean;
@@ -2719,6 +2798,7 @@ export interface components {
     BatchDetail: {
       /**
        * Concurrency
+       * @description ``batch_ai.concurrency``: how many rows draft at once.
        * @default 1
        */
       concurrency: number;
@@ -2744,7 +2824,7 @@ export interface components {
     };
     /**
      * BatchIndexEntry
-     * @description One row of Recent batches (UI doc §2): a confirmed batch, or a staging
+     * @description One row of Recent batches: a confirmed batch, or a staging
      *     session not confirmed yet, which reopens staging instead.
      */
     BatchIndexEntry: {
@@ -2753,17 +2833,24 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
-      /** Designs */
+      /**
+       * Designs
+       * @description Rows: the staged designs, or the batch's rows.
+       */
       designs: number;
       /**
        * Drafted
        * @default 0
        */
       drafted: number;
-      /** Expires At */
+      /**
+       * Expires At
+       * @description A staging session's: seven days after its last edit.
+       */
       expires_at?: string | null;
       /**
        * Failures
+       * @description *N need retry*: a count beside the progress, never a status.
        * @default 0
        */
       failures: number;
@@ -2780,6 +2867,7 @@ export interface components {
       listing_template: string;
       /**
        * Listings
+       * @description Rows with a listing now: created and not deleted.
        * @default 0
        */
       listings: number;
@@ -2795,13 +2883,14 @@ export interface components {
       status: "staging" | "drafting" | "in_review" | "complete" | "stopped";
       /**
        * Undrafted
+       * @description Listings **Cancel batch** left for Resume.
        * @default 0
        */
       undrafted: number;
     };
     /**
      * BatchPatch
-     * @description Rename the batch (UI doc §7): its label only, never its identity.
+     * @description Rename the batch: its label only, never its identity.
      */
     BatchPatch: {
       /** Label */
@@ -2810,7 +2899,7 @@ export interface components {
     /**
      * BatchPlanRequest
      * @description Plan the reviewed rows of one listing batch that have changes to
-     *     deploy (ADR-0059); the server resolves which.
+     *     deploy; the server resolves which.
      */
     BatchPlanRequest: {
       /** Batch Id */
@@ -2822,6 +2911,8 @@ export interface components {
       kind: "plan";
       /**
        * Publish
+       * @description Publish new and still-draft listings on Etsy rather than leave drafts.
+       *     Off unless asked; an apply must repeat what its reviewed plan chose.
        * @default false
        */
       publish: boolean;
@@ -2833,7 +2924,10 @@ export interface components {
     };
     /** BatchRowDetail */
     BatchRowDetail: {
-      /** Ai */
+      /**
+       * Ai
+       * @description The row's AI work; ``None`` until its listing exists.
+       */
       ai?:
         | (
             | "queued"
@@ -2849,6 +2943,7 @@ export interface components {
       ai_error?: string | null;
       /**
        * Ai Steps
+       * @description The live run's nodes while running, else the last run's as it ended.
        * @default []
        */
       ai_steps: components["schemas"]["WorkflowStep"][];
@@ -2859,11 +2954,14 @@ export interface components {
       creation: "pending" | "created" | "failed";
       /**
        * Deleted
+       * @description The listing was deleted; the row stays, struck through.
        * @default false
        */
       deleted: boolean;
       /**
        * Deployable
+       * @description Whether Deploy reviewed takes this row: reviewed, with changes its
+       *     last apply did not deploy.
        * @default false
        */
       deployable: boolean;
@@ -2873,19 +2971,33 @@ export interface components {
       error: string | null;
       /** Id */
       id: string;
-      /** Name */
+      /**
+       * Name
+       * @description The name actually created, which confirm may have suffixed.
+       */
       name: string;
-      /** Proposal */
+      /**
+       * Proposal
+       * @description The listing's cached proposal: sections waiting and current,
+       *     waiting but out of date, or every section dealt with.
+       */
       proposal?: ("ready" | "stale" | "resolved") | null;
-      /** Queue Position */
+      /**
+       * Queue Position
+       * @description 1 for the next row to start, across every batch; ``None`` unless
+       *     queued.
+       */
       queue_position?: number | null;
       /**
        * Reviewable
+       * @description Whether Mark reviewed is offered: not on a queued, drafting, deleted
+       *     or never-created row.
        * @default false
        */
       reviewable: boolean;
       /**
        * Reviewed
+       * @description The seller's own judgement.
        * @default false
        */
       reviewed: boolean;
@@ -2898,6 +3010,8 @@ export interface components {
       stale_reasons: string[];
       /**
        * Waiting For Backup
+       * @description Held by a backup's pause: accepted and queued, starting once the backup
+       *     step ends. Never stored.
        * @default false
        */
       waiting_for_backup: boolean;
@@ -2905,14 +3019,16 @@ export interface components {
     /**
      * BelowCostRow
      * @description One variant priced under what Printify charges to make it -- the
-     *     row `plan()` already refuses over ( :func:`_below_cost`), named for the
-     *     before/after review rather than left as a bare variant id.
+     *     row `plan()` already refuses over, named for the before/after review
+     *     rather than left as a bare variant id.
      */
     BelowCostRow: {
       /** Colour */
       colour: string;
       /**
        * Cost
+       * @description USD, as Printify reports it: not necessarily ``price``'s currency, and
+       *     never converted.
        * @example 349 NOK
        */
       cost: string;
@@ -2963,7 +3079,7 @@ export interface components {
     };
     /**
      * CalibrationSaveRequest
-     * @description A single recoverable calibration transaction under ADR-0054.
+     * @description A single recoverable calibration transaction.
      */
     CalibrationSaveRequest: {
       /** Config */
@@ -2992,7 +3108,10 @@ export interface components {
        * Format: date-time
        */
       at: string;
-      /** Message */
+      /**
+       * Message
+       * @description restic's message when the check failed.
+       */
       message?: string | null;
       /** Ok */
       ok: boolean;
@@ -3067,11 +3186,15 @@ export interface components {
      * ColourReportRow
      * @description What one photo in a candidate ``colour-matrix`` set will be taken as.
      *
-     *     Reporting only: ADR-0004 makes the filename the source of truth, so there is
-     *     no manual mapping to offer and nothing here changes a name.
+     *     Reporting only: the filename is the source of truth, so nothing here
+     *     changes a name.
      */
     ColourReportRow: {
-      /** Clean */
+      /**
+       * Clean
+       * @description False when the filename is not already the slug: ``Heather Grey.png``
+       *     yields ``heather-grey``.
+       */
       clean: boolean;
       /** Colour */
       colour: string;
@@ -3087,20 +3210,32 @@ export interface components {
     CommonCopySummary: {
       /** Ref */
       ref: string;
-      /** Summary */
+      /**
+       * Summary
+       * @description The file's front-matter summary, if it has one.
+       */
       summary?: string | null;
-      /** Title */
+      /**
+       * Title
+       * @description The file's front-matter title.
+       */
       title: string;
     };
     /** ConnectionRowBody */
     ConnectionRowBody: {
-      /** Commands */
+      /**
+       * Commands
+       * @description What to run in a terminal, in order, when ``not_connected``.
+       */
       commands: string[];
       /** Problem */
       problem: string | null;
       /** Sales Channel */
       sales_channel: string | null;
-      /** Shop Currency */
+      /**
+       * Shop Currency
+       * @description The live Etsy shop's own currency, when a lookup read it.
+       */
       shop_currency: string | null;
       /** Shop Id */
       shop_id: number | null;
@@ -3130,6 +3265,8 @@ export interface components {
     CreateAiRunRequest: {
       /**
        * Draft Brief
+       * @description Draft the brief first. Only honoured while the saved brief is empty;
+       *     a run whose listing already has one skips the Brief node.
        * @default false
        */
       draft_brief: boolean;
@@ -3160,10 +3297,15 @@ export interface components {
     /**
      * CreateListingTemplateRequest
      * @description Save as listing template (``from_listing``) or Clone
-     *     (``from_template``) -- exactly one. There is no blank creation (spec).
+     *     (``from_template``) -- exactly one. There is no blank creation.
      */
     CreateListingTemplateRequest: {
-      /** Document */
+      /**
+       * Document
+       * @description The seller's edits made before naming it, as ``template.yaml`` would
+       *     hold them; absent means the draft as the source gives it. Checked as a ``PUT`` is,
+       *     and its ``./`` refs must be files the draft copies.
+       */
       document?: {
         [key: string]: unknown;
       } | null;
@@ -3210,7 +3352,11 @@ export interface components {
        * @default
        */
       lead: string;
-      /** Ref */
+      /**
+       * Ref
+       * @description A POSIX workspace reference beneath ``common-copy/``, e.g.
+       *     ``common-copy/comfort-colors.md``.
+       */
       ref?: string | null;
       /** Text */
       text?: string | null;
@@ -3275,21 +3421,35 @@ export interface components {
       changed: components["schemas"]["ChangedFile"][];
       /**
        * Icloud
+       * @description An iCloud Drive folder, which iCloud for Windows uploads.
        * @default false
        */
       icloud: boolean;
       last_check?: components["schemas"]["CheckResult"] | null;
       /** Last Copy */
       last_copy?: string | null;
-      /** Name */
+      /**
+       * Name
+       * @description What the page calls it.
+       */
       name: string;
       /** Path */
       path: string;
-      /** Problem */
+      /**
+       * Problem
+       * @description Why the latest copy did not finish, such as an unreachable folder.
+       */
       problem?: string | null;
-      /** Set Aside */
+      /**
+       * Set Aside
+       * @description The folder Repair would set ``changed`` and ``unexpected`` aside in
+       *     today; ``None`` with nothing to set aside.
+       */
       set_aside?: string | null;
-      /** Short Problem */
+      /**
+       * Short Problem
+       * @description ``problem`` in a few words, for a pill.
+       */
       short_problem?: string | null;
       /**
        * Unexpected
@@ -3374,9 +3534,17 @@ export interface components {
       description: components["schemas"]["DescriptionConfig"];
       /** Renewal */
       renewal?: ("manual" | "auto") | null;
-      /** Section */
+      /**
+       * Section
+       * @description Which shop section this listing files under, by name. There is no
+       *     shop-wide default.
+       */
       section?: string | null;
-      /** Shipping Profile */
+      /**
+       * Shipping Profile
+       * @description Overrides ``shop.yaml``'s ``etsy.listing_defaults.shipping_profile``,
+       *     by name.
+       */
       shipping_profile?: string | null;
       /**
        * Tags
@@ -3388,7 +3556,11 @@ export interface components {
        * @default
        */
       title: string;
-      /** Variation Images */
+      /**
+       * Variation Images
+       * @description The ``colour-matrix`` template whose renders become this listing's
+       *     per-colour swatches; absent means none.
+       */
       variation_images?: string | null;
     };
     /**
@@ -3415,12 +3587,10 @@ export interface components {
       /** Title */
       title?: string | null;
     };
-    /**
-     * EtsyListingSnapshot
-     * @description Both sides of the review, in full.
-     */
+    /** EtsyListingSnapshot */
     EtsyListingSnapshot: {
       desired: components["schemas"]["EtsyListingFacts"];
+      /** @description ``None`` for a listing with no Etsy id at all, not an empty one. */
       live: components["schemas"]["EtsyListingFacts"] | null;
     };
     /** EtsyListingStagePlanDTO */
@@ -3521,7 +3691,7 @@ export interface components {
     /**
      * EtsyVideosSnapshot
      * @description Both sides for the deploy review. The live side comes in Etsy's
-     *     response order, which says nothing about the gallery (decision 9).
+     *     response order, which says nothing about the gallery.
      */
     EtsyVideosSnapshot: {
       /** Desired */
@@ -3597,7 +3767,11 @@ export interface components {
       materials?: string[] | null;
       /** Name */
       name: string;
-      /** Preview Template */
+      /**
+       * Preview Template
+       * @description The ``colour-matrix`` template the Variants tab judges colours on;
+       *     ``None`` when the garment profile names none.
+       */
       preview_template?: string | null;
       /** Sizes */
       sizes: string[];
@@ -3609,10 +3783,15 @@ export interface components {
     };
     /** HistoryEntry */
     HistoryEntry: {
-      /** Kept As */
+      /**
+       * Kept As
+       * @description The retention bucket holding the run's snapshot; ``None`` once it is
+       *     forgotten, or for a run that made none.
+       */
       kept_as?: ("recent" | "weekly" | "monthly") | null;
       /**
        * Names
+       * @description Each copy's destination's display name, by path.
        * @default {}
        */
       names: {
@@ -3683,6 +3862,8 @@ export interface components {
       listings: string[];
       /**
        * Publish
+       * @description Publish new and still-draft listings on Etsy rather than leave drafts.
+       *     Off unless asked; an apply must repeat what its reviewed plan chose.
        * @default false
        */
       publish: boolean;
@@ -3694,8 +3875,8 @@ export interface components {
     };
     /**
      * ListingBatch
-     * @description The batch a listing was made by, for the editor's row above the head
-     *     (UI doc §8): Back to batch and Mark reviewed.
+     * @description The batch a listing was made by, for the editor's row above the head:
+     *     Back to batch and Mark reviewed.
      */
     ListingBatch: {
       /** Batch Id */
@@ -3711,7 +3892,11 @@ export interface components {
     };
     /** ListingDesignSummary */
     ListingDesignSummary: {
-      /** File */
+      /**
+       * File
+       * @description Workspace-relative path under ``designs/``, e.g.
+       *     ``designs/take-a-hike.png``.
+       */
       file: string;
       /** Name */
       name: string;
@@ -3730,6 +3915,9 @@ export interface components {
       colors: string[];
       /**
        * Description Composed
+       * @description The final `etsy.description` text, as `Workspace.compose_description`
+       *     joins it: what the Details tab's preview renders. The lead alone when
+       *     ``ref`` does not resolve; an issue says why.
        * @default
        */
       description_composed: string;
@@ -3740,7 +3928,12 @@ export interface components {
       design: {
         [key: string]: string | null;
       };
-      /** Design Content Hash */
+      /**
+       * Design Content Hash
+       * @description Hash of the selected design refs and bytes, for AI proposal
+       *     staleness; an unreadable file hashes as a stable marker. ``None`` only with
+       *     no design.
+       */
       design_content_hash?: string | null;
       /**
        * @default {
@@ -3756,6 +3949,9 @@ export interface components {
       etsy_listing_id?: number | null;
       /**
        * Field Errors
+       * @description Set only when a PATCH's candidate failed validation: nothing was
+       *     written, and every other field describes the listing as it was. Empty on
+       *     every GET and every successful PATCH.
        * @default {}
        */
       field_errors: {
@@ -3763,7 +3959,11 @@ export interface components {
       };
       /** Garment Brand */
       garment_brand?: string | null;
-      /** Garment Materials */
+      /**
+       * Garment Materials
+       * @description Fibre materials from the selected garment profile, read-only: a
+       *     listing never stores them.
+       */
       garment_materials?: string[] | null;
       /** Garment Model */
       garment_model?: string | null;
@@ -3773,6 +3973,8 @@ export interface components {
       garment_profile: string;
       /**
        * Gestures
+       * @description The lifecycle actions the editor's action row offers, by the listings
+       *     table's rule; empty for the unsaved draft.
        * @default []
        */
       gestures: ("delete" | "retire" | "un-retire" | "cancel" | "renew")[];
@@ -3782,7 +3984,11 @@ export interface components {
       lifecycle?: ("retired" | "deleted" | "renew") | null;
       /** Media */
       media: (components["schemas"]["TemplateMediaEntry"] | string)[];
-      /** Modified At */
+      /**
+       * Modified At
+       * @description UTC modification time of ``listing.yaml``; ``None`` for an unsaved
+       *     draft.
+       */
       modified_at: string | null;
       /** Name */
       name: string;
@@ -3804,7 +4010,10 @@ export interface components {
       };
       /** Pricing Plan */
       pricing_plan?: string | null;
-      /** Pricing Plan Name */
+      /**
+       * Pricing Plan Name
+       * @description The resolved plan's filename stem, for display.
+       */
       pricing_plan_name?: string | null;
       /** Printify Product Id */
       printify_product_id?: string | null;
@@ -3858,7 +4067,10 @@ export interface components {
     ListingOutsideBody: {
       /** Listing */
       listing: string;
-      /** Positions */
+      /**
+       * Positions
+       * @description Dotted ``template_positions`` keys the candidate limits would refuse.
+       */
       positions: string[];
     };
     /** ListingPlanRequest */
@@ -3872,6 +4084,8 @@ export interface components {
       listings: string[];
       /**
        * Publish
+       * @description Publish new and still-draft listings on Etsy rather than leave drafts.
+       *     Off unless asked; an apply must repeat what its reviewed plan chose.
        * @default false
        */
       publish: boolean;
@@ -3920,7 +4134,13 @@ export interface components {
     ListingSummary: {
       /** Colour Count */
       colour_count: number;
-      /** Design */
+      /**
+       * Design
+       * @description The representative artwork's name, as
+       *     `GET /api/listing-designs/{name}/thumbnail` takes it: the first non-null
+       *     of ``default``, ``on-light``, ``on-dark``, never a colour's own design.
+       *     ``None`` with no base file chosen.
+       */
       design: string | null;
       /** Etsy Listing Id */
       etsy_listing_id?: number | null;
@@ -3928,6 +4148,8 @@ export interface components {
       garment_profile: string;
       /**
        * Gestures
+       * @description Which buttons the listings table offers for this row, from the same
+       *     facts as ``status``.
        * @default []
        */
       gestures: ("delete" | "retire" | "un-retire" | "cancel" | "renew")[];
@@ -3968,7 +4190,7 @@ export interface components {
      *     both, as `ListingDetail` is one shape for a listing and the unnamed draft.
      *
      *     A draft (``GET /draft``: Save as listing template or Clone, written
-     *     nowhere, UI doc §1) has ``name`` ``""``, no ``modified_at``, and says
+     *     nowhere) has ``name`` ``""``, no ``modified_at``, and says
      *     where it came from in ``source`` and ``assets``.
      */
     ListingTemplateDetail: {
@@ -3981,6 +4203,8 @@ export interface components {
       colors: string[];
       /**
        * Description Composed
+       * @description The body alone: a template has no lead, and each listing's own is
+       *     placed above it.
        * @default
        */
       description_composed: string;
@@ -3994,7 +4218,11 @@ export interface components {
       garment?: string | null;
       /** Garment Brand */
       garment_brand?: string | null;
-      /** Garment Materials */
+      /**
+       * Garment Materials
+       * @description Fibre materials from the selected garment profile, read-only: a
+       *     listing never stores them.
+       */
       garment_materials?: string[] | null;
       /** Garment Model */
       garment_model?: string | null;
@@ -4069,24 +4297,38 @@ export interface components {
     };
     /**
      * ListingTemplateSummary
-     * @description One card on the Listing templates page (UI doc §2).
+     * @description One card on the Listing templates page.
      */
     ListingTemplateSummary: {
       /**
        * Batch Count
+       * @description Batches made from this template, while their records last.
        * @default 0
        */
       batch_count: number;
       /** Colour Count */
       colour_count: number;
+      /**
+       * @description The smallest design the garment's print area takes; ``None`` when the
+       *     garment profile will not load.
+       */
       design_minimum?: components["schemas"]["PixelSize"] | null;
-      /** Garment */
+      /**
+       * Garment
+       * @description The garment profile's blueprint as a seller names it
+       *     (``Comfort Colors 1717``), or the profile's own name when it will not
+       *     load.
+       */
       garment: string;
       /** Media */
       media: (components["schemas"]["TemplateMediaEntry"] | string)[];
       /** Name */
       name: string;
-      /** Pricing Plan Name */
+      /**
+       * Pricing Plan Name
+       * @description The plan ref's filename stem; ``None`` when the template prices its
+       *     sizes itself.
+       */
       pricing_plan_name: string | null;
     };
     /**
@@ -4240,7 +4482,10 @@ export interface components {
      * @description One listing's latest market research, as the top listings panel reads it back.
      */
     MarketSnapshot: {
-      /** Block */
+      /**
+       * Block
+       * @description The market block the proposal was given; ``""`` for an empty result.
+       */
       block: string;
       /** Empty */
       empty: boolean;
@@ -4309,16 +4554,28 @@ export interface components {
      *     file uploaded as-is, rather than a rendered mockup.
      */
     MediaFileSummary: {
-      /** File */
+      /**
+       * File
+       * @description Workspace-relative, for display, e.g.
+       *     ``listings/take-a-hike/close-up.mp4``.
+       */
       file: string;
       /**
        * Kind
        * @enum {string}
        */
       kind: "image" | "video";
-      /** Name */
+      /**
+       * Name
+       * @description Its path under ``common-media/`` or the listing's own directory: what
+       *     the picture endpoints take.
+       */
       name: string;
-      /** Ref */
+      /**
+       * Ref
+       * @description The ref to write into ``media:`` unchanged: a shared file's
+       *     workspace-relative path, or ``./close-up.mp4`` for a listing's own.
+       */
       ref: string;
     };
     /** ModelCatalogs */
@@ -4383,6 +4640,10 @@ export interface components {
     MultipleTemplate: {
       /**
        * Colour Coverage
+       * @description How a mismatch between this photo's placement colours and a listing's
+       *     ``colors:`` is handled. ``exact``: ``plan`` fails naming the mismatch.
+       *     ``subset``: placements for colours the listing doesn't sell are skipped
+       *     and ``plan`` reports which, for one chart shared across listings.
        * @default exact
        * @enum {string}
        */
@@ -4486,10 +4747,7 @@ export interface components {
       /** Width */
       width: number;
     };
-    /**
-     * Placement
-     * @description One garment within a ``multiple``-kind scene.
-     */
+    /** Placement */
     Placement: {
       /** Bounding Box */
       bounding_box: [
@@ -4520,6 +4778,8 @@ export interface components {
       listing: string;
       /**
        * Publishable
+       * @description An apply that opts in to publishing would make this listing live on
+       *     Etsy (``Plan.publishable``).
        * @default false
        */
       publishable: boolean;
@@ -4537,14 +4797,21 @@ export interface components {
     };
     /** PlanRunDetail */
     PlanRunDetail: {
-      /** Batch Id */
+      /**
+       * Batch Id
+       * @description The listing batch a ``batch``-scoped run deploys.
+       */
       batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
        */
       created_at: string;
-      /** Events */
+      /**
+       * Events
+       * @description Every event this run has produced so far, in order: what a client
+       *     reattaching to the run replays.
+       */
       events: (
         | components["schemas"]["PhaseEvent"]
         | components["schemas"]["StageCheckingEvent"]
@@ -4573,6 +4840,7 @@ export interface components {
       phase: "queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled";
       /**
        * Publish
+       * @description Whether this run publishes new and still-draft listings.
        * @default false
        */
       publish: boolean;
@@ -4587,13 +4855,18 @@ export interface components {
       seen: boolean;
       /**
        * Waiting For Backup
+       * @description Held by a backup's pause: accepted and queued, starting once the backup
+       *     step ends. Never stored.
        * @default false
        */
       waiting_for_backup: boolean;
     };
     /** PlanRunSummary */
     PlanRunSummary: {
-      /** Batch Id */
+      /**
+       * Batch Id
+       * @description The listing batch a ``batch``-scoped run deploys.
+       */
       batch_id?: string | null;
       /**
        * Created At
@@ -4616,6 +4889,7 @@ export interface components {
       phase: "queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled";
       /**
        * Publish
+       * @description Whether this run publishes new and still-draft listings.
        * @default false
        */
       publish: boolean;
@@ -4630,6 +4904,8 @@ export interface components {
       seen: boolean;
       /**
        * Waiting For Backup
+       * @description Held by a backup's pause: accepted and queued, starting once the backup
+       *     step ends. Never stored.
        * @default false
        */
       waiting_for_backup: boolean;
@@ -4666,7 +4942,7 @@ export interface components {
     };
     /**
      * PositionedListingResponse
-     * @description A listing holding its own position for a template (ADR-0058), which a
+     * @description A listing holding its own position for a template, which a
      *     recalibration may put outside the limits. ``placements`` lists the
      *     ``multiple`` placement IDs it positions; empty for one box.
      */
@@ -4713,6 +4989,8 @@ export interface components {
       template: string;
       /**
        * Waiting For Backup
+       * @description Held by a backup's pause: accepted and queued, starting once the backup
+       *     step ends. Never stored.
        * @default false
        */
       waiting_for_backup: boolean;
@@ -4791,13 +5069,19 @@ export interface components {
     };
     /** PricingPlanSummary */
     PricingPlanSummary: {
-      /** Compatible */
+      /**
+       * Compatible
+       * @description Whether this plan declares the exact garment profile asked for.
+       */
       compatible: boolean;
       /** Garment Profile */
       garment_profile: string;
       /** Name */
       name: string;
-      /** Ref */
+      /**
+       * Ref
+       * @description Workspace-rooted, ready to PATCH into ``pricing_plan:`` unchanged.
+       */
       ref: string;
     };
     /** PrintifyLookupsBody */
@@ -4947,7 +5231,11 @@ export interface components {
     ProposalStaleness: {
       /** Is Stale */
       is_stale: boolean;
-      /** Reasons */
+      /**
+       * Reasons
+       * @description One per input that moved, in a fixed order, each finishing the
+       *     drawer heading's *Out of date: {reason}. Still usable*.
+       */
       reasons: string[];
     };
     /** ProviderCatalog */
@@ -4999,6 +5287,14 @@ export interface components {
        */
       stage: "publish";
     };
+    /**
+     * Refusal
+     * @description A refusal :data:`REFUSAL_STATUS` answers: ``detail`` is its message.
+     */
+    Refusal: {
+      /** Detail */
+      detail: string;
+    };
     /** RenameListingRequest */
     RenameListingRequest: {
       /** New Name */
@@ -5024,7 +5320,11 @@ export interface components {
       preview: boolean;
       /** Scene */
       scene: string;
-      /** Scene Hash */
+      /**
+       * Scene Hash
+       * @description The scene hash this plan computed, without its ``sha256:`` prefix: the
+       *     name of this plan's preview file.
+       */
       scene_hash: string;
       /**
        * State
@@ -5069,16 +5369,24 @@ export interface components {
       last_check?: components["schemas"]["CheckResult"] | null;
       /** Last Prune */
       last_prune?: string | null;
-      /** Missing */
+      /**
+       * Missing
+       * @description No restic repository at ``path``: backups stop.
+       */
       missing: boolean;
       /**
        * Password Stored
+       * @description Whether ``.env`` or the environment holds the password, so the
+       *     missing-repository actions ask for one only when it does not.
        * @default false
        */
       password_stored: boolean;
       /** Path */
       path: string;
-      /** Problem */
+      /**
+       * Problem
+       * @description Why its snapshots could not be read, such as a wrong password.
+       */
       problem?: string | null;
       /**
        * Snapshots
@@ -5096,7 +5404,10 @@ export interface components {
     };
     /** ResolvedPrice */
     ResolvedPrice: {
-      /** Amount */
+      /**
+       * Amount
+       * @description Formatted as `Money` prints itself, e.g. ``"249 NOK"``.
+       */
       amount: string;
       /** Size */
       size: string;
@@ -5116,7 +5427,15 @@ export interface components {
       files_total?: number | null;
       /** Finished At */
       finished_at?: string | null;
-      /** Message */
+      /**
+       * Fraction
+       * @default 0
+       */
+      fraction: number;
+      /**
+       * Message
+       * @description Why it failed or stopped.
+       */
       message?: string | null;
       /**
        * Outcome
@@ -5125,11 +5444,9 @@ export interface components {
        */
       outcome: "running" | "succeeded" | "failed" | "stopped";
       /**
-       * Percent
-       * @default 0
+       * Seconds Left
+       * @description Estimated from the rate so far; ``None`` until there is one.
        */
-      percent: number;
-      /** Seconds Left */
       seconds_left?: number | null;
       /** Snapshot Id */
       snapshot_id: string;
@@ -5216,16 +5533,26 @@ export interface components {
       reviewed: boolean;
     };
     /**
-     * RunRecord
-     * @description One run's outcome, as the history keeps it.
+     * RunConflict
+     * @description The run already holding one of the listings: reattach to it with
+     *     ``GET /api/runs/{active_run}`` rather than retrying.
      */
+    RunConflict: {
+      /** Active Run */
+      active_run: string;
+    };
+    /** RunRecord */
     RunRecord: {
       /**
        * Copies
+       * @description Each destination's copy, in the configured order.
        * @default []
        */
       copies: components["schemas"]["CopyRecord"][];
-      /** Data Added */
+      /**
+       * Data Added
+       * @description Bytes the snapshot added to the repository, from restic's summary.
+       */
       data_added?: number | null;
       /** Failed Step */
       failed_step?: string | null;
@@ -5236,7 +5563,11 @@ export interface components {
       finished_at: string;
       /** Message */
       message?: string | null;
-      /** Notice */
+      /**
+       * Notice
+       * @description Something the run decided that the seller should know, such as a
+       *     new workspace ID beside several others.
+       */
       notice?: string | null;
       /**
        * Outcome
@@ -5245,7 +5576,10 @@ export interface components {
       outcome: "succeeded" | "failed" | "stopped";
       /** Repository */
       repository: string;
-      /** Snapshot Id */
+      /**
+       * Snapshot Id
+       * @description Set once restic made a snapshot, even when a later step failed.
+       */
       snapshot_id?: string | null;
       /**
        * Started At
@@ -5254,18 +5588,19 @@ export interface components {
       started_at: string;
       /**
        * Warnings
+       * @description Files restic could not read; the snapshot was made without them.
        * @default []
        */
       warnings: string[];
     };
-    /**
-     * RunningBackup
-     * @description The operation in progress, for the running line.
-     */
+    /** RunningBackup */
     RunningBackup: {
       /** Destination */
       destination?: string | null;
-      /** Files Done */
+      /**
+       * Files Done
+       * @description Files read so far while backing up, or copied while copying.
+       */
       files_done?: number | null;
       /** Files Total */
       files_total?: number | null;
@@ -5281,7 +5616,10 @@ export interface components {
       started_at: string;
       /** Step */
       step: string;
-      /** Waiting For */
+      /**
+       * Waiting For
+       * @description The job a backup waits for before it pauses the rest.
+       */
       waiting_for?: string | null;
       /** Waiting Since */
       waiting_since?: string | null;
@@ -5301,29 +5639,54 @@ export interface components {
      * @description One scored comparable listing, as the top listings panel shows it.
      */
     ScoredListing: {
-      /** Favourites Per Day */
+      /**
+       * Favourites Per Day
+       * @description ``None`` when Etsy did not say when the listing was created.
+       */
       favourites_per_day: number | null;
-      /** Lead */
+      /**
+       * Lead
+       * @description The description's first sentence -- all of it the model sees.
+       */
       lead: string;
       /** Listing Id */
       listing_id: number;
-      /** Own Shop */
+      /**
+       * Own Shop
+       * @description Its ``shop_id`` is ``shop.yaml``'s ``etsy.shop_id``. Our own listings
+       *     are kept: one that ranks is evidence like any other.
+       */
       own_shop: boolean;
-      /** Rank */
+      /**
+       * Rank
+       * @description 1 is the best score. Ties keep the better search position.
+       */
       rank: number;
       /** Reviews */
       reviews: number;
-      /** Score */
+      /**
+       * Score
+       * @description ``score_raw`` as a whole number out of 100, as the panel shows it.
+       */
       score: number;
-      /** Score Raw */
+      /**
+       * Score Raw
+       * @description Weighted percentile sum ÷ total weight, 0-1: what phrase scores add up.
+       */
       score_raw: number;
-      /** Search Rank */
+      /**
+       * Search Rank
+       * @description Best (lowest) 1-based position across the queries that found it.
+       */
       search_rank: number;
       /** Shop Id */
       shop_id: number;
       /** Shop Name */
       shop_name: string;
-      /** Shop Rating */
+      /**
+       * Shop Rating
+       * @description The shop's ``review_average``; ``None`` for no reviews in a year.
+       */
       shop_rating: number | null;
       /** Shop Sales */
       shop_sales: number;
@@ -5386,19 +5749,22 @@ export interface components {
     };
     /**
      * SeoReadinessResponse
-     * @description Whether AI Mode can be enabled for one saved listing right now
-     *     (implementation plan, "Entry point"). The frontend leaves the control
-     *     visible and disabled when ``ready`` is false; ``reason`` explains why
-     *     to a developer or support reader.
+     * @description Whether AI Mode can be enabled for one saved listing right now. The
+     *     frontend leaves the control visible and disabled when ``ready`` is false;
+     *     ``reason`` explains why to a developer or support reader.
      */
     SeoReadinessResponse: {
       /**
        * Batch Pending
+       * @description A batch row owns this listing's AI: the editor follows the
+       *     batch run instead of offering its own.
        * @default false
        */
       batch_pending: boolean;
       /**
        * Deploying
+       * @description A UI plan or apply holds this listing: the editor asks again
+       *     until the deploy lets it go.
        * @default false
        */
       deploying: boolean;
@@ -5429,6 +5795,8 @@ export interface components {
       };
       /**
        * Kind
+       * @description ``stale`` (412): settings.yaml changed since the page read it, so
+       *     reload; ``invalid`` (422): ``field_errors`` say what to change.
        * @enum {string}
        */
       kind: "stale" | "invalid";
@@ -5540,15 +5908,19 @@ export interface components {
       listing_defaults: components["schemas"]["ShopListingDefaults"];
       /** Preferred Print Provider */
       preferred_print_provider: string | null;
-      /** Revision */
+      /**
+       * Revision
+       * @description sha256 of the file's exact bytes; the next PATCH must send it.
+       */
       revision: string;
-      /** Supported Currencies */
+      /**
+       * Supported Currencies
+       * @description Etsy Payments' currencies, in the order the page offers them.
+       */
       supported_currencies: components["schemas"]["CurrencyOption"][];
     };
     /** SinglePreviewRequest */
     SinglePreviewRequest: {
-      /** Artwork */
-      artwork?: string | null;
       /** Bounding Box */
       bounding_box: [
         components["schemas"]["Point"],
@@ -5582,10 +5954,7 @@ export interface components {
       renderer:
         components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
-    /**
-     * SingleTemplate
-     * @description One photo, one garment.
-     */
+    /** SingleTemplate */
     SingleTemplate: {
       /** Bounding Box */
       bounding_box: [
@@ -5594,7 +5963,12 @@ export interface components {
         components["schemas"]["Point"],
         components["schemas"]["Point"],
       ];
-      /** Colour */
+      /**
+       * Colour
+       * @description Which garment colour this photo depicts, which a light/dark listing
+       *     resolves its artwork by. Without it the scene prints ``default`` and a
+       *     listing with light and dark designs cannot use it.
+       */
       colour?: string | null;
       /**
        * @description discriminator enum property added by openapi-typescript
@@ -5707,6 +6081,10 @@ export interface components {
     };
     /** StagingDetail */
     StagingDetail: {
+      /**
+       * @description Set only while a prompt, a ready provider or Etsy market access is
+       *     missing, which refuses Create; nothing is said when AI can run.
+       */
       ai_blocked?: components["schemas"]["AiReadinessBlock"] | null;
       /**
        * Expires At
@@ -5715,7 +6093,10 @@ export interface components {
       expires_at: string;
       /** Id */
       id: string;
-      /** Ignored */
+      /**
+       * Ignored
+       * @description A ZIP's files that are not PNGs, by their path in it.
+       */
       ignored: string[];
       /** Label */
       label: string;
@@ -5726,6 +6107,7 @@ export interface components {
       /**
        * Template Saved At
        * Format: date-time
+       * @description When the frozen listing template was last saved.
        */
       template_saved_at: string;
     };
@@ -5761,7 +6143,7 @@ export interface components {
     };
     /**
      * StagingRowDetail
-     * @description One unique design on the staging page (UI doc §5).
+     * @description One unique design on the staging page.
      */
     StagingRowDetail: {
       /** Id */
@@ -5772,12 +6154,21 @@ export interface components {
       name: string;
       /** Note */
       note: string | null;
-      /** Reuse */
+      /**
+       * Reuse
+       * @description The ``designs/`` stem with this row's exact bytes, which its listing
+       *     will name instead of writing its own.
+       */
       reuse: string | null;
-      /** Sources */
+      /**
+       * Sources
+       * @description Every uploaded file with these bytes; more than one is a merge.
+       */
       sources: string[];
       /**
        * State
+       * @description ``ready`` will be created; ``name`` blocks Create until fixed;
+       *     ``invalid`` will not be created and blocks nothing.
        * @enum {string}
        */
       state: "ready" | "name" | "invalid";
@@ -5806,8 +6197,7 @@ export interface components {
     /**
      * SwatchResponse
      * @description A colour-matrix colour's real garment shade, sampled off its own scene
-     *     photo (`render/swatch.py`'s `sample_swatch`) rather than an invented or
-     *     hand-typed hex value -- nothing in the domain model stores one.
+     *     photo; nothing in the domain model stores one.
      */
     SwatchResponse: {
       /** Hex */
@@ -5877,7 +6267,10 @@ export interface components {
     };
     /** TemplatePositionImpactRequest */
     TemplatePositionImpactRequest: {
-      /** Limits */
+      /**
+       * Limits
+       * @description Candidate limits, shaped as ``template_positions`` in settings.yaml.
+       */
       limits: {
         [key: string]: unknown;
       };
@@ -5889,7 +6282,11 @@ export interface components {
     TemplatePositionImpactResponse: {
       /** Outside */
       outside: components["schemas"]["ListingOutsideBody"][];
-      /** Templates Needing Inference */
+      /**
+       * Templates Needing Inference
+       * @description Marigold templates whose preparation evidence would need model inference
+       *     to cover the wider limits.
+       */
       templates_needing_inference: string[];
     };
     /**
@@ -5929,12 +6326,16 @@ export interface components {
       colours: string[];
       /** Has Config */
       has_config: boolean;
-      /** Height */
+      /**
+       * Height
+       * @description The template photo's true pixel height, as ``width``.
+       */
       height?: number | null;
       /** Kind */
       kind: ("colour-matrix" | "multiple" | "single") | null;
       /**
        * Labels
+       * @description The seller's words for finding this template; empty with no config yet.
        * @default []
        */
       labels: string[];
@@ -5953,9 +6354,17 @@ export interface components {
        * @enum {string}
        */
       status: "needs-calibration" | "calibrated";
-      /** Status Reason */
+      /**
+       * Status Reason
+       * @description Why it is not calibrated yet, in the words the rail shows ("no kind
+       *     set", "1 box has no colour"); ``None`` when ``status`` is ``calibrated``.
+       */
       status_reason?: string | null;
-      /** Width */
+      /**
+       * Width
+       * @description The template photo's true pixel width, the space ``template.yaml``'s
+       *     boxes are in, not the downscaled preview's; ``None`` with no photo yet.
+       */
       width?: number | null;
     };
     /** Undo */
@@ -6038,6 +6447,8 @@ export interface components {
       listings: string[];
       /**
        * Publish
+       * @description Publish new and still-draft listings on Etsy rather than leave drafts.
+       *     Off unless asked; an apply must repeat what its reviewed plan chose.
        * @default false
        */
       publish: boolean;
@@ -6058,6 +6469,8 @@ export interface components {
       kind: "plan";
       /**
        * Publish
+       * @description Publish new and still-draft listings on Etsy rather than leave drafts.
+       *     Off unless asked; an apply must repeat what its reviewed plan chose.
        * @default false
        */
       publish: boolean;
@@ -6069,7 +6482,11 @@ export interface components {
     };
     /** WorkspaceSettingsChanges */
     WorkspaceSettingsChanges: {
-      /** Backup Destinations */
+      /**
+       * Backup Destinations
+       * @description Backup's Setup page: every destination, in order. A new one is
+       *     created, inside a folder that must exist.
+       */
       backup_destinations?: string[] | null;
       /** Backup Interval Hours */
       backup_interval_hours?: number | null;
@@ -6089,7 +6506,10 @@ export interface components {
       run_limit_minutes?: number | null;
       /** Step Limit Minutes */
       step_limit_minutes?: number | null;
-      /** Template Positions */
+      /**
+       * Template Positions
+       * @description The whole limits section; only the leaves it changes are written.
+       */
       template_positions?: {
         [key: string]: unknown;
       } | null;
@@ -6106,6 +6526,7 @@ export interface components {
     };
     /** WorkspaceSettingsResponse */
     WorkspaceSettingsResponse: {
+      /** @description The ``backup:`` block; ``None`` while backups are off. */
       backup?: components["schemas"]["BackupSettings"] | null;
       /** Concurrency */
       concurrency: number;
@@ -6117,12 +6538,20 @@ export interface components {
       providers: components["schemas"]["AiProviderSettings"][];
       /** Revision */
       revision: string;
-      /** Run Limit Minutes */
+      /**
+       * Run Limit Minutes
+       * @description At least ``max(5, enabled providers x step_limit_minutes)``; the page
+       *     computes that floor from ``providers`` as the seller edits.
+       */
       run_limit_minutes: number;
       /** Step Limit Minutes */
       step_limit_minutes: number;
+      /** @description Current limits, including defaults. */
       template_positions: components["schemas"]["TemplatePositionLimits"];
-      /** Weights */
+      /**
+       * Weights
+       * @description Relative weights, normalized only for display by the page.
+       */
       weights: {
         [key: string]: number;
       };
@@ -6134,9 +6563,17 @@ export interface components {
      *     worth seeing before an edit, not after an apply.
      */
     WorkspaceSummary: {
-      /** Shop Name */
+      /**
+       * Shop Name
+       * @description ``etsy.shop_name`` from ``shop.yaml``; ``None`` until ``setup`` reads
+       *     it back from Etsy.
+       */
       shop_name: string | null;
-      /** Storage Id */
+      /**
+       * Storage Id
+       * @description Opaque identity of the workspace root, for browser storage keys: two
+       *     roots never share one, even with the same shop name.
+       */
       storage_id: string;
     };
   };
@@ -6190,7 +6627,7 @@ export interface operations {
           "application/json": components["schemas"]["WorkspaceSettingsResponse"];
         };
       };
-      /** @description Precondition Failed */
+      /** @description settings.yaml changed since `revision` */
       412: {
         headers: {
           [name: string]: unknown;
@@ -6199,7 +6636,7 @@ export interface operations {
           "application/json": components["schemas"]["SettingsSaveRefusal"];
         };
       };
-      /** @description Unprocessable Entity */
+      /** @description An edit it refuses */
       422: {
         headers: {
           [name: string]: unknown;
@@ -6396,12 +6833,14 @@ export interface operations {
           "application/json": components["schemas"]["AiRunSummary"];
         };
       };
-      /** @description Not Found */
+      /** @description No run for this listing */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6436,14 +6875,16 @@ export interface operations {
           "application/json": components["schemas"]["AiRunSummary"];
         };
       };
-      /** @description Not Found */
+      /** @description No such listing */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
-      /** @description Conflict */
+      /** @description The active run to reattach to, or the readiness rule that failed */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6483,12 +6924,14 @@ export interface operations {
           "application/json": components["schemas"]["AiRunDetail"];
         };
       };
-      /** @description Not Found */
+      /** @description No such run */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6521,19 +6964,23 @@ export interface operations {
           "application/json": components["schemas"]["AiRunSummary"];
         };
       };
-      /** @description Not Found */
+      /** @description No such run */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
-      /** @description Conflict */
+      /** @description The run has already finished */
       409: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6566,12 +7013,14 @@ export interface operations {
           "application/json": unknown;
         };
       };
-      /** @description Not Found */
+      /** @description No such run */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6626,7 +7075,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupOverview"];
         };
       };
-      /** @description Conflict */
+      /** @description What the workspace holds now forbids it */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6635,7 +7084,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Precondition Failed */
+      /** @description settings.yaml changed since the page read it */
       412: {
         headers: {
           [name: string]: unknown;
@@ -6644,7 +7093,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Unprocessable Entity */
+      /** @description A wrong password or a folder that is not a repository */
       422: {
         headers: {
           [name: string]: unknown;
@@ -6730,7 +7179,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupOverview"];
         };
       };
-      /** @description Conflict */
+      /** @description A folder that holds files */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6739,7 +7188,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Precondition Failed */
+      /** @description settings.yaml changed since the page read it */
       412: {
         headers: {
           [name: string]: unknown;
@@ -6748,7 +7197,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Unprocessable Entity */
+      /** @description A missing or short password */
       422: {
         headers: {
           [name: string]: unknown;
@@ -6779,6 +7228,15 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+      /** @description The target is the live workspace or holds files, or a restore is running */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -6830,6 +7288,15 @@ export interface operations {
           "application/json": components["schemas"]["BackupOverview"];
         };
       };
+      /** @description Another backup operation is running */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
     };
   };
   set_up_api_backup_setup_post: {
@@ -6854,7 +7321,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupSetUpResponse"];
         };
       };
-      /** @description Conflict */
+      /** @description A folder that holds files */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6863,7 +7330,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Precondition Failed */
+      /** @description settings.yaml changed since the page read it */
       412: {
         headers: {
           [name: string]: unknown;
@@ -6872,7 +7339,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Unprocessable Entity */
+      /** @description A short password, a destination whose parent is missing, or a destination that holds part of a backup, another repository, or one the password does not open (field `password`) */
       422: {
         headers: {
           [name: string]: unknown;
@@ -7175,7 +7642,7 @@ export interface operations {
           "application/json": components["schemas"]["BatchDetail"];
         };
       };
-      /** @description The row has no listing to review yet */
+      /** @description The row is still queued or drafting, deleted, or never created */
       409: {
         headers: {
           [name: string]: unknown;
@@ -7716,6 +8183,15 @@ export interface operations {
           "application/json": components["schemas"]["ListingTemplateSaveResult"];
         };
       };
+      /** @description An unusable name, refused before any source is read */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -7880,6 +8356,15 @@ export interface operations {
           "application/json": components["schemas"]["ListingTemplateDetail"];
         };
       };
+      /** @description A taken name; it is never suffixed */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -8028,6 +8513,24 @@ export interface operations {
           "application/json": components["schemas"]["ListingDetail"];
         };
       };
+      /** @description Not a single path segment */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description A listing directory of that name exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -8057,6 +8560,15 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["MediaFileSummary"][];
+        };
+      };
+      /** @description No such listing (an empty list is a listing with no files) */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -8176,13 +8688,29 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Successful Response */
+      /** @description Remote copies: marked `lifecycle: deleted`, the row left pending */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": unknown;
+          "application/json": components["schemas"]["ListingSummary"];
+        };
+      };
+      /** @description No remote copies: wiped */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Published: retire it instead */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -8315,7 +8843,7 @@ export interface operations {
           "application/json": components["schemas"]["MarketSnapshot"];
         };
       };
-      /** @description No such listing, or no market search for it yet */
+      /** @description No such listing, no market search for it yet, or a snapshot that no longer reads, which the next run replaces */
       404: {
         headers: {
           [name: string]: unknown;
@@ -8546,6 +9074,15 @@ export interface operations {
         };
         content: {
           "application/json": unknown;
+        };
+      };
+      /** @description No such listing, or a layer that prints nothing */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -8929,6 +9466,25 @@ export interface operations {
             components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];
         };
       };
+      /** @description No such batch */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description The run already holding one of these listings, to reattach to; or an apply that is not exactly its review, or a batch plan with nothing to deploy */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            components["schemas"]["RunConflict"] | components["schemas"]["Refusal"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -8991,6 +9547,24 @@ export interface operations {
         content: {
           "application/json":
             components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];
+        };
+      };
+      /** @description No such run */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description An apply, or a finished run */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -9515,13 +10089,22 @@ export interface operations {
             | components["schemas"]["SingleTemplate"];
         };
       };
-      /** @description Validation Error */
+      /** @description The template already has a kind; changing it would discard its calibration */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description No photos, or a photo count the kind does not take */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["Refusal"];
         };
       };
     };
@@ -9813,6 +10396,24 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["TemplateRenameResponse"];
+        };
+      };
+      /** @description An unusable name */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description A taken name, a running deploy, or a template still preparing */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */

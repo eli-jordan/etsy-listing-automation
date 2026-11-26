@@ -38,7 +38,7 @@ HOLD_LIMIT_SECONDS = 30.0
 broken test fails instead of hanging."""
 
 QUARTER_RESTORED = RestoreProgress(
-    percent=0.25,
+    fraction=0.25,
     bytes_done=2_000_000,
     bytes_total=8_000_000,
     files_done=100,
@@ -46,7 +46,7 @@ QUARTER_RESTORED = RestoreProgress(
     seconds_left=180,
 )
 WHOLE_RESTORE = RestoreProgress(
-    percent=1.0,
+    fraction=1.0,
     bytes_done=8_000_000,
     bytes_total=8_000_000,
     files_done=400,

@@ -54,7 +54,6 @@ def delete_listing(
     ai_runs: AiRunRegistry,
     etsy_states: EtsyStates,
 ) -> Deletion:
-    """ADR-0035."""
     documents = ListingDocuments(workspace)
     if not documents.exists(name):
         raise ListingMissingError(name)

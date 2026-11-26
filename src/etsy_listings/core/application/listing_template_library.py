@@ -1,8 +1,8 @@
-"""Every write takes the listing template's write lock and re-checks the
-template once it holds it, so a create and a rename to one name cannot both
-win, and an edit waiting behind a rename finds the template gone rather than
-recreating it under the old name.
-"""
+"""Listing template operations: list, read, draft, create, edit, rename and
+delete.
+
+Every write takes the template's write lock and re-checks the template under it,
+so a create and a rename to one name cannot both win."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ class ListingTemplateCard:
     """Batches made from it, while their records last."""
     design_minimum: tuple[int, int] | None
     """The smallest design the garment's print area takes, ``(width,
-    height)`` -- New batch's size hint (UI doc §4)."""
+    height)``."""
 
 
 @dataclass(frozen=True)

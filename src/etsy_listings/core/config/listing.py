@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal, Self
+from typing import Any, Final, Literal, Self
 
 from pydantic import (
     BaseModel,
-    BeforeValidator,
     ConfigDict,
     ValidationInfo,
     field_validator,
@@ -55,20 +54,7 @@ MAX_TAG_LENGTH = 20
 MAX_TITLE_LENGTH = 140
 
 
-def _coerce_design(raw: object) -> object:
-    """The written forms a ``design:`` has had, read as the one map.
-
-    A bare path is the single-artwork shorthand written before the map
-    existed, and ``null`` is "nothing chosen" -- both still load, and both
-    are normalised by the next write (:func:`canonical_document`)."""
-    if raw is None:
-        return {}
-    if isinstance(raw, str):
-        return {DEFAULT: raw}
-    return raw
-
-
-DesignField = Annotated[dict[str, str | None], BeforeValidator(_coerce_design)]
+DesignField = dict[str, str | None]
 """The listing's complete artwork map (ADR-0053, docs/features/multi-artwork-20260928/spec.md).
 
 Reserved base keys -- ``default``, or ``on-light``/``on-dark`` -- and colour
@@ -107,21 +93,6 @@ def _refuse_malformed_design(design: Mapping[str, str | None], colors: list[str]
             "design has colour-specific designs but no base design -- set default, or "
             "on-light and on-dark, for the colours without their own"
         )
-
-
-def canonical_document(document: Mapping[str, Any]) -> dict[str, Any]:
-    """``document`` as it is written back: ``design`` always a map.
-
-    Every writer of ``listing.yaml`` goes through this -- the editor's
-    PATCH, create, the AI run's brief write, and ``new`` -- so a bare string
-    or ``null`` written by hand converges on the one written form the next
-    time anything saves (plan, *Settled decisions*). Nothing else is touched:
-    the server writes the document it was given, not a re-serialised model.
-    """
-    result = dict(document)
-    if "design" in result:
-        result["design"] = _coerce_design(result["design"])
-    return result
 
 
 def _check_gallery(media: list[MediaEntry]) -> None:
@@ -190,39 +161,21 @@ def check_production_fields(
 
 
 class EtsyListingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", use_attribute_docstrings=True)
 
     title: str = ""
     description: DescriptionConfig = DescriptionConfig()
     tags: list[str] = []
     renewal: Literal["manual", "auto"] | None = None
     section: str | None = None
-    """Which shop section this listing files under, by name. Listing
-    only -- there is no shop-wide default, unlike `shipping_profile` below:
-    a section is a fact about this listing, and a shop-wide default would be
-    right for the first listing and wrong from the second onwards."""
+    """Which shop section this listing files under, by name. There is no
+    shop-wide default."""
     shipping_profile: str | None = None
-    """Overrides `shop.yaml`'s `etsy.listing_defaults.shipping_profile`, by
-    name."""
+    """Overrides ``shop.yaml``'s ``etsy.listing_defaults.shipping_profile``,
+    by name."""
     variation_images: str | None = None
-    """The `colour-matrix` template whose renders become this listing's
-    per-colour swatches. Names the template rather than a bare
-    `true`, because media order would otherwise silently decide which
-    template supplies them when a listing carries more than one. Absent
-    means the feature is off for this listing."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def _reject_listing_materials(cls, value: Any) -> Any:
-        """Composition is shared by a garment, not independently owned by
-        each listing. Name the migration rather than presenting the generic
-        ``extra_forbidden`` error to an existing workspace."""
-        if isinstance(value, Mapping) and "materials" in value:
-            raise ValueError(
-                "etsy.materials has moved to the garment profile; remove it from this "
-                "listing and set garment-profiles/<name>.yaml's materials instead"
-            )
-        return value
+    """The ``colour-matrix`` template whose renders become this listing's
+    per-colour swatches; absent means none."""
 
     @model_validator(mode="after")
     def _validate_concrete_values(self) -> EtsyListingConfig:
@@ -274,19 +227,6 @@ class Listing(BaseModel):
     after Un-retire. ``plan`` never writes this key; wrong verb is ``Blocked``,
     never rewritten as the right one. Named ``lifecycle``, not ``status``,
     because the listings table already has a Status column."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def _reject_listing_artwork(cls, value: Any) -> Any:
-        """ADR-0053 removed the per-colour ``artwork:`` map; a colour's own file is
-        a ``design:`` key now. Named, like ``etsy.materials``, rather than the
-        generic ``extra_forbidden`` an existing workspace would not act on."""
-        if isinstance(value, Mapping) and "artwork" in value:
-            raise ValueError(
-                "artwork: has been removed; give a colour its own design as "
-                "design.<colour>: <file> instead (ADR-0053)"
-            )
-        return value
 
     @field_validator("design")
     @classmethod

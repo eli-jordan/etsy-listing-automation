@@ -1,7 +1,8 @@
-"""Every path comes from ``Workspace``: template names arrive from URLs, and
-its accessors are where "stays inside the root" is enforced (ADR-0013,
-ADR-0046) -- an unusable name is its ``InvalidNameError``.
-"""
+"""The calibrator's mockup template operations: overviews, kinds, colour
+reports, saved calibration and previews.
+
+Every path comes from ``Workspace``, whose accessors keep a template name that
+arrived in a URL inside the root."""
 
 from __future__ import annotations
 
@@ -432,8 +433,7 @@ LayerDesign = Callable[[str | None], Path | None]
 """``depicted colour -> design file`` for one layer of a saved scene, or
 ``None`` to leave the layer bare. The colour is the one
 :func:`~etsy_listings.core.render.config.scene_layers` says the layer
-depicts, so a ``multiple`` scene can print a different file per placement
-(A35)."""
+depicts, so a ``multiple`` scene can print a different file per placement."""
 
 
 def _drawn_or_saved_renderer(geometry: PreviewGeometry, config: AnyTemplate) -> AnyRenderer:

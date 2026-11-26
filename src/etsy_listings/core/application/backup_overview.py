@@ -28,7 +28,7 @@ KeptAs = Literal["recent", "weekly", "monthly"]
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
 
 class BackupWarning(_Model):
@@ -41,8 +41,6 @@ class BackupWarning(_Model):
 
 
 class RunningBackup(_Model):
-    """The operation in progress, for the running line."""
-
     operation: Literal["backup", "repair", "connect"]
     started_at: datetime
     step: str
@@ -58,7 +56,7 @@ class RunningBackup(_Model):
 class RepositoryOverview(_Model):
     path: str
     missing: bool
-    """No restic repository at ``path``: backups stop (spec, *Missing repository*)."""
+    """No restic repository at ``path``: backups stop."""
     problem: str | None = None
     """Why its snapshots could not be read, such as a wrong password."""
     password_stored: bool = False
@@ -72,36 +70,35 @@ class RepositoryOverview(_Model):
 class DestinationOverview(_Model):
     path: str
     name: str
-    """What the page calls it: :func:`destination_name`."""
+    """What the page calls it."""
     icloud: bool = False
     """An iCloud Drive folder, which iCloud for Windows uploads."""
     last_copy: datetime | None = None
     problem: str | None = None
     """Why the latest copy did not finish, such as an unreachable folder."""
     short_problem: str | None = None
-    """``problem`` in a few words, for a pill: :func:`short_problem`."""
+    """``problem`` in a few words, for a pill."""
     last_check: CheckResult | None = None
     changed: tuple[ChangedFile, ...] = ()
     unexpected: tuple[str, ...] = ()
     behind: bool = False
     set_aside: str | None = None
     """The folder Repair would set ``changed`` and ``unexpected`` aside in
-    today, as :func:`planned_set_aside` finds it; None with nothing to set
-    aside."""
+    today; ``None`` with nothing to set aside."""
 
 
 class BackupOverview(_Model):
     enabled: bool
     interval_hours: int | None = None
     last_success: datetime | None = None
-    """The newest snapshot's time, from restic (spec, *Status and warnings*)."""
+    """The newest snapshot's time, from restic."""
     next_due: datetime | None = None
     running: RunningBackup | None = None
     repository: RepositoryOverview | None = None
     destinations: list[DestinationOverview] = []
     warnings: list[BackupWarning] = []
     restore: RestoreStatus | None = None
-    """The latest restore since the app started (spec, *Restore*)."""
+    """The latest restore since the app started."""
     password_min_length: int = MIN_PASSWORD_LENGTH
     """The shortest password set-up and Create a new repository accept."""
 
@@ -270,10 +267,10 @@ def _failure(facts: BackupFacts) -> str | None:
 class HistoryEntry(_Model):
     run: RunRecord
     kept_as: KeptAs | None = None
-    """The retention bucket holding the run's snapshot; None once it is
+    """The retention bucket holding the run's snapshot; ``None`` once it is
     forgotten, or for a run that made none."""
     names: dict[str, str] = {}
-    """Each copy's destination's :func:`destination_name`, by path."""
+    """Each copy's destination's display name, by path."""
 
 
 def history(

@@ -1,17 +1,12 @@
-"""`scripts/export_openapi.py`: the committed contract (ADR-0011) must not
-depend on whether this checkout happens to have a built SPA.
-
-The SPA fallback route only exists when the built frontend does, so an export
-from a checkout with ``src/ui/dist`` used to gain a ``/{full_path}`` operation
-that one without it lacked.
-"""
+"""`scripts/export_openapi.py`: the committed contract (ADR-0011) is what the
+app exports, whether or not this checkout has a built SPA."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-from scripts.export_openapi import build_schema
+from scripts.export_openapi import CONTRACT, build_schema, render_schema
 
 from etsy_listings.server.api import app as app_module
 
@@ -32,3 +27,10 @@ def test_export_is_identical_with_or_without_a_built_spa(
 
     assert with_spa == without_spa
     assert not any("full_path" in path for path in with_spa["paths"])
+
+
+def test_the_committed_contract_is_the_current_export() -> None:
+    assert CONTRACT.read_bytes() == render_schema(), (
+        "docs/openapi.json is stale: run `uv run python scripts/export_openapi.py`, "
+        "then `npm run gen:api` in src/ui"
+    )

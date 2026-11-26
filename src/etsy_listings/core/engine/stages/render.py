@@ -111,8 +111,8 @@ class ResolvedLayer:
     bounding_box: BoundingBox
     """The template's own box for this layer, whichever renderer draws it:
     where every scene samples its swatch. A listing's position never moves
-    it -- the swatch reads the garment's colour, not the print (template
-    positions plan PR 3) -- so Photo warp's homography target is the
+    it -- the swatch reads the garment's colour, not the print -- so Photo
+    warp's homography target is the
     :class:`RenderConfig`'s box instead, which does follow the listing."""
     placement_id: str | None = None
 
@@ -303,7 +303,7 @@ class RenderSceneSnapshot(BaseModel):
     anything left to do for this scene.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     scene: str
     template: str
@@ -311,9 +311,8 @@ class RenderSceneSnapshot(BaseModel):
     state: RenderSceneState
     preview: bool
     scene_hash: str
-    """:func:`scene_hash` as this plan computed it, without its ``sha256:``
-    prefix -- what names this plan's preview file, so the review can ask for
-    exactly that file rather than have the server plan the listing again."""
+    """The scene hash this plan computed, without its ``sha256:`` prefix: the
+    name of this plan's preview file."""
 
 
 class RenderSnapshot(BaseModel):

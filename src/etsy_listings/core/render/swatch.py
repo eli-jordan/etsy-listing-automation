@@ -1,10 +1,6 @@
-"""Sampling a representative garment colour out of a mockup photo.
-
-The sample is the median of the *blank* mockup inside the print area, where
-the garment fills the frame most reliably; the median rather than the mean, so
-a fold shadow or a highlight cannot drag the result away from the fabric
-colour.
-"""
+"""Sampling a representative garment colour out of a mockup photo: the median of
+the blank mockup inside the print area, so a fold shadow or a highlight cannot
+drag it off the fabric colour."""
 
 from __future__ import annotations
 

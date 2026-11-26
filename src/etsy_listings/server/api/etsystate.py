@@ -1,36 +1,9 @@
-"""Which of this workspace's listings Etsy considers published.
+"""Which of this workspace's listings Etsy considers published, asked in one
+batched request and memoised for :data:`TTL_SECONDS`.
 
-The one fact a listing's status needs that the workspace cannot answer for
-itself: nothing this tool does ever activates a listing, so
-"live" only ever becomes true because a human pressed publish in Shop Manager,
-and the only way to find out is to ask.
-
-Three things make asking cheap enough to do on every read:
-
-* **One request, not one per listing.** ``listing_states`` batches, so the
-  listings table costs a single round trip regardless of how many rows it has.
-* **A short memo.** ``GET /api/listings/{name}`` is also what every autosave
-  PATCH answers with, so an uncached lookup would put an Etsy round trip
-  behind every keystroke burst in the editor. :data:`TTL_SECONDS` is the
-  longest a listing published in another tab stays badged as ``deployed``;
-  short enough not to be noticed, long enough that a burst of saves costs one
-  request.
-* **The table does not wait for a refresh.** Measured on an 18-listing shop,
-  the round trip was ~0.7s of a ~1.7s table load, paid on most visits since
-  they come more than :data:`TTL_SECONDS` apart. A caller that only *draws*
-  states passes ``stale_ok``: an answer up to :data:`STALE_SECONDS` old is
-  drawn at once while a fresh one is fetched behind it for the next read.
-  Callers that *decide* on a state -- the published-deletion refusal, the
-  editor -- leave it off and keep the strict TTL.
-
-Failure is silence, deliberately. A workspace with no Etsy key pair, no
-sign-in, or a shop the token cannot read is an ordinary state -- the
-listings page must still open, with every listing reported as
-not-live, which is what :func:`~etsy_listings.core.engine.status.is_live_etsy_state`
-already reads a missing state as. A *background* refresh that fails keeps the
-answers it was refreshing instead: they are still the best known, and the next
-read tries again.
-"""
+Failure is silence: with no key pair, no sign-in or an unreadable shop every
+listing reads as not live, and a failed background refresh keeps the answers it
+was refreshing."""
 
 from __future__ import annotations
 
@@ -46,8 +19,9 @@ from etsy_listings.core.config.secrets import MissingCredentialError
 from etsy_listings.core.engine.status import is_live_etsy_state
 
 TTL_SECONDS = 30.0
-"""How long a fetched state is reused without asking again. See the module
-docstring."""
+"""How long a fetched state is reused without asking again: the longest a
+listing published in another tab stays badged ``deployed``, and long enough
+that a burst of autosaves costs one Etsy request."""
 
 STALE_SECONDS = 600.0
 """How old a state a ``stale_ok`` caller still draws while a fresh one is
@@ -94,7 +68,8 @@ def etsy_states(  # noqa: PLR0913 -- every argument after client_for is a test s
 
     Unmemoised ids are fetched in one batch. With ``stale_ok``, an answer past
     the TTL but within :data:`STALE_SECONDS` is returned and refreshed by
-    ``background``.
+    ``background``; only a caller that draws states, never one that decides on
+    one, passes it.
     """
     wanted = set(listing_ids)
     if not wanted:

@@ -1,7 +1,5 @@
-"""Every rule a draft answers to, for the two pictures of one. A frame may show
-unsaved geometry and masks, so it needs a draft of the same saved calibration.
-A full-size scene is the prepared render, so what it asks for must be prepared.
-"""
+"""Every rule a draft answers to, for a frame of unsaved geometry and masks and
+for a full-size scene, which must be prepared."""
 
 from dataclasses import dataclass
 

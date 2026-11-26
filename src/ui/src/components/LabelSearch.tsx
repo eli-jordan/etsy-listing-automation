@@ -75,7 +75,6 @@ export function LabelSearch({
   query,
   onQuery,
 }: {
-  /** Every searchable item's tags. */
   items: string[][];
   on: string[];
   onOn: (next: string[]) => void;

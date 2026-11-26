@@ -14,7 +14,7 @@ from etsy_listings.core.user_directory import user_directory
 RESTIC_BINARY_ENV_VAR = "ETSY_LISTINGS_RESTIC_BINARY"
 """Overrides the ``restic_binary`` setting, as the process environment
 overrides the workspace's ``.env`` for credentials. Tests and CI find the
-pinned binary through it (workspace-backup plan, P3)."""
+pinned binary through it."""
 
 RESTIC_VERSION = "0.19.1"
 """The newest restic release at least two weeks old on 2026-11-23 (spec,

@@ -289,22 +289,22 @@ def _restore_figures(figures: RestoreProgress, line: object) -> RestoreProgress 
     if not isinstance(line, dict) or line.get("message_type") not in ("status", "summary"):
         return None
     summary = line["message_type"] == "summary"
-    percent = 1.0 if summary else float(line.get("percent_done", figures.percent))
+    fraction = 1.0 if summary else float(line.get("percent_done", figures.fraction))
     return RestoreProgress(
-        percent=percent,
+        fraction=fraction,
         bytes_done=line.get("bytes_restored", figures.bytes_done),
         bytes_total=line.get("total_bytes", figures.bytes_total),
         files_done=line.get("files_restored", figures.files_done),
         files_total=line.get("total_files", figures.files_total),
-        seconds_left=0 if summary else _seconds_left(line, percent),
+        seconds_left=0 if summary else _seconds_left(line, fraction),
     )
 
 
-def _seconds_left(line: Mapping[str, object], percent: float) -> int | None:
+def _seconds_left(line: Mapping[str, object], fraction: float) -> int | None:
     elapsed = line.get("seconds_elapsed")
-    if not isinstance(elapsed, int | float) or percent <= 0:
+    if not isinstance(elapsed, int | float) or fraction <= 0:
         return None
-    return round(elapsed * (1 - percent) / percent)
+    return round(elapsed * (1 - fraction) / fraction)
 
 
 def _json_lines(lines: Iterable[str]) -> Iterator[Any]:

@@ -27,8 +27,8 @@ Confirm it's on your PATH:
 uv run etsy-listings --help
 ```
 
-This guide uses `plan`, `apply`, `new` and `ui`. Commands that are designed
-but not built are listed in "What's not here yet" at the bottom.
+This guide uses `setup`, `new`, `plan`, `apply` and `ui`; `--help` lists the
+rest.
 
 Node is only needed if you want to run the calibrator's frontend in dev mode
 (§5) — skip it for now.
@@ -416,11 +416,6 @@ materials: [cotton] # Etsy-facing materials, shared by this garment
 preview_template: flat-lay-01 # colour-matrix; editor colour preview only
 ```
 
-If an existing `listing.yaml` has `etsy.materials`, move that list into the
-referenced garment profile's `materials:` field and remove it from the listing.
-One garment profile is shared, so resolve any differing legacy lists before
-choosing its single value.
-
 `blueprint` is matched on **brand and model** — the pair you'd quote to order
 blanks. `title` is there so the file reads as something rather than a part
 number, and is ignored when resolving: Printify's titles are generic ("Unisex
@@ -434,7 +429,8 @@ still match, and ambiguous catalog entries stop with an error.
 ```yaml
 # listings/take-a-hike/listing.yaml
 garment_profile: comfort-colors-1717
-design: designs/take-a-hike.png
+design:
+  default: designs/take-a-hike.png
 colors: [black, blue-jean, ivory, moss]
 brief: >
   Retro 70s sunset mountain scene. Design text reads exactly "TAKE A HIKE".
@@ -469,11 +465,10 @@ A few things worth knowing about `listing.yaml`:
 - **Every path is written from the workspace root** — `designs/x.png`,
   `common-media/size-guide.png`, `pricing-plans/launch.yaml` — or from the
   listing's own directory with a `./` prefix (`./close-up.png`). `..` is
-  refused (ADR-0046). A workspace written before that rule spells its refs
-  `../../designs/x.png`; rewrite them from the workspace root.
-- **`design` can be a map**, not just a bare path, when you need separate
-  light-ink/dark-ink artwork — `{on-light:..., on-dark:...}` — with an
-  optional per-colour `artwork:` override on the listing. Full resolution
+  refused (ADR-0046).
+- **`design` is a map**: `default` for one artwork on every colour, or
+  `on-light` and `on-dark` for separate light-ink and dark-ink artwork, plus
+  optional per-colour keys (`moss: designs/x-moss.png`). Full resolution
   order is in [docs/features/multi-placement-rendering-20260903/spec.md](../features/multi-placement-rendering-20260903/spec.md).
 - **SEO values are ordinary listing fields.** Give `etsy.description` a
   required `lead` plus at most one body source: inline `text` or a `ref` under
@@ -503,9 +498,8 @@ uv run etsy-listings plan take-a-hike # or --all for every listing
 uv run etsy-listings apply take-a-hike # runs whatever plan identified
 ```
 
-`plan` does a three-way diff — desired config vs. last-applied vs. (in later
-phases) live remote state — and prints what would happen without changing
-anything:
+`plan` does a three-way diff (desired config, last applied, live Printify and
+Etsy state) and prints what would happen without changing anything:
 
 ```
 take-a-hike
@@ -651,19 +645,11 @@ signed-in CLI the way you'd treat any other local tool with shell access to
 this workspace, and keep secrets out of files an SEO assistant would have no
 reason to open.
 
-## What's not here yet
+## Other commands
 
-The historical plans describe commands that are not registered in the current CLI:
-
-| Command | Will do |
-|---|---|
-| `catalog refresh` | Force-refresh the cached Printify catalog |
-| `status [<listing>]` | Run history from the SQLite recorder |
-| `render` | Force the local render stage in isolation (today, it runs as part of `apply`) |
-
-`auth` captures credentials and `unlock` clears a stuck Printify publish.
-`ui` serves the dashboard, calibrator, listing and template editors, batch
-creation, AI Mode and reviewed deployment runs.
+`auth` stores the Printify and Etsy credentials, `unlock` clears a Printify
+product stuck publishing, `backup` backs the workspace up with restic, and
+`marigold` installs the Windows worker that prepares mockup templates.
 
 ## Where things live, quick reference
 

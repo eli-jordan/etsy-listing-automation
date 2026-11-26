@@ -1,8 +1,5 @@
-"""The closed event vocabulary emitted while the engine runs.
-
-Domain values, not the server's wire models: adapters decide which to render
-or serialise.
-"""
+"""The closed event vocabulary the engine emits: domain values that adapters render
+or serialise."""
 
 from __future__ import annotations
 

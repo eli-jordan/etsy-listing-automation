@@ -133,7 +133,7 @@ class LiveVideoSnapshot(BaseModel):
 
 class EtsyVideosSnapshot(BaseModel):
     """Both sides for the deploy review. The live side comes in Etsy's
-    response order, which says nothing about the gallery (decision 9)."""
+    response order, which says nothing about the gallery."""
 
     model_config = ConfigDict(frozen=True)
 

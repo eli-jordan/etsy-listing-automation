@@ -182,10 +182,10 @@ class RetentionSettings(BaseModel):
 class BackupSettings(BaseModel):
     """The ``backup:`` block. Paths are this machine's, and the block travels
     with the workspace, so a path that no longer exists is not refused here:
-    the backup reports a missing repository instead (spec, *Missing
-    repository*), and the rest of the app keeps loading its settings."""
+    the backup reports a missing repository instead, and the rest of the app
+    keeps loading its settings."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, use_attribute_docstrings=True)
 
     repository: Path
     """The backup storage folder: the local restic repository."""
@@ -196,10 +196,9 @@ class BackupSettings(BaseModel):
     restic_binary: Path | None = None
     """Another restic to run instead of the pinned download."""
     workspace_id: str | None = None
-    """The workspace ID: a random UUID set-up writes once. Every snapshot
-    is tagged with it, and the retention keeps and groups this workspace's
-    snapshots by it, so a renamed PC or a moved workspace keeps one
-    schedule (ADR-0061). Not shown in Setup; it travels with the file."""
+    """A random UUID set-up writes once. Every snapshot is tagged with it and
+    retention groups this workspace's snapshots by it, so a renamed PC or a
+    moved workspace keeps one schedule. Not shown in Setup."""
 
     _retention_absent = field_validator("retention", mode="before")(_absent_is_empty)
 
@@ -254,7 +253,7 @@ class Settings(BaseModel):
     backup: BackupSettings | None = None
     """Off when absent, and also when written empty (``backup:``): unlike the
     sections above it gets no ``_absent_is_empty``, because there is no
-    default repository to turn an empty block into (plan, P5)."""
+    default repository to turn an empty block into."""
 
     _market_seo_absent = field_validator("market_seo", mode="before")(_absent_is_empty)
     _batch_ai_absent = field_validator("batch_ai", mode="before")(_absent_is_empty)

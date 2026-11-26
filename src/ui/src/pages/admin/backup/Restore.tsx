@@ -177,7 +177,7 @@ function RestoringDialog({
           <strong className="bk-progress__pct">{f.pctText}</strong>
           <span className="bk-sub">{f.left}</span>
         </div>
-        <Progress value={restore.percent} label="Restore progress" />
+        <Progress value={restore.fraction} label="Restore progress" />
         <span className="bk-sub">{joined(f.bytes, f.files)}</span>
       </div>
       <p className="bk-note">
@@ -276,7 +276,7 @@ export function RestoreStrip({ flow }: { flow: RestoreFlow }) {
       <Strip
         actions={
           <>
-            <Progress value={restore.percent} label="Restore progress" />
+            <Progress value={restore.fraction} label="Restore progress" />
             <button type="button" className="btn btn-secondary" onClick={flow.show}>
               Show
             </button>

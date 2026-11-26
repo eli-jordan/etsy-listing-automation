@@ -1,7 +1,6 @@
-"""``AiRun`` and the in-memory registry answering which run holds a listing
-(features/market-seo-20260924/spec.md, *AI runs*). Listing names compare
-case-insensitively, as the write locks compare them.
-"""
+"""``AiRun`` and the in-memory registry answering which run holds a listing.
+
+Listing names compare case-insensitively, as the write locks compare them."""
 
 from __future__ import annotations
 

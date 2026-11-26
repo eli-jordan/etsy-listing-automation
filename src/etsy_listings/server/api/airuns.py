@@ -12,6 +12,7 @@ from etsy_listings.core.application.refusals import (
     ListingDeployingError,
     ListingDraftingInBatchError,
 )
+from etsy_listings.server.api.refusal_status import refusals
 from etsy_listings.server.api.schemas import (
     AiRunDetail,
     AiRunRefusal,
@@ -72,11 +73,16 @@ def _refused(refusal: AiRunRefusal) -> JSONResponse:
     "",
     status_code=202,
     response_model=AiRunSummary,
-    responses={404: {}, 409: {"model": AiRunRefusal}},
+    responses={
+        **refusals({404: "No such listing"}),
+        409: {
+            "model": AiRunRefusal,
+            "description": "The active run to reattach to, or the readiness rule that failed",
+        },
+    },
 )
 def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | JSONResponse:
-    """Start a run for a saved listing. A ``409`` either names the active run
-    to reattach to, or gives the readiness rule that failed."""
+    """Start a run for a saved listing."""
     try:
         run = _ai(request).start_run(body.listing, draft_brief=body.draft_brief)
     except ListingDeployingError:
@@ -90,7 +96,7 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
     return _summary(request, run)
 
 
-@router.get("", response_model=AiRunSummary, responses={404: {}})
+@router.get("", response_model=AiRunSummary, responses=refusals({404: "No run for this listing"}))
 def find_ai_run(request: Request, listing: str) -> AiRunSummary:
     """The listing's running or most recent run -- what the editor
     reattaches to after a reload."""
@@ -100,13 +106,17 @@ def find_ai_run(request: Request, listing: str) -> AiRunSummary:
     return _summary(request, run)
 
 
-@router.get("/{run_id}", response_model=AiRunDetail, responses={404: {}})
+@router.get("/{run_id}", response_model=AiRunDetail, responses=refusals({404: "No such run"}))
 def get_ai_run(request: Request, run: Annotated[AiRun, Depends(_run)]) -> AiRunDetail:
     with run.condition:
         return AiRunDetail(**_summary(request, run).model_dump(), events=list(run.events))
 
 
-@router.delete("/{run_id}", response_model=AiRunSummary, responses={404: {}, 409: {}})
+@router.delete(
+    "/{run_id}",
+    response_model=AiRunSummary,
+    responses=refusals({404: "No such run", 409: "The run has already finished"}),
+)
 def cancel_ai_run(request: Request, run: Annotated[AiRun, Depends(_run)]) -> AiRunSummary:
     """Cancel: the run's provider subprocess tree is killed and research
     starts no new call. The run ends ``cancelled`` on its own thread
@@ -116,7 +126,7 @@ def cancel_ai_run(request: Request, run: Annotated[AiRun, Depends(_run)]) -> AiR
     return _summary(request, run)
 
 
-@router.get("/{run_id}/events", responses={404: {}})
+@router.get("/{run_id}/events", responses=refusals({404: "No such run"}))
 def stream_ai_run_events(
     run: Annotated[AiRun, Depends(_run)], request: Request
 ) -> StreamingResponse:

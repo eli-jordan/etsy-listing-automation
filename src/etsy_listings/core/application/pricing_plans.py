@@ -1,10 +1,5 @@
-"""Which pricing plans a workspace has, which suit a garment, and a
-starting plan generated from live costs.
-
-Shared by both ways a listing is created: the listings editor's plan picker
-(``GET /api/pricing-plans``) and the ``new`` wizard, each rendering the rows
-its own way.
-"""
+"""Which pricing plans a workspace has, which suit a garment, and a starting plan
+generated from live costs, for the editor's plan picker and the ``new`` wizard."""
 
 from __future__ import annotations
 

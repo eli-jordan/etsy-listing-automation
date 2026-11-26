@@ -75,8 +75,7 @@ class EtsyListingDefaults(BaseModel):
     the whole `updateListing` PATCH."""
     return_policy: EtsyReturnPolicyDefaults | None = None
     production_partner: str | None = None
-    """By name; omit when the shop has exactly one (decision 3's resolution
-    ladder) -- most shops never need to set this."""
+    """By name; omit when the shop has exactly one, as most shops can."""
 
 
 class EtsyDefaults(BaseModel):
@@ -103,10 +102,8 @@ class EtsyDefaults(BaseModel):
     different failure modes: a wrong `shop_id` means nothing works, while a
     wrong default means every listing is quietly slightly wrong.
 
-    No shop-wide section, unlike Phase 2's `shop_section_id`: which part of
-    the shop a listing belongs in is a fact about that listing, not the shop
-    (`listing.yaml`'s `etsy.section`), and a shop-wide default would be right
-    for the first listing and wrong from the second onwards.
+    No shop-wide section: which part of the shop a listing belongs in is
+    ``listing.yaml``'s ``etsy.section``.
     """
 
     def require_shop_id(self) -> int:
@@ -118,18 +115,6 @@ class EtsyDefaults(BaseModel):
                 "`auth` flow can also read it back from the Etsy API.",
             )
         return self.shop_id
-
-
-MOVED_KEYS = {
-    "currency": "etsy.currency",
-    "preferred_print_provider": "printify.preferred_print_provider",
-}
-"""Where two top-level keys went.
-
-`extra="forbid"` would report them as "extra inputs are not permitted", which
-is true and useless: the value is not extra, it is one line further down the
-file. A workspace written before the move is exactly the one whose owner needs
-to be told where to put it."""
 
 
 class Defaults(BaseModel):
@@ -150,20 +135,5 @@ class Defaults(BaseModel):
 
     @classmethod
     def from_document(cls, path: Path, raw: object) -> Defaults:
-        if isinstance(raw, dict):
-            _refuse_moved_keys(path, raw)
+        del path
         return cls.model_validate(raw)
-
-
-def _refuse_moved_keys(path: Path, raw: dict[str, object]) -> None:
-    found = [(key, moved_to) for key, moved_to in MOVED_KEYS.items() if key in raw]
-    if not found:
-        return
-    moves = "\n".join(f"  {key}: -> {moved_to}:" for key, moved_to in found)
-    raise ConfigLoadError(
-        path,
-        "these keys moved under the service that owns them:\n"
-        f"{moves}\n"
-        "  Move them by hand, or re-run `etsy-listings setup`, which rewrites "
-        "the file in the current shape.",
-    )

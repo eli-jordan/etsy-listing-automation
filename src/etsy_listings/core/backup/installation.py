@@ -1,11 +1,7 @@
 """Installing the pinned restic: download, digest check, unpack, rename.
 
-Implementation only, reached through ``binary.ResticBinaries`` (an Import
-Linter contract, as for ``preparation.installation``). Mirrors
-``preparation.runtime.Runtime._install``: everything happens in a staging
-directory beside the target, which is renamed into place only when the
-binary is complete, and removed on any failure.
-"""
+Everything happens in a staging directory beside the target, renamed into place
+only once the binary is complete and removed on any failure."""
 
 from __future__ import annotations
 

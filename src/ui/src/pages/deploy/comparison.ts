@@ -11,14 +11,12 @@ import {
 export type ImpactTag =
   "Images" | "Videos" | "Title" | "Description" | "Prices" | "Colours" | "Tags" | "Materials";
 
-/** The title or the description. */
 export interface TextBlock {
   before: string | null;
   after: string;
   changed: boolean;
 }
 
-/** The tags or the materials. */
 export interface StringListBlock {
   before: string[];
   after: string[];

@@ -1,9 +1,5 @@
-"""The calibrator's test-design library over HTTP.
-
-Three bundled targets plus the user's uploads (docs/architecture.md, *The
-calibrator*). ``core/application/calibration_designs.py`` owns names and
-validation; the app's refusal table answers what it refuses.
-"""
+"""The calibrator's test-design library over HTTP: three bundled targets plus the
+user's uploads."""
 
 from __future__ import annotations
 

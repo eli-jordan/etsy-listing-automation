@@ -93,10 +93,8 @@ queued or running: Resume leaves it, so no proposal lands on a listing
 after its deploy, and only the row's own Retry queues it again."""
 
 RETRYABLE: frozenset[AiState] = frozenset({"failed", "stopped", "cancelled", "cancelled_by_deploy"})
-"""The AI states a row's own **Retry** queues again (UI doc §7): a failed, stopped
-or cancelled run, and work a deploy cancelled. Here rather than with the
-queue because Retry's choice -- recreate, requeue or refuse -- is decided
-before the queue is asked (module-structure plan, PR 7)."""
+"""The AI states a row's own **Retry** queues again: a failed, stopped or
+cancelled run, and work a deploy cancelled."""
 
 
 class AiStep(BaseModel):
@@ -138,8 +136,7 @@ class BatchRow(BaseModel):
     ``plan`` or ``apply``."""
     deleted: bool = False
     """The listing was deleted. The row stays, struck through, so the
-    batch still says what it made (UI doc §7); nothing follows or queues it
-    again."""
+    batch still says what it made; nothing follows or queues it again."""
 
 
 DRAFTING: frozenset[AiState | None] = frozenset({"queued", "running"})
@@ -296,9 +293,7 @@ class BatchStore(_Store[Batch]):
         # Lock order: every batch's lock, then the listing write locks, as creating a row
         # takes them; the rows follow only if the body (the move) returns.
         ids = sorted(self._workspace.batch_ids())
-        with ExitStack() as held:
-            for batch_id in ids:
-                held.enter_context(self.lock(batch_id))
+        with self._every_lock(ids):
             yield
             for batch_id in ids:
                 self._change_rows_locked(
@@ -306,6 +301,13 @@ class BatchStore(_Store[Batch]):
                     lambda row: row.name == old and not row.deleted,
                     lambda _: {"name": new},
                 )
+
+    @contextmanager
+    def _every_lock(self, ids: list[str]) -> Iterator[None]:
+        with ExitStack() as held:
+            for batch_id in ids:
+                held.enter_context(self.lock(batch_id))
+            yield
 
     def mark_deployed(self, listing: str) -> None:
         self._each_row(

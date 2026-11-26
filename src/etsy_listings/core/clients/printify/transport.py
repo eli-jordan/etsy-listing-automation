@@ -1,16 +1,9 @@
-"""One authenticated connection to ``api.printify.com``, shared by both halves
-of the client.
+"""One authenticated connection to ``api.printify.com``, shared by both halves of
+the client.
 
-Error decoding leans on a shape this API keeps to without exception -- every
-failure observed against the live API is
-
-    {"status": "error", "code": 8251, "message": "Validation failed.",
-     "errors": {"reason": "...", "code": 8251}}
-
-``errors.reason`` is a human sentence naming the offending field, and is the
-only part of that envelope worth putting in front of a user
-(docs/research/api-findings.md).
-"""
+Every failure the live API returns is ``{"status": "error", "code": ...,
+"message": ..., "errors": {"reason": ..., "code": ...}}``, and only
+``errors.reason``, a sentence naming the field, is worth showing a user."""
 
 from __future__ import annotations
 

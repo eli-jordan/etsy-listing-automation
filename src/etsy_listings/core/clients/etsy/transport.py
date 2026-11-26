@@ -1,10 +1,8 @@
 """One authenticated connection to Etsy, and the token endpoint beside it.
 
-:class:`Transport` sends the app key pair and the shop owner's bearer.
-Etsy's token endpoint takes neither (it authenticates by `client_id` in the
-form body), so :class:`OAuthClient` is separate, which also keeps
-:mod:`tokens` free of an import cycle.
-"""
+Etsy's token endpoint authenticates by ``client_id`` in the form body, not by the
+app key pair and bearer :class:`Transport` sends, so :class:`OAuthClient` is
+separate."""
 
 from __future__ import annotations
 

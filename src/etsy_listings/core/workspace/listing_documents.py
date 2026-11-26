@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from etsy_listings.core.config.listing import Listing, canonical_document
+from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.errors import ConflictError, MissingError
 from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
@@ -66,10 +66,7 @@ class ListingDocuments:
             current = self.read(name)
             # A copy, so a callback that mutates in place still compares unequal.
             changed = change(copy.deepcopy(current))
-            # Unchanged is a semantic no-op even when `design:` is in its old
-            # form: canonicalising alone is not a reason to touch the file.
             if changed is not None and changed != current:
-                changed = canonical_document(changed)
                 self._write(name, changed)
             return changed
 
@@ -89,13 +86,9 @@ class ListingDocuments:
 
     def _write(self, name: str, document: Mapping[str, Any]) -> Path:
         path = self._workspace.listing_file(name)
-        # Every write normalises `design:` to its map form (ADR-0053): a bare
-        # string or `null` written by hand converges on the one written form
-        # the next time anything saves.
-        canonical = canonical_document(document)
         write_yaml_atomic(
             path,
-            canonical,
-            new=lambda: yaml.safe_dump(canonical, sort_keys=False, allow_unicode=True),
+            document,
+            new=lambda: yaml.safe_dump(dict(document), sort_keys=False, allow_unicode=True),
         )
         return path

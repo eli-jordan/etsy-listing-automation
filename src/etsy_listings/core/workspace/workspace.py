@@ -1,8 +1,7 @@
-"""Workspace root discovery and path resolution (ADR-0013).
+"""Workspace root discovery and path resolution.
 
-``Workspace.resolve()`` refuses to resolve outside the workspace root. That is
-a security boundary: the media and preview endpoints resolve through it.
-"""
+``Workspace.resolve()`` refuses to resolve outside the workspace root, a security
+boundary the media and preview endpoints resolve through."""
 
 from __future__ import annotations
 
@@ -256,11 +255,6 @@ class Workspace:
             raise refused("an absolute path is not a ref")
         if "\\" in ref:
             raise refused("use '/' between directories, not a backslash")
-        if ref.startswith("../"):
-            raise refused(
-                "'..' refs are the old listing-relative form; write it from the workspace "
-                "root instead"
-            )
         if ".." in ref.split("/"):
             raise refused("'..' is not allowed in a ref")
         base, rest = (owner_dir, ref[2:]) if ref.startswith("./") else (self.root, ref)

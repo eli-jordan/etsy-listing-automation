@@ -1,6 +1,7 @@
-"""Listings already blocked for another reason, or that do not load, are not
-listed as ``outside`` the candidate limits.
-"""
+"""What saving candidate template-position limits would change.
+
+Listings already blocked for another reason, or that do not load, are not
+listed as ``outside``."""
 
 from __future__ import annotations
 

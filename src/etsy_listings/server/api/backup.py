@@ -1,10 +1,5 @@
-"""The backup status, history, Back up now, set-up, repair, restore, and the
-missing-repository actions.
-
-``GET /api/backup`` is the one status source for the Backup page, the banner
-on every other page and both nav icons. Setup's edits are not here: they save
-through ``PATCH /api/admin/settings`` and its revision check.
-"""
+"""The backup status, history, Back up now, set-up, repair, restore and
+missing-repository endpoints."""
 
 from __future__ import annotations
 
@@ -24,7 +19,7 @@ from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.server.api import app_state
-from etsy_listings.server.api.refusal_status import refusal_status
+from etsy_listings.server.api.refusal_status import refusal_status, refusals
 from etsy_listings.server.api.schemas import (
     BackupConnected,
     BackupConnectRequest,
@@ -75,10 +70,15 @@ def backup_snapshots(request: Request) -> BackupSnapshotsResponse:
     )
 
 
-@router.post("/restore", status_code=202)
+@router.post(
+    "/restore",
+    status_code=202,
+    responses=refusals(
+        {409: "The target is the live workspace or holds files, or a restore is running"}
+    ),
+)
 def start_restore(request: Request, body: BackupRestoreRequest) -> BackupOverview:
-    """Restore a snapshot into a new folder; 409 for the live workspace, a
-    folder that holds files or a restore already running."""
+    """Restore a snapshot into a new folder."""
     backups = app_state.backups(request)
     backups.start_restore(body.snapshot, to_native_path(body.target))
     return backups.overview()
@@ -92,32 +92,47 @@ def stop_restore(request: Request) -> BackupOverview:
     return backups.overview()
 
 
-@router.post("/run", status_code=202)
+@router.post(
+    "/run", status_code=202, responses=refusals({409: "Another backup operation is running"})
+)
 def back_up_now(request: Request) -> BackupOverview:
-    """Start a backup; 409 while another backup operation runs."""
+    """Start a backup."""
     backups = app_state.backups(request)
     backups.run_now()
     return backups.overview()
 
 
-_REFUSALS: dict[int | str, dict[str, Any]] = {
-    409: {"model": BackupRefusal},
-    412: {"model": BackupRefusal},
-    422: {"model": BackupRefusal},
-}
+_STALE = "settings.yaml changed since the page read it"
 
 
-@router.post("/setup", status_code=202, response_model=BackupSetUpResponse, responses=_REFUSALS)
+def _backup_refusals(described: dict[int, str]) -> dict[int | str, dict[str, Any]]:
+    return {
+        status: {"model": BackupRefusal, "description": text}
+        for status, text in ({412: _STALE} | described).items()
+    }
+
+
+@router.post(
+    "/setup",
+    status_code=202,
+    response_model=BackupSetUpResponse,
+    responses=_backup_refusals(
+        {
+            409: "A folder that holds files",
+            422: "A short password, a destination whose parent is missing, or a destination "
+            "that holds part of a backup, another repository, or one the password does not "
+            "open (field `password`)",
+        }
+    ),
+)
 def set_up(request: Request, body: BackupSetUpRequest) -> BackupSetUpResponse | JSONResponse:
     """Write the ``backup:`` block and the password, create the repository
-    and the destination folders, then start the first backup. Refuses a
-    short password (422), a folder that holds files (409) and a destination
-    whose parent is missing (422), writing nothing.
+    and the destination folders, then start the first backup. A refusal
+    writes nothing.
 
     When a destination already holds a backup, connects it instead, as
     ``/connect`` does, answering once it is copied: ``connected`` names the
-    destination. Refuses a password that does not open it (422, field
-    ``password``), part of a copy, and two different repositories (422)."""
+    destination."""
     backups = app_state.backups(request)
     answers = backup_setup.BackupSetUp(
         repository=to_native_path(body.repository),
@@ -146,25 +161,40 @@ def set_up(request: Request, body: BackupSetUpRequest) -> BackupSetUpResponse | 
     return BackupSetUpResponse.model_validate(answer.model_dump() | {"connected": found})
 
 
-@router.post("/repository", status_code=202, response_model=BackupOverview, responses=_REFUSALS)
+@router.post(
+    "/repository",
+    status_code=202,
+    response_model=BackupOverview,
+    responses=_backup_refusals(
+        {409: "A folder that holds files", 422: "A missing or short password"}
+    ),
+)
 def create_repository(
     request: Request, body: BackupNewRepositoryRequest
 ) -> BackupOverview | JSONResponse:
     """Create a new repository while the configured one is missing, save
-    its folder, and start the first backup. Refuses a folder that holds
-    files (409) and a missing or short password (422)."""
+    its folder, and start the first backup."""
     backups = app_state.backups(request)
     answers = Replacement(to_native_path(body.repository), body.password, body.revision)
     return _answer(backups, lambda: backups.create_repository(answers))
 
 
-@router.post("/connect", response_model=BackupOverview, responses=_REFUSALS)
+@router.post(
+    "/connect",
+    response_model=BackupOverview,
+    responses=_backup_refusals(
+        {
+            409: "What the workspace holds now forbids it",
+            422: "A wrong password or a folder that is not a repository",
+        }
+    ),
+)
 def connect_repository(
     request: Request, body: BackupConnectRequest
 ) -> BackupOverview | JSONResponse:
     """Copy an existing repository to local disk, check the password opens
-    it, then use it; answers once it is connected. A wrong password or a
-    folder that is not a repository is a 422, and nothing is saved."""
+    it, then use it; answers once it is connected and saves nothing on a
+    refusal."""
     backups = app_state.backups(request)
     answers = Replacement(to_native_path(body.repository), body.password, body.revision)
     return _answer(backups, lambda: backups.connect(to_native_path(body.source), answers))

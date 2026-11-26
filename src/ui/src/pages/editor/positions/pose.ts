@@ -1,4 +1,5 @@
 import type { components } from "../../../api/schema";
+import type { PhotoPoint, PhotoPx, PhotoQuad, RectifiedPx } from "../../../pixels";
 
 /**
  * Offsets are fractions of W and H; positive rotation is clockwise in image
@@ -30,13 +31,13 @@ export type Limits = Omit<Schemas["TemplatePositionLimits"], "scale"> & {
 export interface PoseFit {
   pose: Pose;
   /** The largest corner error. */
-  residualPixels: number;
+  residualPixels: PhotoPx;
 }
 
 export const IDENTITY: Pose = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 };
 
 /** `listing_validation`'s corner tolerance (rule 1) and the round-off it allows on limits. */
-export const RESIDUAL_PIXELS = 1;
+export const RESIDUAL_PIXELS: PhotoPx = 1;
 const ROUNDOFF = 1e-8;
 const HORIZON = 1e-12;
 
@@ -129,15 +130,15 @@ function mapQuad(quad: Quad, m: Matrix): Quad {
   return quadMap(quad, (p) => mapPoint(p, m));
 }
 
-export function toUnit(box: Quad, point: Point): Point {
+export function toUnit(box: PhotoQuad, point: PhotoPoint): Point {
   return mapPoint(point, invert(homography(box)));
 }
 
-export function toPhoto(box: Quad, point: Point): Point {
+export function toPhoto(box: PhotoQuad, point: Point): PhotoPoint {
   return mapPoint(point, homography(box));
 }
 
-export function proportions(box: Quad): { w: number; h: number } {
+export function proportions(box: PhotoQuad): { w: RectifiedPx; h: RectifiedPx } {
   const [tl, tr, br, bl] = box;
   const length = (p: Point, q: Point) => Math.hypot(q.x - p.x, q.y - p.y);
   const w = (length(tl, tr) + length(bl, br)) / 2;
@@ -163,13 +164,13 @@ function posed(pose: Pose, size: { w: number; h: number }): Quad {
 }
 
 /** The four absolute corners `template_positions` stores for `pose`. */
-export function compose(box: Quad, pose: Pose): Quad {
+export function compose(box: PhotoQuad, pose: Pose): PhotoQuad {
   return mapQuad(posed(pose, proportions(box)), homography(box));
 }
 
 /** The least-squares similarity nearest `quad`, fitted in the rectified frame,
- * and how far its corners miss in photo pixels. */
-export function decompose(box: Quad, quad: Quad): PoseFit {
+ * and how far its corners miss. */
+export function decompose(box: PhotoQuad, quad: PhotoQuad): PoseFit {
   const { w, h } = proportions(box);
   const target = mapQuad(quad, invert(homography(box)));
   const cx = target.reduce((s, p) => s + (p.x - 0.5) * w, 0) / 4;
@@ -212,7 +213,7 @@ export function clampPose(pose: Pose, limits: Limits): Pose {
   };
 }
 
-export function nearestAllowedPose(box: Quad, quad: Quad, limits: Limits): Pose {
+export function nearestAllowedPose(box: PhotoQuad, quad: PhotoQuad, limits: Limits): Pose {
   return clampPose(decompose(box, quad).pose, limits);
 }
 

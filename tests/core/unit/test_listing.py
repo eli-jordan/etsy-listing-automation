@@ -12,14 +12,13 @@ from etsy_listings.core.config.listing import (
     EtsyListingConfig,
     Listing,
     TemplateMediaEntry,
-    canonical_document,
 )
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.config.pricing_plan import PricingPlan
 
 BASE: dict[str, object] = {
     "garment_profile": "comfort-colors-1717",
-    "design": "designs/take-a-hike.png",
+    "design": {"default": "designs/take-a-hike.png"},
     "colors": ["black"],
     "brief": "test brief",
     "prices": {"S": "349 NOK"},
@@ -61,18 +60,6 @@ def test_a_listing_can_override_section_shipping_profile_and_variation_images() 
     assert listing.etsy.variation_images == "flat-lay-01"
 
 
-def test_listing_materials_explains_the_garment_profile_migration() -> None:
-    with pytest.raises(ValidationError, match="moved to the garment profile"):
-        Listing.model_validate(
-            {**BASE, "etsy": {"materials": ["cotton"]}}, context={"currency": "NOK"}
-        )
-
-
-def test_bare_design_string_normalises_to_default_key() -> None:
-    listing = Listing.model_validate(BASE, context={"currency": "NOK"})
-    assert listing.design == {"default": "designs/take-a-hike.png"}
-
-
 def test_design_map_is_kept_as_is() -> None:
     data = {
         **BASE,
@@ -88,9 +75,9 @@ def test_design_map_is_kept_as_is() -> None:
     }
 
 
-@pytest.mark.parametrize("absent", [None, {}])
-def test_no_design_loads_as_an_empty_map(absent: object) -> None:
-    listing = Listing.model_validate({**BASE, "design": absent}, context={"currency": "NOK"})
+def test_no_design_loads_as_an_empty_map() -> None:
+    data = {key: value for key, value in BASE.items() if key != "design"}
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
     assert listing.design == {}
 
 
@@ -141,32 +128,6 @@ def test_a_malformed_design_map_is_a_field_error(design: object, message: str) -
 def test_a_design_map_always_serialises_as_a_map() -> None:
     listing = Listing.model_validate(BASE, context={"currency": "NOK"})
     assert listing.model_dump(mode="json")["design"] == {"default": "designs/take-a-hike.png"}
-
-
-@pytest.mark.parametrize(
-    ("written", "canonical"),
-    [
-        ("designs/a.png", {"default": "designs/a.png"}),
-        (None, {}),
-        ({}, {}),
-        (
-            {"on-light": None, "on-dark": "designs/b.png"},
-            {"on-light": None, "on-dark": "designs/b.png"},
-        ),
-    ],
-)
-def test_a_written_listing_carries_design_as_a_map(written: object, canonical: object) -> None:
-    """Bare strings and ``null`` still load; the next write normalises them,
-    so every listing converges on one written form (plan, *Settled
-    decisions*)."""
-    document = canonical_document({**BASE, "design": written})
-    assert document["design"] == canonical
-    assert document["colors"] == BASE["colors"]
-
-
-def test_a_written_listing_without_design_gains_none() -> None:
-    document = canonical_document({"colors": []})
-    assert "design" not in document
 
 
 def test_rejects_bare_number_price_naming_the_field() -> None:
@@ -321,15 +282,6 @@ def test_a_listing_rejects_text_and_ref_together() -> None:
 def test_rejects_more_than_thirteen_tags() -> None:
     data = {**BASE, "etsy": {"tags": [f"tag{i}" for i in range(14)]}}
     with pytest.raises(ValidationError, match="13-tag limit"):
-        Listing.model_validate(data, context={"currency": "NOK"})
-
-
-def test_the_removed_artwork_map_is_refused_by_name() -> None:
-    """ADR-0053 removed ``listing.artwork``: a colour's own file is written in
-    ``design:`` now. Named, rather than pydantic's generic extra-field error,
-    so an existing workspace learns where the setting went."""
-    data = {**BASE, "artwork": {"black": "on-dark"}}
-    with pytest.raises(ValidationError, match=r"design\.<colour>"):
         Listing.model_validate(data, context={"currency": "NOK"})
 
 

@@ -1,13 +1,9 @@
 """Local AI Mode: SEO proposals, brief drafting and market-query extraction
-run through the local Codex, Claude and Grok CLIs behind one `AiProvider`
-contract, with the workspace-ordered fallback (ADR-0056), one same-provider
-repair and the step and run budgets (ADR-0057) shared by every task.
+through the local Codex, Claude and Grok CLIs behind one ``AiProvider``
+contract, with provider fallback, one repair, and step and run budgets.
 
-Withheld: ``discovery`` (``ModelDiscovery``) and ``host`` (``CliHost``,
-``CommandHost``, ``LOCAL_CLI_HOST``) are imported directly, and the private
-``_windows_process``/``_posix_process`` stay behind `run_managed`.
-`core/application/ai/` coordinates this package into runs.
-"""
+Withheld: ``discovery`` and ``host``, imported directly, and the private
+``_windows_process`` and ``_posix_process``, behind ``run_managed``."""
 
 from __future__ import annotations
 

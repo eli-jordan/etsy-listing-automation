@@ -1,4 +1,4 @@
-"""Loads ``exceptions.yaml`` -- the sparse colour-slug override file, ADR-0004."""
+"""Loads ``exceptions.yaml``, the sparse colour-slug override file."""
 
 from __future__ import annotations
 

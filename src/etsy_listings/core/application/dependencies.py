@@ -1,8 +1,5 @@
-"""The seams a host supplies to core's operations and coordinators: callable
-shapes the real thing satisfies as it stands and a test replaces with a fake.
-They live here because the deploy executor and the AI runner behind them are
-implementation-only (Import Linter's ``protected`` contracts).
-"""
+"""The seams a host supplies to core's operations and coordinators, each a
+callable shape a test replaces with a fake."""
 
 from __future__ import annotations
 

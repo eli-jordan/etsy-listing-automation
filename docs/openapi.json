@@ -379,6 +379,7 @@
                 "type": "null"
               }
             ],
+            "description": "When the run began working: ``created_at``, or later when a backup's\npause held it; ``None`` while it is held.",
             "title": "Started At"
           },
           "steps": {
@@ -390,6 +391,7 @@
           },
           "waiting_for_backup": {
             "default": false,
+            "description": "Held by a backup's pause: accepted and queued, starting once the backup\nstep ends. Never stored.",
             "title": "Waiting For Backup",
             "type": "boolean"
           }
@@ -498,6 +500,7 @@
                 "type": "null"
               }
             ],
+            "description": "When the run began working: ``created_at``, or later when a backup's\npause held it; ``None`` while it is held.",
             "title": "Started At"
           },
           "steps": {
@@ -509,6 +512,7 @@
           },
           "waiting_for_backup": {
             "default": false,
+            "description": "Held by a backup's pause: accepted and queued, starting once the backup\nstep ends. Never stored.",
             "title": "Waiting For Backup",
             "type": "boolean"
           }
@@ -592,6 +596,7 @@
                 "type": "null"
               }
             ],
+            "description": "The listing batch a ``batch``-scoped run deploys.",
             "title": "Batch Id"
           },
           "created_at": {
@@ -681,6 +686,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Whether this run publishes new and still-draft listings.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -710,6 +716,7 @@
           },
           "waiting_for_backup": {
             "default": false,
+            "description": "Held by a backup's pause: accepted and queued, starting once the backup\nstep ends. Never stored.",
             "title": "Waiting For Backup",
             "type": "boolean"
           }
@@ -739,6 +746,7 @@
                 "type": "null"
               }
             ],
+            "description": "The listing batch a ``batch``-scoped run deploys.",
             "title": "Batch Id"
           },
           "created_at": {
@@ -775,6 +783,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Whether this run publishes new and still-draft listings.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -804,6 +813,7 @@
           },
           "waiting_for_backup": {
             "default": false,
+            "description": "Held by a backup's pause: accepted and queued, starting once the backup\nstep ends. Never stored.",
             "title": "Waiting For Backup",
             "type": "boolean"
           }
@@ -851,9 +861,11 @@
                 "type": "null"
               }
             ],
+            "description": "Only read when no password is stored.",
             "title": "Password"
           },
           "repository": {
+            "description": "The local folder to copy into: new or empty.",
             "title": "Repository",
             "type": "string"
           },
@@ -862,6 +874,7 @@
             "type": "string"
           },
           "source": {
+            "description": "The repository to copy from; only read.",
             "title": "Source",
             "type": "string"
           }
@@ -878,6 +891,7 @@
         "description": "The backup set-up connected instead of creating one.",
         "properties": {
           "destination": {
+            "description": "The destination it was copied from.",
             "title": "Destination",
             "type": "string"
           },
@@ -890,6 +904,7 @@
                 "type": "null"
               }
             ],
+            "description": "Set when its snapshots name several workspaces, so this workspace\ngot a new workspace ID and starts its own retention.",
             "title": "Notice"
           },
           "snapshots": {
@@ -907,6 +922,7 @@
       "BackupHistoryResponse": {
         "properties": {
           "runs": {
+            "description": "Newest first, failed runs included.",
             "items": {
               "$ref": "#/components/schemas/HistoryEntry"
             },
@@ -921,7 +937,7 @@
         "type": "object"
       },
       "BackupNewRepositoryRequest": {
-        "description": "Create a new repository while the configured one is missing\n(workspace-backup spec, *Missing repository*).",
+        "description": "Create a new repository while the configured one is missing.",
         "properties": {
           "password": {
             "anyOf": [
@@ -932,13 +948,16 @@
                 "type": "null"
               }
             ],
+            "description": "Only read when no password is stored.",
             "title": "Password"
           },
           "repository": {
+            "description": "The folder the seller confirmed: new or empty.",
             "title": "Repository",
             "type": "string"
           },
           "revision": {
+            "description": "``settings.yaml``'s revision from ``GET /api/admin/settings``.",
             "title": "Revision",
             "type": "string"
           }
@@ -985,6 +1004,7 @@
                 "type": "null"
               }
             ],
+            "description": "The newest snapshot's time, from restic.",
             "title": "Last Success"
           },
           "next_due": {
@@ -1001,6 +1021,7 @@
           },
           "password_min_length": {
             "default": 12,
+            "description": "The shortest password set-up and Create a new repository accept.",
             "title": "Password Min Length",
             "type": "integer"
           },
@@ -1022,7 +1043,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The latest restore since the app started."
           },
           "running": {
             "anyOf": [
@@ -1061,6 +1083,7 @@
                 "type": "null"
               }
             ],
+            "description": "Create refused because this destination holds a repository's copy:\nconnect it instead.",
             "title": "Connect From"
           },
           "field_errors": {
@@ -1071,6 +1094,7 @@
             "type": "object"
           },
           "kind": {
+            "description": "As a settings save's, plus ``conflict`` (409): a folder that holds\nfiles or a repository's copy.",
             "enum": [
               "stale",
               "conflict",
@@ -1094,6 +1118,7 @@
       "BackupRepairRequest": {
         "properties": {
           "destination": {
+            "description": "As ``settings.yaml`` names it.",
             "title": "Destination",
             "type": "string"
           }
@@ -1125,6 +1150,7 @@
             "type": "array"
           },
           "outcome": {
+            "description": "How the copy after it went.",
             "enum": [
               "copied",
               "unreachable",
@@ -1145,6 +1171,7 @@
                 "type": "null"
               }
             ],
+            "description": "``<destination>-set-aside-<date>``; ``None`` when nothing was moved.",
             "title": "Set Aside"
           }
         },
@@ -1159,10 +1186,12 @@
       "BackupRestoreRequest": {
         "properties": {
           "snapshot": {
+            "description": "An id, its start, or ``latest``.",
             "title": "Snapshot",
             "type": "string"
           },
           "target": {
+            "description": "A new or empty folder, as a full path.",
             "title": "Target",
             "type": "string"
           }
@@ -1175,7 +1204,7 @@
         "type": "object"
       },
       "BackupSetUpRequest": {
-        "description": "The set-up form (workspace-backup interactions, *Set up and Setup*).",
+        "description": "The backup set-up form.",
         "properties": {
           "destinations": {
             "items": {
@@ -1208,6 +1237,7 @@
             "$ref": "#/components/schemas/RetentionSettings"
           },
           "revision": {
+            "description": "``settings.yaml``'s revision from ``GET /api/admin/settings``.",
             "title": "Revision",
             "type": "string"
           }
@@ -1231,7 +1261,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Set when a destination already held a backup: set-up copied it to\nthe backup storage folder and uses it, instead of creating one."
           },
           "destinations": {
             "default": [],
@@ -1266,6 +1297,7 @@
                 "type": "null"
               }
             ],
+            "description": "The newest snapshot's time, from restic.",
             "title": "Last Success"
           },
           "next_due": {
@@ -1282,6 +1314,7 @@
           },
           "password_min_length": {
             "default": 12,
+            "description": "The shortest password set-up and Create a new repository accept.",
             "title": "Password Min Length",
             "type": "integer"
           },
@@ -1303,7 +1336,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The latest restore since the app started."
           },
           "running": {
             "anyOf": [
@@ -1332,10 +1366,11 @@
       },
       "BackupSettings": {
         "additionalProperties": false,
-        "description": "The ``backup:`` block. Paths are this machine's, and the block travels\nwith the workspace, so a path that no longer exists is not refused here:\nthe backup reports a missing repository instead (spec, *Missing\nrepository*), and the rest of the app keeps loading its settings.",
+        "description": "The ``backup:`` block. Paths are this machine's, and the block travels\nwith the workspace, so a path that no longer exists is not refused here:\nthe backup reports a missing repository instead, and the rest of the app\nkeeps loading its settings.",
         "properties": {
           "destinations": {
             "default": [],
+            "description": "Folders the repository is copied to one way, in order.",
             "items": {
               "format": "path",
               "type": "string"
@@ -1356,6 +1391,7 @@
             "type": "integer"
           },
           "repository": {
+            "description": "The backup storage folder: the local restic repository.",
             "format": "path",
             "title": "Repository",
             "type": "string"
@@ -1370,6 +1406,7 @@
                 "type": "null"
               }
             ],
+            "description": "Another restic to run instead of the pinned download.",
             "title": "Restic Binary"
           },
           "retention": {
@@ -1384,6 +1421,7 @@
                 "type": "null"
               }
             ],
+            "description": "A random UUID set-up writes once. Every snapshot is tagged with it and\nretention groups this workspace's snapshots by it, so a renamed PC or a\nmoved workspace keeps one schedule. Not shown in Setup.",
             "title": "Workspace Id"
           }
         },
@@ -1411,6 +1449,7 @@
             "type": "string"
           },
           "restore_target": {
+            "description": "The restore dialog's suggested folder for it.",
             "title": "Restore Target",
             "type": "string"
           },
@@ -1427,6 +1466,7 @@
                 "type": "null"
               }
             ],
+            "description": "Bytes the backup read.",
             "title": "Size"
           },
           "time": {
@@ -1447,6 +1487,7 @@
       "BackupSnapshotsResponse": {
         "properties": {
           "snapshots": {
+            "description": "Every snapshot restic lists, made by the app or by hand, newest first.",
             "items": {
               "$ref": "#/components/schemas/BackupSnapshot"
             },
@@ -1454,6 +1495,7 @@
             "type": "array"
           },
           "workspace": {
+            "description": "The live workspace, which a restore refuses.",
             "title": "Workspace",
             "type": "string"
           }
@@ -1469,6 +1511,7 @@
         "properties": {
           "banner": {
             "default": true,
+            "description": "Shown on every other page and as a dot on Admin; all but ``off``.",
             "title": "Banner",
             "type": "boolean"
           },
@@ -1481,6 +1524,7 @@
                 "type": "null"
               }
             ],
+            "description": "The destination it is about, for ``behind`` and ``changed``.",
             "title": "Destination"
           },
           "kind": {
@@ -1535,6 +1579,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Publish new and still-draft listings on Etsy rather than leave drafts.\nOff unless asked; an apply must repeat what its reviewed plan chose.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -1563,6 +1608,7 @@
         "properties": {
           "concurrency": {
             "default": 1,
+            "description": "``batch_ai.concurrency``: how many rows draft at once.",
             "title": "Concurrency",
             "type": "integer"
           },
@@ -1614,7 +1660,7 @@
         "type": "object"
       },
       "BatchIndexEntry": {
-        "description": "One row of Recent batches (UI doc \u00a72): a confirmed batch, or a staging\nsession not confirmed yet, which reopens staging instead.",
+        "description": "One row of Recent batches: a confirmed batch, or a staging\nsession not confirmed yet, which reopens staging instead.",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -1622,6 +1668,7 @@
             "type": "string"
           },
           "designs": {
+            "description": "Rows: the staged designs, or the batch's rows.",
             "title": "Designs",
             "type": "integer"
           },
@@ -1640,10 +1687,12 @@
                 "type": "null"
               }
             ],
+            "description": "A staging session's: seven days after its last edit.",
             "title": "Expires At"
           },
           "failures": {
             "default": 0,
+            "description": "*N need retry*: a count beside the progress, never a status.",
             "title": "Failures",
             "type": "integer"
           },
@@ -1669,6 +1718,7 @@
           },
           "listings": {
             "default": 0,
+            "description": "Rows with a listing now: created and not deleted.",
             "title": "Listings",
             "type": "integer"
           },
@@ -1690,6 +1740,7 @@
           },
           "undrafted": {
             "default": 0,
+            "description": "Listings **Cancel batch** left for Resume.",
             "title": "Undrafted",
             "type": "integer"
           }
@@ -1707,7 +1758,7 @@
         "type": "object"
       },
       "BatchPatch": {
-        "description": "Rename the batch (UI doc \u00a77): its label only, never its identity.",
+        "description": "Rename the batch: its label only, never its identity.",
         "properties": {
           "label": {
             "title": "Label",
@@ -1722,7 +1773,7 @@
       },
       "BatchPlanRequest": {
         "additionalProperties": false,
-        "description": "Plan the reviewed rows of one listing batch that have changes to\ndeploy (ADR-0059); the server resolves which.",
+        "description": "Plan the reviewed rows of one listing batch that have changes to\ndeploy; the server resolves which.",
         "properties": {
           "batch_id": {
             "title": "Batch Id",
@@ -1735,6 +1786,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Publish new and still-draft listings on Etsy rather than leave drafts.\nOff unless asked; an apply must repeat what its reviewed plan chose.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -1772,6 +1824,7 @@
                 "type": "null"
               }
             ],
+            "description": "The row's AI work; ``None`` until its listing exists.",
             "title": "Ai"
           },
           "ai_error": {
@@ -1787,6 +1840,7 @@
           },
           "ai_steps": {
             "default": [],
+            "description": "The live run's nodes while running, else the last run's as it ended.",
             "items": {
               "$ref": "#/components/schemas/WorkflowStep"
             },
@@ -1804,11 +1858,13 @@
           },
           "deleted": {
             "default": false,
+            "description": "The listing was deleted; the row stays, struck through.",
             "title": "Deleted",
             "type": "boolean"
           },
           "deployable": {
             "default": false,
+            "description": "Whether Deploy reviewed takes this row: reviewed, with changes its\nlast apply did not deploy.",
             "title": "Deployable",
             "type": "boolean"
           },
@@ -1832,6 +1888,7 @@
             "type": "string"
           },
           "name": {
+            "description": "The name actually created, which confirm may have suffixed.",
             "title": "Name",
             "type": "string"
           },
@@ -1849,6 +1906,7 @@
                 "type": "null"
               }
             ],
+            "description": "The listing's cached proposal: sections waiting and current,\nwaiting but out of date, or every section dealt with.",
             "title": "Proposal"
           },
           "queue_position": {
@@ -1860,15 +1918,18 @@
                 "type": "null"
               }
             ],
+            "description": "1 for the next row to start, across every batch; ``None`` unless\nqueued.",
             "title": "Queue Position"
           },
           "reviewable": {
             "default": false,
+            "description": "Whether Mark reviewed is offered: not on a queued, drafting, deleted\nor never-created row.",
             "title": "Reviewable",
             "type": "boolean"
           },
           "reviewed": {
             "default": false,
+            "description": "The seller's own judgement.",
             "title": "Reviewed",
             "type": "boolean"
           },
@@ -1889,6 +1950,7 @@
           },
           "waiting_for_backup": {
             "default": false,
+            "description": "Held by a backup's pause: accepted and queued, starting once the backup\nstep ends. Never stored.",
             "title": "Waiting For Backup",
             "type": "boolean"
           }
@@ -1905,13 +1967,14 @@
         "type": "object"
       },
       "BelowCostRow": {
-        "description": "One variant priced under what Printify charges to make it -- the\nrow `plan()` already refuses over ( :func:`_below_cost`), named for the\nbefore/after review rather than left as a bare variant id.",
+        "description": "One variant priced under what Printify charges to make it -- the\nrow `plan()` already refuses over, named for the before/after review\nrather than left as a bare variant id.",
         "properties": {
           "colour": {
             "title": "Colour",
             "type": "string"
           },
           "cost": {
+            "description": "USD, as Printify reports it: not necessarily ``price``'s currency, and\nnever converted.",
             "examples": [
               "349 NOK"
             ],
@@ -2047,7 +2110,7 @@
       },
       "CalibrationSaveRequest": {
         "additionalProperties": false,
-        "description": "A single recoverable calibration transaction under ADR-0054.",
+        "description": "A single recoverable calibration transaction.",
         "properties": {
           "config": {
             "discriminator": {
@@ -2132,6 +2195,7 @@
                 "type": "null"
               }
             ],
+            "description": "restic's message when the check failed.",
             "title": "Message"
           },
           "ok": {
@@ -2304,9 +2368,10 @@
         "type": "object"
       },
       "ColourReportRow": {
-        "description": "What one photo in a candidate ``colour-matrix`` set will be taken as.\n\nReporting only: ADR-0004 makes the filename the source of truth, so there is\nno manual mapping to offer and nothing here changes a name.",
+        "description": "What one photo in a candidate ``colour-matrix`` set will be taken as.\n\nReporting only: the filename is the source of truth, so nothing here\nchanges a name.",
         "properties": {
           "clean": {
+            "description": "False when the filename is not already the slug: ``Heather Grey.png``\nyields ``heather-grey``.",
             "title": "Clean",
             "type": "boolean"
           },
@@ -2343,9 +2408,11 @@
                 "type": "null"
               }
             ],
+            "description": "The file's front-matter summary, if it has one.",
             "title": "Summary"
           },
           "title": {
+            "description": "The file's front-matter title.",
             "title": "Title",
             "type": "string"
           }
@@ -2360,6 +2427,7 @@
       "ConnectionRowBody": {
         "properties": {
           "commands": {
+            "description": "What to run in a terminal, in order, when ``not_connected``.",
             "items": {
               "type": "string"
             },
@@ -2397,6 +2465,7 @@
                 "type": "null"
               }
             ],
+            "description": "The live Etsy shop's own currency, when a lookup read it.",
             "title": "Shop Currency"
           },
           "shop_id": {
@@ -2496,6 +2565,7 @@
         "properties": {
           "draft_brief": {
             "default": false,
+            "description": "Draft the brief first. Only honoured while the saved brief is empty;\na run whose listing already has one skips the Brief node.",
             "title": "Draft Brief",
             "type": "boolean"
           },
@@ -2546,7 +2616,7 @@
         "type": "object"
       },
       "CreateListingTemplateRequest": {
-        "description": "Save as listing template (``from_listing``) or Clone\n(``from_template``) -- exactly one. There is no blank creation (spec).",
+        "description": "Save as listing template (``from_listing``) or Clone\n(``from_template``) -- exactly one. There is no blank creation.",
         "properties": {
           "document": {
             "anyOf": [
@@ -2558,6 +2628,7 @@
                 "type": "null"
               }
             ],
+            "description": "The seller's edits made before naming it, as ``template.yaml`` would\nhold them; absent means the draft as the source gives it. Checked as a ``PUT`` is,\nand its ``./`` refs must be files the draft copies.",
             "title": "Document"
           },
           "from_listing": {
@@ -2680,6 +2751,7 @@
                 "type": "null"
               }
             ],
+            "description": "A POSIX workspace reference beneath ``common-copy/``, e.g.\n``common-copy/comfort-colors.md``.",
             "title": "Ref"
           },
           "text": {
@@ -2796,6 +2868,7 @@
           },
           "icloud": {
             "default": false,
+            "description": "An iCloud Drive folder, which iCloud for Windows uploads.",
             "title": "Icloud",
             "type": "boolean"
           },
@@ -2822,6 +2895,7 @@
             "title": "Last Copy"
           },
           "name": {
+            "description": "What the page calls it.",
             "title": "Name",
             "type": "string"
           },
@@ -2838,6 +2912,7 @@
                 "type": "null"
               }
             ],
+            "description": "Why the latest copy did not finish, such as an unreachable folder.",
             "title": "Problem"
           },
           "set_aside": {
@@ -2849,6 +2924,7 @@
                 "type": "null"
               }
             ],
+            "description": "The folder Repair would set ``changed`` and ``unexpected`` aside in\ntoday; ``None`` with nothing to set aside.",
             "title": "Set Aside"
           },
           "short_problem": {
@@ -2860,6 +2936,7 @@
                 "type": "null"
               }
             ],
+            "description": "``problem`` in a few words, for a pill.",
             "title": "Short Problem"
           },
           "unexpected": {
@@ -2888,6 +2965,8 @@
           },
           "strength": {
             "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Strength",
             "type": "number"
           }
@@ -3045,6 +3124,7 @@
                 "type": "null"
               }
             ],
+            "description": "Which shop section this listing files under, by name. There is no\nshop-wide default.",
             "title": "Section"
           },
           "shipping_profile": {
@@ -3056,6 +3136,7 @@
                 "type": "null"
               }
             ],
+            "description": "Overrides ``shop.yaml``'s ``etsy.listing_defaults.shipping_profile``,\nby name.",
             "title": "Shipping Profile"
           },
           "tags": {
@@ -3080,6 +3161,7 @@
                 "type": "null"
               }
             ],
+            "description": "The ``colour-matrix`` template whose renders become this listing's\nper-colour swatches; absent means none.",
             "title": "Variation Images"
           }
         },
@@ -3154,7 +3236,6 @@
         "type": "object"
       },
       "EtsyListingSnapshot": {
-        "description": "Both sides of the review, in full.",
         "properties": {
           "desired": {
             "$ref": "#/components/schemas/EtsyListingFacts"
@@ -3167,7 +3248,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "``None`` for a listing with no Etsy id at all, not an empty one."
           }
         },
         "required": [
@@ -3427,7 +3509,7 @@
         "type": "object"
       },
       "EtsyVideosSnapshot": {
-        "description": "Both sides for the deploy review. The live side comes in Etsy's\nresponse order, which says nothing about the gallery (decision 9).",
+        "description": "Both sides for the deploy review. The live side comes in Etsy's\nresponse order, which says nothing about the gallery.",
         "properties": {
           "desired": {
             "items": {
@@ -3649,6 +3731,7 @@
                 "type": "null"
               }
             ],
+            "description": "The ``colour-matrix`` template the Variants tab judges colours on;\n``None`` when the garment profile names none.",
             "title": "Preview Template"
           },
           "sizes": {
@@ -3696,6 +3779,7 @@
                 "type": "null"
               }
             ],
+            "description": "The retention bucket holding the run's snapshot; ``None`` once it is\nforgotten, or for a run that made none.",
             "title": "Kept As"
           },
           "names": {
@@ -3703,6 +3787,7 @@
               "type": "string"
             },
             "default": {},
+            "description": "Each copy's destination's display name, by path.",
             "title": "Names",
             "type": "object"
           },
@@ -3847,6 +3932,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Publish new and still-draft listings on Etsy rather than leave drafts.\nOff unless asked; an apply must repeat what its reviewed plan chose.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -3866,7 +3952,7 @@
         "type": "object"
       },
       "ListingBatch": {
-        "description": "The batch a listing was made by, for the editor's row above the head\n(UI doc \u00a78): Back to batch and Mark reviewed.",
+        "description": "The batch a listing was made by, for the editor's row above the head:\nBack to batch and Mark reviewed.",
         "properties": {
           "batch_id": {
             "title": "Batch Id",
@@ -3902,6 +3988,7 @@
       "ListingDesignSummary": {
         "properties": {
           "file": {
+            "description": "Workspace-relative path under ``designs/``, e.g.\n``designs/take-a-hike.png``.",
             "title": "File",
             "type": "string"
           },
@@ -3934,6 +4021,7 @@
           },
           "description_composed": {
             "default": "",
+            "description": "The final `etsy.description` text, as `Workspace.compose_description`\njoins it: what the Details tab's preview renders. The lead alone when\n``ref`` does not resolve; an issue says why.",
             "title": "Description Composed",
             "type": "string"
           },
@@ -3961,6 +4049,7 @@
                 "type": "null"
               }
             ],
+            "description": "Hash of the selected design refs and bytes, for AI proposal\nstaleness; an unreadable file hashes as a stable marker. ``None`` only with\nno design.",
             "title": "Design Content Hash"
           },
           "etsy": {
@@ -3989,6 +4078,7 @@
               "type": "string"
             },
             "default": {},
+            "description": "Set only when a PATCH's candidate failed validation: nothing was\nwritten, and every other field describes the listing as it was. Empty on\nevery GET and every successful PATCH.",
             "title": "Field Errors",
             "type": "object"
           },
@@ -4015,6 +4105,7 @@
                 "type": "null"
               }
             ],
+            "description": "Fibre materials from the selected garment profile, read-only: a\nlisting never stores them.",
             "title": "Garment Materials"
           },
           "garment_model": {
@@ -4045,6 +4136,7 @@
           },
           "gestures": {
             "default": [],
+            "description": "The lifecycle actions the editor's action row offers, by the listings\ntable's rule; empty for the unsaved draft.",
             "items": {
               "enum": [
                 "delete",
@@ -4105,6 +4197,7 @@
                 "type": "null"
               }
             ],
+            "description": "UTC modification time of ``listing.yaml``; ``None`` for an unsaved\ndraft.",
             "title": "Modified At"
           },
           "name": {
@@ -4156,6 +4249,7 @@
                 "type": "null"
               }
             ],
+            "description": "The resolved plan's filename stem, for display.",
             "title": "Pricing Plan Name"
           },
           "printify_product_id": {
@@ -4273,6 +4367,7 @@
             "type": "string"
           },
           "positions": {
+            "description": "Dotted ``template_positions`` keys the candidate limits would refuse.",
             "items": {
               "type": "string"
             },
@@ -4305,6 +4400,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Publish new and still-draft listings on Etsy rather than leave drafts.\nOff unless asked; an apply must repeat what its reviewed plan chose.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -4410,6 +4506,7 @@
                 "type": "null"
               }
             ],
+            "description": "The representative artwork's name, as\n`GET /api/listing-designs/{name}/thumbnail` takes it: the first non-null\nof ``default``, ``on-light``, ``on-dark``, never a colour's own design.\n``None`` with no base file chosen.",
             "title": "Design"
           },
           "etsy_listing_id": {
@@ -4429,6 +4526,7 @@
           },
           "gestures": {
             "default": [],
+            "description": "Which buttons the listings table offers for this row, from the same\nfacts as ``status``.",
             "items": {
               "enum": [
                 "delete",
@@ -4507,7 +4605,7 @@
       },
       "ListingTemplateDetail": {
         "additionalProperties": false,
-        "description": "A listing template as its pages read it, saved or not -- one shape for\nboth, as `ListingDetail` is one shape for a listing and the unnamed draft.\n\nA draft (``GET /draft``: Save as listing template or Clone, written\nnowhere, UI doc \u00a71) has ``name`` ``\"\"``, no ``modified_at``, and says\nwhere it came from in ``source`` and ``assets``.",
+        "description": "A listing template as its pages read it, saved or not -- one shape for\nboth, as `ListingDetail` is one shape for a listing and the unnamed draft.\n\nA draft (``GET /draft``: Save as listing template or Clone, written\nnowhere) has ``name`` ``\"\"``, no ``modified_at``, and says\nwhere it came from in ``source`` and ``assets``.",
         "properties": {
           "assets": {
             "default": [],
@@ -4526,6 +4624,7 @@
           },
           "description_composed": {
             "default": "",
+            "description": "The body alone: a template has no lead, and each listing's own is\nplaced above it.",
             "title": "Description Composed",
             "type": "string"
           },
@@ -4569,6 +4668,7 @@
                 "type": "null"
               }
             ],
+            "description": "Fibre materials from the selected garment profile, read-only: a\nlisting never stores them.",
             "title": "Garment Materials"
           },
           "garment_model": {
@@ -4774,10 +4874,11 @@
         "type": "object"
       },
       "ListingTemplateSummary": {
-        "description": "One card on the Listing templates page (UI doc \u00a72).",
+        "description": "One card on the Listing templates page.",
         "properties": {
           "batch_count": {
             "default": 0,
+            "description": "Batches made from this template, while their records last.",
             "title": "Batch Count",
             "type": "integer"
           },
@@ -4793,9 +4894,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The smallest design the garment's print area takes; ``None`` when the\ngarment profile will not load."
           },
           "garment": {
+            "description": "The garment profile's blueprint as a seller names it\n(``Comfort Colors 1717``), or the profile's own name when it will not\nload.",
             "title": "Garment",
             "type": "string"
           },
@@ -4826,6 +4929,7 @@
                 "type": "null"
               }
             ],
+            "description": "The plan ref's filename stem; ``None`` when the template prices its\nsizes itself.",
             "title": "Pricing Plan Name"
           }
         },
@@ -5178,6 +5282,7 @@
         "description": "One listing's latest market research, as the top listings panel reads it back.",
         "properties": {
           "block": {
+            "description": "The market block the proposal was given; ``\"\"`` for an empty result.",
             "title": "Block",
             "type": "string"
           },
@@ -5376,6 +5481,7 @@
         "description": "One file a listing can put in `media:` as a file ref: a\nshared one under ``common-media/``, or one of the listing's own. A bare\nfile uploaded as-is, rather than a rendered mockup.",
         "properties": {
           "file": {
+            "description": "Workspace-relative, for display, e.g.\n``listings/take-a-hike/close-up.mp4``.",
             "title": "File",
             "type": "string"
           },
@@ -5388,10 +5494,12 @@
             "type": "string"
           },
           "name": {
+            "description": "Its path under ``common-media/`` or the listing's own directory: what\nthe picture endpoints take.",
             "title": "Name",
             "type": "string"
           },
           "ref": {
+            "description": "The ref to write into ``media:`` unchanged: a shared file's\nworkspace-relative path, or ``./close-up.mp4`` for a listing's own.",
             "title": "Ref",
             "type": "string"
           }
@@ -5544,6 +5652,7 @@
         "properties": {
           "colour_coverage": {
             "default": "exact",
+            "description": "How a mismatch between this photo's placement colours and a listing's\n``colors:`` is handled. ``exact``: ``plan`` fails naming the mismatch.\n``subset``: placements for colours the listing doesn't sell are skipped\nand ``plan`` reports which, for one chart shared across listings.",
             "enum": [
               "exact",
               "subset"
@@ -5746,7 +5855,6 @@
       },
       "Placement": {
         "additionalProperties": false,
-        "description": "One garment within a ``multiple``-kind scene.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -5825,6 +5933,7 @@
           },
           "publishable": {
             "default": false,
+            "description": "An apply that opts in to publishing would make this listing live on\nEtsy (``Plan.publishable``).",
             "title": "Publishable",
             "type": "boolean"
           },
@@ -5894,6 +6003,7 @@
                 "type": "null"
               }
             ],
+            "description": "The listing batch a ``batch``-scoped run deploys.",
             "title": "Batch Id"
           },
           "created_at": {
@@ -5902,6 +6012,7 @@
             "type": "string"
           },
           "events": {
+            "description": "Every event this run has produced so far, in order: what a client\nreattaching to the run replays.",
             "items": {
               "discriminator": {
                 "mapping": {
@@ -5985,6 +6096,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Whether this run publishes new and still-draft listings.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -6007,6 +6119,7 @@
           },
           "waiting_for_backup": {
             "default": false,
+            "description": "Held by a backup's pause: accepted and queued, starting once the backup\nstep ends. Never stored.",
             "title": "Waiting For Backup",
             "type": "boolean"
           }
@@ -6035,6 +6148,7 @@
                 "type": "null"
               }
             ],
+            "description": "The listing batch a ``batch``-scoped run deploys.",
             "title": "Batch Id"
           },
           "created_at": {
@@ -6073,6 +6187,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Whether this run publishes new and still-draft listings.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -6095,6 +6210,7 @@
           },
           "waiting_for_backup": {
             "default": false,
+            "description": "Held by a backup's pause: accepted and queued, starting once the backup\nstep ends. Never stored.",
             "title": "Waiting For Backup",
             "type": "boolean"
           }
@@ -6171,7 +6287,7 @@
         "type": "object"
       },
       "PositionedListingResponse": {
-        "description": "A listing holding its own position for a template (ADR-0058), which a\nrecalibration may put outside the limits. ``placements`` lists the\n``multiple`` placement IDs it positions; empty for one box.",
+        "description": "A listing holding its own position for a template, which a\nrecalibration may put outside the limits. ``placements`` lists the\n``multiple`` placement IDs it positions; empty for one box.",
         "properties": {
           "listing": {
             "title": "Listing",
@@ -6283,6 +6399,7 @@
           },
           "waiting_for_backup": {
             "default": false,
+            "description": "Held by a backup's pause: accepted and queued, starting once the backup\nstep ends. Never stored.",
             "title": "Waiting For Backup",
             "type": "boolean"
           }
@@ -6518,6 +6635,7 @@
       "PricingPlanSummary": {
         "properties": {
           "compatible": {
+            "description": "Whether this plan declares the exact garment profile asked for.",
             "title": "Compatible",
             "type": "boolean"
           },
@@ -6530,6 +6648,7 @@
             "type": "string"
           },
           "ref": {
+            "description": "Workspace-rooted, ready to PATCH into ``pricing_plan:`` unchanged.",
             "title": "Ref",
             "type": "string"
           }
@@ -6912,6 +7031,7 @@
             "type": "boolean"
           },
           "reasons": {
+            "description": "One per input that moved, in a fixed order, each finishing the\ndrawer heading's *Out of date: {reason}. Still usable*.",
             "items": {
               "type": "string"
             },
@@ -7041,6 +7161,20 @@
         "title": "PublishStagePlanDTO",
         "type": "object"
       },
+      "Refusal": {
+        "description": "A refusal :data:`REFUSAL_STATUS` answers: ``detail`` is its message.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "Refusal",
+        "type": "object"
+      },
       "RenameListingRequest": {
         "properties": {
           "new_name": {
@@ -7077,6 +7211,7 @@
             "type": "string"
           },
           "scene_hash": {
+            "description": "The scene hash this plan computed, without its ``sha256:`` prefix: the\nname of this plan's preview file.",
             "title": "Scene Hash",
             "type": "string"
           },
@@ -7214,11 +7349,13 @@
             "title": "Last Prune"
           },
           "missing": {
+            "description": "No restic repository at ``path``: backups stop.",
             "title": "Missing",
             "type": "boolean"
           },
           "password_stored": {
             "default": false,
+            "description": "Whether ``.env`` or the environment holds the password, so the\nmissing-repository actions ask for one only when it does not.",
             "title": "Password Stored",
             "type": "boolean"
           },
@@ -7235,6 +7372,7 @@
                 "type": "null"
               }
             ],
+            "description": "Why its snapshots could not be read, such as a wrong password.",
             "title": "Problem"
           },
           "snapshots": {
@@ -7268,6 +7406,7 @@
       "ResolvedPrice": {
         "properties": {
           "amount": {
+            "description": "Formatted as `Money` prints itself, e.g. ``\"249 NOK\"``.",
             "title": "Amount",
             "type": "string"
           },
@@ -7342,6 +7481,11 @@
             ],
             "title": "Finished At"
           },
+          "fraction": {
+            "default": 0.0,
+            "title": "Fraction",
+            "type": "number"
+          },
           "message": {
             "anyOf": [
               {
@@ -7351,6 +7495,7 @@
                 "type": "null"
               }
             ],
+            "description": "Why it failed or stopped.",
             "title": "Message"
           },
           "outcome": {
@@ -7364,11 +7509,6 @@
             "title": "Outcome",
             "type": "string"
           },
-          "percent": {
-            "default": 0.0,
-            "title": "Percent",
-            "type": "number"
-          },
           "seconds_left": {
             "anyOf": [
               {
@@ -7378,6 +7518,7 @@
                 "type": "null"
               }
             ],
+            "description": "Estimated from the rate so far; ``None`` until there is one.",
             "title": "Seconds Left"
           },
           "snapshot_id": {
@@ -7555,11 +7696,25 @@
         "title": "ReviewedRequest",
         "type": "object"
       },
+      "RunConflict": {
+        "description": "The run already holding one of the listings: reattach to it with\n``GET /api/runs/{active_run}`` rather than retrying.",
+        "properties": {
+          "active_run": {
+            "title": "Active Run",
+            "type": "string"
+          }
+        },
+        "required": [
+          "active_run"
+        ],
+        "title": "RunConflict",
+        "type": "object"
+      },
       "RunRecord": {
-        "description": "One run's outcome, as the history keeps it.",
         "properties": {
           "copies": {
             "default": [],
+            "description": "Each destination's copy, in the configured order.",
             "items": {
               "$ref": "#/components/schemas/CopyRecord"
             },
@@ -7575,6 +7730,7 @@
                 "type": "null"
               }
             ],
+            "description": "Bytes the snapshot added to the repository, from restic's summary.",
             "title": "Data Added"
           },
           "failed_step": {
@@ -7613,6 +7769,7 @@
                 "type": "null"
               }
             ],
+            "description": "Something the run decided that the seller should know, such as a\nnew workspace ID beside several others.",
             "title": "Notice"
           },
           "outcome": {
@@ -7637,6 +7794,7 @@
                 "type": "null"
               }
             ],
+            "description": "Set once restic made a snapshot, even when a later step failed.",
             "title": "Snapshot Id"
           },
           "started_at": {
@@ -7646,6 +7804,7 @@
           },
           "warnings": {
             "default": [],
+            "description": "Files restic could not read; the snapshot was made without them.",
             "items": {
               "type": "string"
             },
@@ -7663,7 +7822,6 @@
         "type": "object"
       },
       "RunningBackup": {
-        "description": "The operation in progress, for the running line.",
         "properties": {
           "destination": {
             "anyOf": [
@@ -7685,6 +7843,7 @@
                 "type": "null"
               }
             ],
+            "description": "Files read so far while backing up, or copied while copying.",
             "title": "Files Done"
           },
           "files_total": {
@@ -7725,6 +7884,7 @@
                 "type": "null"
               }
             ],
+            "description": "The job a backup waits for before it pauses the rest.",
             "title": "Waiting For"
           },
           "waiting_since": {
@@ -7774,9 +7934,11 @@
                 "type": "null"
               }
             ],
+            "description": "``None`` when Etsy did not say when the listing was created.",
             "title": "Favourites Per Day"
           },
           "lead": {
+            "description": "The description's first sentence -- all of it the model sees.",
             "title": "Lead",
             "type": "string"
           },
@@ -7785,10 +7947,12 @@
             "type": "integer"
           },
           "own_shop": {
+            "description": "Its ``shop_id`` is ``shop.yaml``'s ``etsy.shop_id``. Our own listings\nare kept: one that ranks is evidence like any other.",
             "title": "Own Shop",
             "type": "boolean"
           },
           "rank": {
+            "description": "1 is the best score. Ties keep the better search position.",
             "title": "Rank",
             "type": "integer"
           },
@@ -7797,14 +7961,17 @@
             "type": "integer"
           },
           "score": {
+            "description": "``score_raw`` as a whole number out of 100, as the panel shows it.",
             "title": "Score",
             "type": "integer"
           },
           "score_raw": {
+            "description": "Weighted percentile sum \u00f7 total weight, 0-1: what phrase scores add up.",
             "title": "Score Raw",
             "type": "number"
           },
           "search_rank": {
+            "description": "Best (lowest) 1-based position across the queries that found it.",
             "title": "Search Rank",
             "type": "integer"
           },
@@ -7825,6 +7992,7 @@
                 "type": "null"
               }
             ],
+            "description": "The shop's ``review_average``; ``None`` for no reviews in a year.",
             "title": "Shop Rating"
           },
           "shop_sales": {
@@ -8024,15 +8192,17 @@
         "type": "object"
       },
       "SeoReadinessResponse": {
-        "description": "Whether AI Mode can be enabled for one saved listing right now\n(implementation plan, \"Entry point\"). The frontend leaves the control\nvisible and disabled when ``ready`` is false; ``reason`` explains why\nto a developer or support reader.",
+        "description": "Whether AI Mode can be enabled for one saved listing right now. The\nfrontend leaves the control visible and disabled when ``ready`` is false;\n``reason`` explains why to a developer or support reader.",
         "properties": {
           "batch_pending": {
             "default": false,
+            "description": "A batch row owns this listing's AI: the editor follows the\nbatch run instead of offering its own.",
             "title": "Batch Pending",
             "type": "boolean"
           },
           "deploying": {
             "default": false,
+            "description": "A UI plan or apply holds this listing: the editor asks again\nuntil the deploy lets it go.",
             "title": "Deploying",
             "type": "boolean"
           },
@@ -8091,6 +8261,7 @@
             "type": "object"
           },
           "kind": {
+            "description": "``stale`` (412): settings.yaml changed since the page read it, so\nreload; ``invalid`` (422): ``field_errors`` say what to change.",
             "enum": [
               "stale",
               "invalid"
@@ -8131,6 +8302,8 @@
           },
           "opacity": {
             "default": 0.6,
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Opacity",
             "type": "number"
           }
@@ -8407,10 +8580,12 @@
             "title": "Preferred Print Provider"
           },
           "revision": {
+            "description": "sha256 of the file's exact bytes; the next PATCH must send it.",
             "title": "Revision",
             "type": "string"
           },
           "supported_currencies": {
+            "description": "Etsy Payments' currencies, in the order the page offers them.",
             "items": {
               "$ref": "#/components/schemas/CurrencyOption"
             },
@@ -8431,17 +8606,6 @@
       "SinglePreviewRequest": {
         "additionalProperties": false,
         "properties": {
-          "artwork": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artwork"
-          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,
@@ -8539,7 +8703,6 @@
       },
       "SingleTemplate": {
         "additionalProperties": false,
-        "description": "One photo, one garment.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -8570,6 +8733,7 @@
                 "type": "null"
               }
             ],
+            "description": "Which garment colour this photo depicts, which a light/dark listing\nresolves its artwork by. Without it the scene prints ``default`` and a\nlisting with light and dark designs cannot use it.",
             "title": "Colour"
           },
           "kind": {
@@ -8825,7 +8989,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Set only while a prompt, a ready provider or Etsy market access is\nmissing, which refuses Create; nothing is said when AI can run."
           },
           "expires_at": {
             "format": "date-time",
@@ -8837,6 +9002,7 @@
             "type": "string"
           },
           "ignored": {
+            "description": "A ZIP's files that are not PNGs, by their path in it.",
             "items": {
               "type": "string"
             },
@@ -8859,6 +9025,7 @@
             "type": "array"
           },
           "template_saved_at": {
+            "description": "When the frozen listing template was last saved.",
             "format": "date-time",
             "title": "Template Saved At",
             "type": "string"
@@ -8930,7 +9097,7 @@
         "type": "object"
       },
       "StagingRowDetail": {
-        "description": "One unique design on the staging page (UI doc \u00a75).",
+        "description": "One unique design on the staging page.",
         "properties": {
           "id": {
             "title": "Id",
@@ -8971,9 +9138,11 @@
                 "type": "null"
               }
             ],
+            "description": "The ``designs/`` stem with this row's exact bytes, which its listing\nwill name instead of writing its own.",
             "title": "Reuse"
           },
           "sources": {
+            "description": "Every uploaded file with these bytes; more than one is a merge.",
             "items": {
               "type": "string"
             },
@@ -8981,6 +9150,7 @@
             "type": "array"
           },
           "state": {
+            "description": "``ready`` will be created; ``name`` blocks Create until fixed;\n``invalid`` will not be created and blocks nothing.",
             "enum": [
               "ready",
               "name",
@@ -9071,7 +9241,7 @@
         "type": "object"
       },
       "SwatchResponse": {
-        "description": "A colour-matrix colour's real garment shade, sampled off its own scene\nphoto (`render/swatch.py`'s `sample_swatch`) rather than an invented or\nhand-typed hex value -- nothing in the domain model stores one.",
+        "description": "A colour-matrix colour's real garment shade, sampled off its own scene\nphoto; nothing in the domain model stores one.",
         "properties": {
           "hex": {
             "title": "Hex",
@@ -9230,6 +9400,7 @@
         "properties": {
           "limits": {
             "additionalProperties": true,
+            "description": "Candidate limits, shaped as ``template_positions`` in settings.yaml.",
             "title": "Limits",
             "type": "object"
           }
@@ -9251,6 +9422,7 @@
             "type": "array"
           },
           "templates_needing_inference": {
+            "description": "Marigold templates whose preparation evidence would need model inference\nto cover the wider limits.",
             "items": {
               "type": "string"
             },
@@ -9342,6 +9514,7 @@
                 "type": "null"
               }
             ],
+            "description": "The template photo's true pixel height, as ``width``.",
             "title": "Height"
           },
           "kind": {
@@ -9362,6 +9535,7 @@
           },
           "labels": {
             "default": [],
+            "description": "The seller's words for finding this template; empty with no config yet.",
             "items": {
               "type": "string"
             },
@@ -9422,6 +9596,7 @@
                 "type": "null"
               }
             ],
+            "description": "Why it is not calibrated yet, in the words the rail shows (\"no kind\nset\", \"1 box has no colour\"); ``None`` when ``status`` is ``calibrated``.",
             "title": "Status Reason"
           },
           "width": {
@@ -9433,6 +9608,7 @@
                 "type": "null"
               }
             ],
+            "description": "The template photo's true pixel width, the space ``template.yaml``'s\nboxes are in, not the downscaled preview's; ``None`` with no photo yet.",
             "title": "Width"
           }
         },
@@ -9626,6 +9802,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Publish new and still-draft listings on Etsy rather than leave drafts.\nOff unless asked; an apply must repeat what its reviewed plan chose.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -9659,6 +9836,7 @@
           },
           "publish": {
             "default": false,
+            "description": "Publish new and still-draft listings on Etsy rather than leave drafts.\nOff unless asked; an apply must repeat what its reviewed plan chose.",
             "title": "Publish",
             "type": "boolean"
           },
@@ -9690,6 +9868,7 @@
                 "type": "null"
               }
             ],
+            "description": "Backup's Setup page: every destination, in order. A new one is\ncreated, inside a folder that must exist.",
             "title": "Backup Destinations"
           },
           "backup_interval_hours": {
@@ -9782,6 +9961,7 @@
                 "type": "null"
               }
             ],
+            "description": "The whole limits section; only the leaves it changes are written.",
             "title": "Template Positions"
           },
           "weights": {
@@ -9836,7 +10016,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The ``backup:`` block; ``None`` while backups are off."
           },
           "concurrency": {
             "title": "Concurrency",
@@ -9861,6 +10042,7 @@
             "type": "string"
           },
           "run_limit_minutes": {
+            "description": "At least ``max(5, enabled providers x step_limit_minutes)``; the page\ncomputes that floor from ``providers`` as the seller edits.",
             "title": "Run Limit Minutes",
             "type": "integer"
           },
@@ -9869,12 +10051,14 @@
             "type": "integer"
           },
           "template_positions": {
-            "$ref": "#/components/schemas/TemplatePositionLimits"
+            "$ref": "#/components/schemas/TemplatePositionLimits",
+            "description": "Current limits, including defaults."
           },
           "weights": {
             "additionalProperties": {
               "type": "number"
             },
+            "description": "Relative weights, normalized only for display by the page.",
             "title": "Weights",
             "type": "object"
           }
@@ -9904,9 +10088,11 @@
                 "type": "null"
               }
             ],
+            "description": "``etsy.shop_name`` from ``shop.yaml``; ``None`` until ``setup`` reads\nit back from Etsy.",
             "title": "Shop Name"
           },
           "storage_id": {
+            "description": "Opaque identity of the workspace root, for browser storage keys: two\nroots never share one, even with the same shop name.",
             "title": "Storage Id",
             "type": "string"
           }
@@ -9947,7 +10133,7 @@
         ]
       },
       "patch": {
-        "description": "Save ``changes`` against ``revision``: 412 when the file changed since,\n422 for an edit it refuses. What the save sets off is ``settings_save``'s;\nthis hands it the host's coordinators, and coverage jobs it queues are\nqueued after the response.",
+        "description": "Save ``changes`` against ``revision``. Coverage jobs the save queues\nrun after the response.",
         "operationId": "edit_settings_api_admin_settings_patch",
         "requestBody": {
           "content": {
@@ -9978,7 +10164,7 @@
                 }
               }
             },
-            "description": "Precondition Failed"
+            "description": "settings.yaml changed since `revision`"
           },
           "422": {
             "content": {
@@ -9988,7 +10174,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "An edit it refuses"
           }
         },
         "summary": "Edit Settings",
@@ -10222,7 +10408,14 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No run for this listing"
           },
           "422": {
             "content": {
@@ -10241,7 +10434,7 @@
         ]
       },
       "post": {
-        "description": "Start a run for a saved listing. A ``409`` either names the active run\nto reattach to, or gives the readiness rule that failed.",
+        "description": "Start a run for a saved listing.",
         "operationId": "create_ai_run_api_ai_runs_post",
         "requestBody": {
           "content": {
@@ -10265,7 +10458,14 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such listing"
           },
           "409": {
             "content": {
@@ -10275,7 +10475,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "The active run to reattach to, or the readiness rule that failed"
           },
           "422": {
             "content": {
@@ -10321,10 +10521,24 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such run"
           },
           "409": {
-            "description": "Conflict"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "The run has already finished"
           },
           "422": {
             "content": {
@@ -10367,7 +10581,14 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such run"
           },
           "422": {
             "content": {
@@ -10410,7 +10631,14 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such run"
           },
           "422": {
             "content": {
@@ -10452,7 +10680,7 @@
     },
     "/api/backup/connect": {
       "post": {
-        "description": "Copy an existing repository to local disk, check the password opens\nit, then use it; answers once it is connected. A wrong password or a\nfolder that is not a repository is a 422, and nothing is saved.",
+        "description": "Copy an existing repository to local disk, check the password opens\nit, then use it; answers once it is connected and saves nothing on a\nrefusal.",
         "operationId": "connect_repository_api_backup_connect_post",
         "requestBody": {
           "content": {
@@ -10483,7 +10711,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "What the workspace holds now forbids it"
           },
           "412": {
             "content": {
@@ -10493,7 +10721,7 @@
                 }
               }
             },
-            "description": "Precondition Failed"
+            "description": "settings.yaml changed since the page read it"
           },
           "422": {
             "content": {
@@ -10503,7 +10731,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "A wrong password or a folder that is not a repository"
           }
         },
         "summary": "Connect Repository",
@@ -10577,7 +10805,7 @@
     },
     "/api/backup/repository": {
       "post": {
-        "description": "Create a new repository while the configured one is missing, save\nits folder, and start the first backup. Refuses a folder that holds\nfiles (409) and a missing or short password (422).",
+        "description": "Create a new repository while the configured one is missing, save\nits folder, and start the first backup.",
         "operationId": "create_repository_api_backup_repository_post",
         "requestBody": {
           "content": {
@@ -10608,7 +10836,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A folder that holds files"
           },
           "412": {
             "content": {
@@ -10618,7 +10846,7 @@
                 }
               }
             },
-            "description": "Precondition Failed"
+            "description": "settings.yaml changed since the page read it"
           },
           "422": {
             "content": {
@@ -10628,7 +10856,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "A missing or short password"
           }
         },
         "summary": "Create Repository",
@@ -10639,7 +10867,7 @@
     },
     "/api/backup/restore": {
       "post": {
-        "description": "Restore a snapshot into a new folder; 409 for the live workspace, a\nfolder that holds files or a restore already running.",
+        "description": "Restore a snapshot into a new folder.",
         "operationId": "start_restore_api_backup_restore_post",
         "requestBody": {
           "content": {
@@ -10661,6 +10889,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "The target is the live workspace or holds files, or a restore is running"
           },
           "422": {
             "content": {
@@ -10703,7 +10941,7 @@
     },
     "/api/backup/run": {
       "post": {
-        "description": "Start a backup; 409 while another backup operation runs.",
+        "description": "Start a backup.",
         "operationId": "back_up_now_api_backup_run_post",
         "responses": {
           "202": {
@@ -10715,6 +10953,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Another backup operation is running"
           }
         },
         "summary": "Back Up Now",
@@ -10725,7 +10973,7 @@
     },
     "/api/backup/setup": {
       "post": {
-        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. Refuses a\nshort password (422), a folder that holds files (409) and a destination\nwhose parent is missing (422), writing nothing.\n\nWhen a destination already holds a backup, connects it instead, as\n``/connect`` does, answering once it is copied: ``connected`` names the\ndestination. Refuses a password that does not open it (422, field\n``password``), part of a copy, and two different repositories (422).",
+        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. A refusal\nwrites nothing.\n\nWhen a destination already holds a backup, connects it instead, as\n``/connect`` does, answering once it is copied: ``connected`` names the\ndestination.",
         "operationId": "set_up_api_backup_setup_post",
         "requestBody": {
           "content": {
@@ -10756,7 +11004,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A folder that holds files"
           },
           "412": {
             "content": {
@@ -10766,7 +11014,7 @@
                 }
               }
             },
-            "description": "Precondition Failed"
+            "description": "settings.yaml changed since the page read it"
           },
           "422": {
             "content": {
@@ -10776,7 +11024,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "A short password, a destination whose parent is missing, or a destination that holds part of a backup, another repository, or one the password does not open (field `password`)"
           }
         },
         "summary": "Set Up",
@@ -11146,7 +11394,7 @@
     },
     "/api/batches/{batch_id}/rows/{row}/reviewed": {
       "put": {
-        "description": "Mark reviewed / Mark needs review (spec, *Review workflow*). Refused\nfor a row still queued or drafting, deleted, or never created.",
+        "description": "Mark reviewed / Mark needs review.",
         "operationId": "set_reviewed_api_batches__batch_id__rows__row__reviewed_put",
         "parameters": [
           {
@@ -11190,7 +11438,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The row has no listing to review yet"
+            "description": "The row is still queued or drafting, deleted, or never created"
           },
           "422": {
             "content": {
@@ -11841,7 +12089,7 @@
         ]
       },
       "post": {
-        "description": "Naming the draft is what writes it (UI doc \u00a71). The name is checked\nfirst, so a bad one is a 400 before any source is read.",
+        "description": "Naming the draft is what writes it.",
         "operationId": "create_listing_template_api_listing_templates_post",
         "requestBody": {
           "content": {
@@ -11863,6 +12111,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "An unusable name, refused before any source is read"
           },
           "422": {
             "content": {
@@ -12078,7 +12336,7 @@
     },
     "/api/listing-templates/{name}/rename": {
       "post": {
-        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). A taken name is a 409 and never\nsuffixed (spec, *Storage and identity*); the staging sessions and\nbatches made from it follow it by name\n(:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`).",
+        "description": "Move a listing template, whole, to a new name. The staging sessions\nand batches made from it follow it.",
         "operationId": "rename_listing_template_api_listing_templates__name__rename_post",
         "parameters": [
           {
@@ -12111,6 +12369,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "A taken name; it is never suffixed"
           },
           "422": {
             "content": {
@@ -12301,7 +12569,7 @@
         ]
       },
       "post": {
-        "description": "Naming a listing is what creates it.\n\nMirrors PATCH exactly, one level up: a document that fails\n``Listing.model_validate`` is a **200** carrying ``field_errors`` with\nnothing written. The two things a *name* can be wrong about keep their\nstatus codes instead -- not a single path segment is the 400, and\nalready taken (the directory, not just ``listing.yaml``) is a 409.",
+        "description": "Naming a listing is what creates it. As with PATCH, a document that\nwill not validate writes nothing and answers 200 with ``field_errors``.",
         "operationId": "create_listing_api_listings_post",
         "requestBody": {
           "content": {
@@ -12324,6 +12592,26 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Not a single path segment"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "A listing directory of that name exists"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12343,7 +12631,7 @@
     },
     "/api/listings/{listing}/media-files": {
       "get": {
-        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it. A ``404`` for a listing that does not\nexist, rather than an empty group that would look like one with nothing\nin it.",
+        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it.",
         "operationId": "list_listing_media_files_api_listings__listing__media_files_get",
         "parameters": [
           {
@@ -12370,6 +12658,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such listing (an empty list is a listing with no files)"
           },
           "422": {
             "content": {
@@ -12488,7 +12786,7 @@
     },
     "/api/listings/{name}": {
       "delete": {
-        "description": "Delete from the listings table.\n\nNo remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering\nwith the row left pending. Published: 409 -- retire it instead. Confirm\nis the UI's. What goes with the listing either way is\n:func:`~etsy_listings.core.application.listing_identity.delete_listing`'s.",
+        "description": "Delete from the listings table.",
         "operationId": "delete_listing_api_listings__name__delete",
         "parameters": [
           {
@@ -12505,10 +12803,25 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ListingSummary"
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "Remote copies: marked `lifecycle: deleted`, the row left pending"
+          },
+          "204": {
+            "description": "No remote copies: wiped"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Published: retire it instead"
           },
           "422": {
             "content": {
@@ -12716,7 +13029,7 @@
     },
     "/api/listings/{name}/market": {
       "get": {
-        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose\nsearch succeeded, so a failed run leaves the previous one here. 404 until\nthe first search -- the panel is not rendered then -- and for a snapshot\nthat no longer reads as one, which the next run replaces.",
+        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload. Written only by an AI run whose search succeeded, so a\nfailed run leaves the previous one here.",
         "operationId": "get_market_snapshot_api_listings__name__market_get",
         "parameters": [
           {
@@ -12741,7 +13054,7 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "No such listing, or no market search for it yet"
+            "description": "No such listing, no market search for it yet, or a snapshot that no longer reads, which the next run replaces"
           },
           "422": {
             "content": {
@@ -13061,7 +13374,7 @@
     },
     "/api/listings/{name}/scene-artwork": {
       "get": {
-        "description": "The file one layer of this listing's scene prints, as the editor's live\nPosition mode draws it: downscaled and with its transparency, unlike a list\nthumbnail. Resolved here for the reason :func:`scene_preview` is, so the\npicture under a drag and the render that replaces it print the same file.\n``404`` for a layer left bare.",
+        "description": "The file one layer of this listing's scene prints, as the editor's live\nPosition mode draws it: downscaled and with its transparency, unlike a list\nthumbnail. Resolved here for the reason :func:`scene_preview` is, so the\npicture under a drag and the render that replaces it print the same file.",
         "operationId": "scene_artwork_picture_api_listings__name__scene_artwork_get",
         "parameters": [
           {
@@ -13123,6 +13436,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such listing, or a layer that prints nothing"
           },
           "422": {
             "content": {
@@ -13786,7 +14109,7 @@
         ]
       },
       "post": {
-        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace or batch apply that is not\nexactly its review is a ``409`` too, carrying the refusal's message, and\nso is a batch plan with nothing to deploy; a batch nobody holds is a\n``404``.",
+        "description": "Queue a plan or apply run.",
         "operationId": "create_run_api_runs_post",
         "requestBody": {
           "content": {
@@ -13844,6 +14167,34 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such batch"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunConflict"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    }
+                  ],
+                  "title": "Response 409 Create Run Api Runs Post"
+                }
+              }
+            },
+            "description": "The run already holding one of these listings, to reattach to; or an apply that is not exactly its review, or a batch plan with nothing to deploy"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -13863,7 +14214,7 @@
     },
     "/api/runs/{run_id}": {
       "delete": {
-        "description": "Cancel a queued or running **plan**. An ``apply`` is always refused\n(leaving the page never cancels one), and so is a finished run.",
+        "description": "Cancel a queued or running plan. Leaving the page never cancels an\napply.",
         "operationId": "cancel_run_api_runs__run_id__delete",
         "parameters": [
           {
@@ -13901,6 +14252,26 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such run"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "An apply, or a finished run"
           },
           "422": {
             "content": {
@@ -14745,7 +15116,7 @@
     },
     "/api/templates/{name}/kind": {
       "post": {
-        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape. Refused for a template that\nalready has one -- changing kind would discard its calibration.",
+        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.",
         "operationId": "assign_kind_api_templates__name__kind_post",
         "parameters": [
           {
@@ -14798,15 +15169,25 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "The template already has a kind; changing it would discard its calibration"
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Refusal"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "No photos, or a photo count the kind does not take"
           }
         },
         "summary": "Assign Kind",
@@ -15249,7 +15630,7 @@
     },
     "/api/templates/{name}/rename": {
       "post": {
-        "description": "Move a template, and everything naming it, to a new name\n(:mod:`~etsy_listings.core.application.template_rename`). A taken name, a\nrunning deploy or a preparing template is a ``409``; an unusable name is a\n``400``.",
+        "description": "Move a template, and everything naming it, to a new name.",
         "operationId": "rename_template_api_templates__name__rename_post",
         "parameters": [
           {
@@ -15282,6 +15663,26 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "An unusable name"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "A taken name, a running deploy, or a template still preparing"
           },
           "422": {
             "content": {

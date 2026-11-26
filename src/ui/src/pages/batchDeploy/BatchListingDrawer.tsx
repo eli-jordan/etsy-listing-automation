@@ -142,8 +142,8 @@ function DrawerPlan({
         comparison={comparison}
         listing={{
           name,
-          // The server resolves every layer from the saved listing
-          // (A35); nothing is edited here, so no version to key by.
+          // The server resolves every layer from the saved listing;
+          // nothing is edited here, so no version to key by.
           scene: sceneSource(name, ""),
         }}
         renderSnapshot={renderSnapshot}

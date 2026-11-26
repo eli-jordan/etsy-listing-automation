@@ -28,7 +28,6 @@ from etsy_listings.core.clients.etsy.oauth import OAuthError, TokenResponse
 from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -43,7 +42,6 @@ ANSWERS = {
     "Printify API token": "printify-token-abc",
     "Etsy keystring": "keystring-123",
     "Etsy shared secret": "shared-secret-456",
-    "Anthropic API key": "",
     "Sign in to Etsy again": False,
 }
 
@@ -123,7 +121,7 @@ def backends(etsy: FakeEtsy, printify: FakePrintifyClient, **overrides: Any) -> 
 def _no_ambient_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     """A developer machine has some of these exported. These tests decide for
     themselves what already exists."""
-    for name in (PRINTIFY_TOKEN_VAR, ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR, ANTHROPIC_KEY_VAR):
+    for name in (PRINTIFY_TOKEN_VAR, ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -153,7 +151,7 @@ def tokens_document(root: Path) -> dict[str, Any]:
 def test_a_first_run_stores_every_credential_it_was_given(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, etsy: FakeEtsy, printify: FakePrintifyClient
 ) -> None:
-    scripted.install(monkeypatch, dict(ANSWERS, **{"Anthropic API key": "sk-ant-123"}))
+    scripted.install(monkeypatch, ANSWERS)
 
     run_auth(tmp_path, backends=backends(etsy, printify))
 
@@ -161,7 +159,6 @@ def test_a_first_run_stores_every_credential_it_was_given(
         PRINTIFY_TOKEN_VAR: "printify-token-abc",
         ETSY_KEYSTRING_VAR: "keystring-123",
         ETSY_SHARED_SECRET_VAR: "shared-secret-456",
-        ANTHROPIC_KEY_VAR: "sk-ant-123",
     }
 
 
@@ -407,15 +404,14 @@ def test_cancelling_any_question_auth_asks_keeps_only_what_came_before_it(
     same reason as `setup`'s: a list written by hand beside a wizard that
     grows is a list that goes stale.
     """
-    full = dict(ANSWERS, **{"Anthropic API key": "sk-ant-123"})
-    probe = scripted.install(monkeypatch, dict(full))
+    probe = scripted.install(monkeypatch, dict(ANSWERS))
     run_auth(tmp_path / "probe", backends=backends(etsy, printify))
     questions = list(probe.asked)
     assert len(questions) > 1
 
     for index, question in enumerate(questions):
         root = tmp_path / f"cancelled-at-{index}"
-        run = scripted.install(monkeypatch, {**full, question: None})
+        run = scripted.install(monkeypatch, {**ANSWERS, question: None})
 
         with pytest.raises(prompts.Cancelled):
             run_auth(root, backends=backends(etsy, printify))
@@ -432,7 +428,6 @@ def test_cancelling_any_question_auth_asks_keeps_only_what_came_before_it(
 CREDENTIALS = (
     (("Printify API token",), (PRINTIFY_TOKEN_VAR,)),
     (("Etsy keystring", "Etsy shared secret"), (ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR)),
-    (("Anthropic API key",), (ANTHROPIC_KEY_VAR,)),
 )
 
 

@@ -159,6 +159,34 @@ def test_generate_writes_the_prompt_to_a_file_and_returns_the_text_field(tmp_pat
     assert not Path(argv[argv.index("--prompt-file") + 1]).exists()
 
 
+def test_generate_builds_a_read_only_headless_argv(tmp_path: Path) -> None:
+    host = _generating(_Grok(finished(json.dumps({"text": "{}"}))))
+
+    _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+
+    argv = host.last_managed.argv
+    assert argv == [
+        "/resolved/grok",
+        "--prompt-file",
+        argv[argv.index("--prompt-file") + 1],
+        "--output-format",
+        "json",
+        "--json-schema",
+        json.dumps(RESPONSE_SCHEMA),
+        "--tools",
+        "read_file,grep,list_dir",
+        "--permission-mode",
+        "dontAsk",
+        "--no-subagents",
+        "--disable-web-search",
+        "--max-turns",
+        "8",
+        "--verbatim",
+        "--cwd",
+        str(tmp_path),
+    ]
+
+
 def test_generate_uses_the_schema_object_when_the_text_is_not_json(tmp_path: Path) -> None:
     # `--json-schema` puts the valid object in `structuredOutput`. `text` is
     # the model's own write-up and is not required to parse.

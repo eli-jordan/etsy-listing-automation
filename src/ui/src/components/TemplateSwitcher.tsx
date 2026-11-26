@@ -159,7 +159,6 @@ interface SheetProps {
   selected: string;
   rename: TemplateRename;
   onClose: () => void;
-  /** The template rail, which picks and closes. */
   children: ReactNode;
 }
 

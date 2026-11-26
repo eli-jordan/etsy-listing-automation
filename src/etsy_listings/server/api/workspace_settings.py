@@ -62,15 +62,19 @@ def read_settings(request: Request) -> WorkspaceSettingsResponse:
 @router.patch(
     "",
     response_model=WorkspaceSettingsResponse,
-    responses={412: {"model": SettingsSaveRefusal}, 422: {"model": SettingsSaveRefusal}},
+    responses={
+        412: {
+            "model": SettingsSaveRefusal,
+            "description": "settings.yaml changed since `revision`",
+        },
+        422: {"model": SettingsSaveRefusal, "description": "An edit it refuses"},
+    },
 )
 def edit_settings(
     request: Request, body: WorkspaceSettingsPatch, background: BackgroundTasks
 ) -> WorkspaceSettingsResponse | JSONResponse:
-    """Save ``changes`` against ``revision``: 412 when the file changed since,
-    422 for an edit it refuses. What the save sets off is ``settings_save``'s;
-    this hands it the host's coordinators, and coverage jobs it queues are
-    queued after the response."""
+    """Save ``changes`` against ``revision``. Coverage jobs the save queues
+    run after the response."""
     keys = {
         "concurrency": workspace_settings.CONCURRENCY,
         "weights": workspace_settings.WEIGHTS,

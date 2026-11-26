@@ -1,21 +1,9 @@
-"""What a local listing check reads off the workspace, read once per request.
+"""What a local listing check reads off the workspace, once per request:
+templates eagerly, garment profiles and video probes on demand.
 
-* **Templates are gathered eagerly**, in ``gather``, because every check of
-  every listing needs the whole map.
-* **Garment profiles are read on demand and kept**, because a request usually
-  wants one or two of them and a workspace may hold many.
-* **Videos are probed on demand and kept, by file**: a shared clip in
-  ``common-media/`` is named by many listings.
-
-Two of those answers also outlive the request:
-
-* **A template's entry is kept until a file in its directory changes**
-  (:func:`~etsy_listings.core.workspace.file_version.tree_version`). Readiness
-  is advisory here -- a listing issue -- and the render stage asks it again
-  from the files before it acts.
-* **A video's probe is kept until the file changes**
-  (:func:`~etsy_listings.core.workspace.file_version.file_version`).
-"""
+A template's entry outlives the request until a file in its directory changes,
+and a video's probe until its file changes, so readiness here is advisory and
+the render stage asks again before it acts."""
 
 from __future__ import annotations
 

@@ -92,7 +92,6 @@ class RunExecutor:
                 return
 
     def _admitted(self, run_id: str) -> None:
-        """Execute ``run_id`` once the gate admits it."""
         run = self.registry.get(run_id)
         if run is None or run.phase in TERMINAL_PHASES:
             return

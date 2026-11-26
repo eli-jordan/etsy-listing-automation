@@ -1,8 +1,7 @@
-"""Listing templates (ADR-0047): turning a listing or another template into a
-draft, judging it complete, writing it, and freezing one for a staging session.
+"""Listing templates: turning a listing or another template into a draft, judging
+it complete, writing it, and freezing one for a staging session.
 
-Withheld: instantiating a template into listings, which is ``batches``'.
-"""
+Withheld: instantiating a template into listings, which is ``batches``'."""
 
 from etsy_listings.core.listing_templates.check import template_issues
 from etsy_listings.core.listing_templates.convert import (

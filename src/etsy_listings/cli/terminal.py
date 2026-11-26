@@ -1,14 +1,8 @@
 """Terminal decorations that need an ASCII fallback.
 
-A redirected stdout on Windows is cp1252, and a cygwin console can report an
-encoding that represents neither a block nor an emoji; printing one anyway
-raises ``UnicodeEncodeError`` mid-run. Anything that prints a non-ASCII
-decoration asks :func:`choose` first.
-
-A CLI leaf: the ``apply`` swatches and the ``new`` picker's marker are
-both terminal output, which only the CLI produces (ADR-0052). It depends on
-nothing but the standard library, so any CLI module may depend on it.
-"""
+A redirected stdout on Windows is cp1252 and a cygwin console can report an
+encoding with no block or emoji, so printing one raises ``UnicodeEncodeError``
+unless :func:`choose` is asked first."""
 
 from __future__ import annotations
 

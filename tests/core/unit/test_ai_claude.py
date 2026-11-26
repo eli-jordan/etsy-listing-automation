@@ -323,24 +323,24 @@ def test_generate_builds_the_expected_argv(tmp_path: Path) -> None:
     assert result.raw_output == '{"ok": true}'
     assert len(host.managed_calls) == 1
     call = host.last_managed
-    argv = call.argv
-    assert argv[0] == "/resolved/claude"  # the which-resolved path, not the bare name
-    assert "-p" in argv
-    assert "--output-format" in argv
-    assert argv[argv.index("--output-format") + 1] == "json"
-    assert "--no-session-persistence" in argv
-    assert "--tools" in argv
-    assert "--json-schema" in argv
-    schema_arg = argv[argv.index("--json-schema") + 1]
-    assert json.loads(schema_arg) == RESPONSE_SCHEMA
+    assert call.argv == [
+        "/resolved/claude",
+        "-p",
+        "--output-format",
+        "json",
+        "--no-session-persistence",
+        "--tools",
+        "Read,Grep,Glob",
+        "--permission-mode",
+        "dontAsk",
+        "--permission-prompts",
+        "none",
+        "--json-schema",
+        json.dumps(RESPONSE_SCHEMA),
+    ]
     assert call.cwd == tmp_path
     assert call.deadline is deadline
-    # The prompt is piped via stdin (see `ai/codex.py`'s own reasoning, which
-    # applies here too, only more so since Claude's prompt also echoes the
-    # response schema): it must never appear as a trailing argv element,
-    # which is what would risk a platform argv-length limit.
-    assert argv[-1] == json.dumps(RESPONSE_SCHEMA)
-    assert not any(str(request.design_image) in arg for arg in argv)
+    assert not any(str(request.design_image) in arg for arg in call.argv)
 
 
 def test_generate_sends_the_seller_prompt_and_context_over_stdin(tmp_path: Path) -> None:
