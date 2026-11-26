@@ -85,9 +85,6 @@ function Check({ row, onUse }: { row: StagingRow; onUse: (name: string) => void 
   );
 }
 
-/** A name input that sends only what the seller committed: on blur or
- * Enter, and only when it differs from the server's answer. Keyed by that
- * answer, so a new one starts it afresh. */
 function NameInput({ row, onCommit }: { row: StagingRow; onCommit: (name: string) => void }) {
   const [value, setValue] = useState(row.name);
   const commit = () => {

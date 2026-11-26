@@ -104,8 +104,6 @@ export function RecentBatches() {
     let current = true;
     listBatches()
       .then((loaded) => current && setEntries(loaded))
-      // The cards above are the page; a batch index that will not load
-      // leaves them usable rather than replacing them with an error.
       .catch(() => {});
     return () => {
       current = false;
