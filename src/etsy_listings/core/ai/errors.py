@@ -59,8 +59,7 @@ class ProviderGenerationError(SeoTryAgainError):
         )
 
 
-_AVAILABILITY_MARKERS: tuple[str, ...] = (
-    # authentication
+_AUTH_MARKERS: tuple[str, ...] = (
     "not logged in",
     "not authenticated",
     "authentication failed",
@@ -70,7 +69,8 @@ _AVAILABILITY_MARKERS: tuple[str, ...] = (
     "login required",
     "run `codex login`",
     "run 'codex login'",
-    # quota / billing
+)
+_QUOTA_MARKERS: tuple[str, ...] = (
     "quota",
     "insufficient_quota",
     "billing",
@@ -85,12 +85,14 @@ _AVAILABILITY_MARKERS: tuple[str, ...] = (
     "usage credits",
     "opus limit",
     "sonnet limit",
-    # rate limiting
+)
+_RATE_LIMIT_MARKERS: tuple[str, ...] = (
     "rate limit",
     "rate-limited",
     "rate_limit",
     "too many requests",
 )
+_AVAILABILITY_MARKERS = _AUTH_MARKERS + _QUOTA_MARKERS + _RATE_LIMIT_MARKERS
 """Substrings (matched case-insensitively) that a CLI's own stdout/stderr is
 checked against. Deliberately conservative and stdlib-only: the classifier
 never guesses at an internal error message it does not recognise, per the
@@ -108,6 +110,10 @@ structured ``api_error_status`` on a CLI envelope is the other place a bare
 status is trusted -- it is a field, not a number floating in prose."""
 
 _HTTP_STATUS_PATTERN = re.compile(r"\bhttp\D{0,5}(401|403|429)\b", re.IGNORECASE)
+"""An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
+line. A bare status number in prose is not trusted; this pattern is, because
+it is anchored to the word "http". A structured ``api_error_status`` is
+trusted separately, in :func:`_api_status`."""
 _PREFERENCE_REJECTION = re.compile(
     r"\b(?:unknown|unsupported|invalid) (?:reasoning )?effort\b"
     r"|\b(?:unknown|unsupported|invalid) model\b(?!\s+(?:output|response)\b)"
@@ -124,13 +130,8 @@ _CLAUDE_SELECTED_MODEL_REJECTION = re.compile(
 )
 """Claude's observed refusal of a saved model, fallback-eligible like the above."""
 _ERROR_PREFIX = re.compile(r"^error:\s*", re.IGNORECASE)
-"""An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
-line. A bare status number in prose is not trusted; this pattern is, because
-it is anchored to the word "http". A structured ``api_error_status`` is
-trusted separately, in :func:`_api_status`."""
 
 _AUTH_OR_LIMIT_STATUS = frozenset({401, 403, 429})
-_MIN_JSONL_LINES = 2  # one line is a single object, which _parse_object already tried
 """HTTP statuses that mean sign-in, permission, or a rate/usage limit when a
 CLI reports them as ``api_error_status``. 500 and 529 stay "Try again": they
 are the service failing, not this account being blocked."""
@@ -226,6 +227,9 @@ def _failure_lines(text: str) -> str | None:
     if not seen:
         return None
     return " ".join(seen)
+
+
+_MIN_JSONL_LINES = 2  # one line is a single object, which _parse_object already tried
 
 
 def _envelope(text: str) -> dict[str, Any] | None:
