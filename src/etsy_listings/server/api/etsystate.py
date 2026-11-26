@@ -92,13 +92,9 @@ def etsy_states(  # noqa: PLR0913 -- every argument after client_for is a test s
 ) -> dict[int, str | None]:
     """Each of ``listing_ids``' Etsy ``state``, or ``None`` when unknown.
 
-    Ids still inside the memo are answered from it; the rest are fetched in
-    one batch. An id Etsy does not answer for is cached as ``None`` like any
-    other, so a listing deleted on Etsy does not re-ask every time the table
-    is drawn. With ``stale_ok`` an answer older than the TTL but younger
-    than :data:`STALE_SECONDS` is returned as it stands and refreshed by
-    ``background`` -- unless an id has no usable answer at all, when the one
-    round trip that must happen anyway refreshes the old ones too.
+    Unmemoised ids are fetched in one batch. With ``stale_ok``, an answer past
+    the TTL but within :data:`STALE_SECONDS` is returned and refreshed by
+    ``background``.
     """
     wanted = set(listing_ids)
     if not wanted:
