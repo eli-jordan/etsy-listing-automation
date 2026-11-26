@@ -1,7 +1,7 @@
-"""Codex briefs, the ideas report and the seller's picks for Etsy design research.
+"""Generator prompts, the ideas report and the seller's picks for Etsy design research.
 
-    uv run python design_ideas.py briefs NICHE_RUN --general GENERAL_RUN
-    uv run python design_ideas.py report NICHE_RUN --general GENERAL_RUN
+    uv run python design_ideas.py briefs NICHE_RUN --general GENERAL_RUN [--downloads RUN]
+    uv run python design_ideas.py report NICHE_RUN --general GENERAL_RUN [--downloads RUN]
     uv run python design_ideas.py picked NICHE_RUN DECISIONS_FOLDER
 
 All three read NICHE_RUN/ideas.json (written by the agent; SKILL.md step 7 gives
@@ -9,16 +9,18 @@ its shape), whose `ideas` list runs from the idea expected to sell best to the
 one expected to sell worst.
 
 `briefs` gives each idea a folder NICHE_RUN/ideas/<slug>/ holding prompt.md
-(filled from codex-brief.md), refs/ with its one style reference downloaded at
-full size, and an empty out/. It also tiles every reference into
-NICHE_RUN/ideas/refs-overview.jpg for a visual check.
+(design-prompt.md filled in: the whole prompt generate_designs.py sends to the
+generator), refs/ with its one style reference downloaded at full size, and an
+empty out/. It also tiles every reference into NICHE_RUN/ideas/refs-overview.jpg
+for a visual check.
 
 `report` writes NICHE_RUN/report.html from ideas.json, tally.json, the two
 runs' listings and each idea's reference image: one card per idea, in rank
 order, with a Generate / Skip choice saved to the page's `decisions` store.
 
 `picked` reads the decisions saved from that store (ArtifactData `list` with
-out_dir) and prints the prompt.md of every idea marked Generate, in rank order.
+out_dir), lists every idea marked Generate in rank order, and prints the
+generate_designs.py command that makes them.
 """
 
 from __future__ import annotations
@@ -37,7 +39,13 @@ import httpx
 from design_sheets import _font, _read_json, listing_score
 from PIL import Image, ImageDraw
 
+sys.path.insert(0, str(Path(__file__).parents[1] / "design-review"))
+from review import SHIRTS  # the review page shows each shirt in the same colour
+
 HERE = Path(__file__).parent
+GREEN_KEY = ("pure green", "#00FF00")
+MAGENTA_KEY = ("magenta", "#FF00FF")
+GREENISH = re.compile(r"green|teal|lime|olive|mint|emerald|jade|sage|moss", re.IGNORECASE)
 REQUIRED = (
     "slug", "name", "concept", "hook", "direction", "palette", "garment", "ref",
     "general_tags", "niche_tags", "phrase", "template", "forecast", "why",
@@ -115,38 +123,55 @@ def _fetch_ref(client: httpx.Client, runs: list[Path], niche: Path, idea: Json) 
 def text_line(idea: Json) -> str:
     text = idea.get("text")
     if not text:
-        return "none: this design is image-only"
-    line = f'exactly "{text}", letter case as shown'
-    if " / " in text:
-        line += '; "/" marks a line break and is not printed'
+        return "The artwork has no text, letters, numbers, signatures or watermarks."
+    lines = " | ".join(f'"{line.strip()}"' for line in text.split(" / "))
+    line = (
+        "The artwork includes exactly this text, spelled exactly, letter case as shown, "
+        f"on these lines: {lines}."
+    )
     labels = idea.get("labels") or []
     if labels:
         quoted = ", ".join(f'"{label}"' for label in labels)
-        line += f"; plus {len(labels)} small labels, exactly: {quoted}"
+        line += f" Plus {len(labels)} small labels, exactly: {quoted}."
     if idea.get("text_note"):
-        line += f"; {idea['text_note']}"
-    return line
+        line += f" {idea['text_note'].rstrip('.')}."
+    return (
+        f"{line} The words are part of the artwork, following a shape, woven into a pattern "
+        "or carried by its motion, rather than a caption set above or below it, and they sit "
+        "in the upper half of the design. No other words, letters, numbers, signatures or "
+        "watermarks anywhere."
+    )
+
+
+def garment_hex(idea: Json) -> str:
+    found = idea.get("garment_hex") or SHIRTS.get(str(idea["garment"]).lower())
+    if not found:
+        known = ", ".join(sorted(SHIRTS))
+        sys.exit(
+            f"{idea['slug']}: no colour for garment {idea['garment']!r}; "
+            f"add garment_hex or use one of {known}"
+        )
+    return str(found)
 
 
 def fill_brief(idea: Json) -> str:
-    page = (HERE / "codex-brief.md").read_text(encoding="utf-8")
-    ref = idea["ref"]
+    page = (HERE / "design-prompt.md").read_text(encoding="utf-8")
+    key_name, key_hex = MAGENTA_KEY if GREENISH.search(idea["palette"]) else GREEN_KEY
     fields = {
-        "NAME": idea["name"],
+        "KEY_NAME": key_name,
+        "KEY_HEX": key_hex,
         "CONCEPT": idea["concept"],
-        "HOOK": idea["hook"],
         "TEXT": text_line(idea),
         "DIRECTION": idea["direction"].replace("{slug}", idea["slug"]),
+        "TAKE": idea["ref"]["take"].rstrip("."),
         "PALETTE": idea["palette"],
         "GARMENT": idea["garment"],
-        "REF": f"ref-{ref['listing']}.jpg",
-        "TAKE": ref["take"].rstrip("."),
-        "SLUG": idea["slug"],
+        "GARMENT_HEX": garment_hex(idea),
     }
     for key, value in fields.items():
         page = page.replace(f"__{key}__", value)
-    if re.search(r"__[A-Z]+__", page):
-        sys.exit(f"{idea['slug']}: codex-brief.md has a placeholder briefs doesn't fill")
+    if re.search(r"__[A-Z_]+__", page):
+        sys.exit(f"{idea['slug']}: design-prompt.md has a placeholder briefs doesn't fill")
     return page
 
 
@@ -168,11 +193,12 @@ def _overview(niche: Path, ideas: list[Json]) -> Path:
     return out
 
 
-def briefs(niche: Path, general: Path) -> None:
+def briefs(niche: Path, general: Path, downloads: Path | None = None) -> None:
     ideas = load_ideas(niche)["ideas"]
+    runs = [general, niche, *([downloads] if downloads else [])]
     with httpx.Client(timeout=60, follow_redirects=True) as client:
         for idea in ideas:
-            _fetch_ref(client, [general, niche], niche, idea)
+            _fetch_ref(client, runs, niche, idea)
             folder = niche / "ideas" / idea["slug"]
             (folder / "out").mkdir(exist_ok=True)
             (folder / "prompt.md").write_bytes(fill_brief(idea).encode("utf-8"))
@@ -209,9 +235,14 @@ def _tag(name: str, side: str, lookup: dict[str, list[tuple[str, Json]]], runs: 
             "g": cell(runs[0]), "n": cell(runs[1])}  # fmt: skip
 
 
-def _listing_rows(general: Path, niche: Path) -> dict[int, Json]:
+def _listing_rows(general: Path, niche: Path, downloads: Path | None) -> dict[int, Json]:
     rows: dict[int, Json] = {}
-    for run, side in ((general, "general"), (niche, "niche")):
+    sides = [
+        (general, "general"),
+        (niche, "niche"),
+        *([(downloads, "downloads")] if downloads else []),
+    ]
+    for run, side in sides:
         for item in _read_json(run / "listings.json"):
             rows.setdefault(
                 item["listing_id"],
@@ -259,12 +290,12 @@ def _card(niche: Path, idea: Json, ctx: Json) -> Json:
     return card
 
 
-def report(niche: Path, general: Path) -> None:
+def report(niche: Path, general: Path, downloads: Path | None = None) -> None:
     doc = load_ideas(niche)
     ctx = {
         "lookup": _tag_lookup(_read_json(niche / "tally.json")),
         "runs": [general.name, niche.name],
-        "listings": _listing_rows(general, niche),
+        "listings": _listing_rows(general, niche, downloads),
     }
     cards = [_card(niche, idea, ctx) for idea in doc["ideas"]]
     limits = {"freshPhrase": FRESH_PHRASE, "takenPhrase": TAKEN_PHRASE,
@@ -306,6 +337,12 @@ def picked(niche: Path, folder: Path) -> None:
             sys.stdout.write(f"{number}. {idea['name']}: {niche / 'ideas' / idea['slug']}\n")
     undecided = len(ideas) - len(chosen) - skipped
     sys.stdout.write(f"{len(chosen)} to generate, {skipped} skipped, {undecided} undecided\n")
+    if chosen:
+        slugs = " ".join(idea["slug"] for idea in chosen)
+        sys.stdout.write(
+            "uv run python .claude/skills/etsy-research-design/generate_designs.py "
+            f"generate {niche} {slugs}\n"
+        )
 
 
 def main() -> None:
@@ -317,14 +354,15 @@ def main() -> None:
         cmd = sub.add_parser(name)
         cmd.add_argument("niche", type=Path)
         cmd.add_argument("--general", type=Path, required=True)
+        cmd.add_argument("--downloads", type=Path, help="the digital-download run, if any")
     pick = sub.add_parser("picked")
     pick.add_argument("niche", type=Path)
     pick.add_argument("decisions", type=Path, help="the out_dir ArtifactData saved them to")
     args = parser.parse_args()
     if args.command == "briefs":
-        briefs(args.niche, args.general)
+        briefs(args.niche, args.general, args.downloads)
     elif args.command == "report":
-        report(args.niche, args.general)
+        report(args.niche, args.general, args.downloads)
     else:
         picked(args.niche, args.decisions)
 

@@ -10,7 +10,7 @@ The signal: designs on listings that Etsy marks as Star Seller or Bestseller are
 - **general**: the whole product category ("t-shirt", "funny t-shirt"), where the strongest styles and phrase templates in the market show up;
 - **niche**: the user's niche ("teacher shirts", "dog mom tee").
 
-It annotates each set's top designs into tags, weighs the tags by listing performance, and looks for **crossovers**: patterns proven in the general category that the niche hasn't used yet, applied to the niche's own subjects. The output is **20 design ideas**, each one a crossover with evidence behind it, ranked in an interactive report where the seller picks which ones Codex generates. A seller who has finished picking starts at step 10.
+It annotates each set's top designs into tags, weighs the tags by listing performance, and looks for **crossovers**: patterns proven in the general category that the niche hasn't used yet, applied to the niche's own subjects. The output is **20 design ideas**, each one a crossover with evidence behind it, ranked in an interactive report where the seller picks which ones to generate. Picks are generated with Nano Banana 2.1 at 2K through Kie.ai, or through Kittl when the seller names it. A seller who has finished picking starts at step 10.
 
 Follow the [etsy-research](../etsy-research/SKILL.md) skill for the mechanics this builds on: loading the Claude in Chrome tools, pacing, and the API script. If the Chrome tools aren't in the session, stop and tell the user; this research needs the Star Seller and Bestseller filters, which only etsy.com has.
 
@@ -59,6 +59,15 @@ The shop doesn't offer personalisation yet, so pass `--exclude custom,personaliz
 
 Results mix tees, sweatshirts and hoodies whatever the query says. The design is what matters here, so keep them all.
 
+**Digital downloads.** Sellers of PNG, SVG and sublimation files show the styles print shops buy and reuse, such as glam illustrated women, word-filled silhouettes and seasonal crossovers. Sample them into a third run, `<niche-slug>-downloads-<YYYY-MM-DD>\`, through the API alone:
+
+```bash
+uv run python .claude/skills/etsy-research-proven-mockups/fetch_listings.py DOWNLOADS_DIR --images 2 --downloads "<niche> png" "<niche> svg" "<niche> sublimation"
+uv run python .claude/skills/etsy-research-design/design_sheets.py sheets DOWNLOADS_DIR --exclude "bundle,custom,personaliz,personalis,your photo,your text,your name,monogram,with name,names"
+```
+
+`--downloads` searches each query's top 100 and keeps only `listing_type == "download"` listings, so the sheets rank them by favourites and views. Read every sheet and look at the single designs, passing over bundle collages and mockup-heavy covers. This run has no Star Seller or Bestseller signal, so it isn't annotated or tallied. Its winning styles go into `findings`, and its listings can be an idea's `ref` or `examples`.
+
 ## 5. Annotate
 
 Read every sheet of a run in order and write one JSON line per listing to `RUN_DIR\designs.jsonl`. The step is done when every listing in `sheets\index.json` has a line; `tally` warns about any that don't.
@@ -98,6 +107,8 @@ Style, layout, typography, tone and pattern gaps carry over directly. A theme ga
 
 Write 20 design ideas. Each one is a **crossover**: at least one proven general-run tag (preferably a gap) applied to a proven niche theme or subject. Spread them across different gaps and patterns; no more than three ideas on any one pattern or style.
 
+Weight the set to the seller's taste: bold, saturated colour in a craft or art-movement style (stained glass, woven strips, patchwork, linocut, Art Nouveau, gig poster) built around one strong central symbol or heroic figure, often with the niche's own name as the text. Jokes and minimal or monochrome designs stay a minority, six of the 20 at most.
+
 Every idea passes these checks:
 
 - **Original**: its text appears on no listing in either `designs.jsonl`, and it isn't a niche listing's design with the words swapped.
@@ -105,7 +116,14 @@ Every idea passes these checks:
   - **phrase**: the idea's exact text. Tens or fewer means nobody sells it yet; hundreds means it's taken, so rework the wording.
   - **template**: the pattern's fixed words plus the niche and product (`most likely to teacher shirt`). This measures how crowded the template is in the niche. In testing, `most likely to teacher shirt` returned 2,202 and `three moon teacher shirt` returned 14, while the phrase `most likely to confiscate your phone` returned 0. A fresh phrase on a crowded template is a weaker idea, so rank it lower.
 - **Clean**: no trademarked names, characters, logos, lyrics or brands (Disney, sports teams, bands, film quotes).
-- **Printable**: one or two print colours where the style allows, readable at chest size. Render an embroidered or glitter-puff winner as a print that suggests the finish (stitched outline, faux glitter texture).
+- **Accurate**: every fact the design prints (a patent and its year, a "banned" book, a founding date) matches a primary source, such as the patent record or the challenge lists of the American Library Association.
+- **Respectful**: a cultural symbol (an Adinkra symbol, say) matches two independent references in form and meaning. From a sacred tradition, borrow only the technique (the carving, the weave, the pattern), never its deities or spirit emblems. Leave out imagery with a loaded reading in the niche: a crow on a Black history shirt reads as Jim Crow.
+- **Printable**: readable at chest size, and screen-printable:
+  - flat graphic colour, with any craft or finish (embroidery, beads, sequins, glitter, metal) drawn as flat shapes rather than photoreal;
+  - open, with roughly 40% or more of the artwork's box left bare shirt, rather than a wall-to-wall panel, medallion or disc;
+  - text that belongs to the art (following a shape, woven into a pattern, carried by its motion) rather than a caption above or below it, in the upper half, because one mockup's umbrella shadow crosses low text.
+
+  [design-prompt.md](design-prompt.md) already asks the generator for these, so keep `direction` from contradicting it.
 
 Write the ideas to `NICHE_DIR\ideas.json`, an object with the report's copy and the `ideas` list:
 
@@ -121,7 +139,7 @@ Each idea:
  "text": "Anatomy Of A Situationship", "labels": ["Mixed Signals", "Left On Read"],
  "concept": "What the design shows, in one or two sentences.",
  "hook": "How it ties to the niche: the joke or the appeal, and who buys it.",
- "direction": "style, layout, typography, elements", "palette": "print colours", "garment": "pepper",
+ "direction": "style, layout, typography, elements", "palette": "print colours", "garment": "black",
  "ref": {"listing": 4524891354, "image": 1, "take": "the quality to borrow from it"},
  "general_tags": ["museum specimen chart", "spaced caps"], "niche_tags": ["anti-valentine", "sarcastic"],
  "examples": [4527778406, 1848331380],
@@ -132,26 +150,27 @@ Each idea:
 
 - `text`: the exact printed words, `" / "` for a line break, null for an image-only design. `labels` (small captions) and `text_note` (how the text sits, e.g. one letter per character) are optional.
 - `general_tags`, `niche_tags`: the crossover, spelled as `tally` prints them; `field:tag` picks the field when a tag is in two (`style:distressed`). The report pulls their weights from `tally.json`.
-- `ref`: the idea's one style reference (step 8). `examples`: two to four other listing IDs from either run that prove the crossover.
+- `garment`: the shirt colour, mostly `black` for this seller. Use a name in the `SHIRTS` table of [review.py](../design-review/review.py), or add `garment_hex` (`#rrggbb`).
+- `ref`: the idea's one style reference (step 8). `examples`: two to four other listing IDs from any run that prove the crossover.
 - `forecast`: `strong`, `good` or `long shot`. `why`: one to three sentences on what earns the rank and what holds it back.
 
-## 8. Codex briefs
+## 8. Prompts
 
-Each idea gets a hand-off folder, `NICHE_DIR\ideas\<slug>\`, for a Codex agent that generates **one** design with ChatGPT Image 2.
+Each idea gets a folder, `NICHE_DIR\ideas\<slug>\`, holding the prompt that generates its **one** design.
 
-1. **Pick exactly one style reference** per idea from the listings its crossover cites: the image that best shows the look the idea borrows (rendering, layout, lettering), not its subject. Set `"image": 2` when the first image is a size chart or a mockup that hides the design. Its `take` names the one quality to borrow.
+1. **Pick exactly one style reference** per idea from the listings its crossover cites: the image that best shows the look the idea borrows (rendering, layout, lettering), not its subject. Prefer one whose subject differs from the idea's, because the generator copies a close match. Set `"image": 2` when the first image is a size chart or a mockup that hides the design. Its `take` names the one quality to borrow.
 2. **Build the folders**:
 
    ```bash
-   uv run python .claude/skills/etsy-research-design/design_ideas.py briefs NICHE_DIR --general GENERAL_DIR
+   uv run python .claude/skills/etsy-research-design/design_ideas.py briefs NICHE_DIR --general GENERAL_DIR --downloads DOWNLOADS_DIR
    ```
 
-   It downloads each reference at full size into `refs\`, fills [codex-brief.md](codex-brief.md) into `prompt.md` and makes an empty `out\`. Look at `ideas\refs-overview.jpg`: every reference must show the design, not a chart, a collage of colour options or a crowded flat lay. Change the pick in `ideas.json` and run `briefs` again for any that don't.
+   It downloads each reference at full size into `refs\`, fills [design-prompt.md](design-prompt.md) into `prompt.md` and makes an empty `out\`. `prompt.md` is the whole prompt the generator sees, with a flat magenta key background when the palette has a green in it and pure green otherwise. Running `briefs` again rewrites every `prompt.md`, so make changes in `ideas.json`. Look at `ideas\refs-overview.jpg`: every reference must show the design, not a chart, a collage of colour options or a crowded flat lay. Change the pick in `ideas.json` and run `briefs` again for any that don't.
 
 ## 9. Report
 
 ```bash
-uv run python .claude/skills/etsy-research-design/design_ideas.py report NICHE_DIR --general GENERAL_DIR
+uv run python .claude/skills/etsy-research-design/design_ideas.py report NICHE_DIR --general GENERAL_DIR --downloads DOWNLOADS_DIR
 ```
 
 It writes `NICHE_DIR\report.html`: one card per idea in rank order, with its concept, hook, reference image, crossover weights, phrase and template counts, example listings, and a Generate / Skip choice. Run `findings`, `notes`, `hook` and `why` past the `unslop` skill first.
@@ -170,4 +189,23 @@ ArtifactData action=list, url=REPORT, collection=decisions, query={"limit": 100}
 uv run python .claude/skills/etsy-research-design/design_ideas.py picked NICHE_DIR NICHE_DIR/dec
 ```
 
-Call `orchestrator_capabilities`, then start one Codex delegate per picked idea with `delegate_task` (provider `codex`), each with the task `Read <idea folder>\prompt.md and follow it. Its refs\ and out\ folders are beside it.` Done when every picked idea has `out\<slug>.png`; tell the seller which ones are ready and which failed.
+`picked` ends with the `generate_designs.py generate` command for the picks. Run it, then tile and check them:
+
+```bash
+uv run python .claude/skills/etsy-research-design/generate_designs.py generate NICHE_DIR SLUG ...
+uv run python .claude/skills/etsy-research-design/generate_designs.py sheet NICHE_DIR
+uv run python .claude/skills/etsy-research-design/generate_designs.py check NICHE_DIR
+```
+
+`generate` sends each `prompt.md` and its reference to Nano Banana 2.1 at 2K on Kie.ai, 6 credits a design, and stops before spending if the credits run short. If it reports Kie.ai is out of credits, tell the seller and stop. It saves the generator's image on its key background to `raw\<slug>.png` and cuts it into `out\<slug>.png`, a transparent 4500x5400 PNG. When the seller asks for Kittl instead, generate each `prompt.md` with the Kittl MCP tools (`kittl-get-ai-generation-guidance` first), save the image to `raw\<slug>.png`, and run `generate NICHE_DIR` with no slugs: it cuts every idea that has a raw image and no print, without paying Kie.ai.
+
+Review `NICHE_DIR\designs-overview.jpg`, which shows each design on its shirt colour beside its reference, and the `check` lines. Fail only what's visible at normal size:
+
+- misspelled, repeated or extra words;
+- a panel, box or disc behind the art, or a key-colour tint;
+- photoreal materials, shine, glows or soft shadows;
+- anything that vanishes into the shirt colour;
+- a composition, character or detail lifted from the reference;
+- any problem `check` names. Its `crowded` note marks a design with under 40% of its box bare, and a `1K` raw needs regenerating before it can be listed.
+
+Regenerate each failure with one added sentence in its `prompt.md` naming the fix, then run `generate NICHE_DIR SLUG ...` and `sheet` again. Done when every pick has a print that passes. Tell the seller which ones are ready and which failed, embed `designs-overview.jpg`, and offer the [design-review](../design-review/SKILL.md) skill for their Publish, Iterate and Drop tags.

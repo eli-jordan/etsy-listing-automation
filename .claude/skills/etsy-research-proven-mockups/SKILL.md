@@ -70,7 +70,7 @@ It looks every listing up through the API and drops digital downloads. It record
 ```bash
 uv run --script .claude/skills/etsy-research-proven-mockups/cluster_mockups.py cluster RUN_DIR \
   --garment tshirt \
-  --exclude-templates "C:/Users/Admin/iCloudDrive/naturally-inked-studio-workspace/mockup-templates"
+  --exclude-templates "C:/Users/Admin/naturally-inked-studio-workspace/mockup-templates"
 ```
 
 Always pass `--exclude-templates`: the user wants mockups they don't own yet. The script has its own dependencies (torch, open_clip, OpenCV); the first run installs them. It:

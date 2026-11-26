@@ -24,9 +24,7 @@ from etsy_listings.core.connections import _etsy_app_key_source, etsy_token_stor
 from etsy_listings.core.errors import UserFacingError
 
 WORKSPACE = Path(
-    os.environ.get(
-        "ETSY_API_WORKSPACE", r"C:\Users\Admin\iCloudDrive\naturally-inked-studio-workspace"
-    )
+    os.environ.get("ETSY_API_WORKSPACE", r"C:\Users\Admin\naturally-inked-studio-workspace")
 )
 SHOP_ID = "67961328"
 PAGE_LIMIT = 100

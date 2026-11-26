@@ -41,9 +41,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 HERE = Path(__file__).resolve().parent
 WORKSPACE = Path(
-    os.environ.get(
-        "ETSY_API_WORKSPACE", r"C:\Users\Admin\iCloudDrive\naturally-inked-studio-workspace"
-    )
+    os.environ.get("ETSY_API_WORKSPACE", r"C:\Users\Admin\naturally-inked-studio-workspace")
 )
 HOME = Path(os.environ.get("ETSY_SEO_HOME", r"C:\Users\Admin\Downloads\etsy-seo-review"))
 KEYWORDS = HOME / "keyword-store.json"

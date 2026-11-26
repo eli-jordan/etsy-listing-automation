@@ -157,3 +157,50 @@ def test_results_groups_tags(review: ModuleType, run: Path, tmp_path: Path) -> N
     assert recs[ids[0]]["verdict"] == "iterate"
     assert recs[ids[0]]["note"] == "bigger text"
     assert recs[ids[1]]["verdict"] == "untagged"
+
+
+def tagged(review: ModuleType, run: Path, tmp_path: Path, notes: list[str]) -> Path:
+    """A review whose designs are tagged Iterate with these notes, in order."""
+    out = tmp_path / "review"
+    review.scan(out, [run])
+    ids = [d["id"] for d in fill(out)["designs"]]
+    rows = tmp_path / "tags.txt"
+    lines = [
+        json.dumps({"id": i, "data": {"verdict": "iterate", "note": n}})
+        for i, n in zip(ids, notes, strict=False)
+    ]
+    rows.write_text("\n".join(lines) + "\n", encoding="utf8")
+    review.results(out, rows)
+    return out
+
+
+def test_a_second_round_keeps_the_first_rounds_results(
+    review: ModuleType, run: Path, tmp_path: Path
+) -> None:
+    out = tagged(review, run, tmp_path, ["bigger text"])
+    first = (out / "review-results.json").read_bytes()
+
+    review.results(out, tmp_path / "tags.txt")
+
+    assert (out / "review-results-round1.json").read_bytes() == first
+    assert (out / "review-results.json").exists()
+
+
+def test_iterate_writes_a_numbered_brief_per_noted_design(
+    review: ModuleType, run: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rejected = run / "01-starry-new-year" / "rejected"
+    rejected.mkdir()
+    Image.new("RGBA", (10, 10)).save(rejected / "01-starry-new-year-v1.png")
+    out = tagged(review, run, tmp_path, ["Drop the\n outline", ""])
+
+    review.iterate(out)
+
+    brief = (run / "01-starry-new-year" / "revision-2.md").read_text(encoding="utf8")
+    assert "> Drop the outline" in brief
+    assert "## Revision 2" in brief
+    assert "Black (#1c1c1c)" in brief
+    assert str(run / "01-starry-new-year") in brief
+    assert "__" not in brief
+    assert not list((run / "02-sankofa").glob("revision-*.md"))
+    assert "no note" in capsys.readouterr().out
