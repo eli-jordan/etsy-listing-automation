@@ -40,12 +40,6 @@ def _new_label(label: str) -> str:
 
 
 def saved_labels(labels: Iterable[str], *, held: Sequence[str]) -> list[str]:
-    """``labels`` as a template that holds ``held`` saves them: each new label
-    tidied and checked, every held one left as written, duplicates dropped.
-
-    The count is a rule on new labels too, so a template over the limit by
-    hand keeps saving and can lose labels, but takes no new one.
-    """
     saved: dict[str, None] = {}
     for label in labels:
         saved[label if label in held else _new_label(label)] = None
