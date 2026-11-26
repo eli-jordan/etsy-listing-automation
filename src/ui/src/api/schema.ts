@@ -3062,10 +3062,7 @@ export interface components {
     };
     /**
      * ColourMatrixTemplate
-     * @description One photo per colour, same design position in all of them. Scene
-     *     images are ``{colour-slug}.png`` per colour -- there is no
-     *     ``colours:`` list in the YAML, since the filenames present in the
-     *     directory *are* the colour set.
+     * @description One photo per colour, named by colour slug, with the design in the same position.
      */
     ColourMatrixTemplate: {
       /** Bounding Box */
@@ -5639,8 +5636,7 @@ export interface components {
     };
     /**
      * SingleTemplate
-     * @description One photo, one garment -- a lifestyle shot, a folded product photo,
-     *     anything that isn't part of a colour set.
+     * @description One photo, one garment.
      */
     SingleTemplate: {
       /** Bounding Box */

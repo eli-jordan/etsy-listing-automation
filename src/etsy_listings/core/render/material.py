@@ -1,10 +1,3 @@
-"""Prepared CPU sampling maps and scene composition. ADR-0054.
-
-Schema v1 stores photo pixel centres in row/column order. Material channels
-are U right, V down. 0/1 map to first/last artwork centres. Material sampling
-uses linear interpolation with a zero border. Visibility outside the quad is zero.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -84,7 +77,6 @@ Pixels = RGBA
 
 
 def patch_derivative(material: Float, labels: NDArray[np.int32], axis: int) -> Float:
-    """Centred differences inside a patch; one-sided at its boundary."""
     forward = np.roll(material, -1, axis=axis) - material
     backward = material - np.roll(material, 1, axis=axis)
     valid_forward = labels == np.roll(labels, -1, axis=axis)
@@ -150,7 +142,6 @@ def filtered_sample(
 
 
 def prepare_material_artwork(artwork: RGBA) -> FloatMap:
-    """Exact linear samples, reusable in a host's byte-bounded cache."""
     _validate_artwork(artwork)
     return material_math.premultiply(artwork)
 

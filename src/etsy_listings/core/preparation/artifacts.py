@@ -1,9 +1,3 @@
-"""Validated immutable map generations, independent of inference installation.
-
-ADR-0054: manifests describe numerical semantics. ZIP timestamps, generation
-names, paths and diagnostic provenance do not enter the content digest.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -107,14 +101,10 @@ class StalePreparationError(ArtifactError):
 
 
 class UnsupportedSchemaError(ArtifactError):
-    """A map pointer or manifest this version cannot read."""
-
     reason: ClassVar[ReadinessReason] = "unsupported_schema"
 
 
 class IncompatibleDimensionsError(ArtifactError):
-    """A target photo whose size differs from the prepared main photo."""
-
     reason: ClassVar[ReadinessReason] = "incompatible_dimensions"
 
 
@@ -255,8 +245,6 @@ _UNSUPPORTED = "Unsupported map schema; migrate or prepare the template again"
 
 
 def _unsupported(exc: ValidationError) -> bool:
-    """Whether ``exc`` refuses a record's schema version, which this version
-    cannot read, rather than the rest of its shape."""
     return any(error["loc"] == ("schema_version",) for error in exc.errors())
 
 
@@ -299,7 +287,6 @@ def _within(extent: tuple[int, int, int, int], size: tuple[int, int]) -> bool:
 
 
 def _layout(name: str, extent: tuple[int, int, int, int]) -> tuple[tuple[int, ...], np.dtype]:
-    """The shape and dtype array ``name`` must have over ``extent``."""
     left, top, right, bottom = extent
     width, height = right - left, bottom - top
     channels = BOUNDS[name][2]
@@ -513,8 +500,6 @@ def _check_member(
     ):
         raise ArtifactError("Prepared array header has unsafe shape, dtype or byte length")
     if verify_payload:
-        # Verify written payload bytes and ZIP CRC only after header,
-        # shape, dtype and byte-budget checks have passed.
         _check_payload(archive, member, header_size, expected.checksum)
 
 
@@ -574,13 +559,6 @@ class _Publication:
 
 
 class Artifacts:
-    """One complete set in, one leased immutable set out.
-
-    Template locks serialize pointer changes and reader ownership in the
-    single-server workspace model. Cleanup keeps the current generation and
-    every one a publisher or reader has leased.
-    """
-
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self.calibration = CalibrationStore(workspace)
@@ -637,7 +615,6 @@ class Artifacts:
         return pointer
 
     def _current(self, name: str) -> tuple[MapPointer, Manifest]:
-        """The current pointer and the validated manifest it names."""
         pointer = self._pointer(name)
         return pointer, self._read_manifest(name, pointer.generation_id, pointer.manifest_checksum)
 
@@ -821,8 +798,6 @@ class Artifacts:
             )
 
     def _accepted_evidence(self, name: str) -> Mapping[str | None, str]:
-        """Each placement's evidence identity in the current generation; none
-        when there is no readable generation."""
         try:
             _, manifest = self._current(name)
         except (OSError, ValueError):
@@ -1025,7 +1000,6 @@ class Artifacts:
     def _stale_reason(
         self, name: str, inputs: PreparationInputs, exc: StalePreparationError
     ) -> ReadinessReason:
-        """The first relevant change since the accepted, immutable inputs."""
         try:
             _, manifest = self._current(name)
         except (OSError, ValueError):
@@ -1040,7 +1014,6 @@ class Artifacts:
         return exc.reason
 
     def cleanup(self, name: str) -> list[str]:
-        """Remove every generation that is neither current nor leased."""
         removed = []
         with self.calibration.lock(name):
             keep: set[str] = set()

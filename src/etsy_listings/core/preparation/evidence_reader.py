@@ -1,5 +1,3 @@
-"""Validated read-only evidence selection and reconstruction."""
-
 from __future__ import annotations
 
 import hashlib
@@ -72,8 +70,6 @@ def placement_key(value: str | None) -> str:
 
 
 class _JobEvidence(Protocol):
-    """What :meth:`EvidenceReader.candidates` reads of a preparation job."""
-
     @property
     def template(self) -> str: ...
 
@@ -168,8 +164,6 @@ class EvidenceReader:
         return selected
 
     def pointer(self, template: str) -> PredictionPointer | None:
-        """The template's current prediction set; None when it has none or
-        its pointer is unreadable."""
         path = self.workspace.preparation_prediction_current(template)
         try:
             pointer = PredictionPointer.model_validate_json(path.read_bytes())

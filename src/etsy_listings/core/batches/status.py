@@ -1,25 +1,3 @@
-"""Where a batch stands, worked out from its rows (UI doc §2, *Recent
-batches*; spec *Review workflow*; batch plan PR 5). Pure: nothing here reads
-the disk, so the index, the summary and the tests ask the same question.
-
-The status is derived, never set by hand:
-
-* **Drafting** -- the queue still has work for one of its listings.
-* **Stopped** -- **Cancel batch** left work undrafted (Resume is on the
-  summary).
-* **Complete** -- every listing it created, and still has, is reviewed.
-* **In review** -- anything else: drafting is over and a listing waits.
-
-*Staging* is a staging session's, which has no batch rows yet.
-
-**Failures are not a status.** A row whose creation or AI failed is a count
-beside the progress (*2 need retry*), so a batch with one failure still
-reads as Drafting or In review. A listing whose AI failed still exists and
-still has to be reviewed -- by hand, if the seller finishes it themselves --
-so it holds Complete back exactly as any unreviewed listing does; a row that
-was never created has no listing to review, and holds nothing back.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

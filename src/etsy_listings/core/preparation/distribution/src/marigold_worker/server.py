@@ -94,8 +94,6 @@ def _check_prediction(role: Role, image: Image.Image, prediction: NDArray[np.flo
 
 
 def _publish(destination: Path, prediction: NDArray[np.float32]) -> str:
-    """Write the prediction beside ``destination``, fsync it, move it into
-    place and return its sha256. A failure removes the temporary file."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name("." + destination.name + "." + uuid.uuid4().hex)
     try:
@@ -206,7 +204,6 @@ class _Session:
     # The model call loop, on the main thread.
 
     def run(self, message: InferRequest) -> None:
-        """Run one accepted call; answer with its result or a Failure."""
         try:
             checksum, metadata = self._infer(message)
             with self.lock:

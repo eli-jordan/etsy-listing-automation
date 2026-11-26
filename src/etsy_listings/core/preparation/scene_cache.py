@@ -1,19 +1,3 @@
-"""Composed scenes, kept on disk by identity so a scene is composed once.
-
-A full-size scene takes seconds to compose and encode (a Marigold one also
-about 1 GB); its PNG is about 5 MB. :class:`SceneCache` keeps the PNG under the
-scene's pixel identity, either renderer's
-(:mod:`~etsy_listings.core.render.identity`). An entry is only ever written
-under an identity computed from the very arrays that were composed, so it is
-exactly the bytes a fresh composition encodes, and a reader holding a
-pixel-derived identity (the render stage) trusts nothing but that identity.
-
-Previews reach the same identity without decoding anything through
-:data:`PIXEL_DIGESTS`, which remembers each photo's and design's pixel digest
-against the file's :func:`~etsy_listings.core.workspace.file_version.file_version`
-stamp. A file written since has a new stamp and is decoded again.
-"""
-
 from __future__ import annotations
 
 import contextlib

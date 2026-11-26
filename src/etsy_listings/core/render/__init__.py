@@ -69,11 +69,9 @@ from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
 __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
-    # The array vocabulary every function here speaks.
     "RGB",
     "RGBA",
     "FloatMap",
-    # Render configuration, and the three shapes a template.yaml can take.
     "AnyRenderer",
     "Renderer",
     "PhotoWarpConfig",
@@ -100,18 +98,15 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "load_template_config",
     "scene_colours",
     "scene_layers",
-    # Compositing. One function for all three kinds -- see pipeline.py.
     "Layer",
     "render_scene",
     "MaterialMaps",
     "MaterialLayer",
     "prepare_material_artwork",
     "render_marigold_scene",
-    # Derived maps, and their on-disk cache.
     "DerivedMapCache",
     "height_map",
     "luminance_map",
-    # The I/O boundary, kept out of the passes so those stay pure.
     "DesignValidationError",
     "encode_png",
     "load_design",

@@ -1,12 +1,3 @@
-"""Name allocation (name allocation; spec *Cleaning and editing names*).
-
-One base name drives both ``listings/<name>/`` and ``designs/<name>.png``, so
-a name is free only when it is free for both, and for every other row of the
-batch. :func:`allocate` is the one rule; staging calls it for its preview and
-confirmation calls it again under the listing's lock, because the preview can
-go stale between the two.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable

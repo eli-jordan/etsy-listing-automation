@@ -1,7 +1,3 @@
-"""The renderer's I/O boundary: loading design/template images and saving
-results. Deliberately kept out of:mod:`etsy_listings.core.render.pipeline` so the
-render passes themselves stay pure."""
-
 from __future__ import annotations
 
 import io
@@ -15,10 +11,7 @@ from etsy_listings.core.render.types import RGB, RGBA
 MARIGOLD_PNG_COMPRESSION = 1
 
 
-class DesignValidationError(ValueError):
-    """Validation: design files must be RGB with an alpha channel, never
-    auto-converted -- a design without one is a config mistake to report, not
-    silently paper over."""
+class DesignValidationError(ValueError): ...
 
 
 def load_design(path: Path) -> RGBA:

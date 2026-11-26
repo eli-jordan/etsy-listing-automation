@@ -1,27 +1,3 @@
-"""Frozen render configuration. ADR-0012: canonical JSON of ``RenderConfig`` is what
-gets hashed into the lockfile's render stage entry, so every field here must be
-something that can differ between two "the same design" runs -- no derived
-values, no file paths (those are workspace-relative strings elsewhere, hashed
-separately as part of the render stage's desired state).
-
-A template is exactly one of three kinds -- never a mix (multi-placement
-redesign, see docs/features/multi-placement-rendering-20260903/spec.md):
-
-- ``colour-matrix`` -- one photo per colour, the design at the same
-  ``bounding_box`` in every one. No per-colour override: a colour whose photo
-  is actually framed differently is a ``single``-kind template instead.
-- ``multiple`` -- several garments in one photo, each a ``Placement`` with its
-  own ``bounding_box``. This is the one place per-item geometry exists, since
-  that is the entire point of a chart.
-- ``single`` -- one photo, one garment.
-
-Every kind also holds ``labels``, the seller's words for finding it. They are
-the one thing in a template that is not render input: the render stage hashes
-the file without them, and any list of strings loads, because a bad label
-cannot affect a pixel. The app checks a new label when it saves it
-(:mod:`etsy_listings.core.config.template_labels`).
-"""
-
 from __future__ import annotations
 
 import json
@@ -84,9 +60,6 @@ class ShadeConfig(BaseModel):
 
 
 class RenderConfig(BaseModel):
-    """The resolved, per-layer configuration a single render call consumes.
-    Frozen and hashable via :meth:`canonical_json`."""
-
     model_config = ConfigDict(frozen=True)
 
     bounding_box: BoundingBox
@@ -168,10 +141,7 @@ PlacementId = Annotated[str, AfterValidator(_safe_id)]
 
 
 class ColourMatrixTemplate(BaseModel):
-    """One photo per colour, same design position in all of them. Scene
-    images are ``{colour-slug}.png`` per colour -- there is no
-    ``colours:`` list in the YAML, since the filenames present in the
-    directory *are* the colour set."""
+    """One photo per colour, named by colour slug, with the design in the same position."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -184,7 +154,7 @@ class ColourMatrixTemplate(BaseModel):
         return photo_warp_config(self.renderer, self.bounding_box)
 
 
-def _reject_template_artwork(value: Any) -> Any:  # pydantic validator boundary
+def _reject_template_artwork(value: Any) -> Any:
     """A template no longer chooses artwork (ADR-0053): a colour resolves to the
     same file in every mockup scene and on Printify, and a mockup showing a
     different print from the delivered shirt is not a useful exception. The
@@ -216,7 +186,7 @@ class Placement(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _no_artwork(cls, value: Any) -> Any:  # pydantic validator boundary
+    def _no_artwork(cls, value: Any) -> Any:
         return _reject_template_artwork(value)
 
 
@@ -252,8 +222,7 @@ class MultipleTemplate(BaseModel):
 
 
 class SingleTemplate(BaseModel):
-    """One photo, one garment -- a lifestyle shot, a folded product photo,
-    anything that isn't part of a colour set."""
+    """One photo, one garment."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -269,7 +238,7 @@ class SingleTemplate(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _no_artwork(cls, value: Any) -> Any:  # pydantic validator boundary
+    def _no_artwork(cls, value: Any) -> Any:
         return _reject_template_artwork(value)
 
     def render_config(self) -> RenderConfig:
@@ -319,20 +288,12 @@ def scene_layers(
 
 
 def scene_colours(template: AnyTemplate, colour: str | None) -> list[tuple[str | None, str | None]]:
-    """``(depicted colour, placement ID)`` per layer of one scene, in
-    :func:`scene_layers`'s order, for any renderer: a prepared scene pairs
-    each layer's artwork with its placement's accepted maps rather than a
-    Photo warp configuration (ADR-0054)."""
     if isinstance(template, MultipleTemplate):
         return [(p.colour, p.id) for p in template.placements]
     return [(colour if isinstance(template, ColourMatrixTemplate) else template.colour, None)]
 
 
 def scene_boxes(template: AnyTemplate, boxes: LayerBoxes = _NO_BOXES) -> list[BoundingBox]:
-    """Each layer's bounding box, in :func:`scene_layers`'s order, for any
-    renderer: the template's own, or the listing's where ``boxes`` names the
-    layer. A prepared scene reads it without building a Photo warp
-    configuration it would never render (ADR-0054)."""
     if isinstance(template, MultipleTemplate):
         return [boxes.get(p.id, p.bounding_box) for p in template.placements]
     return [boxes.get(None, template.bounding_box)]
@@ -349,9 +310,6 @@ _TEMPLATE_CONFIG_ADAPTER: TypeAdapter[AnyTemplate] = TypeAdapter(TemplateConfig)
 
 
 def load_template_config(data: object) -> AnyTemplate:
-    """Parse already-read YAML/JSON data. The file-level read is
-    ``workspace.template_state`` -- this half stays pure, so ``render`` still
-    knows nothing about where a workspace keeps its templates."""
     return _TEMPLATE_CONFIG_ADAPTER.validate_python(data)
 
 

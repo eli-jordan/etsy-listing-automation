@@ -57,7 +57,6 @@ from etsy_listings.core.batches.staging import (
 from etsy_listings.core.batches.status import BatchStatus, Standing, standing
 
 __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
-    # Records and their stores.
     "StagingSession",
     "StagingRow",
     "StagingStore",
@@ -68,7 +67,6 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "RETRYABLE",
     "BatchStore",
     "BatchRecords",
-    # Staging and its review.
     "Upload",
     "stage_pngs",
     "StagingRefusedError",
@@ -77,12 +75,10 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "RowReview",
     "upload_path",
     "allocate",
-    # Creating the listings.
     "confirm",
     "retry_row",
     "row_upload",
     "ConfirmRefusedError",
-    # Where a batch stands (UI doc §2), and who may be reviewed (§7).
     "standing",
     "Standing",
     "BatchStatus",

@@ -22,13 +22,13 @@ Float = NDArray[np.float32]
 # Thresholds of the evaluated prototype (ADR-0054). Named, not tuned here.
 _MIN_FACING_Z = 0.22  # a normal's camera-facing component below this is grazing
 _CG_BREAKDOWN = 1e-25  # conjugate-gradient curvature at which the solve stops
-_CONFIDENT = 0.15  # normals confidence above which a pixel is trusted
-_MIN_DEPTH_SAMPLES = 30  # confident depth pixels needed to fit depth to height
-_MIN_DEPTH_SPREAD = 1e-5  # depth standard deviation below which the fit is skipped
-_FOLDED_AREA = 1e-9  # a mesh triangle at or below this signed area has folded
-_FLATTEN_CONVERGED = 1e-6  # largest vertex move at which flattening has converged
+_CONFIDENT = 0.15
+_MIN_DEPTH_SAMPLES = 30
+_MIN_DEPTH_SPREAD = 1e-5
+_FOLDED_AREA = 1e-9
+_FLATTEN_CONVERGED = 1e-6
 _CLOTH_COVERAGE = 0.95  # cloth mask value of a pixel inside the garment
-_LIGHTING_CONFIDENCE = 0.35  # confidence above which a pixel informs lighting
+_LIGHTING_CONFIDENCE = 0.35
 _CLIPPED_GAIN = 1.7  # shading over exposure above which a gain counts as clipped
 Pixels = NDArray[np.uint8]
 
@@ -255,7 +255,6 @@ def _fit_depth(
     scale, offset = np.linalg.lstsq(
         design[selected] * weight[:, None], z[selected] * weight, rcond=None
     )[0]
-    # A negative fitted scale contradicts the near/far convention.
     if not scale > 0:
         return z, {"used": False, "fallback": "depth scale disagrees with the normals/camera frame"}
     fitted = scale * d + offset
@@ -420,9 +419,6 @@ def polygon_mask(size: tuple[int, int], points: list[list[float]]) -> Float:
 
 @dataclass(frozen=True)
 class Intrinsics:
-    """A photo region's intrinsic decomposition: shading, albedo and the
-    residual neither explains."""
-
     shading: Float
     albedo: Float
     residual: Float

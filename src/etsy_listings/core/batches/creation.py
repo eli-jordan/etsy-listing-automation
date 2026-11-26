@@ -52,7 +52,6 @@ class ConfirmRefusedError(ConflictError, ValueError):
 
 
 def _revalidate(frozen: FrozenListingTemplate, name: str) -> None:
-    """Current shared refs may have changed since staging began."""
     issues = frozen.issues(facts=WorkspaceFacts.gather(frozen.workspace))
     blocking = [issue.message for issue in issues if issue.severity == "block"]
     if blocking:
@@ -112,8 +111,6 @@ def _start(
     allocated: set[str] = set()
     rows: list[BatchRow] = []
     for row in reviewed.creatable:
-        # the preview may be stale; the name is checked again under the
-        # listing's lock and recorded before any file is written.
         with ListingDocuments(workspace).lock(row.name):
             taken = taken_for(workspace_names(workspace), row.reuse)
             name = allocate(row.name, taken | allocated | (others - {row.name.casefold()}))
@@ -126,8 +123,6 @@ def _start(
                 sources=staged.sources,
                 base=row.name,
                 name=name,
-                # Spec, *Content deduplication*: identical bytes already in
-                # designs/ are named, not written again.
                 design=row.reuse or name,
             )
         )

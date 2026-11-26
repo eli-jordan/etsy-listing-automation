@@ -17,7 +17,7 @@ import numpy as np
 
 from etsy_listings.core.render.types import RGB, FloatMap
 
-_FLAT_RANGE = 1e-6  # a map whose values span less than this is flat: mid-grey
+_FLAT_RANGE = 1e-6
 
 
 def luminance_map(base_rgb: RGB) -> FloatMap:
@@ -33,7 +33,6 @@ def luminance_map(base_rgb: RGB) -> FloatMap:
 
 
 def height_map(base_rgb: RGB, blur_ksize: int = 15) -> FloatMap:
-    """Gaussian-blurred luminance, used as the displacement height field."""
     gray = np.asarray(cv2.cvtColor(base_rgb, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
     normalized = gray.astype(np.float32) / 255.0
     ksize = blur_ksize if blur_ksize % 2 == 1 else blur_ksize + 1

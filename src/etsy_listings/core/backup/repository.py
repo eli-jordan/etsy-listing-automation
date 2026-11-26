@@ -1,22 +1,3 @@
-"""A restic repository's operations, in the backup's own terms
-(workspace-backup spec, *Backup run*, *Restore* and *Missing repository*).
-
-:class:`Repository` is the seam between the backup's application modules and
-restic. Callers ask for an operation (back up a folder, forget by the
-retention, prune, check, restore a snapshot, verify the password) and get
-domain values back: progress figures while it runs, then a summary or a
-check result. Which subcommands and flags that takes, restic's exit codes
-and the shapes of its ``--json`` lines stay inside the adapter.
-
-Two adapters satisfy it. ``core/backup/restic.py``'s ``Restic`` runs restic
-itself and is reached only through ``core/application/backup_repository.py``
-(Import Linter enforces it). ``tests/support/restic.py`` keeps a repository
-in memory for behaviour tests.
-
-The errors are restic's outcomes as the backup sees them; their message is
-restic's own.
-"""
-
 from __future__ import annotations
 
 import threading
@@ -82,14 +63,11 @@ WORKSPACE_TAG = "workspace:"
 
 
 def workspace_tag(workspace_id: str) -> str:
-    """The tag every snapshot of the workspace ``workspace_id`` carries."""
     return f"{WORKSPACE_TAG}{workspace_id}"
 
 
 @dataclass(frozen=True)
 class BackupFigures:
-    """How far a backup has read."""
-
     files_done: int
     files_total: int | None = None
 
@@ -138,9 +116,7 @@ class Repository(Protocol):
     """
 
     @property
-    def path(self) -> Path:
-        """The repository's folder."""
-        ...
+    def path(self) -> Path: ...
 
     def init(self) -> str:
         """Create the repository in its empty folder; its id."""

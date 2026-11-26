@@ -58,7 +58,6 @@ class ArchiveRefusedError(ValueError):
 
 
 def receive(chunks: Iterable[bytes], path: Path) -> None:
-    """Write the dropped ZIP to ``path`` with a running byte count."""
     size = 0
     with path.open("wb") as out:
         for chunk in chunks:
@@ -81,11 +80,9 @@ class Archive:
 
     @property
     def pngs(self) -> list[str]:
-        """Every PNG's path in the ZIP, in archive order."""
         return list(self._pngs)
 
     def read(self, name: str) -> Iterator[bytes]:
-        """One PNG's bytes, a chunk at a time."""
         try:
             with self._zip.open(self._pngs[name]) as entry:
                 while chunk := entry.read(_CHUNK):
@@ -123,7 +120,6 @@ def _unsafe_type(info: zipfile.ZipInfo) -> str | None:
 
 
 def _check(infos: list[zipfile.ZipInfo]) -> None:
-    """Every entry, before any is read: ADR-0051's per-entry refusals."""
     if len(infos) > MAX_ENTRIES:
         raise ArchiveRefusedError(
             f"It holds {len(infos)} entries, and a ZIP can hold at most {MAX_ENTRIES}.",
@@ -193,7 +189,6 @@ def _survey(archive: zipfile.ZipFile) -> Archive:
 
 @contextmanager
 def open_archive(path: Path) -> Iterator[Archive]:
-    """The ZIP at ``path``, checked, or :class:`ArchiveRefusedError`."""
     try:
         archive = zipfile.ZipFile(path)
     except _UNREADABLE as exc:

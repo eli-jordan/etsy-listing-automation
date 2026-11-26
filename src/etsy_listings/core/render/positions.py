@@ -1,14 +1,3 @@
-"""Similarity poses in a template box's rectified frame, mapped to photo pixels (ADR-0058).
-
-The rectified frame is the box's unit-square parameterisation scaled by
-``(W, H)``, the mean lengths of its top/bottom and left/right sides in photo
-pixels, so a tilt is a rigid rotation of a box with its real proportions
-(ADR-0058 amendment, 2026-11-02). Offsets are fractions of W and H; positive
-rotation is clockwise in image coordinates. Fit in the rectified frame, measure
-the maximum corner residual in photo pixels. No workspace, listing or settings
-imports: limits use a structural protocol.
-"""
-
 from dataclasses import dataclass
 from math import atan2, cos, degrees, hypot, radians, sin
 from typing import Protocol
@@ -66,7 +55,6 @@ def _unit() -> NDArray[np.float64]:
 
 
 def _proportions(box: BoundingBox) -> NDArray[np.float64]:
-    """``(W, H)``: mean top/bottom and left/right side lengths in photo pixels."""
     tl, tr, br, bl = _pixels(box)
     width = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2
     height = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2
@@ -107,7 +95,6 @@ def _map(points: NDArray[np.float64], matrix: NDArray[np.float64]) -> NDArray[np
 
 
 def _corners(points: NDArray[np.float64]) -> BoundingBox:
-    """Four mapped points as TL, TR, BR, BL corners."""
     return (
         Point(x=points[0, 0], y=points[0, 1]),
         Point(x=points[1, 0], y=points[1, 1]),
@@ -117,8 +104,6 @@ def _corners(points: NDArray[np.float64]) -> BoundingBox:
 
 
 def compose(template_box: BoundingBox, pose: Pose) -> BoundingBox:
-    """Apply ``pose`` in the rectified frame, then the template homography;
-    return TL, TR, BR, BL."""
     homography = _homography(template_box)
     size = _proportions(template_box)
     angle = radians(pose.rotation)
@@ -183,7 +168,6 @@ def padded_box(template_box: BoundingBox, limits: PositionLimits) -> BoundingBox
 
 
 def clamp_pose(pose: Pose, limits: PositionLimits) -> Pose:
-    """Clamp each fitted component. Only explicit editor repair calls this."""
     return Pose(
         scale=max(limits.scale.min, min(limits.scale.max, pose.scale)),
         offset_x=max(-limits.offset, min(limits.offset, pose.offset_x)),
@@ -195,9 +179,4 @@ def clamp_pose(pose: Pose, limits: PositionLimits) -> Pose:
 def nearest_allowed_pose(
     template_box: BoundingBox, box: BoundingBox, limits: PositionLimits
 ) -> Pose:
-    """Fit, then clamp (interactions: *Position outside the limits*).
-
-    Compose the returned pose to obtain replacement absolute corners. This is the
-    specified repair, not a pixel-space search for the closest quad.
-    """
     return clamp_pose(decompose(template_box, box).pose, limits)

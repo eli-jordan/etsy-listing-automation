@@ -168,20 +168,14 @@ DRAFTING: frozenset[AiState | None] = frozenset({"queued", "running"})
 
 
 def has_listing(row: BatchRow) -> bool:
-    """Does the row have a listing the seller can open? Created, and not
-    deleted since."""
     return row.creation == "created" and not row.deleted
 
 
 def reviewable(row: BatchRow) -> bool:
-    """May the seller mark this row reviewed, or back? Only a listing they
-    can look at: not one still queued or drafting, deleted, or never created
-    (UI doc §7)."""
     return has_listing(row) and row.ai not in DRAFTING
 
 
-class NotReviewableError(ValueError):
-    """Mark reviewed on a row :func:`reviewable` refuses."""
+class NotReviewableError(ValueError): ...
 
 
 class Batch(_Record):
@@ -211,7 +205,6 @@ class _Store[R: _Record]:
 
     @property
     def workspace(self) -> Workspace:
-        """The workspace these records live in, and the only one they know."""
         return self._workspace
 
     @contextmanager
@@ -339,8 +332,6 @@ class BatchStore(_Store[Batch]):
     # listing given its old name is not its listing.
 
     def rename_listing(self, old: str, new: str) -> None:
-        """Rename's half of rename and delete hooks: every batch's row for ``old`` now names
-        ``new``. Its design target is the design's file, which stays."""
         with self.following_rename(old, new):
             pass
 

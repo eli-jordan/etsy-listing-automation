@@ -2242,7 +2242,7 @@
       },
       "ColourMatrixTemplate": {
         "additionalProperties": false,
-        "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
+        "description": "One photo per colour, named by colour slug, with the design in the same position.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -8528,7 +8528,7 @@
       },
       "SingleTemplate": {
         "additionalProperties": false,
-        "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
+        "description": "One photo, one garment.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,

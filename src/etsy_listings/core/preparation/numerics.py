@@ -221,7 +221,6 @@ def prepare(
     max_edge: int | None = None,
     cooperation: Cooperation = Cooperation(),
 ) -> Preparation:
-    """Fit one placement from explicit evidence, with cancellation between phases."""
     box, mask = placement.box, placement.mask
     checkpoint, cooperate = cooperation.checkpoint, cooperation.cooperate
     height, width = base.shape[:2]
@@ -321,7 +320,6 @@ class MaskProposal:
 
 
 _MASK_PROPOSAL_LOCK = threading.Lock()
-# Fewer seed or sure-garment pixels than this fall back to manual visibility.
 _MIN_SEED_PIXELS = 20
 # Chroma distance from the seed median, in robust deviations, that GrabCut
 # starts from: sure garment, probable garment, and sure background.

@@ -1,12 +1,3 @@
-"""The array vocabulary the renderer speaks.
-
-Every pass, map and I/O function in ``render/`` is typed in these terms, so
-they live in their own module rather than in whichever one happened to define
-them first. Colour handling is fixed at 8-bit sRGB throughout (ADR-0012's
-determinism controls): ``RGBA`` wherever alpha matters -- the design and the
-print layer derived from it -- and ``RGB`` for the opaque mockup photo.
-"""
-
 from __future__ import annotations
 
 import numpy as np

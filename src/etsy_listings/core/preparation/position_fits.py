@@ -1,21 +1,3 @@
-"""Marigold maps fitted directly to a listing's posed quad (option B).
-
-The spike rejected warping a template's maps to a listing position (spec,
-*Spike result*), so a positioned Marigold layer gets its own maps: the fit a
-calibrator geometry change runs, from evidence that covers the posed quad
-(spec *Rendering → Marigold (option B: a fit per position)*).
-
-A fit is a durable, content-addressed artifact under ``.cache/position-fits/``,
-named by the digest of :class:`FitInputs` -- template, placement, posed quad,
-mask, evidence identity, photo and inference settings -- so listings holding
-the same position share one, and any fit is rebuilt from evidence on demand.
-Each load is validated like a published generation (ADR-0054): archive
-checksum, array descriptors, shapes and bounds. :meth:`PositionFits.ensure`
-holds a per-fit lock while it fits, so a plan or preview arriving while the
-scene warmer fits the same position waits for that fit instead of starting a
-second, and never falls back to the template's own maps.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -106,8 +88,6 @@ class FitRecord(Record):
 
 @dataclass(frozen=True)
 class FitRequest:
-    """One positioned layer's fit, and the retained evidence it is fitted from."""
-
     inputs: FitInputs
     evidence: CropEvidence
 
@@ -124,9 +104,6 @@ class PositionFit:
 
 
 def scene_map_content(content_digest: str, fits: Mapping[str | None, PositionFit]) -> str:
-    """A prepared scene's map identity: the template generation's content
-    digest alone when no layer is positioned -- so unpositioned scenes and
-    their lockfiles are unchanged -- else that and each fit's digest."""
     if not fits:
         return content_digest
     document = {
@@ -137,7 +114,6 @@ def scene_map_content(content_digest: str, fits: Mapping[str | None, PositionFit
 
 
 def template_boxes(config: AnyTemplate) -> dict[str | None, BoundingBox]:
-    """Each layer's own box, keyed as :data:`LayerBoxes` keys it."""
     if isinstance(config, MultipleTemplate):
         return {p.id: p.bounding_box for p in config.placements}
     return {None: config.bounding_box}
@@ -179,9 +155,7 @@ def _with_quads(
 _GUARD = threading.Lock()
 _LOCKS: dict[tuple[str, str], threading.Lock] = {}
 _WRITING: set[str] = set()
-# Fits a scene is fitting or composing with; prune leaves them alone.
 _LEASED: Counter[str] = Counter()
-# Validated fits, as the generation reader keeps its maps (ADR-0054).
 _FITS: BoundedCache[tuple[Any, ...], PositionFit] = BoundedCache(
     256 * 1024 * 1024,
     size=lambda fit: sum(a.nbytes for a in arrays_of(fit.maps).values()),
@@ -189,8 +163,6 @@ _FITS: BoundedCache[tuple[Any, ...], PositionFit] = BoundedCache(
 
 
 class PositionFits:
-    """The workspace's position fits: request, read or fit, and prune."""
-
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self.evidence = EvidenceReader(workspace)
@@ -258,7 +230,6 @@ class PositionFits:
                         del _LEASED[key]
 
     def read(self, request: FitRequest) -> PositionFit | None:
-        """The stored fit, validated, or ``None`` when it is missing or invalid."""
         key = request.key
         directory = self.workspace.position_fit(key)
         try:
@@ -321,7 +292,6 @@ class PositionFits:
         return prepare(base, Placement(quad, visibility), evidence).maps
 
     def _store(self, request: FitRequest, maps: MaterialMaps) -> None:
-        """Write the fit to a staging directory and rename it into place."""
         key = request.key
         final = self.workspace.position_fit(key)
         staging = final.with_name(f".{key}-{uuid4().hex}")

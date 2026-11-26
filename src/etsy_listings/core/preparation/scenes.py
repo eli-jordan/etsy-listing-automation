@@ -1,11 +1,3 @@
-"""Compose a prepared scene: the one path from accepted maps to pixels (ADR-0054).
-
-The render stage's plan and apply, and every authoring or listing preview,
-lease a scene here. Reading the saved inputs, acquiring the generation for the
-target photo and naming the result's identity happen in one place, so the
-identity a plan records is the identity apply and a preview compute.
-"""
-
 import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
@@ -73,8 +65,6 @@ def _premultiplied(artwork: RGBA, digest: str) -> FloatMap:
 
 @dataclass(frozen=True)
 class PreparedLayer:
-    """One painted placement, in paint order."""
-
     artwork: RGBA
     placement_id: str | None = None
     digest: str | None = None
@@ -118,8 +108,6 @@ class PreparedScene:
             )
 
     def encoded(self, cache: SceneCache) -> bytes:
-        """The scene's PNG: ``cache``'s entry for :attr:`identity`, or a
-        fresh composition, stored there before it is returned."""
         return cache.get_or_compose(
             self.identity,
             lambda: encode_png(self.render(), compression=MARIGOLD_PNG_COMPRESSION),
@@ -128,9 +116,6 @@ class PreparedScene:
 
 @dataclass(frozen=True)
 class Composition:
-    """What a scene composites: artwork ``layers`` on the ``base`` photo, in
-    ``appearance``."""
-
     base: RGB
     layers: Sequence[PreparedLayer]
     appearance: MarigoldAppearance

@@ -70,7 +70,6 @@ def worker_command(python: Path, weights: Path, cache_root: Path | None = None) 
 
 
 def _contained(root: Path, relatives: Iterable[str], message: str) -> list[Path]:
-    """``relatives`` under ``root``, refusing any that resolves outside it."""
     paths = []
     for relative in relatives:
         path = root / relative
@@ -212,7 +211,6 @@ class NativeInstaller:
             raise SetupError("Installed packages do not match the complete worker lock")
 
     def _stamps(self, target: Path, weights: Path) -> dict[str, list[int]]:
-        """Size and modification time of every file the installation depends on."""
         manifest_file = target / "installation.json"
         if manifest_file.stat().st_size > 1024 * 1024:
             raise SetupError("Runtime installation manifest exceeds size limit")

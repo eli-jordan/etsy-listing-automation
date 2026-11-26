@@ -1,12 +1,3 @@
-"""Copy the backup storage folder one way to a destination folder
-(workspace-backup spec, *Copy to destinations*).
-
-Plain file operations with no restic, so any folder works, a NAS share
-included. The copy only adds files under names the destination lacks and
-deletes names the local repository no longer has. It never overwrites a file
-and never deletes one it does not recognise.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -51,8 +42,6 @@ CopyOutcome = Literal["copied", "unreachable", "changed", "damaged", "failed", "
 
 @dataclass(frozen=True)
 class CopyStep:
-    """One file operation, reported once it is done."""
-
     action: Literal["copied", "deleted", "set_aside"]
     name: str
 
@@ -92,7 +81,6 @@ class CopyResult:
 
 
 def restic_name(name: str) -> bool:
-    """Whether restic writes a file by this ``/`` path."""
     match name.split("/"):
         case [top] if top == CONFIG:
             return True
@@ -142,7 +130,6 @@ def _reference_directories(root: Path) -> list[tuple[int, int, int, int, int] | 
 
 
 def list_destination(root: Path) -> dict[str, os.stat_result]:
-    """List the repository paths in read order, then any other files."""
     others = sorted(path.name for path in root.iterdir() if path.name not in READ_ORDER)
     found: dict[str, os.stat_result] = {}
     for top in (*READ_ORDER, *others):
@@ -419,8 +406,6 @@ class DamagedError(Exception):
 
 
 def _copy_file(repository: Path, destination: Path, name: str) -> None:
-    """Stream ``source`` to a temporary name beside ``target``, hashing it,
-    then give it its name."""
     target = _destination_path(destination, name)
     folder = destination
     for part in Path(name).parts[:-1]:
@@ -451,8 +436,6 @@ def _temporary(target: Path) -> Iterator[tuple[Path, BinaryIO]]:
 
 
 def _stream(source: Path, writer: BinaryIO) -> str:
-    """Copy ``source`` into the new file ``temp``, flushed to disk; the
-    SHA-256 of what was written."""
     digest = hashlib.sha256()
     with source.open("rb") as reader:
         while chunk := reader.read(CHUNK):
@@ -543,8 +526,6 @@ def _sha256(path: Path) -> str:
 
 
 class ForeignCopyError(ConflictError):
-    """A destination whose ``config`` differs from the local one's."""
-
     def __init__(self, destination: Path) -> None:
         super().__init__(
             f"config in {destination} is missing or differs from the backup storage "
@@ -559,7 +540,6 @@ class ForeignCopyError(ConflictError):
 
 
 def holds_repository(folder: Path) -> bool:
-    """Whether the folder still has any of restic's repository paths."""
     return any((folder / name).exists() for name in READ_ORDER)
 
 

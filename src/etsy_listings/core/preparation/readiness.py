@@ -1,12 +1,3 @@
-"""Whether a saved template can render, for every caller that asks.
-
-Authoring status, listing checks, the render stage and the template catalogue
-all ask here rather than checking the renderer first: a Photo warp template is
-``not_required`` without any file read, and a Marigold template is validated
-against its one fixed generation without prediction cache or model access.
-Every cause is a typed :data:`ReadinessReason`, never a parsed message.
-"""
-
 from dataclasses import dataclass
 
 from PIL import Image
@@ -55,13 +46,11 @@ def catalog_readiness(config: AnyTemplate) -> Readiness | None:
 
 
 def template_readiness(workspace: Workspace, name: str, config: AnyTemplate) -> Readiness:
-    """Whether ``name``, already loaded as ``config``, can render now."""
     known = catalog_readiness(config)
     return known if known is not None else saved_preparation_facts(workspace, name).maps
 
 
 def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparationFacts:
-    """Validate one fixed generation without prediction cache or model access."""
     with CalibrationStore(workspace).lock(name):
         try:
             return _saved_facts(workspace, name)
@@ -102,7 +91,6 @@ def _saved_facts(workspace: Workspace, name: str) -> SavedPreparationFacts:
 def _map_readiness(
     artifacts: Artifacts, name: str, inputs: PreparationInputs
 ) -> tuple[Readiness, str | None]:
-    """The maps' readiness and, when ready, the engine that prepared them."""
     try:
         manifest = artifacts.inspect(name, inputs)
     except ArtifactError:

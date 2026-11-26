@@ -1,5 +1,3 @@
-"""Internal numerical helpers ported from the evaluated prototype. ADR-0054."""
-
 from __future__ import annotations
 
 from typing import Any, cast
@@ -15,7 +13,6 @@ Pixels = NDArray[np.uint8]
 # linear terms (IEC 61966-2-1).
 _SRGB_ENCODED_KNEE = 0.04045
 _SRGB_LINEAR_KNEE = 0.0031308
-# A homography denominator this close to zero maps a pixel to infinity.
 _DEGENERATE_HOMOGRAPHY = 1e-8
 
 

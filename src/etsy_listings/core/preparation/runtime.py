@@ -134,7 +134,6 @@ class Runtime:
     def selection(
         self, version: str, *, installation_id: str | None = None, verify: bool = False
     ) -> Capability:
-        """Persist both IDs per job. A repair never redirects its selected files."""
         _segment(version)
         if installation_id is None:
             installation_id = _read_pointer(
@@ -149,7 +148,6 @@ class Runtime:
         return replace(report, required_engine=self.engine_version, installation_id=installation_id)
 
     def worker(self, selected: Capability, *, cache_root: Path) -> WarmWorker:
-        """Construct a lazy warm adapter for a retained, verified engine selection."""
         from etsy_listings.core.preparation.installation import (  # noqa: PLC0415 -- cycle: installation imports this module's Capability
             worker_command,
         )

@@ -1,5 +1,3 @@
-"""Canonical CPU scene identities shared by previews and deployment."""
-
 import hashlib
 import json
 from collections.abc import Sequence
@@ -18,7 +16,6 @@ def _canonical(document: dict[str, Any]) -> str:
 
 
 def artwork_identity(artwork: RGBA) -> str:
-    """Canonical decoded RGBA bytes include their shape and channel convention."""
     if (
         artwork.ndim != IMAGE_NDIM
         or artwork.shape[2] != RGBA_CHANNELS

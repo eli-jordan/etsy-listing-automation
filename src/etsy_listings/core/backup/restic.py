@@ -1,27 +1,3 @@
-"""The real :class:`~etsy_listings.core.backup.repository.Repository`: restic
-itself, run as a subprocess (workspace-backup plan, P6; ADR-0060).
-
-Each operation becomes one ``restic --repo <folder> --json <subcommand>``,
-and its ``--json`` lines become the interface's figures and summaries. The
-subcommands, flags, exit codes and line shapes are known here and nowhere
-else. Reached only through ``core/application/backup_repository.py``; an
-Import Linter contract enforces it.
-
-Not ``core/ai/process.py``'s ``run_managed``: that takes no environment,
-buffers stdout until exit and needs input text. restic needs the password in
-its environment, reports progress as ``--json`` lines while it runs, and
-reads nothing from stdin. So this launches restic with ``subprocess.Popen``
-and line-buffered stdout, as ``preparation/worker_client.py`` does, and
-reads each line as it arrives.
-
-The password goes only into the child's environment as ``RESTIC_PASSWORD``,
-never onto the command line or into a log (spec, *Configuration*). restic's
-exit codes become typed errors: 10 for a missing repository or a folder that
-is not one, 11 for a lock held elsewhere, 12 for a wrong password. Their
-message is restic's own, from the ``exit_error`` line ``--json`` writes to
-stderr.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -91,8 +67,6 @@ _ERRORS: Mapping[int, type[ResticError]] = {
 
 
 class ResticProcess(Protocol):
-    """A running restic: its stdout lines, then its exit code and stderr."""
-
     @property
     def stdout(self) -> Iterable[str]: ...
     def wait(self) -> int: ...
@@ -105,8 +79,6 @@ Launch = Callable[[Sequence[str], Mapping[str, str]], ResticProcess]
 
 
 class Restic:
-    """The repository in ``repository``, run with the restic at ``binary``."""
-
     def __init__(
         self, binary: Path, repository: Path, password: str, *, launch: Launch | None = None
     ) -> None:
@@ -121,8 +93,6 @@ class Restic:
     @property
     def path(self) -> Path:
         return self.repository
-
-    # ------------------------------------------------------ the operations
 
     def init(self) -> str:
         for message in self.run("init"):
@@ -200,8 +170,6 @@ class Restic:
         """``cat config`` reads the one file every key opens, and no more."""
         self.run("--no-lock", "cat", "config")
 
-    # -------------------------------------------------------- the commands
-
     def stream(self, *args: str, cancel: threading.Event | None = None) -> Iterator[Any]:
         """Run ``restic <args> --json`` and yield each JSON line as it comes:
         the operations' runner, and for tests that drive restic itself.
@@ -233,7 +201,6 @@ class Restic:
             raise self._failure(code, process.stderr())
 
     def run(self, *args: str, cancel: threading.Event | None = None) -> list[Any]:
-        """:meth:`stream`, collected."""
         return list(self.stream(*args, cancel=cancel))
 
     def _environment(self) -> dict[str, str]:
@@ -246,9 +213,6 @@ class Restic:
         message = message.replace(self._password, "***")
         error = _ERRORS.get(code, ResticError)
         return error(f"restic: {message}", exit_code=code)
-
-
-# ----------------------------------------------------- arguments and lines
 
 
 def forget_arguments(retention: RetentionSettings, workspace_id: str) -> tuple[str, ...]:
@@ -308,7 +272,6 @@ def restore_arguments(snapshot: Snapshot, target: Path) -> tuple[str, ...]:
 
 
 def _snapshot(raw: Mapping[str, Any]) -> Snapshot:
-    """One entry of ``restic snapshots --json``."""
     summary = raw.get("summary") or {}
     return Snapshot(
         id=raw["id"],
@@ -324,8 +287,6 @@ def _snapshot(raw: Mapping[str, Any]) -> Snapshot:
 
 @dataclass
 class _BackupLines:
-    """What ``restic backup --json`` reported."""
-
     progress: BackupListener
     snapshot_id: str | None = None
     data_added: int | None = None
@@ -394,7 +355,6 @@ class _Watch:
 
 
 def _stop_on_cancel(process: ResticProcess, cancel: threading.Event | None) -> _Watch:
-    """Stop ``process`` when ``cancel`` is set before it finishes."""
     watch = _Watch(threading.Event(), threading.Event())
     if cancel is None:
         return watch
@@ -409,9 +369,6 @@ def _stop_on_cancel(process: ResticProcess, cancel: threading.Event | None) -> _
 
     threading.Thread(target=watcher, name="restic-cancel", daemon=True).start()
     return watch
-
-
-# ------------------------------------------------------------- the launcher
 
 
 class _PopenProcess:
@@ -491,5 +448,4 @@ class _PopenProcess:
 
 
 def launch_process(argv: Sequence[str], env: Mapping[str, str]) -> ResticProcess:
-    """Start ``argv`` as restic's real launcher does."""
     return _PopenProcess(argv, env)

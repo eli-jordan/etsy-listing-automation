@@ -72,10 +72,6 @@ def _stem(filename: str) -> str:
 
 
 class _Received:
-    """The unique designs of one upload, stored under their content hash as
-    they stream in. Identical bytes become one row that names every
-    source (spec, *Content deduplication*)."""
-
     def __init__(self, workspace: Workspace, session: str, total_limit: int | None) -> None:
         self._workspace = workspace
         self._session = session
@@ -144,8 +140,6 @@ def _archive_name(filename: str) -> str:
 
 
 def _receive(workspace: Workspace, session: str, uploads: Iterable[Upload]) -> _Receipt:
-    """Every design in the upload. One ZIP, or loose PNGs, never both (spec,
-    *Accepted input*)."""
     heads = [(upload, upload.stream.read(len(PNG_MAGIC))) for upload in uploads]
     zips = [upload for upload, head in heads if _is_zip(upload, head)]
     if len(zips) > 1:
@@ -187,8 +181,6 @@ _SPLITS = {2: "two", 3: "three", 4: "four"}
 
 
 def _limit(received: _Received, subject: str, remedy: str) -> None:
-    """More than 25 unique designs is refused, never truncated or split
-    (spec, *Accepted input*). The remedy says into how many."""
     count = len(received.rows)
     if count > MAX_DESIGNS:
         parts = -(-count // MAX_DESIGNS)
@@ -201,8 +193,6 @@ def _limit(received: _Received, subject: str, remedy: str) -> None:
 def _receive_zip(
     workspace: Workspace, session: str, upload: Upload, head: bytes, received: _Received
 ) -> list[str]:
-    """Stream the ZIP to disk, then read each PNG out of it entry by entry
-    ; the ZIP itself goes before the session is saved."""
     path = workspace.staging_archive_file(session)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -425,8 +415,6 @@ class _NameAllocation:
         return _row_review(row, named, note, reuse)
 
     def _typed(self, row: StagingRow, taken: set[str], claimed: set[str]) -> _RowName:
-        """A typed name is never changed: a taken one is flagged, with the
-        next free suffix as a suggestion."""
         folded = row.base.casefold()
         holder = (self.workspace_taken.get(folded) if folded in taken else None) or (
             "row" if self.typed.get(folded) != row.id else None
@@ -463,13 +451,6 @@ def _row_review(row: StagingRow, named: _RowName, note: str | None, reuse: str |
 
 
 def review(workspace: Workspace, session: StagingSession) -> StagingReview:
-    """Every row's name, state and note (name allocation; UI doc §5).
-
-    Typed names are claimed first and never changed: one that is taken is
-    flagged, with the next free suffix as a suggestion. Generated names then
-    take the smallest free suffix around the workspace, the typed names and
-    each other, in upload order. Rows that will not be created claim
-    nothing."""
     workspace_taken = workspace_names(workspace)
     valid = [row for row in session.rows if row.error is None]
     typed: dict[str, str] = {}
@@ -489,7 +470,6 @@ def review(workspace: Workspace, session: StagingSession) -> StagingReview:
 
 
 def upload_path(workspace: Workspace, session: StagingSession, row: str) -> Path:
-    """Where row ``row``'s bytes are, for its thumbnail."""
     for candidate in session.rows:
         if candidate.id == row:
             return workspace.staging_upload_file(session.id, candidate.sha256)

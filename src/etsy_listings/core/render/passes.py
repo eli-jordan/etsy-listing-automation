@@ -1,13 +1,3 @@
-"""Pure render passes: warp -> displace -> shade -> export/export_many. ADR-0012.
-
-No I/O, no globals, no clock. Every array is 8-bit sRGB; RGBA where alpha
-matters (the design and its warped/displaced/shaded print layer), RGB for the
-opaque mockup base photo. Every ``cv2`` call passes explicit ``interpolation``
-and ``borderMode`` -- relying on defaults makes output depend on the library
-version (docs/architecture.md, Rendering invariants), so ``tests/core/unit/test_no_bare_cv2.py``
-greps this module for the ones that aren't.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
@@ -19,7 +9,7 @@ from PIL import Image
 from etsy_listings.core.render.config import BoundingBox, DisplaceConfig, ShadeConfig
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
-_SOFT_LIGHT_PIVOT = 0.5  # light at or below this darkens in soft light; above lightens
+_SOFT_LIGHT_PIVOT = 0.5
 
 DISPLACE_MAX_PX = 24.0
 """Pixel displacement at strength=1.0. A calibration constant, not derived --
@@ -49,9 +39,6 @@ def warp(design: RGBA, bounding_box: BoundingBox, output_size: tuple[int, int]) 
 
 
 def displace(img: RGBA, cfg: DisplaceConfig, height: FloatMap) -> RGBA:
-    """Standard Photoshop apparel-mockup displacement: remap by the gradient of
-    a height field derived from the mockup's own luminance (see
-    :mod:`etsy_listings.core.render.maps`). Off unless ``cfg.enabled``."""
     if not cfg.enabled or cfg.strength <= 0:
         return img
 
@@ -160,8 +147,6 @@ Region = tuple[slice, slice]
 
 
 def print_bounds(layer: RGBA) -> Region | None:
-    """The smallest rectangle holding every pixel ``layer`` prints (alpha
-    above zero); ``None`` when it prints none."""
     x, y, width, height = cv2.boundingRect(np.ascontiguousarray(layer[..., 3]))
     if width == 0 or height == 0:
         return None

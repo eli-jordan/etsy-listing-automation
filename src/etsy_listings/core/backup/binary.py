@@ -1,10 +1,3 @@
-"""Which restic binary the app runs, and the one release it pins.
-
-The spec (*Scope and decisions*, restic binary) has the app download one
-pinned release for the OS, check it against a SHA-256 stored here, and keep
-it under ``~/.etsy-listings/restic/``. A setting can name another binary.
-"""
-
 from __future__ import annotations
 
 import os
@@ -37,8 +30,6 @@ class ResticInstallError(UserFacingError):
 
 @dataclass(frozen=True)
 class ReleaseAsset:
-    """One file of the release, and how to get the binary out of it."""
-
     name: str
     sha256: str
     member: str
@@ -69,12 +60,6 @@ Fetch = Callable[[str, Path], None]
 
 
 class ResticBinaries:
-    """The restic to run on this machine, and the pinned release's install.
-
-    ``fetch``, ``asset``, ``system`` and ``machine`` exist for tests; ``home``
-    keeps every test's install out of the real home directory (plan, P2).
-    """
-
     def __init__(
         self,
         *,
@@ -91,7 +76,6 @@ class ResticBinaries:
 
     @property
     def pinned(self) -> Path:
-        """Where the pinned release's binary lives once installed."""
         name = "restic.exe" if self._platform[0] == "Windows" else "restic"
         return self.root / RESTIC_VERSION / name
 
@@ -99,9 +83,6 @@ class ResticBinaries:
         return self.pinned if self.pinned.is_file() else None
 
     def locate(self, configured: Path | None) -> Path | None:
-        """The binary to run without installing anything: the environment
-        variable, then the ``restic_binary`` setting, then the pinned release
-        if it is installed."""
         from_env = os.environ.get(RESTIC_BINARY_ENV_VAR)
         if from_env:
             return Path(from_env)
@@ -110,7 +91,6 @@ class ResticBinaries:
         return self.installed()
 
     def ensure(self, configured: Path | None) -> Path:
-        """:meth:`locate`, installing the pinned release when it finds none."""
         return self.locate(configured) or self.install()
 
     def install(self) -> Path:

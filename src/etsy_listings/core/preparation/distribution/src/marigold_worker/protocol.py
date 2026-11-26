@@ -63,14 +63,8 @@ class _Message(_Model):
 
 
 class InferenceSettings(_Model):
-    """The only caller-controlled sampling settings, bounded by this engine and
-    always explicit."""
-
     num_inference_steps: Annotated[StrictInt, Field(ge=1, le=10)]
     ensemble_size: Annotated[StrictInt, Field(ge=1, le=3)]
-
-
-# Requests: application to worker.
 
 
 class HelloRequest(_Message):
@@ -119,9 +113,6 @@ class Envelope(BaseModel):
 
     protocol: Literal[1]
     request_id: RequestId
-
-
-# Replies: worker to application.
 
 
 class Capabilities(_Model):
@@ -230,12 +221,10 @@ REPLY: Final[TypeAdapter[Reply]] = TypeAdapter(Reply)
 
 
 def encode(message: _Message) -> str:
-    """One protocol line, newline included."""
     return message.model_dump_json() + chr(10)
 
 
 def describe(error: ValidationError) -> str:
-    """A short, single-line account of why a message was refused."""
     return "; ".join(
         ".".join(str(part) for part in issue["loc"]) + ": " + issue["msg"]
         if issue["loc"]
