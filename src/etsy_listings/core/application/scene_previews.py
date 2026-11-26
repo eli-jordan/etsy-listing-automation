@@ -15,12 +15,12 @@ from etsy_listings.core.application.mockup_templates import (
     saved_preview,
     unsaved_preview,
 )
-from etsy_listings.core.application.preparation.previews import (
+from etsy_listings.core.application.preparation.draft_rules import (
     EditorDraft,
     check_prepared_geometry,
-    editor_preview,
     prepared_renderer,
 )
+from etsy_listings.core.application.preparation.previews import editor_preview
 from etsy_listings.core.application.refusals import TemplatePhotoMissingError
 from etsy_listings.core.preparation.artifacts import ArtifactError, Artifacts, PreparationInputs
 from etsy_listings.core.preparation.position_fits import (

@@ -2,7 +2,6 @@
 
 import hashlib
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -11,9 +10,14 @@ import numpy as np
 from PIL import Image
 
 from etsy_listings.core.application.preparation.activity import interactive
-from etsy_listings.core.application.refusals import TemplatePreviewKindMismatchError
+from etsy_listings.core.application.preparation.draft_rules import (
+    EditorDraft,
+    drawn_against,
+    placement_boxes,
+    previewable_renderer,
+)
 from etsy_listings.core.bounded_cache import BoundedCache
-from etsy_listings.core.preparation.artifacts import Artifacts, PlacementInput, PreparationInputs
+from etsy_listings.core.preparation.artifacts import Artifacts, PlacementInput
 from etsy_listings.core.preparation.evidence_reader import (
     CropEvidence,
     EvidenceReader,
@@ -21,18 +25,14 @@ from etsy_listings.core.preparation.evidence_reader import (
 )
 from etsy_listings.core.preparation.numerics import Placement, prepare
 from etsy_listings.core.render import (
-    AnyTemplate,
-    BoundingBox,
-    MarigoldRenderer,
     MaterialLayer,
     MaterialMaps,
-    MultipleTemplate,
     PreparationRequiredError,
     render_marigold_scene,
 )
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.calibration import Calibration, CalibrationStore, MaskEdit
+from etsy_listings.core.workspace.calibration import CalibrationStore
 
 EDITOR_EDGE = 1024
 EDITOR_ARTWORK_EDGE = 3072
@@ -56,84 +56,6 @@ def _maps(key: tuple[str, ...], compute: Callable[[], MaterialMaps]) -> Material
         return value
 
     return _MAP_CACHE.get_or_compute(key, frozen)
-
-
-@dataclass(frozen=True)
-class EditorDraft:
-    """The calibrator's unsaved state: its geometry, the calibration
-    ``revision`` it was drawn against, mask strokes not yet saved, and the
-    colour-matrix photo it shows (``None`` for other kinds). ``config.labels``
-    are the labels of that revision, not the seller's latest."""
-
-    config: AnyTemplate
-    revision: str
-    mask_edits: list[MaskEdit]
-    colour: str | None = None
-
-
-# ------------------------------------- does a draft still match what is saved?
-#
-# Every rule a draft answers to, for the two pictures of one. A frame may show
-# unsaved geometry and masks, so it needs a draft of the same saved calibration.
-# A full-size scene is the prepared render, so what it asks for must be prepared.
-
-
-def _drawn_against(
-    store: CalibrationStore, name: str, saved: Calibration, draft: EditorDraft
-) -> bool:
-    """Whether ``saved`` is the calibration ``draft`` was drawn against, labels
-    aside. A label save moves the revision (spec *Saving*) and nothing a preview
-    draws, masks included, so a frame in flight as one lands stays good: the
-    saved document with the draft's labels must hash to the draft's revision."""
-    if saved.revision == draft.revision:
-        return True
-    relabelled = saved.config.model_copy(update={"labels": draft.config.labels})
-    return store.revision(name, relabelled) == draft.revision
-
-
-def _previewable_renderer(
-    store: CalibrationStore, name: str, saved: Calibration, draft: EditorDraft
-) -> MarigoldRenderer:
-    config = draft.config
-    if not _drawn_against(store, name, saved, draft):
-        raise PreparationRequiredError("Calibration changed; refresh the editor preview")
-    if config.kind != saved.config.kind or not isinstance(config.renderer, MarigoldRenderer):
-        raise PreparationRequiredError("Save the renderer selection before previewing")
-    if (
-        not isinstance(saved.config.renderer, MarigoldRenderer)
-        or config.renderer.config.inference != saved.config.renderer.config.inference
-    ):
-        raise PreparationRequiredError("Prepare changed inference settings before previewing")
-    return config.renderer
-
-
-def prepared_renderer(saved: AnyTemplate, requested: AnyTemplate) -> MarigoldRenderer:
-    if requested.kind != saved.kind:
-        raise TemplatePreviewKindMismatchError(saved.kind)
-    if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
-        saved.renderer, MarigoldRenderer
-    ):
-        raise PreparationRequiredError("Save the Marigold renderer selection before rendering")
-    return requested.renderer
-
-
-def check_prepared_geometry(
-    requested: AnyTemplate, renderer: MarigoldRenderer, inputs: PreparationInputs
-) -> None:
-    """Refuse a full-size scene of anything but the prepared geometry and
-    inference: its maps are only of those."""
-    quads = {key: tuple((p.x, p.y) for p in box) for key, box in _boxes(requested)}
-    expected = {p.id: p.quad for p in inputs.placements}
-    if quads != expected or renderer.config.inference != inputs.inference:
-        raise PreparationRequiredError(
-            "Save geometry and inference settings, then rebuild or prepare the template"
-        )
-
-
-def _boxes(config: AnyTemplate) -> list[tuple[str | None, BoundingBox]]:
-    if isinstance(config, MultipleTemplate):
-        return [(p.id, p.bounding_box) for p in config.placements]
-    return [(None, config.bounding_box)]
 
 
 def _composite_target(
@@ -177,9 +99,9 @@ def editor_preview(
         evidence_store = EvidenceReader(workspace)
         with store.lock(name):
             saved = store.read(name)
-            renderer = _previewable_renderer(store, name, saved, draft)
+            renderer = previewable_renderer(store, name, saved, draft)
             original = Artifacts(workspace).saved_inputs(name)
-            boxes = _boxes(config)
+            boxes = placement_boxes(config)
             inputs = original.model_copy(
                 update={
                     "placements": tuple(
@@ -245,6 +167,6 @@ def editor_preview(
         small = cast(RGB, cv2.resize(target, (width, height), interpolation=cv2.INTER_AREA))
         result = render_marigold_scene(small, layers, appearance=renderer.config.appearance)
         with store.lock(name):
-            if not _drawn_against(store, name, store.read(name), draft):
+            if not drawn_against(store, name, store.read(name), draft):
                 raise PreparationRequiredError("Calibration changed during the editor preview")
         return result
