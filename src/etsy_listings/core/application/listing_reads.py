@@ -301,9 +301,7 @@ def listing_row(
         status = workspace_listing_status(
             workspace, name, live=published, lifecycle=listing.lifecycle, etsy_state=etsy_state
         )
-    # Probing the listing's videos is almost all of what assembling the
-    # check inputs costs; the profile it also reads is memoised in `facts`.
-    with timer.phase("videos"):
+    with timer.phase("inputs"):
         inputs = _check_inputs(facts, listing, listing_dir, description, name=name)
     with timer.phase("checks"):
         issues = _business_issues(workspace, listing_dir, listing, inputs, published=published)
