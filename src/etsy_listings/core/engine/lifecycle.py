@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
@@ -62,22 +62,21 @@ class LifecycleWalk:
     that no stage is blocked."""
 
 
-def published_on_etsy(ctx: RunContext, lock: Lockfile) -> bool | None:
-    """Whether the listing has left Etsy ``draft``.
+EtsyPublication = Literal["live", "never_live", "unknown"]
+"""``unknown``: an Etsy id but no client to ask, so delete/retire fails closed.
+No id is ``never_live``, including a Printify-only product."""
 
-    ``None`` means we have an id but no client to ask -- delete/retire must
-    not guess; the caller fails closed. No id is never-live (``False``),
-    including a Printify-only product.
-    """
+
+def published_on_etsy(ctx: RunContext, lock: Lockfile) -> EtsyPublication:
     listing_id = etsy_listing_id(lock)
     if listing_id is None:
-        return False
+        return "never_live"
     if ctx.etsy is None:
-        return None
+        return "unknown"
     live = ctx.etsy.get_listing(listing_id)
-    if live is None or live.state is None:
-        return False
-    return is_live_etsy_state(live.state)
+    if live is None or live.state is None or not is_live_etsy_state(live.state):
+        return "never_live"
+    return "live"
 
 
 def walk(
@@ -99,10 +98,10 @@ def walk(
             return LifecycleWalk(stages=pipeline, published=False, blocked=yaml_block.message)
 
     config = ctx.workspace.load_listing(listing)
-    published = published_on_etsy(ctx, lock)
-    if published is None and config.lifecycle in {"deleted", "retired"}:
+    publication = published_on_etsy(ctx, lock)
+    if publication == "unknown" and config.lifecycle in {"deleted", "retired"}:
         return LifecycleWalk(stages=pipeline, published=False, blocked=UNREADABLE_ETSY)
-    proven = False if published is None else published
+    proven = publication == "live"
     verb_block = check_lifecycle_verb(config.lifecycle, published=proven)
     if verb_block is not None:
         return LifecycleWalk(stages=pipeline, published=proven, blocked=verb_block.message)
