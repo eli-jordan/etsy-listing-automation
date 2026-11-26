@@ -23,6 +23,7 @@ import {
   type Focus,
   type FocusRef,
   type FocusView,
+  firstFocus,
   focusRef,
   isFocusRef,
   restoreFocus,
@@ -190,7 +191,13 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   }));
 
   const files = directory === null ? shared : [...local, ...shared];
-  const focus = pointed ?? restoreFocus(remembered, templates, files);
+  const phone = useIsPhone();
+  /** No room for the preview pane under the gallery: it opens full screen. */
+  const upright = isUpright(phone, landscape);
+  const focus =
+    pointed ??
+    restoreFocus(remembered, templates, files) ??
+    opening(upright, detail, templates, files);
   const view = focus === null ? null : viewFocus(focus, detail, templates, scene, listing);
   // The reel highlights whatever the stage is showing, wherever the pointing
   // came from.
@@ -201,9 +208,6 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
     view?.inListing === true,
     artwork === undefined && owner === undefined && detail.name !== "",
   );
-  const phone = useIsPhone();
-  /** No room for the preview pane under the gallery: it opens full screen. */
-  const upright = isUpright(phone, landscape);
   const positioning = usePositioning({
     detail,
     ...target,
@@ -327,6 +331,18 @@ function useAdjustSheet() {
     if (!positioning.on) positioning.toggle();
   }, []);
   return { adjusting, startAdjusting, stopAdjusting };
+}
+
+/** What the stage shows before the seller points at anything: the reel's
+ * first picture, so reviewing starts without a click. Not on an upright
+ * phone, where there is no pane and a selection is only a moves bar. */
+function opening(
+  upright: boolean,
+  detail: ListingDetail,
+  templates: readonly TemplateSummary[],
+  files: readonly MediaFileSummary[],
+): Focus | null {
+  return upright ? null : firstFocus(detail.media, templates, files);
 }
 
 /** A phone held upright, where the preview pane has no room on the page. */

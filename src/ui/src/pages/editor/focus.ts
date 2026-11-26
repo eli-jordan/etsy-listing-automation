@@ -9,7 +9,13 @@ import {
   scenePath,
   templatePicture,
 } from "../../media";
-import type { Issue, MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
+import type {
+  Issue,
+  MediaEntry,
+  MediaFileSummary,
+  ListingDetail,
+  TemplateSummary,
+} from "../../types";
 
 /**
  * What the Listing Images tab's preview pane is pointing at, and everything
@@ -66,6 +72,23 @@ export function restoreFocus(
   const summary = templates.find((template) => template.name === ref.template);
   if (summary === undefined) return null;
   return ref.colour === null || summary.colours.includes(ref.colour) ? ref : null;
+}
+
+/** The reel's first picture, as a focus: what the stage opens on when the
+ * seller has pointed at nothing yet, so reviewing starts without a click.
+ * `null` for an empty reel, or while its first entry is not listed. */
+export function firstFocus(
+  media: readonly MediaEntry[],
+  templates: readonly TemplateSummary[],
+  files: readonly MediaFileSummary[],
+): Focus | null {
+  const first = media[0];
+  if (first === undefined) return null;
+  const ref: FocusRef =
+    typeof first === "string"
+      ? { kind: "file", ref: first }
+      : { kind: "template", template: first.template, colour: first.colour ?? null };
+  return restoreFocus(ref, templates, files);
 }
 
 /** Everything the preview pane and its foot need, for one focus. */
