@@ -70,7 +70,6 @@ def write_yaml_atomic(
     before: object = UNSET,
     durable: bool = False,
 ) -> bool:
-    """The caller holds whatever lock guards ``path``."""
     try:
         source = read_bytes_retrying(path)
     except FileNotFoundError:

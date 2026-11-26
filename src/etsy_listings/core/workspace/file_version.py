@@ -111,8 +111,7 @@ TreeVersion = tuple[tuple[str, int, int], ...]
 
 
 def tree_version(directory: Path) -> TreeVersion:
-    """Stat-only, so a same-size rewrite within one timestamp tick goes unseen:
-    use it only where the reader that acts on the answer re-reads the files."""
+    """Stat-only: use it only where the reader that acts on the answer re-reads the files."""
     found: list[tuple[str, int, int]] = []
     visited: set[tuple[int, int]] = set()
     pending = [directory]

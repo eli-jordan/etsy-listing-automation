@@ -42,6 +42,16 @@ def test_a_tree_version_holds_until_a_file_under_it_is_added_changed_or_removed(
     assert tree_version(tmp_path) == changed
 
 
+def test_a_tree_version_misses_a_same_size_rewrite_that_keeps_the_mtime(tmp_path):
+    path = tmp_path / "template.yaml"
+    path.write_bytes(b"kind: one\n")
+    original = path.stat()
+    before = tree_version(tmp_path)
+    path.write_bytes(b"kind: two\n")
+    os.utime(path, ns=(original.st_atime_ns, original.st_mtime_ns))
+    assert tree_version(tmp_path) == before
+
+
 def test_a_missing_directory_has_an_empty_tree_version(tmp_path):
     assert tree_version(tmp_path / "gone") == ()
 
