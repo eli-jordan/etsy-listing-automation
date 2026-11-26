@@ -11,15 +11,10 @@ is render geometry and render settings from top to bottom. ``workspace.template_
 reads it and ``CalibrationStore`` writes it (``load_template_config`` here only parses data
 already in hand).
 
-``positions`` exposes ``Pose(scale=1, offset_x=0, offset_y=0, rotation=0)``,
-``PoseFit(pose, residual_pixels)``, ``compose(template_box, pose) -> BoundingBox``,
-``decompose(template_box, box) -> PoseFit``, ``clamp_pose(pose, limits) -> Pose``
-and ``nearest_allowed_pose(template_box, box, limits) -> Pose`` (ADR-0058).
-Import these directly from ``positions``. ``PositionLimits``/``ScaleLimits``
-are structural protocols; ``config.settings.TemplatePositionLimits`` satisfies
-them without making render depend on settings. Offsets are fractions of the box's
-rectified W and H; rotation is rigid, in clockwise degrees. Compose the nearest
-pose to get repair corners.
+``positions`` (ADR-0058) is not re-exported: import it directly. Its
+``PositionLimits``/``ScaleLimits`` are structural protocols, so
+``config.settings.TemplatePositionLimits`` satisfies them without making render
+depend on settings.
 """
 
 from etsy_listings.core.render.config import (
@@ -68,51 +63,51 @@ from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
-__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
+__all__ = [
     "RGB",
     "RGBA",
-    "FloatMap",
     "AnyRenderer",
-    "Renderer",
-    "PhotoWarpConfig",
-    "PhotoWarpRenderer",
-    "MarigoldInference",
-    "LayerBoxes",
-    "MarigoldAppearance",
-    "MarigoldConfig",
-    "MarigoldRenderer",
-    "PlacementId",
-    "PreparationRequiredError",
     "AnyTemplate",
     "BoundingBox",
     "ColourMatrixTemplate",
+    "DerivedMapCache",
+    "DesignValidationError",
     "DisplaceConfig",
+    "FloatMap",
+    "Layer",
+    "LayerBoxes",
+    "MarigoldAppearance",
+    "MarigoldConfig",
+    "MarigoldInference",
+    "MarigoldRenderer",
+    "MaterialLayer",
+    "MaterialMaps",
     "MultipleTemplate",
+    "PhotoWarpConfig",
+    "PhotoWarpRenderer",
     "Placement",
+    "PlacementId",
     "Point",
+    "PreparationRequiredError",
     "RenderConfig",
+    "Renderer",
     "ShadeConfig",
     "SingleTemplate",
     "TemplateConfig",
     "dump_template_config",
-    "load_template_config",
-    "scene_colours",
-    "scene_layers",
-    "Layer",
-    "render_scene",
-    "MaterialMaps",
-    "MaterialLayer",
-    "prepare_material_artwork",
-    "render_marigold_scene",
-    "DerivedMapCache",
-    "height_map",
-    "luminance_map",
-    "DesignValidationError",
     "encode_png",
+    "height_map",
     "load_design",
     "load_template_base",
-    "save_png",
+    "load_template_config",
+    "luminance_map",
+    "prepare_material_artwork",
+    "render_marigold_scene",
+    "render_scene",
     "sample_swatch",
+    "save_png",
+    "scene_colours",
+    "scene_layers",
 ]
 """MaterialMaps carries an explicit photo origin and optional reference size for
 compact preparation maps. The pure renderer returns the complete reference photo.
@@ -120,7 +115,7 @@ compact preparation maps. The pure renderer returns the complete reference photo
 The public identity module provides decoded artwork and prepared scene
 identities for CPU preview promotion; it imports no orchestration code.
 
-The individual passes (``warp``/``displace``/``shade``/``export``) are
+The individual passes (``warp``/``displace``/``shade``/``export_many``) are
 deliberately absent: they are the *inside* of ``render_scene``, goldened
 per-pass so a pixel change can be attributed, and composing them in some other
 order elsewhere is exactly what ADR-0012 exists to prevent. Import

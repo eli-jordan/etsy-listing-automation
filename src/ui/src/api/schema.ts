@@ -5485,12 +5485,7 @@ export interface components {
     /**
      * ShadeConfig
      * @description Blends the base mockup photo's own greyscale lighting over the printed
-     *     design, so a flat design picks up the garment's real fold shadows and
-     *     light falloff instead of looking pasted on as a flat rectangle -- this is
-     *     why a plain flat-lay PNG is enough to mock up, with no purchased
-     *     Photoshop lighting map needed. On by default: almost every mockup needs
-     *     it. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a
-     *     mid-grey pivot is used for those instead.
+     *     design. On by default: almost every mockup needs it.
      */
     ShadeConfig: {
       /**

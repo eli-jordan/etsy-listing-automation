@@ -183,8 +183,7 @@ def render_marigold_scene(
         if regions is None:
             continue
         region, photo_region = regions
-        ink, alpha, visibility = _layer_ink(layer, region, settings)
-        canvas.add(photo_region, ink, alpha, visibility)
+        canvas.add(photo_region, _layer_ink(layer, region, settings))
     return canvas.image()
 
 
@@ -222,11 +221,14 @@ def _visible_regions(maps: MaterialMaps) -> tuple[Region, Region] | None:
     return region, photo_region
 
 
-def _layer_ink(
-    layer: MaterialLayer, region: Region, settings: MarigoldAppearance
-) -> tuple[FloatMap, FloatMap, FloatMap]:
-    """The layer's lit linear ink over ``region``, its coverage, and the
-    maps' visibility there."""
+@dataclass(frozen=True)
+class _LayerInk:
+    lit_linear_ink: FloatMap
+    coverage: FloatMap
+    visibility: FloatMap
+
+
+def _layer_ink(layer: MaterialLayer, region: Region, settings: MarigoldAppearance) -> _LayerInk:
     maps = layer.maps
     material = maps.material[region]
     labels = maps.patch_ids[region] if maps.patch_ids is not None else None
@@ -251,7 +253,7 @@ def _layer_ink(
         * (1 + settings.fabric_texture * (maps.texture[region] - 1))[..., None]
         + sampled[..., 3, None] * settings.print_shine * maps.residual[region]
     )
-    return ink, alpha, visibility
+    return _LayerInk(lit_linear_ink=ink, coverage=alpha, visibility=visibility)
 
 
 class _Canvas:
@@ -264,17 +266,15 @@ class _Canvas:
         self._initialized = np.zeros(base.shape[:2], bool)
         self._changed = np.zeros(base.shape[:2], bool)
 
-    def add(
-        self, photo_region: Region, ink: FloatMap, alpha: FloatMap, visibility: FloatMap
-    ) -> None:
+    def add(self, photo_region: Region, layer: _LayerInk) -> None:
+        alpha = layer.coverage
         destination = self._result[photo_region]
         fresh = ~self._initialized[photo_region]
         if fresh.any():
             destination[fresh] = material_math.linear(self._base[photo_region][fresh])
             self._initialized[photo_region] = True
-        self._result[photo_region] = ink * visibility[..., None] + destination * (
-            1 - alpha[..., None]
-        )
+        visible_ink = layer.lit_linear_ink * layer.visibility[..., None]
+        self._result[photo_region] = visible_ink + destination * (1 - alpha[..., None])
         self._changed[photo_region] |= alpha > 0
 
     def image(self) -> Image.Image:

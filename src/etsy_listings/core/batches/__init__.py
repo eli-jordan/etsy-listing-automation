@@ -1,26 +1,16 @@
 """Batch creation: stage design PNGs against a listing template, then create
 one ordinary local listing per design (spec *Starting a batch* to
-*Confirming a batch*; cache-record persistence, ADR-0051, staging expiry; batch plan PR 2).
+*Confirming a batch*; ADR-0051).
 
-Two cache records carry the work (`records`): a staging session, which is
-everything uploaded but not yet confirmed, and a batch, which is what
-confirming made of it. The stores are plain classes over `Workspace`; the UI
-server keeps one of each. Nothing here deploys, and nothing here calls a
-provider.
+Two cache records carry the work: a staging session, which is everything
+uploaded but not yet confirmed, and a batch, which is what confirming made of
+it. The stores are plain classes over `Workspace`; the UI server keeps one of
+each. ``archive``'s ZIP checks are reached only through :func:`stage_pngs`.
 
-* :func:`stage_pngs` -- the upload, one ZIP or loose PNGs, validated and
-  frozen, or a :class:`StagingRefusedError` with nothing on disk. The ZIP's own
-  checks are ``archive``'s, reached only through it.
-* :func:`review` -- the names, checks and notes the staging page shows,
-  worked out afresh on every read.
-* :func:`confirm` and :func:`retry_row` -- create the listings, idempotently
-.
-* :func:`standing` -- a batch's derived status and progress counts, and
-:func:`reviewable`, which rows Mark reviewed applies to (batch plan PR 5).
-
-A created row is queued for AI (``BatchRow.ai``); the queue that drafts it
-is the UI server's (``core/application/ai/batch_queue.py``, ADR-0048), since only that process runs
-AI.
+Nothing here deploys or calls a provider. A created row is queued for AI
+(``BatchRow.ai``), but the queue that drafts it is the UI server's
+(``core/application/ai/batch_queue.py``, ADR-0048), since only that process
+runs AI.
 """
 
 from etsy_listings.core.batches.creation import (
@@ -56,33 +46,33 @@ from etsy_listings.core.batches.staging import (
 )
 from etsy_listings.core.batches.status import BatchStatus, Standing, standing
 
-__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
-    "StagingSession",
-    "StagingRow",
-    "StagingStore",
-    "Batch",
-    "BatchRow",
+__all__ = [
+    "RETRYABLE",
     "AiState",
     "AiStep",
-    "RETRYABLE",
-    "BatchStore",
+    "Batch",
     "BatchRecords",
-    "Upload",
-    "stage_pngs",
-    "StagingRefusedError",
-    "review",
-    "StagingReview",
+    "BatchRow",
+    "BatchStatus",
+    "BatchStore",
+    "ConfirmRefusedError",
+    "NotReviewableError",
     "RowReview",
-    "upload_path",
+    "StagingRefusedError",
+    "StagingReview",
+    "StagingRow",
+    "StagingSession",
+    "StagingStore",
+    "Standing",
+    "Upload",
     "allocate",
     "confirm",
-    "retry_row",
-    "row_upload",
-    "ConfirmRefusedError",
-    "standing",
-    "Standing",
-    "BatchStatus",
-    "reviewable",
     "has_listing",
-    "NotReviewableError",
+    "retry_row",
+    "review",
+    "reviewable",
+    "row_upload",
+    "stage_pngs",
+    "standing",
+    "upload_path",
 ]

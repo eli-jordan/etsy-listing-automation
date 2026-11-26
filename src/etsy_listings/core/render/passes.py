@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from typing import assert_never
 
 import cv2
 import numpy as np
@@ -78,7 +79,7 @@ def _soft_light(base: FloatMap, light: FloatMap) -> FloatMap:
 def shade(img: RGBA, cfg: ShadeConfig, luminance: FloatMap) -> RGBA:
     """Blend the mockup's own lighting/fold shadows over the design so the
     print picks up the garment's shape. ``multiply`` crushes dark garments;
-    ``soft-light``/``grey-pivot`` exist for those ."""
+    ``soft-light``/``grey-pivot`` exist for those."""
     if not cfg.enabled or cfg.opacity <= 0:
         return img
 
@@ -90,8 +91,10 @@ def shade(img: RGBA, cfg: ShadeConfig, luminance: FloatMap) -> RGBA:
         blended = rgb * lum
     elif cfg.blend == "soft-light":
         blended = _soft_light(rgb, lum)
-    else:  # grey-pivot: push toward the luminance around a neutral mid-grey
+    elif cfg.blend == "grey-pivot":
         blended = np.clip(rgb + (lum - 0.5) * 2.0, 0.0, 1.0)
+    else:
+        assert_never(cfg.blend)
 
     out_rgb = np.clip(rgb * (1 - cfg.opacity) + blended * cfg.opacity, 0.0, 1.0)
     out_rgb_u8 = (out_rgb * 255.0 + 0.5).astype(np.uint8)
@@ -99,31 +102,11 @@ def shade(img: RGBA, cfg: ShadeConfig, luminance: FloatMap) -> RGBA:
     return result
 
 
-def export(base: RGB, print_layer: RGBA) -> Image.Image:
-    """Alpha-composite ``print_layer`` (canvas-sized RGBA) over the opaque
-    ``base`` mockup photo. Straight (non-premultiplied) alpha, composited in
-    float32 and rounded rather than truncated -- documented here since this is
-    the one place the alpha compositing order matters for determinism."""
-    base_f = base[..., :3].astype(np.float32)
-    print_rgb = print_layer[..., :3].astype(np.float32)
-    alpha = print_layer[..., 3:4].astype(np.float32) / 255.0
-
-    composite = base_f * (1 - alpha) + print_rgb * alpha
-    composite_u8 = np.clip(composite + 0.5, 0, 255).astype(np.uint8)
-    return Image.fromarray(composite_u8, mode="RGB")
-
-
 def export_many(base: RGB, print_layers: Sequence[RGBA]) -> Image.Image:
-    """Alpha-composite several canvas-sized RGBA layers over ``base`` in list
-    order. The compositor for every template kind: a one-layer
-    ``colour-matrix``/``single`` scene is just the single-element case.
-
-    Same straight-alpha, float32, round-not-truncate arithmetic as
-    :func:`export`, folded across every layer in turn -- which is why the
-    one-layer case is byte-identical to it, and why
-    ``test_export_many_with_one_layer_matches_export`` pins that. :func:`export`
-    is kept as the two-operand statement of the same rule: it is the definition
-    this function is checked against, and dropping it would drop the check.
+    """Alpha-composite canvas-sized RGBA layers over the opaque ``base`` in
+    list order: straight (non-premultiplied) alpha, folded in float32, then
+    rounded rather than truncated. The compositing order matters for
+    determinism.
 
     The fold runs only over the rectangle where some layer prints. Outside it
     every alpha is zero, so the whole-canvas fold would be ``base * 1 +

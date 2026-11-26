@@ -165,18 +165,3 @@ def padded_box(template_box: BoundingBox, limits: PositionLimits) -> BoundingBox
     unit = (_unit() - 0.5) * (2 * half_x, 2 * half_y) + 0.5
     points = _map(unit, _homography(template_box))
     return _corners(points)
-
-
-def clamp_pose(pose: Pose, limits: PositionLimits) -> Pose:
-    return Pose(
-        scale=max(limits.scale.min, min(limits.scale.max, pose.scale)),
-        offset_x=max(-limits.offset, min(limits.offset, pose.offset_x)),
-        offset_y=max(-limits.offset, min(limits.offset, pose.offset_y)),
-        rotation=max(-limits.rotation, min(limits.rotation, pose.rotation)),
-    )
-
-
-def nearest_allowed_pose(
-    template_box: BoundingBox, box: BoundingBox, limits: PositionLimits
-) -> Pose:
-    return clamp_pose(decompose(template_box, box).pose, limits)

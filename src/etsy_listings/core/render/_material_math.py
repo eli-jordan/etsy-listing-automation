@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, cast
 
 import cv2
@@ -14,6 +15,7 @@ Pixels = NDArray[np.uint8]
 _SRGB_ENCODED_KNEE = 0.04045
 _SRGB_LINEAR_KNEE = 0.0031308
 _DEGENERATE_HOMOGRAPHY = 1e-8
+_BAKE_TILE_ROWS = 128
 
 
 def sample(field: Float, xy: Float, border: int = cv2.BORDER_REPLICATE) -> Float:
@@ -35,18 +37,21 @@ def blur(array: Float, sigma: float) -> Float:
     return cast(Float, cv2.GaussianBlur(array, (0, 0), sigma, borderType=cv2.BORDER_REFLECT_101))
 
 
+def _srgb_decode(values: NDArray[Any]) -> Float:
+    return cast(
+        Float,
+        np.where(values <= _SRGB_ENCODED_KNEE, values / 12.92, ((values + 0.055) / 1.055) ** 2.4),
+    )
+
+
+_LINEAR_BYTE_TABLE = _srgb_decode(np.arange(256, dtype=np.float32) / 255)
+_LINEAR_BYTE_TABLE.setflags(write=False)
+
+
 def linear(rgb: NDArray[Any]) -> Float:
-    # Byte colour has only 256 possible inputs. Evaluate the same float32
-    # transfer function once per value instead of per megapixel. The local
-    # table keeps this pass pure and preserves the non-byte input contract.
     if rgb.dtype == np.uint8:
-        values = np.arange(256, dtype=np.float32) / 255
-        table = np.where(
-            values <= _SRGB_ENCODED_KNEE, values / 12.92, ((values + 0.055) / 1.055) ** 2.4
-        )
-        return cast(Float, table[rgb])
-    values = rgb.astype(np.float32) / 255
-    return np.where(values <= _SRGB_ENCODED_KNEE, values / 12.92, ((values + 0.055) / 1.055) ** 2.4)
+        return cast(Float, _LINEAR_BYTE_TABLE[rgb])
+    return _srgb_decode(rgb.astype(np.float32) / 255)
 
 
 def display(rgb: Float) -> Pixels:
@@ -93,10 +98,9 @@ def bake(
     )
     material = np.empty((height, width, 2), np.float32)
     visibility = np.empty((height, width), np.float32)
-    # Identical arithmetic in bounded row tiles avoids full-frame float64
-    # triangle temporaries. Pixel coordinates stay in the original photo frame.
-    for top in range(0, height, 128):
-        bottom = min(top + 128, height)
+    # Row tiles bound the float64 triangle temporaries' memory.
+    for top in range(0, height, _BAKE_TILE_ROWS):
+        bottom = min(top + _BAKE_TILE_ROWS, height)
         yy, xx = np.mgrid[
             origin[1] + top : origin[1] + bottom, origin[0] : origin[0] + width
         ].astype(np.float32)
@@ -108,34 +112,46 @@ def bake(
         gx = np.clip(np.nan_to_num(x), 0, 1) * (mesh - 1)
         gy = np.clip(np.nan_to_num(y), 0, 1) * (mesh - 1)
         ix, iy = np.minimum(gx.astype(int), mesh - 2), np.minimum(gy.astype(int), mesh - 2)
-        fx, fy = gx - ix, gy - iy
-        if neutral:
-            # Preparation bakes the neutral grid before adding fitted residuals.
-            # Its triangle components are separable. Keep the same float32 edge
-            # differences, float64 weights and diagonal choice as the general
-            # interpolator, without loading four two-channel fields per pixel.
-            ax, bx = coordinate[ix], coordinate[ix + 1]
-            ay, dy = coordinate[iy], coordinate[iy + 1]
-            lower_x = ax + fx * (bx - ax)
-            lower_y = ay + fy * (dy - ay)
-            upper_x = bx + (1 - fx) * (ax - bx)
-            upper_y = dy + (1 - fy) * (ay - dy)
-            lower_triangle = fx + fy <= 1
-            tile = np.stack(
-                [
-                    np.where(lower_triangle, lower_x, upper_x),
-                    np.where(lower_triangle, lower_y, upper_y),
-                ],
-                -1,
-            ).astype(np.float32)
-        else:
-            a, b, c, d = uv[iy, ix], uv[iy, ix + 1], uv[iy + 1, ix], uv[iy + 1, ix + 1]
-            lower = a + fx[..., None] * (b - a) + fy[..., None] * (c - a)
-            upper = d + (1 - fx[..., None]) * (c - d) + (1 - fy[..., None]) * (b - d)
-            tile = np.where((fx + fy <= 1)[..., None], lower, upper).astype(np.float32)
+        cell = _Cell(ix, iy, gx - ix, gy - iy)
+        tile = _neutral_grid_tile(coordinate, cell) if neutral else _triangle_tile(uv, cell)
         material[top:bottom] = tile
         visibility[top:bottom] = valid
     return material, visibility
+
+
+@dataclass(frozen=True)
+class _Cell:
+    """Each pixel's mesh cell (``ix``, ``iy``) and position inside it (``fx``, ``fy``)."""
+
+    ix: NDArray[np.intp]
+    iy: NDArray[np.intp]
+    fx: NDArray[Any]
+    fy: NDArray[Any]
+
+
+def _triangle_tile(uv: Float, cell: _Cell) -> Float:
+    ix, iy, fx, fy = cell.ix, cell.iy, cell.fx, cell.fy
+    a, b, c, d = uv[iy, ix], uv[iy, ix + 1], uv[iy + 1, ix], uv[iy + 1, ix + 1]
+    lower = a + fx[..., None] * (b - a) + fy[..., None] * (c - a)
+    upper = d + (1 - fx[..., None]) * (c - d) + (1 - fy[..., None]) * (b - d)
+    return cast(Float, np.where((fx + fy <= 1)[..., None], lower, upper).astype(np.float32))
+
+
+def _neutral_grid_tile(coordinate: Float, cell: _Cell) -> Float:
+    """:func:`_triangle_tile`'s bytes on the neutral grid, whose triangle
+    components are separable, without loading four two-channel fields per pixel."""
+    ix, iy, fx, fy = cell.ix, cell.iy, cell.fx, cell.fy
+    ax, bx = coordinate[ix], coordinate[ix + 1]
+    ay, dy = coordinate[iy], coordinate[iy + 1]
+    lower_x = ax + fx * (bx - ax)
+    lower_y = ay + fy * (dy - ay)
+    upper_x = bx + (1 - fx) * (ax - bx)
+    upper_y = dy + (1 - fy) * (ay - dy)
+    lower_triangle = fx + fy <= 1
+    return np.stack(
+        [np.where(lower_triangle, lower_x, upper_x), np.where(lower_triangle, lower_y, upper_y)],
+        -1,
+    ).astype(np.float32)
 
 
 def premultiply(artwork: Pixels) -> Float:

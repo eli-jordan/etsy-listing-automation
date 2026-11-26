@@ -8101,7 +8101,7 @@
       },
       "ShadeConfig": {
         "additionalProperties": false,
-        "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
+        "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign. On by default: almost every mockup needs it.",
         "properties": {
           "blend": {
             "default": "soft-light",

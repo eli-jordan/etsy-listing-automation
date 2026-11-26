@@ -1,14 +1,9 @@
 """Sampling a representative garment colour out of a mockup photo.
 
-Not a render pass -- nothing composited depends on it -- but pure in the same
-sense: ndarrays and frozen config in, a tuple out, no I/O and no clock.
-``apply`` uses it to put a colour block next to each render log line, so a run
-reads as the colour set it produced rather than as a list of slugs.
-
-The sample is taken from the *blank* mockup inside the print area, which is
-where the garment fills the frame most reliably -- the median rather than the
-mean, so a fold shadow or a highlight cannot drag the result away from the
-fabric colour.
+The sample is the median of the *blank* mockup inside the print area, where
+the garment fills the frame most reliably; the median rather than the mean, so
+a fold shadow or a highlight cannot drag the result away from the fabric
+colour.
 """
 
 from __future__ import annotations
