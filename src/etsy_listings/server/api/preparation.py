@@ -1,10 +1,3 @@
-"""Thin HTTP adapters for durable preparation and calibration masks.
-
-Refusals pass through to the app's one refusal table (``app.py``'s
-``REFUSAL_STATUS``): a Prepare against a calibration revision that has moved
-is a ``412``, an unknown template a ``404``. Only a refused Prepare keeps its
-own body, the ``reason`` beside the sentence."""
-
 import time
 from collections.abc import AsyncIterator
 from dataclasses import asdict
@@ -206,8 +199,6 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
             ),
         )
     except ConflictError as exc:
-        # PreparationRefusedError and the mask refusals: the 409 the refusal
-        # table gives a conflict, with a reason beside the sentence.
         raise HTTPException(
             status_code=409, detail={"reason": "preparation_refused", "message": str(exc)}
         ) from exc
@@ -230,8 +221,8 @@ def cover_prepared(request: Request) -> list[PreparationJobResponse]:
 
 @router.get("/templates/{name}/coverage")
 def coverage(request: Request, name: str, response: Response) -> PositionReadinessResponse:
-    """Whether the editor may adjust this template yet. Apart from the status
-    above, which the catalog reads for every template."""
+    """Whether the editor may adjust this template yet. Separate from the
+    preparation status, which the catalog reads for every template."""
     response.headers["Cache-Control"] = "no-store"
     preparations = coordinator(request)
     preparations.workspace.template_dir(name)
@@ -270,7 +261,6 @@ def cancel(request: Request, identity: str) -> PreparationJobResponse:
 
 
 async def _caught_up(preparations: Preparations, identity: str, after: int) -> bool:
-    """Whether the job has ended and every event it emitted has been sent."""
     job = await run_in_threadpool(preparations.status, identity)
     return job.phase in TERMINAL and after >= job.last_event_sequence
 

@@ -1,53 +1,24 @@
-"""The AI runs resource (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's
-*Run contract*).
-
-```
-POST /api/ai/runs {listing, draft_brief} -> 202 AiRunSummary
-                                 | 409 {active_run} | 409 {reason}
-                                 | 409 {reason: "batch_pending"}
-                                 | 409 {reason: "deploying"}
-GET /api/ai/runs?listing= the listing's current or most recent run, or 404
-GET /api/ai/runs/{id} AiRunDetail: phase, steps, events so far
-GET /api/ai/runs/{id}/events text/event-stream; replays after Last-Event-ID
-DELETE /api/ai/runs/{id} cancel; 409 if already finished
-```
-
-``POST`` asks core's AI coordinator (``core/application/ai/coordinator.py``)
-to start the run, which re-checks readiness whatever the browser last saw;
-this module maps its refusals to the codes above. The chain itself is
-``core/application/ai/runner.py``'s, on its own thread; this module only
-starts, reads and cancels runs.
-
-**The SSE bridge** is ``server/api/runs.py``'s: a blocking wait on the run's
-condition, awaited through ``run_in_executor`` with a short timeout so the
-generator notices a client leaving. A client leaving ends the stream and
-nothing else -- only ``DELETE`` cancels.
-"""
-
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
-from etsy_listings.core.application.ai.events import AnyAiRunEvent
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry, Conflict
 from etsy_listings.core.application.refusals import (
     AiNotReadyError,
     ListingDeployingError,
     ListingDraftingInBatchError,
 )
-from etsy_listings.server.api.runs import last_event_id
 from etsy_listings.server.api.schemas import (
     AiRunDetail,
     AiRunRefusal,
     AiRunSummary,
     CreateAiRunRequest,
 )
+from etsy_listings.server.api.sse import event_stream
 
 router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
 
@@ -59,7 +30,6 @@ DEPLOYING = "deploying"
 """The refusal's ``reason`` while a UI plan or apply holds the listing
 : deploying takes precedence over AI."""
 
-_EVENT_WAIT_TIMEOUT = 1.0
 """One SSE poll's longest block, as in ``server/api/runs.py``."""
 
 
@@ -146,36 +116,8 @@ def cancel_ai_run(request: Request, run: Annotated[AiRun, Depends(_run)]) -> AiR
     return _summary(request, run)
 
 
-def _sse_frame(event: AnyAiRunEvent) -> bytes:
-    return f"id: {event.seq}\nevent: {event.type}\ndata: {event.model_dump_json()}\n\n".encode()
-
-
-async def sse_events(request: Request, run: AiRun, after_seq: int) -> AsyncIterator[bytes]:
-    """Every event past ``after_seq``, then each new one, until the run's
-    last. Returns when the client has gone; the run is not touched."""
-    loop = asyncio.get_running_loop()
-    next_seq = after_seq
-    while True:
-        if await request.is_disconnected():
-            return
-
-        def wait(after: int = next_seq) -> tuple[list[AnyAiRunEvent], bool]:
-            return run.wait_for_events(after, timeout=_EVENT_WAIT_TIMEOUT)
-
-        pending, done = await loop.run_in_executor(None, wait)
-        for event in pending:
-            next_seq = event.seq
-            yield _sse_frame(event)
-        if done:
-            return
-
-
 @router.get("/{run_id}/events", responses={404: {}})
 def stream_ai_run_events(
     run: Annotated[AiRun, Depends(_run)], request: Request
 ) -> StreamingResponse:
-    return StreamingResponse(
-        sse_events(request, run, last_event_id(request)),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return event_stream(request, run, lambda event: event.seq)

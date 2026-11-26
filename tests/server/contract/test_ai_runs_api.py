@@ -18,9 +18,10 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.ai.models import ProviderReadiness
@@ -30,7 +31,7 @@ from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.layout import MARKET_QUERIES_PROMPT_FILE, PROMPTS_DIR
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.api import airuns as airuns_api
+from etsy_listings.server.api import sse
 from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import (
@@ -403,7 +404,8 @@ def test_closing_the_stream_does_not_cancel_the_run(
                 return self.polls > 1
 
         async def read_until_gone() -> list[bytes]:
-            return [frame async for frame in airuns_api.sse_events(Leaving(), run, 0)]  # type: ignore[arg-type]
+            frames = sse._frames(cast(Request, Leaving()), run, lambda e: e.seq, 0)
+            return [frame async for frame in frames]
 
         # Its own thread: another test layer (Playwright) may leave this
         # thread with a running event loop, and asyncio.run refuses that.

@@ -1,17 +1,11 @@
-"""FastAPI app factory for the calibrator, listings, AI runs and batch workflows.
-
-The routes share one workspace and the same engine services as the CLI.
-"""
-
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -34,8 +28,7 @@ from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.dependencies import PreparationRuntime
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.batches import BatchStore, StagingStore
-from etsy_listings.core.errors import ConflictError, MissingError, RefusedError, StaleError
-from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.airuns import router as ai_runs_router
 from etsy_listings.server.api.backup import router as backup_router
 from etsy_listings.server.api.batches import router as batches_router
@@ -45,6 +38,7 @@ from etsy_listings.server.api.listings import router as listings_router
 from etsy_listings.server.api.listings import support_router as listings_support_router
 from etsy_listings.server.api.media_files import router as media_files_router
 from etsy_listings.server.api.preparation import router as preparation_router
+from etsy_listings.server.api.refusal_status import REFUSAL_STATUS
 from etsy_listings.server.api.runs import router as runs_router
 from etsy_listings.server.api.seo import router as seo_router
 from etsy_listings.server.api.shop import router as shop_router
@@ -71,19 +65,16 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     preparation_runtime: PreparationRuntime | None = None,
     clients: ClientFactories = DEFAULT_CLIENTS,
     backup: BackupEnvironment | None = None,
+    model_discovery: ModelDiscovery | None = None,
 ) -> FastAPI:
-    # One of each per process, so their locks mean something: the cache
-    # records' stores. Listing, mockup-template and listing-template locks need
-    # no instance; `core/workspace/locks.py` keys them by workspace root.
-    # The backup's pause (workspace-backup spec, *Pausing jobs*): one gate,
-    # shared by every coordinator below, so a backup holds them all at once.
+    # One of each per app: the gate and stores lock in process, so a second
+    # instance would not exclude the first. (`core/workspace/locks.py` keys the
+    # listing and template locks by workspace root instead.)
     job_gate = JobGate()
     preparations = Preparations(workspace, runtime=preparation_runtime, gate=job_gate)
     proposal_store = ProposalStore(workspace)
     staging_store = StagingStore(workspace)
     batch_store = BatchStore(workspace)
-    # Constructing the coordinators starts nothing; the lifespan below does.
-    # Deploying takes precedence over AI work (ADR-0050).
     ai = AiCoordinator(
         workspace,
         proposals=proposal_store,
@@ -94,42 +85,12 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     )
     deployments = Deployments(workspace, context_factory, ai=ai, gate=job_gate)
     scene_warmer = SceneWarmer(workspace, gate=job_gate)
-    # The schedule and the one backup operation at a time; it owns the
-    # gate's pause during a run. `backup` lets a test keep the state under
-    # tmp_path and replace restic (workspace-backup plan, P2 and P3).
     backups = BackupCoordinator(workspace, gate=job_gate, environment=backup)
+    discovery = ModelDiscovery() if model_discovery is None else model_discovery
 
     @asynccontextmanager
-    async def lifespan(running: FastAPI) -> AsyncIterator[None]:
-        """Starts the deployment worker thread with the app, and waits
-        for it on the way out -- "finish what's in flight, start nothing
-        else" (decision 7), on the path every ASGI server already calls
-        (uvicorn's own shutdown when ``ui`` is interrupted, and
-        ``TestClient``'s ``with`` block).
-
-        AI work stops first: its batch queue starts nothing more, then every
-        AI run is cancelled -- each on its own daemon thread, its provider
-        subprocess tree killed -- so a server stopping never waits out a
-        model, and a deploy yielding to a run is not left waiting on it.
-
-        Expired staging sessions are swept on the way in. The batch queue
-        starts with the app, returning rows a previous server left running
-        to the queue.
-
-        The scene warmer stops before the rest, abandoning its queue: what
-        it composes is only ever a head start.
-
-        The job gate stops first of all: a backup waiting for quiet gives
-        up, and work its pause holds stays held, for each coordinator's own
-        stop to drop as it drops queued work. The backup scheduler starts
-        last, so an overdue backup's pause finds every coordinator running,
-        and stops next, stopping restic part way; the run is recorded as
-        stopped."""
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await run_in_threadpool(preparations.start)
-        # ADR-0056: discovery is advisory. Its owned worker must not hold
-        # application availability behind installed CLI processes.
-        # Read from app.state, so a test can put its own discovery there first.
-        discovery: ModelDiscovery = running.state.model_discovery
         discovery.start()
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
@@ -150,39 +111,17 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
     app.state.preparations = preparations
     app.state.workspace = workspace
-    app.state.model_discovery = ModelDiscovery()
+    app.state.model_discovery = discovery
     app.state.deployments = deployments
     app.state.job_gate = job_gate
     app.state.backups = backups
-    # Shared with the preview endpoint (`listings.py`), which needs a
-    # `RunContext` to ask the render stage for a scene's current hash but has
-    # nothing to do with running a run -- reaching through `deployments` for
-    # it would couple that endpoint to deployment's own shape for no reason.
     app.state.context_factory = context_factory
-    # The Etsy and Printify clients the routes ask through (`app_state.clients`),
-    # injected for the same reason as the context factory: a test passes fakes.
     app.state.clients = clients
-    # AI runs (features/market-seo-20260924/spec.md, *AI runs*) and the
-    # batch AI queue (ADR-0048): a thread per run, never `deployments`.
     app.state.ai = ai
     app.state.staging_store = staging_store
     app.state.batch_store = batch_store
-    # ADR-0049: the cached proposals, written by AI runs and read and resolved
-    # through `seo.py`. One store, for the same reason.
     app.state.proposal_store = proposal_store
-    # Composes a saved listing's gallery scenes ahead of the Listing Images
-    # tab asking for them (`listings.py`'s create and PATCH).
     app.state.scene_warmer = scene_warmer
-
-    # Permissive CORS for local dev only -- the Vite dev server proxies /api in
-    # production-shaped use, but running `uvicorn` and `vite` as two separate
-    # processes during development needs this.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     register_refusals(app)
 
@@ -217,40 +156,7 @@ API_ROUTERS = (
 )
 
 
-REFUSAL_STATUS: Mapping[type[Exception], int] = {
-    InvalidNameError: 400,
-    MissingError: 404,
-    ConflictError: 409,
-    StaleError: 412,
-    RefusedError: 422,
-}
-"""Each refusal category (``core/errors.py``) as the status it surfaces as.
-
-The one place a core refusal becomes a status code, so a route only lets it
-through. Core declares the category and never a code (ADR-0052); the routes
-used to decide per router, and disagreed -- a missing test design was a 400
-where every other missing thing was a 404, and a calibration conflict was a
-409 or a 412 depending on what its message said.
-
-* ``400``: a name from a URL or a body that the server will not take as a name
-  -- not a single path segment (ADR-0013 makes that a security boundary, so
-  the refusal belongs to ``Workspace``), or reserved.
-* ``404``: what the request names is not there.
-* ``409``: the request is fine, but what the workspace holds now forbids it.
-* ``412``: the request was made against a revision that has since changed;
-  reload and ask again.
-* ``422``: the request's own content cannot be taken.
-
-The detail is the refusal's message: a ``UserFacingError``'s message is the
-whole of what should reach a reader. A route whose refusal carries more than a
-sentence -- a staging refusal's remedy, an AI run's reason, the Admin page's
-field errors -- still answers it itself, with the status this table gives its
-category. Starlette picks a handler by walking the exception's MRO, so a class
-answers as the first category among its bases."""
-
-
 def register_refusals(app: FastAPI) -> None:
-    """Answer every refusal category with its :data:`REFUSAL_STATUS`."""
     for category, status in REFUSAL_STATUS.items():
         app.add_exception_handler(category, _refusal_handler(status))
 
@@ -263,14 +169,10 @@ def _refusal_handler(status: int) -> Callable[[Request, Exception], Awaitable[Re
 
 
 def _serve_frontend(app: FastAPI, dist: Path) -> None:
-    """Built assets under /assets; everything else falls back to
-    index.html so client-side routing works on a hard refresh.
-    `npm run build` must have run first -- in dev, use the Vite
-    dev server instead and hit uvicorn only for /api."""
+    """Built assets under /assets; everything else falls back to index.html
+    so client-side routing survives a hard refresh. Needs `npm run build`."""
     app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
 
-    # Out of the schema: it is not API, and the exported contract must
-    # not depend on whether this checkout has a built SPA.
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str) -> Response:
         if full_path.startswith("api/"):

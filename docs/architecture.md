@@ -111,7 +111,7 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | Module | Owns | Boundary |
 |---|---|---|
 | `cli` | Typer commands, terminal presentation of engine reports (`cli/render.py`), command options, prompts and the `auth`/`setup`/`new` wizards' question order (`cli/auth.py`, `cli/setup.py`, `cli/new.py`, with `cli/credentials.py` and `cli/pickers.py`) | Uses engine reports rather than computing a second diff; wizards call core operations for every decision and write; only `cli/ui.py` imports the server, and only `server.hosting` |
-| `server` | FastAPI routing and wire schemas (`server/api/`), the one refusal-to-status table (`REFUSAL_STATUS` in `server/api/app.py`), SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator and store per process and starts and stops them; decides no workflow rule itself |
+| `server` | FastAPI routing and wire schemas (`server/api/`), the one refusal-to-status table (`REFUSAL_STATUS` in `server/api/refusal_status.py`), SSE framing (`server/api/sse.py`), reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator and store per process and starts and stops them; decides no workflow rule itself |
 | `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and holds a listing template's lock around each of its check-then-writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 | `core/engine` | Stage protocol, comparison, lockfile, lifecycle, runs, previews and status | Stages return values; the engine decides execution and records progress |
 | `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `locks.py`, the process-wide keyed locks for listings, mockup templates and listing templates; `listing_documents.py` is the one reader and writer of `listing.yaml` and takes each listing's lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
@@ -450,6 +450,12 @@ reads the list again after each save: `positioned_listings()` in
 `GET /api/templates/{name}/positioned-listings`. It reads raw listing documents
 and writes none.
 
+The design a preview prints comes from an open library: the three bundled
+targets in `server/api/static/` plus PNGs the user uploads into the workspace's
+`test-designs/` (`core/application/calibration_designs.py`). A fixed set would
+not do, because calibration is judged by eye: the grid target shows whether the
+warp is right and says nothing about how a real ink weight sits on a garment.
+
 ### Renderer configuration and calibration recovery
 
 Templates require `renderer.type` and put active settings in `renderer.config`.
@@ -743,7 +749,9 @@ build their clients through the app's `ClientFactories` (`app_state.clients`).
 configured-identity retention and the editable key set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
 revision refuses with 412 and `kind: "stale"`; invalid values refuse with field
-errors and 422.
+errors and 422. Both are a typed `ShopSaveRefusal` body rather than
+`{"detail": ...}`, so the page tells a conflict from field errors without
+parsing text.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055. A
 conflict never overwrites an external edit, even a comment-only one: the page
 reloads instead. An optional file such as `settings.yaml` is read with

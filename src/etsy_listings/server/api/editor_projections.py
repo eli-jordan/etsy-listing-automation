@@ -1,5 +1,3 @@
-"""Wire fields shared by listing and listing-template editors."""
-
 from collections.abc import Sequence
 from typing import Any
 

@@ -186,7 +186,7 @@
       },
       "AiProviderSettings": {
         "additionalProperties": false,
-        "description": "One provider's preferences for every task.",
+        "description": "One provider's preferences for every task (ADR-0056).\n\nDiscovery is advisory, so model and effort are intentionally not enums.\nA retired value stays usable until the seller replaces it.",
         "properties": {
           "effort": {
             "anyOf": [
@@ -2149,7 +2149,7 @@
       },
       "ColourMatrixPreviewRequest": {
         "additionalProperties": false,
-        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body. All\nthree take ``labels`` because an editor preview names with them the labels\nof its ``calibration_revision``. None draws them.",
+        "description": "A colour-matrix template's preview body. All three preview shapes take\n``labels``: an editor preview names the labels of its\n``calibration_revision`` with them. None draws them.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -2242,7 +2242,7 @@
       },
       "ColourMatrixTemplate": {
         "additionalProperties": false,
-        "description": "One photo per colour, named by colour slug, with the design in the same position.",
+        "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -2329,7 +2329,7 @@
         "type": "object"
       },
       "CommonCopySummary": {
-        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). A common-copy ref is\nworkspace-relative, like every other ref, so it is exactly what\n`description.ref` stores, already usable as-is.",
+        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector. ``ref`` is workspace-relative, exactly what `description.ref`\nstores.",
         "properties": {
           "ref": {
             "title": "Ref",
@@ -2527,7 +2527,7 @@
         "type": "object"
       },
       "CreateListingRequest": {
-        "description": "The whole document, not a handful of fields to build one from.\n\nThe editor is the create form, so by the time a name is typed the user may\nhave chosen a design, colours and images -- and the shape they edited is the\nshape that should be written. A server-built stub here would be a second\nopinion about what a new listing starts as.",
+        "description": "The whole document the editor built, written as edited -- not a\nhandful of fields to build one from.",
         "properties": {
           "document": {
             "additionalProperties": true,
@@ -2898,7 +2898,7 @@
         "type": "object"
       },
       "DraftListingRequest": {
-        "description": "A candidate ``listing.yaml``, as the editor holds it before the listing\nexists.\n\n``dict`` rather than ``Listing``, deliberately: an incomplete candidate is\nthe *normal* case on this endpoint, and rejecting it at the FastAPI boundary\nwould answer with a 422 the editor cannot render. The point is to get it as\nfar as ``Listing.draft`` and report what is missing.",
+        "description": "A candidate ``listing.yaml``, as the editor holds it before the listing\nexists.\n\n``dict`` rather than ``Listing``, deliberately: an incomplete candidate is\nthe *normal* case on this endpoint, and rejecting it at the FastAPI boundary\nwould answer with a 422 the editor cannot render. The point is to describe\nit as it stands and report what is missing.",
         "properties": {
           "document": {
             "additionalProperties": true,
@@ -3089,7 +3089,7 @@
         "type": "object"
       },
       "EtsyListingFacts": {
-        "description": "One side of the review, its section and shipping profile named rather than left as ids.",
+        "description": "One side of the review: the fields the mock shows unchanged\ncontext for, named rather than left as an id.",
         "properties": {
           "description": {
             "anyOf": [
@@ -3156,7 +3156,7 @@
         "type": "object"
       },
       "EtsyListingSnapshot": {
-        "description": "Both sides of the review, in full.",
+        "description": "Both sides, in full -- the ``Plan`` this stage also returns carries\nonly what changed.",
         "properties": {
           "desired": {
             "$ref": "#/components/schemas/EtsyListingFacts"
@@ -4229,7 +4229,7 @@
         "type": "object"
       },
       "ListingFailedEvent": {
-        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for\nword, or the generic internal-error text for a defect, which also fails\nthe run. ``stale_plan`` is set only when the error was a\n:class:`~etsy_listings.core.engine.run.StalePlanError`.",
+        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.core.engine.run.StalePlanError`.",
         "properties": {
           "id": {
             "title": "Id",
@@ -4358,7 +4358,7 @@
         "type": "object"
       },
       "ListingProposal": {
-        "description": "A listing's cached proposal, with ``stale`` computed on every read.",
+        "description": "A listing's cached proposal as the editor and the batch summary read\nit: the record, and whether it still describes the saved listing.\n``stale`` is computed from the saved listing on every read, never\nstored.",
         "properties": {
           "generated_at": {
             "format": "date-time",
@@ -5177,7 +5177,7 @@
         "type": "object"
       },
       "MarketSnapshot": {
-        "description": "One listing's latest market research, as the top listings panel reads it back.",
+        "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (features/market-seo-20260924/spec.md, *What the\nproposal sees*).",
         "properties": {
           "block": {
             "title": "Block",
@@ -5602,7 +5602,7 @@
         "type": "object"
       },
       "PhaseEvent": {
-        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be.",
+        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be (ADR-0041, decision 7).",
         "properties": {
           "id": {
             "title": "Id",
@@ -5706,7 +5706,7 @@
         "type": "object"
       },
       "PhraseScore": {
-        "description": "One tag the scored listings use, with its normalised score.",
+        "description": "One tag used by the scored listings: how many use it, and the sum of\ntheir scores normalised so the best phrase is 1.",
         "properties": {
           "listings": {
             "title": "Listings",
@@ -6755,7 +6755,7 @@
         "type": "object"
       },
       "ProposalChoices": {
-        "description": "The validated proposal the seller chooses from.",
+        "description": "What the seller chooses from: the validated `ai/models.py.SeoProposal`,\nfield for field, as JSON can carry it.",
         "properties": {
           "description_leads": {
             "items": {
@@ -6809,7 +6809,7 @@
         "type": "object"
       },
       "ProposalResolution": {
-        "description": "Each section's state: an accepted or dismissed section stays resolved after a reload.",
+        "description": "Each section's state (spec, *Durable AI proposals*): a section the\nseller accepted or dismissed stays resolved after a reload, so its drawer\ndoes not present itself as new again. ``pending`` is still open.",
         "properties": {
           "lead": {
             "default": "pending",
@@ -7751,22 +7751,8 @@
         "title": "RunningBackup",
         "type": "object"
       },
-      "SceneCheckResponse": {
-        "description": "Whether the Listing Images preview showed the wrong scene: one found\nunder a pixel digest remembered from before a restart that no longer\nnames the file's pixels. The digest is corrected either way.",
-        "properties": {
-          "changed": {
-            "title": "Changed",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "changed"
-        ],
-        "title": "SceneCheckResponse",
-        "type": "object"
-      },
       "ScoredListing": {
-        "description": "One scored comparable listing, as the top listings panel shows it.",
+        "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (features/market-seo-20260924/interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal\nsees*).",
         "properties": {
           "favourites_per_day": {
             "anyOf": [
@@ -7903,7 +7889,7 @@
         "type": "object"
       },
       "SeoProposalSnapshot": {
-        "description": "The generation inputs, frozen before the provider starts: the\nrequest's fields but the image, plus the design's name and content hash.",
+        "description": "The generation inputs, frozen before the provider starts: everything\n`ai/models.py.SeoRequest` sent except the design image itself, plus the\ndesign's identity and content hash. :func:`proposal_staleness` compares\none of these against the same inputs read from the listing now.",
         "properties": {
           "brief": {
             "title": "Brief",
@@ -7985,7 +7971,7 @@
         "type": "object"
       },
       "SeoRationaleEntry": {
-        "description": "One of the proposal's seven priority-phrase rationales.",
+        "description": "One of the proposal's seven priority-phrase rationales -- the wire\nshape of `ai/models.py.PhraseRationale`.",
         "properties": {
           "intent": {
             "enum": [
@@ -8062,7 +8048,7 @@
         "type": "object"
       },
       "SeoWarningEntry": {
-        "description": "One disclosure attached to a proposal: a general note or a trademark warning.",
+        "description": "The wire shape of `ai/models.py.ProposalWarning`.",
         "properties": {
           "kind": {
             "default": "general",
@@ -8115,7 +8101,7 @@
       },
       "ShadeConfig": {
         "additionalProperties": false,
-        "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign. On by default: almost every mockup needs it.",
+        "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
         "properties": {
           "blend": {
             "default": "soft-light",
@@ -8542,7 +8528,7 @@
       },
       "SingleTemplate": {
         "additionalProperties": false,
-        "description": "One photo, one garment.",
+        "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -9119,7 +9105,7 @@
       },
       "TemplateEtsyConfig": {
         "additionalProperties": false,
-        "description": "`EtsyListingConfig` without the copy an instance writes for itself.",
+        "description": "`EtsyListingConfig` without the copy an instance writes for itself.\nThe four settings keep the meanings `EtsyListingConfig` documents.",
         "properties": {
           "description": {
             "$ref": "#/components/schemas/TemplateDescriptionConfig",
@@ -9204,7 +9190,7 @@
         "type": "object"
       },
       "TemplatePhoto": {
-        "description": "One scene photo in a template's directory: which colour it is, and where\nit actually is.\n\n``file`` is workspace-relative and forward-slashed, resolved through\n``Workspace.scene_photo`` -- the same rule the renderer uses, including the\ntrailing-segment fallback for a vendor pack delivered as\n``{template}-{colour}.png``. The listings editor shows it under its preview\nso the user knows which file to go and edit, and it used to *derive* that\ncaption from ADR-0004's convention in TypeScript, which named a file that was\nnot there for exactly the pack the fallback exists for.\n\n``colour`` is ``None`` for a ``multiple``/``single`` template's fixed\n``scene.png``: there is no per-colour name to derive one from.",
+        "description": "One scene photo in a template's directory: which colour it is, and where\nit actually is.\n\n``file`` is workspace-relative and forward-slashed, resolved through\n``Workspace.scene_photo`` -- the same rule the renderer uses, including the\ntrailing-segment fallback for a vendor pack delivered as\n``{template}-{colour}.png``. The listings editor shows it under its preview\nso the user knows which file to go and edit.\n\n``colour`` is ``None`` for a ``multiple``/``single`` template's fixed\n``scene.png``: there is no per-colour name to derive one from.",
         "properties": {
           "colour": {
             "anyOf": [
@@ -10045,7 +10031,7 @@
     },
     "/api/admin/settings/template-positions/impact": {
       "post": {
-        "description": "A read for Settings' confirmation (template positions PR 5): who the\ncandidate limits would block, and which Marigold templates would need\nmodel inference to cover them.",
+        "description": "A read for Settings' confirmation: who the\ncandidate limits would block, and which Marigold templates would need\nmodel inference to cover them.",
         "operationId": "template_positions_impact_api_admin_settings_template_positions_impact_post",
         "requestBody": {
           "content": {
@@ -11264,7 +11250,7 @@
     },
     "/api/common-copy": {
       "get": {
-        "description": "The Description tab's common-copy selector (AI SEO implementation\nplan, PR6): every reusable description body, with the title and summary\nits front matter carries, so the picker can show something readable\nrather than a bare filename.\n\nA file whose front matter will not parse is left out -- read-only, so\nthere is nowhere here to report the problem, and offering it would only\nproduce a pick that immediately fails to resolve. (A *stored* ref that\nfails to resolve still surfaces as a details-tab issue -- see\n`Workspace.resolve_description` -- this is only the list of things one\ncould newly pick.)",
+        "description": "The Description tab's common-copy selector: every reusable description\nbody, with the title and summary its front matter carries.\n\nA file whose front matter will not parse is left out, since picking it\nwould fail to resolve. A stored ref that fails to resolve is still a\ndetails-tab issue.",
         "operationId": "list_common_copy_api_common_copy_get",
         "responses": {
           "200": {
@@ -11717,7 +11703,7 @@
     },
     "/api/listing-designs/{name}/thumbnail": {
       "get": {
-        "description": "The artwork itself, downscaled -- what the listings table, its hover\ncard and the editor's design strip all show.\n\nDistinct from ``designs.py``'s calibrator library for the same reason\n``GET /api/listing-designs`` is: ``designs/`` holds artwork that ships,\n``test-designs/`` holds calibration targets, and a listing's design is\nnever one of the latter.\n\nAn unusable *name* needs nothing here: ``InvalidNameError`` out of\n``design_file`` becomes a 400 through the app-wide handler in ``app.py``.",
+        "description": "The artwork itself, downscaled -- what the listings table, its hover\ncard and the editor's design strip all show.\n\nServed from ``designs/``, never the calibrator's ``test-designs/``.",
         "operationId": "listing_design_thumbnail_api_listing_designs__name__thumbnail_get",
         "parameters": [
           {
@@ -11758,7 +11744,7 @@
     },
     "/api/listing-draft": {
       "get": {
-        "description": "The listing `+ New listing` opens the editor on, before it has a name.\n\nThere is no separate create *form* -- the editor itself is the form, and a\nlisting is written the moment it is named and priced. What the editor needs\nfirst is a document to render, and inventing one in the browser would put\nthe starting shape of a listing in two places, so the server hands over\n`EMPTY_DRAFT`: nothing chosen, nothing invented, and a block issue for each\nthing still to pick.\n\n``name`` comes back empty, which is exactly the state the editor refuses to\nsave in.",
+        "description": "The listing `+ New listing` opens the editor on, before it has a name.\n\nThe server hands over `EMPTY_DRAFT`: nothing chosen, nothing invented, and\na block issue for each thing still to pick. ``name`` comes back empty,\nwhich the editor refuses to save.",
         "operationId": "listing_draft_api_listing_draft_get",
         "responses": {
           "200": {
@@ -11778,7 +11764,7 @@
         ]
       },
       "post": {
-        "description": "The same, for a candidate the editor has since edited. Writes nothing.\n\nThe mount-time draft above answers once; this is what keeps the issues\nbanner true for every edit made before the listing has a name. Without it\nthe banner would still be saying \"no colours enabled\" about a listing whose\ncolours were picked a minute ago -- and the banner is the only way an\nunsaved listing can be told what it is still missing.",
+        "description": "The same, for a candidate the editor has since edited, so its issues\nstay current before the listing has a name. Writes nothing.",
         "operationId": "describe_listing_draft_api_listing_draft_post",
         "requestBody": {
           "content": {
@@ -12026,7 +12012,7 @@
         ]
       },
       "put": {
-        "description": "template completeness: write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\nkeeps the unsaved values on its side.",
+        "description": "Write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\nkeeps the unsaved values on its side.",
         "operationId": "put_listing_template_api_listing_templates__name__put",
         "parameters": [
           {
@@ -12570,7 +12556,7 @@
         ]
       },
       "patch": {
-        "description": "Merge the editor's slice into ``listing.yaml``. A merged document\nthat will not validate writes nothing and answers 200 with\n``field_errors`` beside the listing as it still is. Saved positions\nqueue any Marigold coverage inference they need after the response, since\nfinding the installed worker can take seconds (option B).",
+        "description": "Merge the editor's slice into ``listing.yaml``. A merged document\nthat will not validate writes nothing and answers 200 with\n``field_errors`` beside the listing as it still is. Saved positions\nqueue any Marigold coverage inference they need after the response, since\nfinding the installed worker can take seconds (ADR-0058).",
         "operationId": "patch_listing_api_listings__name__patch",
         "parameters": [
           {
@@ -13011,7 +12997,7 @@
     },
     "/api/listings/{name}/rename": {
       "post": {
-        "description": "Move a listing, whole, to a new name -- with everything keyed by it\n(:func:`~etsy_listings.core.application.listing_identity.rename_listing`).\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
+        "description": "Move a listing, whole, to a new name -- with everything keyed by it\n(:func:`~etsy_listings.core.application.listing_identity.rename_listing`).",
         "operationId": "rename_listing_api_listings__name__rename_post",
         "parameters": [
           {
@@ -13146,7 +13132,7 @@
     },
     "/api/listings/{name}/scene-preview": {
       "get": {
-        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing (A35) -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL,\nbecause the editor showing one file while Printify prints another is the\nthing a single resolver exists to prevent.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\nEach layer prints at the listing's *saved* position where it holds one\n(ADR-0058), so a landed position save is the composite the render writes.\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.\n\nA full-size scene may be found under pixel digests remembered from before\na restart, which saves seconds of decoding; the editor then asks\n:func:`check_scene_preview` whether that was the right one.",
+        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL, so\nthe editor shows the file Printify prints.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\nEach layer prints at the listing's *saved* position where it holds one\n(ADR-0058), so a landed position save is the composite the render writes.\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.",
         "operationId": "scene_preview_api_listings__name__scene_preview_get",
         "parameters": [
           {
@@ -13235,104 +13221,6 @@
           }
         },
         "summary": "Scene Preview",
-        "tags": [
-          "listings"
-        ]
-      }
-    },
-    "/api/listings/{name}/scene-preview/check": {
-      "get": {
-        "description": "Whether :func:`scene_preview` showed a scene found under a remembered\ndigest that no longer names its file's pixels, so the editor should\nfetch the picture again. Computes the digests, which corrects them.",
-        "operationId": "check_scene_preview_api_listings__name__scene_preview_check_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "template",
-            "required": true,
-            "schema": {
-              "title": "Template",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "colour",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Colour"
-            }
-          },
-          {
-            "in": "query",
-            "name": "scale",
-            "required": false,
-            "schema": {
-              "default": "full",
-              "enum": [
-                "editor",
-                "full"
-              ],
-              "title": "Scale",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "v",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "V"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SceneCheckResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Check Scene Preview",
         "tags": [
           "listings"
         ]
@@ -13686,7 +13574,7 @@
     },
     "/api/runs": {
       "get": {
-        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded -- decision 7's retention); ``scope=batch&batch=``\nto that listing batch's. Omitted, every run this process still\nremembers, for a future workspace-wide view.",
+        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded); ``scope=batch&batch=`` to that listing batch's.\nOmitted, every run this process still remembers.",
         "operationId": "list_runs_api_runs_get",
         "parameters": [
           {
@@ -13866,7 +13754,7 @@
     },
     "/api/runs/{run_id}": {
       "delete": {
-        "description": "Cancel a queued or running **plan**. An ``apply`` is refused\nunconditionally (decision 8: Back leaves, it never cancels one), and so is\na run that has already finished.",
+        "description": "Cancel a queued or running **plan**. An ``apply`` is always refused\n(leaving the page never cancels one), and so is a finished run.",
         "operationId": "cancel_run_api_runs__run_id__delete",
         "parameters": [
           {
@@ -14077,7 +13965,7 @@
     },
     "/api/staging": {
       "post": {
-        "description": "Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has\nalready spooled the parts to temporary files; each is handed on as a\nstream, which staging reads a PNG or a ZIP's entries out of with a\nrunning count.",
+        "description": "Stage one ZIP or loose PNGs (spec, *Accepted input*).",
         "operationId": "create_staging_api_staging_post",
         "requestBody": {
           "content": {
@@ -14553,7 +14441,7 @@
     },
     "/api/templates/{name}/coverage": {
       "get": {
-        "description": "Whether the editor may adjust this template yet. Apart from the status\nabove, which the catalog reads for every template.",
+        "description": "Whether the editor may adjust this template yet. Separate from the\npreparation status, which the catalog reads for every template.",
         "operationId": "coverage_api_templates__name__coverage_get",
         "parameters": [
           {
@@ -14645,7 +14533,7 @@
     },
     "/api/templates/{name}/design-preview": {
       "get": {
-        "description": "One design on every layer of this template's saved geometry -- the\nlisting-template editor's preview (UI doc \u00a73): a listing template has no\nartwork, so it is viewed through a design picked only to preview with.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file``; ``test_design`` is the calibrator library's id\ninstead, through :func:`resolve_design`, bundled grid by default. Exactly\none of the two -- they name files in different places, and guessing which\none a bare name meant is how a test target would end up judged as artwork.\n\nA *listing's* scenes are not previewed here: ``GET\n/api/listings/{name}/scene-preview`` resolves each layer's file from the\nsaved listing (A35), so its editor cannot show one file while Printify\nprints another.",
+        "description": "One design on every layer of this template's saved geometry -- the\nlisting-template editor's preview (UI doc \u00a73): a listing template has no\nartwork, so it is viewed through a design picked only to preview with.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file``; ``test_design`` is the calibrator library's id\ninstead, through :func:`resolve_design`, bundled grid by default. Exactly\none of the two: they name files in different places, and guessing would\njudge a test target as artwork.\n\nA listing's scenes are previewed by ``GET /api/listings/{name}/scene-preview``.",
         "operationId": "design_preview_api_templates__name__design_preview_get",
         "parameters": [
           {
@@ -15252,7 +15140,7 @@
     },
     "/api/templates/{name}/rename": {
       "post": {
-        "description": "Move a template, and everything naming it, to a new name\n(:mod:`~etsy_listings.core.application.template_rename`). A taken name, a\nrunning deploy or a preparing template is a ``409``; an unusable name is a\n``400``. POST for the reason a listing's rename is.",
+        "description": "Move a template, and everything naming it, to a new name\n(:mod:`~etsy_listings.core.application.template_rename`). A taken name, a\nrunning deploy or a preparing template is a ``409``; an unusable name is a\n``400``.",
         "operationId": "rename_template_api_templates__name__rename_post",
         "parameters": [
           {
@@ -15357,7 +15245,7 @@
     },
     "/api/templates/{name}/thumbnail": {
       "get": {
-        "description": "The template's own photo, downscaled, for the rail -- not a render,\nwhich once per row would make opening the calibrator cost as much as\ncalibrating. ``colour`` narrows it to one photo of a colour-matrix set,\nfor the listings editor's reel. Which photo is\n:func:`~etsy_listings.core.application.mockup_templates.template_photo`'s\nquestion; how it is downscaled is :mod:`.thumbnails`'.",
+        "description": "The template's own photo, downscaled, for the rail -- not a render, so\nopening the calibrator stays cheap. ``colour`` narrows it to one photo of\na colour-matrix set, for the listings editor's reel.",
         "operationId": "thumbnail_api_templates__name__thumbnail_get",
         "parameters": [
           {

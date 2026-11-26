@@ -1,32 +1,11 @@
 """In-process caches for the calibrator's preview loop, and the downscale the
 editor renders at.
 
-The render *stage* reads each image once per run, so it has never needed a
-cache and does not get one --:mod:`etsy_listings.core.render.io` stays the plain
-I/O boundary it is documented as. The calibrator is the opposite shape: it
-re-renders the same photo, against the same test design, several times a
-second while a box is being dragged. Without this, every one of those frames
-re-decoded a multi-megapixel mockup PNG *and* a multi-megapixel design PNG
-from disk and re-derived the height/luminance maps -- work that dominated the
-render itself and is identical every time.
-
-Two things live here because they answer the same question ("what does this
-preview need in memory?"):
-
-* :class:`PreviewImages` -- the memo. Keyed on path *and* mtime, so editing a
-  photo or replacing a test design invalidates it with no manual clear, the
-  same rule ``DerivedMapCache`` uses on disk.
-* :class:`ScaledBase` -- the downscale. The editor renders at
-:data:`EDITOR_MAX_EDGE` rather than the photo's true size, which is what
-  makes dragging feel live; ``scale`` is what the caller multiplies bounding
-  boxes by to get from the template's true pixel space (which is what
-  ``template.yaml`` stores, and what the editor's overlay works in) into the
-  smaller canvas actually being rendered.
-
-Cached arrays are handed out **read-only**. Every render pass is pure, so
-nothing should ever want to write to one; the flag makes a future accident a
-loud ``ValueError`` here rather than a preview that is subtly wrong for
-whoever asks next.
+The render stage reads each image once per run and has no cache; the
+calibrator re-renders the same photo and design several times a second while
+a box is dragged, so :class:`PreviewImages` memoises the decoded images and
+derived maps by path and file version, and hands them out read-only.
+:class:`ScaledBase` is the editor's downscale to :data:`EDITOR_MAX_EDGE`.
 """
 
 from __future__ import annotations
@@ -80,8 +59,6 @@ _Array = TypeVar("_Array", bound="np.ndarray[Any, Any]")
 
 @dataclass(frozen=True)
 class ScaledBase:
-    """A mockup photo decoded for a preview, possibly downscaled."""
-
     image: RGB
     """What to render onto -- at ``scale``, not necessarily the true size."""
 
@@ -104,9 +81,7 @@ def _nbytes(value: np.ndarray[Any, Any]) -> int:
 
 
 def _stamp(path: Path) -> tuple[int | str, ...]:
-    """Completed-write token, or a sentinel for a file that has gone:
-    a re-exported photo or a replaced test design must not be served from a
-    memo of the old bytes."""
+    """Completed-write token, or a sentinel for a file that has gone."""
     try:
         return file_version(path)
     except OSError:
@@ -114,15 +89,7 @@ def _stamp(path: Path) -> tuple[int | str, ...]:
 
 
 class PreviewImages:
-    """Everything the preview endpoint has to load, memoised across requests.
-
-    One instance is shared by the app ( :data:`PREVIEW_IMAGES`); tests build
-    their own so the memo cannot leak between them.
-    """
-
     def __init__(self, budget_bytes: int = CACHE_BUDGET_BYTES) -> None:
-        # Budgeted in bytes, not entries: one full-size design array is worth
-        # fifty editor-scale bases.
         self._cache: BoundedCache[object, np.ndarray[Any, Any]] = BoundedCache(
             budget_bytes, size=_nbytes
         )
@@ -136,13 +103,8 @@ class PreviewImages:
         return cast("_Array", self._cache.get_or_compute(key, frozen))
 
     def base(self, path: Path, max_edge: int | None = None) -> ScaledBase:
-        """The mockup photo to composite over, downscaled to ``max_edge`` if
-        it is larger than that.
-
-        Never upscales: a small template photo previews at its own size, so a
-        fixture set or a low-resolution mockup is not blurred into looking
-        worse than it is, and ``scale`` stays exactly 1.0 for it.
-        """
+        """The mockup photo to composite over, downscaled (never upscaled) to
+        ``max_edge``."""
         stamp = _stamp(path)
         with Image.open(path) as probe:
             true_size = probe.size
@@ -162,20 +124,13 @@ class PreviewImages:
         return ScaledBase(
             image=image,
             size=true_size,
-            # Recomputed from the array rather than reusing `ratio`: rounding
-            # to whole pixels moves it, and a box scaled by the *requested*
-            # factor would sit fractionally off the canvas it lands on.
             scale=image.shape[1] / true_size[0],
             token=f"{path}|{stamp}|{target[0]}x{target[1]}",
         )
 
     def design(self, path: Path, max_edge: int | None = None) -> RGBA:
-        """Cache full artwork, or an explicitly approximate editor-only size.
-
-        Photo warp and full-quality callers keep their original source. The
-        Marigold editor caps its source before floating-point mip construction;
-        otherwise a 4800px design dominates even a 1024px destination frame.
-        """
+        """Full artwork, or with ``max_edge`` an approximate editor-only size
+        (the Marigold editor caps it before building float mips)."""
 
         def decode() -> RGBA:
             if max_edge is None:
@@ -192,12 +147,9 @@ class PreviewImages:
         return self._get(("design", str(path), _stamp(path), max_edge), decode)
 
     def material_design(self, path: Path, max_edge: int) -> tuple[RGBA, FloatMap]:
-        """Retain exact linear artwork samples under the same total byte budget.
-
-        Capture the file token before decoding, so a concurrent replacement
-        cannot cache old samples under its new file version.
-        """
+        """Retain exact linear artwork samples under the same total byte budget."""
         for _ in range(3):
+            # Stamp before decoding, or a replacement caches old samples under its new version.
             stamp = _stamp(path)
             design = self.design(path, max_edge=max_edge)
             if _stamp(path) == stamp:
@@ -214,8 +166,6 @@ class PreviewImages:
         return self.base(path).image
 
     def canvas(self, scene: PreviewScene) -> EditorCanvas:
-        """``scene``'s photo at :data:`EDITOR_MAX_EDGE`, with its derived maps
-        at that size: a drag is a burst of requests for all of them."""
         base = self.base(scene.photo.path, EDITOR_MAX_EDGE)
         directory, key = scene.derived_dir, scene.photo.map_key
         return EditorCanvas(
@@ -245,14 +195,8 @@ class PreviewImages:
         base: ScaledBase,
         compute: Callable[[], FloatMap],
     ) -> FloatMap:
-        """A derived map, through the same on-disk ``DerivedMapCache`` the
-        render stage uses -- this only adds a memo in front of it.
-
-        Worth having on top of the disk cache: that one is keyed by a SHA-256
-        over the whole base array, so a *hit* still costs a hash of every
-        pixel plus an ``np.load`` of a float32 map the same size as the photo.
-        Once per drag that is invisible; five times a second it is not.
-        """
+        """A derived map, memoised in front of the on-disk ``DerivedMapCache``,
+        whose hits still hash every pixel and load a photo-sized float map."""
         return self._get(("map", kind, map_key, base.token), compute)
 
     @property

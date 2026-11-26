@@ -254,11 +254,28 @@ def test_a_credential_already_present_is_not_asked_for_again(
     assert env_values(tmp_path)[PRINTIFY_TOKEN_VAR] == "already-here"
 
 
+def test_half_an_etsy_key_pair_keeps_its_half_and_asks_only_for_the_other(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, etsy: FakeEtsy, printify: FakePrintifyClient
+) -> None:
+    (tmp_path / layout.ENV_FILE).write_text(
+        f"{ETSY_KEYSTRING_VAR}=kept-keystring\n", encoding="utf-8"
+    )
+    script = scripted.install(monkeypatch, ANSWERS)
+
+    run_auth(tmp_path, backends=backends(etsy, printify))
+
+    assert not any("Etsy keystring" in question for question in script.asked)
+    assert any("Etsy shared secret" in question for question in script.asked)
+    assert env_values(tmp_path)[ETSY_KEYSTRING_VAR] == "kept-keystring"
+    assert env_values(tmp_path)[ETSY_SHARED_SECRET_VAR] == "shared-secret-456"
+
+
 def test_an_existing_sign_in_is_left_alone_unless_asked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, etsy: FakeEtsy, printify: FakePrintifyClient
 ) -> None:
     """Re-authorising costs a browser, a password and a consent screen. A
-    wizard that spends those on every re-run teaches people not to re-run it."""
+    wizard that spends those on every re-run teaches people not to re-run it,
+    so an existing consent is kept unless the user asks."""
     scripted.install(monkeypatch, ANSWERS)
     run_auth(tmp_path, backends=backends(etsy, printify))
     first = tokens_document(tmp_path)
