@@ -5,40 +5,25 @@ export type Attention =
   | { action: "repair"; warning: BackupWarning; destination: DestinationStatus }
   | { action: "retry"; warnings: BackupWarning[] };
 
-/** One destination's copy, as the diagram's pill draws it. */
 export interface Copy {
   destination: DestinationStatus;
-  /** The changed and unexpected files to check, while a `changed` warning
-   * names this destination; otherwise 0. */
   toCheck: number;
 }
 
 interface Activity {
-  /** A backup or a repair runs: Back up now and Try again wait for it. */
   running: boolean;
-  /** A restore runs: every Restore… waits for it. */
   restoring: boolean;
 }
 
 export interface BackupsOn extends Activity {
   state: "on";
   status: BackupStatus;
-  /** The warning the shell's banner and both nav marks show: the first of
-   * `warnings`, or null when nothing needs attention. */
   banner: BackupWarning | null;
-  /** Every warning that shows beyond the Backup page (all but `off`), in the
-   * server's order. */
   warnings: BackupWarning[];
   attention: Attention[];
   copies: Copy[];
 }
 
-/**
- * The shell's backup status as the app draws it. `loading` until the first
- * read answers; `error` when no read has answered yet and the last one
- * failed. Once a status is read, a failed read keeps it, so the view stays
- * `off` or `on`.
- */
 export type BackupView =
   | (Activity & { state: "loading"; banner: null })
   | (Activity & { state: "error"; error: string; banner: null })
@@ -68,7 +53,7 @@ export function backupView(status: BackupStatus | null, error: string | null): B
     const warning = changed(destination);
     if (warning) attention.push({ action: "repair", warning, destination });
   }
-  const retry = warnings.filter((w) => RETRYABLE.has(w.kind));
+  const retry = warnings.filter((w) => CLEARED_BY_A_BACKUP_RUN.has(w.kind));
   if (retry.length) attention.push({ action: "retry", warnings: retry });
 
   return {
@@ -87,5 +72,4 @@ export function backupView(status: BackupStatus | null, error: string | null): B
   };
 }
 
-/** The warnings a backup run can clear, so Try again answers them. */
-const RETRYABLE = new Set<BackupWarning["kind"]>(["stale", "failed", "behind"]);
+const CLEARED_BY_A_BACKUP_RUN = new Set<BackupWarning["kind"]>(["stale", "failed", "behind"]);
