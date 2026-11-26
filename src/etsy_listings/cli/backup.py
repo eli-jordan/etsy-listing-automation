@@ -224,8 +224,10 @@ class _RestoreLines:
 def restore_progress_line(figures: RestoreProgress) -> str:
     """``  25% · 100 of 400 files``; restic's ``--json`` omits a zero ``files_restored``."""
     if not figures.files_total:
-        return f"  {figures.percent:.0%}"
-    return f"  {figures.percent:.0%} · {figures.files_done or 0:,} of {figures.files_total:,} files"
+        return f"  {figures.fraction:.0%}"
+    return (
+        f"  {figures.fraction:.0%} · {figures.files_done or 0:,} of {figures.files_total:,} files"
+    )
 
 
 @app.command(name="restore")

@@ -62,6 +62,14 @@ def test_displace_defaults_off_shade_defaults_on() -> None:
     assert ShadeConfig().enabled is True
 
 
+@pytest.mark.parametrize("value", [-0.01, 1.01, float("nan")])
+def test_strength_and_opacity_are_refused_outside_zero_to_one(value: float) -> None:
+    with pytest.raises(ValidationError):
+        DisplaceConfig(strength=value)
+    with pytest.raises(ValidationError):
+        ShadeConfig(opacity=value)
+
+
 def test_colour_matrix_template_has_no_per_colour_override() -> None:
     template = load_template_config(
         {

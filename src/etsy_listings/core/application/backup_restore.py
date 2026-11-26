@@ -35,8 +35,7 @@ class RestoreStatus(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     outcome: RestoreOutcome = "running"
-    percent: float = 0.0
-    """0 to 1."""
+    fraction: float = 0.0
     bytes_done: int | None = None
     bytes_total: int | None = None
     files_done: int | None = None

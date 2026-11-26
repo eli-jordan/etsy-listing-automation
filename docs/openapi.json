@@ -2888,6 +2888,8 @@
           },
           "strength": {
             "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Strength",
             "type": "number"
           }
@@ -7356,6 +7358,11 @@
             ],
             "title": "Finished At"
           },
+          "fraction": {
+            "default": 0.0,
+            "title": "Fraction",
+            "type": "number"
+          },
           "message": {
             "anyOf": [
               {
@@ -7377,11 +7384,6 @@
             ],
             "title": "Outcome",
             "type": "string"
-          },
-          "percent": {
-            "default": 0.0,
-            "title": "Percent",
-            "type": "number"
           },
           "seconds_left": {
             "anyOf": [
@@ -8159,6 +8161,8 @@
           },
           "opacity": {
             "default": 0.6,
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Opacity",
             "type": "number"
           }

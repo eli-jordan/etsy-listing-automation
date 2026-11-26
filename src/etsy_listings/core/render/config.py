@@ -9,6 +9,8 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter, 
 
 from etsy_listings.core.errors import ConflictError
 
+UnitInterval = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+
 
 class Point(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -37,7 +39,7 @@ class DisplaceConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     enabled: bool = False
-    strength: float = 0.0  # 0..1, calibrated per template
+    strength: UnitInterval = 0.0
 
 
 class ShadeConfig(BaseModel):
@@ -47,7 +49,7 @@ class ShadeConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     enabled: bool = True
-    opacity: float = 0.6  # 0..1
+    opacity: UnitInterval = 0.6
     blend: Literal["multiply", "soft-light", "grey-pivot"] = "soft-light"
 
 
@@ -77,9 +79,9 @@ class MarigoldInference(BaseModel):
 class MarigoldAppearance(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     lighting_source: Literal["estimated", "photo"] = "estimated"
-    lighting_strength: float = Field(default=1.0, ge=0, le=1, allow_inf_nan=False)
-    fabric_texture: float = Field(default=0.25, ge=0, le=1, allow_inf_nan=False)
-    print_shine: float = Field(default=0.0, ge=0, le=1, allow_inf_nan=False)
+    lighting_strength: UnitInterval = 1.0
+    fabric_texture: UnitInterval = 0.25
+    print_shine: UnitInterval = 0.0
 
 
 class MarigoldConfig(BaseModel):

@@ -1,4 +1,5 @@
-import { type Matrix, type Quad, proportions, toPhoto, quadToUnit } from "./pose";
+import { type Matrix, proportions, toPhoto, quadToUnit } from "./pose";
+import type { BackingPx, PhotoQuad } from "../../../pixels";
 
 /**
  * A Photo warp template's shade is `passes.py`'s arithmetic, on the luminance
@@ -11,11 +12,10 @@ export type LiveLook =
 
 export interface LiveLayer {
   id: string;
-  /** Where the print sits now, in photo pixels. */
-  quad: Quad;
+  quad: PhotoQuad;
   /** The template's own box, which fixes what "the garment's light" is measured
    * against, so the print does not brighten and dim as it moves. */
-  box: Quad;
+  box: PhotoQuad;
 }
 
 export interface LiveRenderer {
@@ -23,7 +23,7 @@ export interface LiveRenderer {
   /** Sets one layer's pictures. A layer with none is drawn bare. */
   setLayer: (id: string, artwork: TexImageSource, mask: TexImageSource | null) => void;
   clearLayers: () => void;
-  resize: (width: number, height: number) => void;
+  resize: (width: BackingPx, height: BackingPx) => void;
   draw: (size: { w: number; h: number }, look: LiveLook, layers: readonly LiveLayer[]) => void;
   dispose: () => void;
 }
@@ -107,7 +107,10 @@ const columns = (m: Matrix) => [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], 
 
 /** Where a layer measures the garment's light: the middle of the template's
  * box, averaged over about half of it by the photo's mip chain. */
-export function garmentSample(box: Quad, size: { w: number; h: number }): [number, number, number] {
+export function garmentSample(
+  box: PhotoQuad,
+  size: { w: number; h: number },
+): [number, number, number] {
   const centre = toPhoto(box, { x: 0.5, y: 0.5 });
   const { w, h } = proportions(box);
   return [centre.x / size.w, centre.y / size.h, Math.log2(Math.max(1, Math.min(w, h) / 2))];

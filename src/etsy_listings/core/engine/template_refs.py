@@ -9,8 +9,7 @@ from etsy_listings.core.engine.stages.etsy_media import renamed_media_refs
 from etsy_listings.core.workspace.workspace import Workspace
 
 
-def follow_template_rename(workspace: Workspace, listing: str, old: str, new: str) -> None:
-    """The caller holds the listing's lock."""
+def follow_template_rename_locked(workspace: Workspace, listing: str, old: str, new: str) -> None:
     path = workspace.lock_file(listing)
     lock = Lockfile.read(path)
     if lock is None:

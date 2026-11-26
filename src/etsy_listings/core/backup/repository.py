@@ -80,8 +80,7 @@ class BackupSummary:
 
 @dataclass(frozen=True)
 class RestoreProgress:
-    percent: float = 0.0
-    """0 to 1."""
+    fraction: float = 0.0
     bytes_done: int | None = None
     bytes_total: int | None = None
     files_done: int | None = None
