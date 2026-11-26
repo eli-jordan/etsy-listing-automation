@@ -18,9 +18,6 @@ export interface LightboxItem {
 interface Props {
   items: LightboxItem[];
   index: number;
-  /** True pixels rather than fit-to-screen. Owned by the parent so it
-   * survives stepping between images -- having to re-press it on every
-   * neighbour would defeat comparing them. */
   actualSize: boolean;
   onActualSizeChange: (actual: boolean) => void;
   onIndexChange: (index: number) => void;
@@ -46,9 +43,6 @@ export function Lightbox({
     [index, items.length, onIndexChange],
   );
 
-  // On the window, not on the dialog: the dialog is what has focus when it
-  // opens, but a click on the image or a scroll of the 1:1 view moves it, and
-  // Escape has to keep working afterwards.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -135,8 +129,7 @@ export function Lightbox({
             {slides.map(({ at, position }) => {
               const slide = items[position] as LightboxItem;
               return (
-                // Keyed by item, so the picture that slid in keeps its loaded
-                // element when it becomes the current one.
+                // Keyed by item: the slid-in picture keeps its loaded element.
                 <div
                   key={slide.id}
                   className={`lightbox__slide lightbox__slide--${at}`}
@@ -159,8 +152,6 @@ export function Lightbox({
 
 type SlidePlace = "previous" | "current" | "next";
 
-/** Keyed by its caller, so a step swaps in a fresh element: reusing one keeps
- * painting the old picture until the new one arrives. */
 function Picture({ item }: { item: LightboxItem }) {
   const url = useCheckedPicture(item.url);
   return item.kind === "video" ? (
@@ -179,14 +170,7 @@ function Picture({ item }: { item: LightboxItem }) {
 
 const PRELOAD_REACH = 2;
 
-/**
- * Fetches and decodes the pictures a step or a swipe could land on next, so
- * the one that slides in is already there. Full renders are large and can take
- * a while, and a swipe settles in a fifth of a second. The browser cache is
- * what serves them to the `<img>`; the elements are kept so it holds them
- * while the box is open.
- * Videos are left alone, because their element loads only metadata anyway.
- */
+/** The browser cache serves these to the `<img>`; the elements are kept so it holds them. */
 function usePreloadNeighbours(items: readonly LightboxItem[], index: number) {
   const loaded = useRef(new Map<string, HTMLImageElement>());
   useEffect(() => {
@@ -198,8 +182,7 @@ function usePreloadNeighbours(items: readonly LightboxItem[], index: number) {
       const image = new Image();
       image.decoding = "async";
       image.src = item.url;
-      // Decoding ahead too, so the swap does not wait on it; a failure here
-      // is the visible <img>'s to show, not this one's.
+      // The visible <img> reports a failure.
       image.decode().catch(() => {});
       loaded.current.set(item.url, image);
     }
