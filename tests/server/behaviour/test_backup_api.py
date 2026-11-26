@@ -7,6 +7,7 @@ the by-command fake unless a test is marked ``restic``; ``home`` is under
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -332,7 +333,8 @@ def test_set_up_with_restic_makes_a_first_backup_the_history_shows(
             (entry,) = _history(client)
             status = _ok(client.get("/api/backup"))
 
-    assert entry["run"]["outcome"] == "succeeded", entry
+    # As text: pytest cuts a dict message short, and the message is the cause.
+    assert entry["run"]["outcome"] == "succeeded", json.dumps(entry["run"], indent=2)
     assert entry["kept_as"] == "recent"
     assert status["repository"]["snapshots"] == 1
 
