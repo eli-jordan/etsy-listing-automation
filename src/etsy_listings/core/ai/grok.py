@@ -1,15 +1,5 @@
-"""The Grok CLI adapter behind `AiProvider`: one non-interactive, read-only
-generation call. Grok 1.0.41's flags, as measured:
-
-- ``--prompt-file``: the prompt is too long for Windows' command line.
-- ``--json-schema`` implies JSON output; the schema-valid object is
-  ``structuredOutput`` (``text`` is only a rendering of it).
-- ``--sandbox read-only`` is documented for Linux and macOS only, so on
-  Windows the read-only ``--tools`` allowlist is the guarantee.
-- No ``--no-session-persistence`` exists: Grok writes a session under its
-  home directory even though no call resumes one.
-- No image-attach flag: the prompt names the design's path for ``read_file``.
-"""
+"""The Grok CLI adapter behind ``AiProvider``; docs/architecture.md, *AI provider
+CLI flags*, gives each flag's reason."""
 
 from __future__ import annotations
 

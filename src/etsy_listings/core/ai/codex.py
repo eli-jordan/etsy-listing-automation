@@ -1,30 +1,5 @@
-"""The Codex CLI adapter behind `AiProvider`: a non-interactive `codex exec`
-invocation with its read-only sandbox, ephemeral/no-session mode, structured
-output schema, and the design image.
-
-Every flag below was confirmed against the installed `codex exec --help`
-(codex-cli 0.155.0) rather than guessed. In particular:
-
-- ``-s, --sandbox read-only`` is the documented read-only sandbox policy.
-- ``--ephemeral`` is the documented "run without persisting session files"
-  flag -- this feature's "no durable provider session" requirement.
-- ``codex exec`` has no ``-a/--ask-for-approval`` option at all (confirmed:
-  passing one is a clap "unexpected argument" error); `codex exec --help`
-  shows a live invocation prints ``approval: never``, so exec is
-  unconditionally non-interactive already -- there is nothing to configure
-  for "automatic tool approval inside read-only mode".
-- ``--output-schema <FILE>`` takes a JSON Schema *file*, not inline JSON, and
-  ``-o, --output-last-message <FILE>`` writes the final agent message to a
-  file -- confirmed live, this is a clean, reliable way to capture the
-  structured response text instead of scraping the human-readable transcript
-  `codex exec` prints to stdout.
-- The prompt is sent over stdin with ``-`` as the PROMPT argument (confirmed
-  live) rather than as a trailing argv element, so an unusually long prompt
-  (seller text plus delimited JSON context and schema) never risks a
-  platform argv-length limit.
-- ADR-0056: explicit model and effort use ``--model`` and
-  ``-c model_reasoning_effort=...``. Omitted preferences pass no flags.
-"""
+"""The Codex CLI adapter behind ``AiProvider``; docs/architecture.md, *AI provider
+CLI flags*, gives each flag's reason."""
 
 from __future__ import annotations
 
@@ -49,11 +24,9 @@ _REQUIRED_EXEC_HELP_FLAGS: tuple[str, ...] = (
     "--output-schema",
     "--output-last-message",
 )
-"""Confirmed-real `codex exec` flags this adapter depends on. Checked
-against the installed CLI's own `--help` text at readiness time rather than
-assumed from a version number, so an older `codex` that cannot honour the
-read-only guarantee is reported unready rather than silently launched
-writable (implementation plan, "Provider adapters")."""
+"""The `codex exec` flags this adapter depends on, checked against the
+installed CLI's `--help` at readiness time: an older `codex` that cannot honour
+the read-only guarantee is reported unready rather than launched writable."""
 
 
 @dataclass
