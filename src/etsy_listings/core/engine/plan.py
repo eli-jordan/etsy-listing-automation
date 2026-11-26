@@ -21,16 +21,8 @@ from etsy_listings.core.engine.stages.etsy_target import etsy_listing_id
 
 @dataclass(frozen=True)
 class StageState:
-    """One stage, and the three states its ``plan()`` compared.
-
-    Types erased, like :data:`AnyStage` -- the pipeline mixes stages with
-    unrelated desired/applied/live types by design, and only the stage
-    that produced them ever looks inside.
-
-    ``desired`` is the exception worth naming: it is a ``Blocked`` rather than
-    a desired document when the stage refused, which is exactly the case
-    ``stage_plan.blocked`` reports and ``execute`` never runs.
-    """
+    """Types erased, like :data:`AnyStage`: only the stage that produced the
+    states looks inside. ``desired`` is a ``Blocked`` when the stage refused."""
 
     stage: AnyStage
     desired: Any

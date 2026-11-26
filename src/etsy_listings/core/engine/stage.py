@@ -41,15 +41,11 @@ class Stage(Protocol[D, A, L]):
     """No remote state: a difference ``read_live`` finds is work to redo, never drift."""
 
     group: str | None
-    """The stage a reader shows this one under, or ``None`` for a stage of
-    its own. ``etsy_videos`` is ``"etsy_media"``'s: one gallery, two stages.
-    The engine stamps it on every
-    :class:`~etsy_listings.core.engine.change.StagePlan`, so the CLI and the UI
-    group by the same answer rather than each inferring one from a name.
-    """
+    """The stage a reader shows this one under: ``etsy_videos`` is
+    ``"etsy_media"``'s, one gallery in two stages. The CLI and the UI group by
+    it rather than inferring from a name."""
 
     applied_model: type[A]
-    """The type this stage's lockfile subtree decodes into."""
 
     needs_every_earlier_stage: bool = False
     """Blocks the stage, without asking it, while any earlier stage in the walk
@@ -61,24 +57,19 @@ class Stage(Protocol[D, A, L]):
     review."""
 
     def desired(self, ctx: RunContext, listing: str, applied: A | None) -> D | Blocked:
-        """What this listing wants from this stage, or why it cannot have it.
-
-        Every refusal decidable from config and the last-applied document is
-        returned here, before a desired document is built. A refusal only the
-        live state can prove belongs to ``plan()`` as
-        :meth:`~etsy_listings.core.engine.change.Verdict.refused`.
-        """
+        """Every refusal decidable from config and the last-applied document;
+        one only the live state can prove is ``plan()``'s
+        :meth:`~etsy_listings.core.engine.change.Verdict.refused`."""
         ...
 
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: A | None
     ) -> L | None:
-        """The state outside the lockfile: a remote object, or files on disk.
-        ``lock`` is passed for ``lock.remote``'s ids, which are not live state."""
+        """``lock`` is passed for ``lock.remote``'s ids, which are not live state."""
         ...
 
     def plan(self, desired: D, applied: A | None, live: L | None) -> Verdict:
-        """Compare the three states. Pure: no context, clock or client."""
+        """Pure: no context, clock or client."""
         ...
 
     def apply(
@@ -89,9 +80,8 @@ class Stage(Protocol[D, A, L]):
         live: L | None,
         lock: Lockfile,
     ) -> StageApplyResult:
-        """``desired``, ``applied`` and ``live`` are the ones ``build_plan``
-        resolved, so the document that was hashed is the document that is sent.
-        ``lock`` is the previous lockfile, for the ids the last apply wrote."""
+        """The states are the ones ``build_plan`` resolved, so the document
+        that was hashed is the document that is sent."""
         ...
 
     def snapshot(self, desired: D, live: L | None) -> BaseModel | None:
@@ -101,10 +91,7 @@ class Stage(Protocol[D, A, L]):
         return None
 
     def rewrites(self, ctx: RunContext, desired: D, live: L | None) -> Mapping[Path, Path | None]:
-        """The local files this stage's apply will rewrite with different bytes,
-        each mapped to a file already holding those bytes, or ``None``. Asked
-        only when the stage will run; later stages see it as
-        :attr:`RunContext.rewrites`."""
+        """Asked only when the stage will run; see :attr:`RunContext.rewrites`."""
         del ctx, desired, live
         return {}
 

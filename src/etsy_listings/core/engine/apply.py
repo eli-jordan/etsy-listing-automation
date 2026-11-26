@@ -62,11 +62,8 @@ class _StageRun:
             return stage.apply(stage_ctx, state.desired, state.applied, state.live, live_lock)
         except Exception as exc:
             self.record(_stamp(result_lock.marked_incomplete(stage.name)))
-            # A `UserFacingError`'s message is safe to show verbatim (the
-            # same rule `_over` already applies to a listing-level failure);
-            # anything else is a defect and may carry whatever its own text
-            # happens to say, so it is masked here, at the one place that
-            # decides, rather than trusting every future event consumer to guess.
+            # Only a `UserFacingError`'s message is safe to show; a defect's
+            # text may carry anything, so it is masked here, where it is decided.
             reported = str(exc) if isinstance(exc, UserFacingError) else INTERNAL_ERROR_MESSAGE
             self.on_event(EngineStageFailed(listing, stage.name, reported))
             raise

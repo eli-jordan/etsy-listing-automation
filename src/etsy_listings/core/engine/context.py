@@ -44,20 +44,14 @@ class RunContext:
     workspace: Workspace
     catalog: CatalogClient
     printify: PrintifyClient | None = None
-    """Optional because a workspace that only renders mockups should not need
-    a token to run `plan`."""
+    """``plan`` runs without a token for a workspace that only renders mockups."""
     etsy: EtsyListingClient | None = None
-    """Optional for the same reason ``printify`` is: `plan` builds a context
-    for a workspace that has never signed in to Etsy."""
+    """``plan`` runs for a workspace that has never signed in to Etsy."""
     on_event: EventSink = field(default=_noop_sink)
     rewrites: Mapping[Path, Path | None] = field(default_factory=dict)
-    """Local files an earlier stage in this plan will rewrite with different
-    bytes when it applies, each mapped to a file already holding those bytes
-    (a reviewed preview), or ``None`` when they do not exist yet.
-
-    ``build_plan`` fills it from each stage that will run and declares
-    ``rewrites()``, for the stages after it. A later stage that reads such a
-    file at plan time is reading what is about to be replaced."""
+    """Files an earlier stage will rewrite, each mapped to a file already
+    holding the new bytes (``None`` when none exists yet): a later stage reading
+    the original at plan time reads what is about to be replaced."""
 
     def emit(self, message: str, *, swatches: Sequence[Swatch] = ()) -> None:
         self.on_event(Event(message=message, swatches=tuple(swatches)))

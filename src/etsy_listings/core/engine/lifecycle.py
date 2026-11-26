@@ -34,8 +34,8 @@ UNREADABLE_ETSY = (
 
 @dataclass(frozen=True)
 class LifecycleWalk:
-    """What this listing's lifecycle does to a plan: the caller's pipeline,
-    ``RetractStage`` alone, or a ``blocked`` refusal every stage carries."""
+    """The caller's pipeline, ``RetractStage`` alone, or a ``blocked``
+    refusal every stage carries."""
 
     stages: list[AnyStage]
     published: bool
@@ -72,9 +72,8 @@ def walk(
     pipeline = list(stages)
     present = ListingDocuments(ctx.workspace).exists(listing)
     if not present:
-        # yaml gone, lockfile still there -- the row appears, Blocked.
-        # No directory at all is not that: it is an unknown listing, and
-        # load_listing raises the same ConfigLoadError it always did.
+        # yaml gone, lockfile still there: the row appears, Blocked. With
+        # neither it is an unknown listing and load_listing raises.
         if not ctx.workspace.lock_file(listing).is_file():
             ctx.workspace.load_listing(listing)
         yaml_block = check_listing_yaml_present(present=False)

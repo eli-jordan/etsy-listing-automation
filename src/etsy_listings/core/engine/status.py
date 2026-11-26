@@ -86,13 +86,10 @@ def edited_since_apply(listing_file: Path, lock_file: Path) -> bool:
 
 @dataclass(frozen=True)
 class StatusInputs:
-    """The facts a listing's badge is decided from (:func:`listing_status`).
-
-    A ``lifecycle`` verb or a paused ``etsy_state`` wins over ``live``/``dirty``:
-    calling a paused listing ``live`` would lie. ``incomplete`` (ADR-0037) reads
-    like ``edited``, because a per-stage lockfile write leaves the lockfile
-    newer than ``listing.yaml`` partway through a failed apply.
-    """
+    """A ``lifecycle`` verb or a paused ``etsy_state`` wins over
+    ``live``/``dirty``. ``incomplete`` (ADR-0037) reads like ``edited``: a
+    per-stage lockfile write leaves the lockfile newer than ``listing.yaml``
+    partway through a failed apply."""
 
     applied: bool
     edited: bool
