@@ -75,13 +75,8 @@ class PublishTimeoutError(UserFacingError, RuntimeError):
 
 
 class PublishWithoutProductError(UserFacingError, RuntimeError):
-    """``apply`` was asked to publish a listing with no Printify product id
-    on record. `printify_product` runs first in the pipeline and either mints
-    one (available here via ADR-0034's same-run threading) or blocks -- reaching
-    here means it blocked for a reason this stage's own gates do not share
-    (a design too small, or a garment change), which is a real, if rare, gap
-    between two independently-gated stages rather than a wiring defect.
-    """
+    """User-facing: ``printify_product`` can block for a reason this stage's
+    gates do not share (a design too small, a garment change)."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -314,13 +309,8 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
 def _match_etsy_visibility(
     ctx: RunContext, client: PrintifyClient, shop_id: int, product_id: str, lock: Lockfile
 ) -> None:
-    """Make ``visible`` say what the Etsy listing is now, because the publish
-    about to happen copies it back onto Etsy. Read at apply time, not in
-    ``read_live``: a listing activated in Shop Manager between plan and apply
-    must not be deactivated by the plan's stale picture.
-
-    With no Etsy listing yet (a first publish) the product keeps the
-    ``visible: false`` it was created with, so it lands as a draft."""
+    """Printify's publish copies ``visible`` onto the Etsy listing, so match
+    Etsy's state now, at apply time."""
     listing_id = etsy_listing_id(lock)
     if listing_id is None or ctx.etsy is None:
         return
