@@ -24,8 +24,8 @@ Three things make asking cheap enough to do on every read:
   editor -- leave it off and keep the strict TTL.
 
 Failure is silence, deliberately. A workspace with no Etsy key pair, no
-sign-in, or a shop the token cannot read is an ordinary state well short of
-Phase 3 -- the listings page must still open, with every listing reported as
+sign-in, or a shop the token cannot read is an ordinary state -- the
+listings page must still open, with every listing reported as
 not-live, which is what :func:`~etsy_listings.core.engine.status.is_live_etsy_state`
 already reads a missing state as. A *background* refresh that fails keeps the
 answers it was refreshing instead: they are still the best known, and the next
