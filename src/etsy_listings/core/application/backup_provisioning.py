@@ -61,6 +61,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import NamedTuple
 
 from etsy_listings.core.application import credentials, settings_save, workspace_settings
 from etsy_listings.core.application.backup_repository import (
@@ -237,21 +238,29 @@ def provision(
     told each copy before it is copied, or None before a new repository is
     made."""
     plan = _plan(workspace, asked, binaries, restic)
-    chosen, stored = _password(workspace, asked.source, asked.password)
+    password = _password(workspace, asked.source, asked.password)
     storage = asked.storage
     with ExitStack() as undo:
-        if not stored:
-            _store(workspace, chosen, undo)
+        if not password.already_stored:
+            _store(workspace, password.value, undo)
         undo.callback(_quietly, _take_back, storage, existed=storage.is_dir())
-        connected, repository_id = _bring(
-            plan.backup, asked.source, chosen, stored=stored, trying=trying
+        brought = _bring(
+            plan.backup,
+            asked.source,
+            password.value,
+            stored=password.already_stored,
+            trying=trying,
         )
-        workspace_id = plan.workspace_id(() if connected is None else connected.snapshots)
+        workspace_id = plan.workspace_id(
+            brought.snapshots if isinstance(brought, Connected) else ()
+        )
         plan.save(workspace_id.value)
         undo.pop_all()
-    if connected is not None:
-        connected = replace(connected, notice=workspace_id.notice)
-    return Provisioned(connected, repository_id, workspace_id, stored_password=not stored)
+    stored_password = not password.already_stored
+    if isinstance(brought, _Created):
+        return Provisioned(None, brought.repository_id, workspace_id, stored_password)
+    connected = replace(brought, notice=workspace_id.notice)
+    return Provisioned(connected, None, workspace_id, stored_password)
 
 
 @dataclass(frozen=True)
@@ -362,8 +371,12 @@ def _refuse_copy(copy: Path, storage: Path) -> None:
         raise ConnectRefusedError("Choose a local folder separate from the source repository.")
 
 
-def _password(workspace: Workspace, source: Source, supply: PasswordSource) -> tuple[str, bool]:
-    """The password, and whether it is already stored."""
+class _Password(NamedTuple):
+    value: str
+    already_stored: bool
+
+
+def _password(workspace: Workspace, source: Source, supply: PasswordSource) -> _Password:
     stored = None if supply.replaces_stored else stored_password(workspace)
     chosen = stored or supply.ask(source) or ""
     if supply.replaces_stored:
@@ -376,7 +389,7 @@ def _password(workspace: Workspace, source: Source, supply: PasswordSource) -> t
         raise ConnectPasswordError(
             "Enter the password of the repository you are connecting.", source.copies[0]
         )
-    return chosen, stored is not None
+    return _Password(chosen, already_stored=stored is not None)
 
 
 def _refuse_override(password: str) -> None:
@@ -420,6 +433,11 @@ def _quietly(undo: Callable[..., None], *args: object, **kwargs: object) -> None
         logger.exception("undoing part of a failed backup provisioning failed")
 
 
+@dataclass(frozen=True)
+class _Created:
+    repository_id: str
+
+
 def _bring(
     backup: ConfiguredBackup,
     source: Source,
@@ -427,27 +445,28 @@ def _bring(
     *,
     stored: bool,
     trying: Callable[[Path | None], None] | None,
-) -> tuple[Connected | None, str | None]:
-    """The repository in the storage folder: what was connected, or the new
-    repository's id."""
+) -> Connected | _Created:
     told = trying or (lambda _source: None)
     if isinstance(source, NewRepository):
         told(None)
-        return None, _into_place(backup.storage, _initialised(backup, password))
+        return _Created(_into_place(backup.storage, _initialised(backup, password)))
     env_file = backup.env_file if stored else None
-    refused: ConnectRefusedError | None = None
-    for copy in source.copies:
+
+    def connect(copy: Path) -> Connected:
         told(copy)
+        return Connected(
+            copy, _into_place(backup.storage, _copied(backup, copy, password, env_file))
+        )
+
+    *earlier, last = source.copies
+    for copy in earlier:
         try:
-            snapshots = _into_place(backup.storage, _copied(backup, copy, password, env_file))
+            return connect(copy)
         except ConnectPasswordError:
             raise  # Every copy has the same keys.
-        except ConnectRefusedError as exc:
-            refused = exc
+        except ConnectRefusedError:
             continue
-        return Connected(copy, snapshots), None
-    assert refused is not None  # _refuse_source refused no copies.
-    raise refused
+    return connect(last)
 
 
 def _into_place[T](storage: Path, bring: Callable[[Path], T]) -> T:
