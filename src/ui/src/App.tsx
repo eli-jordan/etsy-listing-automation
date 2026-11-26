@@ -26,7 +26,13 @@ import {
 } from "./hooks/useTemplateSession";
 import { SavedAgo } from "./pages/editor/SavedAgo";
 import { useIsPhone } from "./phone/usePhone";
-import type { Renderer, TemplateConfigState, TemplateKind, TemplateSummary } from "./types";
+import type {
+  PhotoSpace,
+  Renderer,
+  TemplateConfigState,
+  TemplateKind,
+  TemplateSummary,
+} from "./types";
 
 const KIND_LABELS: Record<TemplateKind, string> = {
   "colour-matrix": "Colour Matrix",
@@ -36,21 +42,20 @@ const KIND_LABELS: Record<TemplateKind, string> = {
 
 type CatalogState = "loading" | "ready" | "error";
 
-/** What switching to a renderer this template has no draft for starts from:
- * the settings its preparation stored, else the renderer's defaults. */
-function fallbackRenderer(
+const PHOTO_WARP_DEFAULTS: Renderer = {
+  type: "photo-warp",
+  config: {
+    displace: { enabled: false, strength: 0 },
+    shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  },
+};
+
+function initialRendererFor(
   type: Renderer["type"],
   stored: Preparation["renderer_settings"][Renderer["type"]] | undefined,
 ): Renderer {
   if (stored) return { type, config: stored } as Renderer;
-  if (type === "marigold") return MARIGOLD_DEFAULTS;
-  return {
-    type: "photo-warp",
-    config: {
-      displace: { enabled: false, strength: 0 },
-      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
-    },
-  };
+  return type === "marigold" ? MARIGOLD_DEFAULTS : PHOTO_WARP_DEFAULTS;
 }
 
 function runtimeLimits(runtime: Runtime | null) {
@@ -68,8 +73,7 @@ function marigoldStatusClass(preparing: boolean, preparation: Preparation | null
   return preparation?.latest_job?.phase === "failed" ? " mg-status--failed" : "";
 }
 
-/** The breadcrumb's summary of what the open template holds. */
-function templateMeta(selected: TemplateSummary, config: TemplateConfigState | null): string {
+function crumbSummary(selected: TemplateSummary, config: TemplateConfigState | null): string {
   if (config?.kind === "multiple") return "Multiple · " + config.placements.length + " placements";
   if (selected.status !== "calibrated") return selected.status_reason ?? "not calibrated";
   const kindLabel = selected.kind ? KIND_LABELS[selected.kind] : null;
@@ -131,7 +135,7 @@ function TemplateCrumb({
         preparationStatus={preparationStatus}
         statusClass={statusClass}
       />
-      <span className="app__meta">{templateMeta(selected, config)}</span>
+      <span className="app__meta">{crumbSummary(selected, config)}</span>
       {rename.note && (
         <span className="app__meta" role="status">
           {rename.note}
@@ -199,10 +203,10 @@ function PhoneHeader({
         selected={selected.name}
         onSelect={onSelect}
         onOpen={onOpenTemplates}
-        chip={<StatusChip selected={selected} {...chip} />}
-        meta={
+        statusChip={<StatusChip selected={selected} {...chip} />}
+        contentsAndSaveState={
           <>
-            <span className="app__meta">{templateMeta(selected, chip.config)}</span>
+            <span className="app__meta">{crumbSummary(selected, chip.config)}</span>
             <span className="app__status" role="status">
               <SaveStatus save={session.save} load={session.load} catalogState={catalogState} />
             </span>
@@ -261,7 +265,7 @@ interface TemplateEditorProps {
   templateName: string;
   config: TemplateConfigState;
   session: TemplateSession;
-  space: [number, number] | null;
+  space: PhotoSpace | null;
   colours: string[];
   knownColours: string[];
   design: string;
@@ -320,7 +324,7 @@ function TemplateEditor({
   return <SingleEditor key={templateName} {...common} config={config} />;
 }
 
-export function App() {
+export function CalibratorPage() {
   const preparationJobs = usePreparationQueue();
   const rendererCache = useRef<Record<string, Partial<Record<Renderer["type"], Renderer>>>>({});
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
@@ -337,28 +341,14 @@ export function App() {
   // "no kind set" on screen while the file on disk says otherwise. The
   // sequence number makes a late response a no-op instead.
   const refreshSeq = useRef(0);
-  const currentTemplate = useRef<string | null>(templateName);
-
-  useEffect(() => {
-    currentTemplate.current = templateName;
-  }, [templateName]);
-
-  const refreshTemplates = useCallback((selectName?: string) => {
+  const refreshTemplates = useCallback(() => {
     const seq = ++refreshSeq.current;
-    const selectionAtRequest = currentTemplate.current;
     listTemplates()
       .then((loaded) => {
         if (seq !== refreshSeq.current) return;
         setCatalogState("ready");
         setTemplates(loaded);
-        // A save may finish its catalog refresh after the user has moved on.
-        setTemplateName(
-          (current) =>
-            (current === selectionAtRequest ? selectName : undefined) ??
-            current ??
-            loaded[0]?.name ??
-            null,
-        );
+        setTemplateName((current) => current ?? loaded[0]?.name ?? null);
       })
       .catch(() => {
         if (seq !== refreshSeq.current) return;
@@ -372,9 +362,6 @@ export function App() {
 
   const session = useTemplateSession(templateName, { onCatalogChanged: refreshTemplates });
   const { config, preparation, preparing, save, update: setConfig, reloadPreparation } = session;
-  // Selected here rather than through `refreshTemplates(newName)`: a refresh
-  // already in flight would supersede that one and drop the selection, leaving
-  // the page on a name the new list does not hold.
   const rename = useTemplateRename(templateName, session.flush, (newName) => {
     setTemplates((current) =>
       current.map((t) => (t.name === templateName ? { ...t, name: newName } : t)),
@@ -393,7 +380,7 @@ export function App() {
     const cache = rendererCache.current[templateName] ?? {};
     cache[config.renderer.type] = config.renderer;
     rendererCache.current[templateName] = cache;
-    const renderer = cache[type] ?? fallbackRenderer(type, preparation?.renderer_settings[type]);
+    const renderer = cache[type] ?? initialRendererFor(type, preparation?.renderer_settings[type]);
     setConfig({ ...config, renderer });
   };
   const queueKey = preparationJobs
@@ -476,9 +463,7 @@ export function App() {
     />
   );
 
-  // small. `null` for a directory with no readable photo -- there is nothing
-  // to calibrate against, and the editors say so rather than guessing.
-  const space: [number, number] | null =
+  const space: PhotoSpace | null =
     selected?.width && selected.height ? [selected.width, selected.height] : null;
 
   return (
@@ -522,7 +507,7 @@ export function App() {
               templateName={templateName}
               onAssigned={() => {
                 session.reload();
-                refreshTemplates(templateName);
+                refreshTemplates();
               }}
             />
           )}

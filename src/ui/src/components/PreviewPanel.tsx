@@ -37,15 +37,13 @@ interface Props {
   onApprove?: () => void;
 }
 
-/** What one press of Render asked for. Set once and never mutated, so the
- * render loop's dependency on it is honest: a later edit produces a *new*
- * request, it does not redirect the one in flight. */
-interface Request {
+/** What one press of Render asked for; a later edit makes a new one. */
+type Request = Readonly<{
   key: string;
   templateName: string;
   design: string;
-  jobs: PreviewJob[];
-}
+  jobs: readonly PreviewJob[];
+}>;
 
 function requestKey(templateName: string, design: string, jobs: PreviewJob[]): string {
   return `${templateName}|${design}|${JSON.stringify(jobs)}`;
@@ -158,6 +156,8 @@ function PreviewTile({
   );
 }
 
+/** `.btn` alone is transparent in this design system, so the quiet button is
+ * `btn-secondary`, never bare. */
 function renderButtonClass(stale: boolean, approvable: boolean): string {
   if (stale) return "btn btn-danger";
   return approvable ? "btn btn-secondary" : "btn btn-primary";
@@ -253,13 +253,6 @@ export function PreviewPanel({
             {`${failed} ${failed === 1 ? "preview" : "previews"} failed to render`}
           </span>
         )}
-        {/* Which button is the loud one follows what there is to do. A config
-            that has moved on since the render makes Re-render *red*: that is
-            the one state where what you are looking at is not what you would
-            be approving, and it is worth more than a line of prose beside the
-            progress count, which is what it replaced. `.btn` alone is
-            transparent in this design system, so the quiet one is explicitly
-            `btn-secondary` rather than bare. */}
         <div className="preview-grid__actions">
           <button
             type="button"

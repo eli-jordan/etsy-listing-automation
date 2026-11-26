@@ -230,7 +230,7 @@ describe("useTemplateSession", () => {
     expect(result.current.dirty).toBe(false);
     expect(result.current.saved).toEqual(edited(PHOTO_WARP, 2));
     expect(result.current.calibrationRevision).toBe("tee-w1");
-    expect(onCatalogChanged).toHaveBeenCalledWith("tee");
+    expect(onCatalogChanged).toHaveBeenCalledWith();
   });
 
   it("keeps one save in flight and sends the next over the revision it returned", async () => {
@@ -348,8 +348,7 @@ describe("useTemplateSession", () => {
     );
     expect(result.current.calibrationRevision).toBe("s1");
     expect(result.current.dirty).toBe(false);
-    // The rail refreshes, but is not pulled back to the template just left.
-    expect(onCatalogChanged).toHaveBeenCalledWith(undefined);
+    expect(onCatalogChanged).toHaveBeenCalledWith();
   });
 
   it("flushes a pending edit on unmount", async () => {
@@ -556,7 +555,7 @@ describe("useTemplateSession", () => {
       await clock.advance(AUTOSAVE_DEBOUNCE_MS);
       await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy", "warm"]));
       expect(server.puts).toHaveLength(1);
-      expect(onCatalogChanged).toHaveBeenCalledWith("tee");
+      expect(onCatalogChanged).toHaveBeenCalledWith();
     });
 
     it("leaves what a preview names alone, and reads no preparation", async () => {

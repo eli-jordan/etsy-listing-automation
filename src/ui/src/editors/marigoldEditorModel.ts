@@ -3,12 +3,18 @@ import type { maskDraft } from "../components/maskDraft";
 import type { PreviewJob } from "../components/PreviewPanel";
 import type { Placement, TemplateConfigState } from "../types";
 
-/** The boxes the Marigold editor draws: a multiple template's own
- * placements, or one implicit placement for a single box. */
+/** The id of the one placement a single-box template is drawn as. */
+export const IMPLICIT_PLACEMENT_ID = "implicit";
+
+/** `selected` while it is still one of `options`, else the first option. */
+export function pickOrFirst(selected: string | null, options: readonly string[]): string {
+  return selected !== null && options.includes(selected) ? selected : (options[0] ?? "");
+}
+
 export function editorPlacements(config: TemplateConfigState, colours: string[]): Placement[] {
   if (config.kind === "multiple") return config.placements;
   const colour = config.kind === "single" ? (config.colour ?? "") : (colours[0] ?? "");
-  return [{ id: "implicit", colour, bounding_box: config.bounding_box }];
+  return [{ id: IMPLICIT_PLACEMENT_ID, colour, bounding_box: config.bounding_box }];
 }
 
 export function previewJobs(
@@ -71,7 +77,7 @@ export function undoBases(
   id: string | null,
 ): string[] {
   if (histories.revision !== revision) return [];
-  return histories.values[id ?? "implicit"]?.strokes.map((s) => s.before) ?? [];
+  return histories.values[id ?? IMPLICIT_PLACEMENT_ID]?.strokes.map((s) => s.before) ?? [];
 }
 
 /** Whether Undo has anything to take back: a stroke drawn since the save,

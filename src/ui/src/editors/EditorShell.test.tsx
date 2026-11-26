@@ -126,7 +126,7 @@ describe("EditorShell", () => {
   it("shows a kind's extra bar and inspector controls, the bar only while calibrating", () => {
     setup({
       barExtras: <span data-testid="bar-extra">colour</span>,
-      controls: <span data-testid="inspector-extra">garment colour</span>,
+      rendererControls: <span data-testid="inspector-extra">garment colour</span>,
       footer: <p data-testid="footer">2 boxes have no colour</p>,
     });
 

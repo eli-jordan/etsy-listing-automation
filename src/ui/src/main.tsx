@@ -6,7 +6,7 @@ import {
   Route,
   RouterProvider,
 } from "react-router-dom";
-import { App } from "./App";
+import { CalibratorPage } from "./App";
 import "./index.css";
 import { AppShell } from "./shell/AppShell";
 import { AdminPage } from "./pages/admin/AdminPage";
@@ -51,7 +51,7 @@ const router = createBrowserRouter(
       <Route path="/batches/staging/:id" element={<StagingPage />} />
       <Route path="/batches/:id" element={<BatchSummaryPage />} />
       <Route path="/admin" element={<AdminPage />} />
-      <Route path="/templates" element={<App />} />
+      <Route path="/templates" element={<CalibratorPage />} />
     </Route>,
   ),
 );

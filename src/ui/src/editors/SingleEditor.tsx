@@ -1,6 +1,6 @@
 import { PreparationNotice } from "./PreparationNotice";
 import type { ReactNode } from "react";
-import type { PhotoWarpTemplate } from "../types";
+import type { PhotoSpace, PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
 import { usePreview } from "../hooks/usePreview";
@@ -11,9 +11,7 @@ interface Props {
   rendererControls?: ReactNode;
   templateName: string;
   config: PhotoWarpTemplate<SingleTemplate>;
-  /** The photo's true pixel size -- the space the box is in. See
-   * `QuadEditor`'s `space`. */
-  space: [number, number] | null;
+  space: PhotoSpace | null;
   onChange: (config: SingleTemplate) => void;
   design: string;
   onDesignChange: (design: string) => void;

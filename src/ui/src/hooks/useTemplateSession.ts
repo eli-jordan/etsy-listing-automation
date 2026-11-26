@@ -110,8 +110,8 @@ interface Doc {
   saved: TemplateConfigState | null;
   /** Sent as `If-Match`; advanced by every save and by an adopted baseline. */
   revision: string;
-  fence: string;
-  fenceLabels: string[];
+  previewRevision: string;
+  previewLabels: string[];
   relabelled: string[];
   maskEdits: MaskEdit[];
   save: TemplateSaveState;
@@ -145,7 +145,7 @@ interface View {
 
 interface Connections {
   reloadPreparation: () => void;
-  onCatalogChanged: ((select?: string) => void) | undefined;
+  onCatalogChanged: (() => void) | undefined;
 }
 
 const IDLE: TemplateSaveState = { kind: "idle" };
@@ -231,9 +231,9 @@ class Session {
       job.template === doc.name &&
       this.own.has(job.id) &&
       job.config_revision === preparation?.config_revision &&
-      doc.fence !== job.config_revision
+      doc.previewRevision !== job.config_revision
     ) {
-      this.fence(doc, job.config_revision);
+      this.movePreviewRevision(doc, job.config_revision);
       this.emit();
     }
   }
@@ -356,8 +356,8 @@ class Session {
       draft: null,
       saved: null,
       revision: "",
-      fence: "",
-      fenceLabels: NO_LABELS,
+      previewRevision: "",
+      previewLabels: NO_LABELS,
       relabelled: [],
       maskEdits: NO_EDITS,
       save: IDLE,
@@ -386,7 +386,7 @@ class Session {
           doc.load = "ready";
           doc.draft = doc.saved = loaded?.config ?? null;
           doc.revision = loaded?.revision ?? "";
-          this.fence(doc, doc.revision);
+          this.movePreviewRevision(doc, doc.revision);
           doc.save = loaded ? { kind: "saved", savedAt: Date.parse(loaded.modifiedAt) } : IDLE;
           this.emit();
         },
@@ -442,15 +442,14 @@ class Session {
     doc.saved = config;
     doc.maskEdits = this.uncommitted(doc.maskEdits);
     if (relabelling) doc.relabelled = [...doc.relabelled, doc.revision];
-    else this.fence(doc, doc.revision);
+    else this.movePreviewRevision(doc, doc.revision);
     doc.save = { kind: "saved", savedAt: Date.now() };
     const current = this.doc === doc;
     if (current && !relabelling) this.version += 1;
     this.emit();
     // Whether the template still needs calibration may have changed, and
-    // the rail is what shows that. Only the open template is reselected: a
-    // flushed one finishing late must not pull the rail back to it.
-    this.connections.onCatalogChanged?.(current ? doc.name : undefined);
+    // the rail is what shows that.
+    this.connections.onCatalogChanged?.();
   }
 
   /** A completed preparation this session queued rewrites template.yaml's
@@ -478,10 +477,9 @@ class Session {
     this.own.delete(job.id);
   }
 
-  /** Moves what a preview names to `revision`, which holds the saved labels. */
-  private fence(doc: Doc, revision: string) {
-    doc.fence = revision;
-    doc.fenceLabels = doc.saved?.labels ?? NO_LABELS;
+  private movePreviewRevision(doc: Doc, revision: string) {
+    doc.previewRevision = revision;
+    doc.previewLabels = doc.saved?.labels ?? NO_LABELS;
     doc.relabelled = [];
   }
 
@@ -512,8 +510,8 @@ class Session {
       dirty: doc ? isDirty(doc) : false,
       save: doc ? shownSave(doc) : IDLE,
       maskEdits: doc?.maskEdits ?? NO_EDITS,
-      calibrationRevision: doc?.fence ?? "",
-      calibrationLabels: doc?.fenceLabels ?? NO_LABELS,
+      calibrationRevision: doc?.previewRevision ?? "",
+      calibrationLabels: doc?.previewLabels ?? NO_LABELS,
       relabelledRevisions: doc?.relabelled ?? [],
       previewPending: doc?.previewPending ?? false,
       preparationVersion: this.version,
@@ -525,7 +523,7 @@ class Session {
 
 export function useTemplateSession(
   name: string | null,
-  options: { onCatalogChanged?: (select?: string) => void } = {},
+  options: { onCatalogChanged?: () => void } = {},
 ): TemplateSession {
   const [session] = useState(() => new Session());
   const stored = useSyncExternalStore(session.subscribe, session.snapshot);

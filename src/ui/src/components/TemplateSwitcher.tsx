@@ -29,10 +29,8 @@ interface SwitcherProps {
   selected: string;
   onSelect: (name: string) => void;
   onOpen: () => void;
-  /** The status chip beside the name. */
-  chip: ReactNode;
-  /** What the template holds, and whether it is saved. */
-  meta: ReactNode;
+  statusChip: ReactNode;
+  contentsAndSaveState: ReactNode;
 }
 
 function Thumb({ name }: { name: string }) {
@@ -48,7 +46,14 @@ function Thumb({ name }: { name: string }) {
   );
 }
 
-export function TemplateSwitcher({ names, selected, onSelect, onOpen, chip, meta }: SwitcherProps) {
+export function TemplateSwitcher({
+  names,
+  selected,
+  onSelect,
+  onOpen,
+  statusChip,
+  contentsAndSaveState,
+}: SwitcherProps) {
   const zone = useRef<HTMLDivElement>(null);
   const current = useRef<HTMLButtonElement>(null);
   const { previous, next } = usePager(zone, {
@@ -87,7 +92,7 @@ export function TemplateSwitcher({ names, selected, onSelect, onOpen, chip, meta
             <CaretDownIcon className="tswitch__caret" aria-hidden="true" />
           </span>
           <span className="tswitch__meta">
-            {chip}
+            {statusChip}
             <span className="tswitch__position">{stepPosition(names, selected)}</span>
           </span>
         </span>
@@ -103,7 +108,7 @@ export function TemplateSwitcher({ names, selected, onSelect, onOpen, chip, meta
       >
         <CaretRightIcon aria-hidden="true" />
       </button>
-      <div className="tswitch__status">{meta}</div>
+      <div className="tswitch__status">{contentsAndSaveState}</div>
     </div>
   );
 }
