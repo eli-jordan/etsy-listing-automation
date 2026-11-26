@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import asdict, dataclass
 from email.utils import format_datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import Annotated
 
@@ -294,6 +295,24 @@ def preview(
     return scene_response(picture)
 
 
+def _preview_design(
+    workspace: Workspace, design: str | None, test_design: str | None
+) -> Callable[[], Path]:
+    match design, test_design:
+        case str() as name, None:
+            return partial(_listing_design, workspace, name)
+        case None, str() as library_id:
+            return partial(resolve_design, workspace, library_id)
+    raise HTTPException(status_code=422, detail="give exactly one of design, test_design")
+
+
+def _listing_design(workspace: Workspace, name: str) -> Path:
+    path = workspace.design_file(name)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no design {name!r}")
+    return path
+
+
 @router.get("/{name}/design-preview")
 def design_preview(
     template: Annotated[Target, Depends(target)],
@@ -318,20 +337,8 @@ def design_preview(
     prints another.
     """
     workspace, colour, scale = template.workspace, query.colour, query.scale
-    if (design is None) == (test_design is None):
-        raise HTTPException(status_code=422, detail="give exactly one of design, test_design")
-
-    def design_path() -> Path:
-        if test_design is not None:
-            return resolve_design(workspace, test_design)
-        assert design is not None  # exactly one, checked above
-        path = workspace.design_file(design)
-        if not path.is_file():
-            raise HTTPException(status_code=404, detail=f"no design {design!r}")
-        return path
-
     # Every layer shows the one file, resolved (and refused) once.
-    one_design = cache(design_path)
+    one_design = cache(_preview_design(workspace, design, test_design))
     picture = saved_scene(
         workspace,
         template.name,

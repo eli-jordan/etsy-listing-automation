@@ -37,7 +37,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, assert_never
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -147,38 +147,41 @@ def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONRes
     exactly its review is a ``409`` too, carrying the refusal's message, and
     so is a batch plan with nothing to deploy; a batch nobody holds is a
     ``404``."""
-    workspace: Workspace = request.app.state.workspace
-    command: RunCommand
-    if isinstance(body, ListingPlanRequest):
-        command = ListingPlan(tuple(body.listings), publish=body.publish)
-    elif isinstance(body, WorkspacePlanRequest):
-        command = WorkspacePlan(tuple(workspace.listing_names()), publish=body.publish)
-    elif isinstance(body, BatchPlanRequest):
-        listings = batch_workflow.batch_deploy_listings(
-            workspace, app_state.batch_store(request), body.batch_id
-        )
-        command = BatchPlan(body.batch_id, listings, publish=body.publish)
-    elif isinstance(body, ListingApplyRequest):
-        command = ListingApply(tuple(body.listings), body.expect, publish=body.publish)
-    elif isinstance(body, BatchApplyRequest):
-        command = BatchApply(
-            body.batch_id,
-            tuple(body.listings),
-            body.expect,
-            body.reviewed_run_id,
-            publish=body.publish,
-        )
-    else:
-        assert isinstance(body, WorkspaceApplyRequest)  # closed request union
-        command = WorkspaceApply(
-            tuple(body.listings), body.expect, body.reviewed_run_id, publish=body.publish
-        )
-
     deployments = _deployments(request)
-    result = deployments.submit(command)
+    result = deployments.submit(_run_command(request, body))
     if isinstance(result, Conflict):
         return JSONResponse(status_code=409, content={"active_run": result.active_run})
     return _summary(result, deployments)
+
+
+def _run_command(request: Request, body: CreateRunRequest) -> RunCommand:
+    workspace: Workspace = request.app.state.workspace
+    match body:
+        case ListingPlanRequest():
+            return ListingPlan(tuple(body.listings), publish=body.publish)
+        case WorkspacePlanRequest():
+            return WorkspacePlan(tuple(workspace.listing_names()), publish=body.publish)
+        case BatchPlanRequest():
+            listings = batch_workflow.batch_deploy_listings(
+                workspace, app_state.batch_store(request), body.batch_id
+            )
+            return BatchPlan(body.batch_id, listings, publish=body.publish)
+        case ListingApplyRequest():
+            return ListingApply(tuple(body.listings), body.expect, publish=body.publish)
+        case BatchApplyRequest():
+            return BatchApply(
+                body.batch_id,
+                tuple(body.listings),
+                body.expect,
+                body.reviewed_run_id,
+                publish=body.publish,
+            )
+        case WorkspaceApplyRequest():
+            return WorkspaceApply(
+                tuple(body.listings), body.expect, body.reviewed_run_id, publish=body.publish
+            )
+        case _:
+            assert_never(body)
 
 
 @router.get("", response_model=list[RunSummary])
