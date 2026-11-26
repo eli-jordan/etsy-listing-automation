@@ -67,9 +67,7 @@ class PreparedSetUp:
         self, *, expected_revision: str, trying: Callable[[Path], None] | None = None
     ) -> Connected | None:
         """Provision the storage folder and save the ``backup:`` block and
-        the password; the settings save makes the destination folders. What
-        was connected, or None for a new repository. ``trying`` is told each
-        copy a connect tries, before it copies."""
+        the password. What was connected, or None for a new repository."""
         answers = self.answers
         asked = Provisioning(
             storage=answers.repository,
@@ -87,7 +85,6 @@ class PreparedSetUp:
                 trying=None if trying is None else _copies_only(trying),
             )
         except ConnectPasswordError as exc:
-            # The seller named a destination, not a backup: say which one.
             raise ExistingBackupPasswordError(exc.source) from None
         return done.connected
 

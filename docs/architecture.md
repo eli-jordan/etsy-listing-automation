@@ -1524,8 +1524,26 @@ folder beside the target (`restic init`, or the destinations' own one-way copy
 that the password must open and that must pass a `check`), renames it into
 place, chooses the workspace ID (ADR-0061) and saves the block last. A failure
 at any step undoes the ones before it, so the workspace is left as it was: no
-password, no block, no repository and no staging folder. The module docstring
-gives the reasons for the order.
+password, no block, no repository and no staging folder; an undo that fails is
+logged rather than raised over the failure it undoes.
+
+The order is what makes that hold. Refusing first means a stale page or an
+invalid interval is refused before a copy that can take many minutes, and a
+terminal never prompts for a password an attempt would refuse anyway. The
+password is stored before any repository exists, so even a process killed part
+way never leaves a repository on this disk whose password this machine did not
+record; killed there, it leaves at most the password, which is only a retry,
+and a failure the process sees puts `.env` back byte for byte. The repository
+is built in staging and renamed whole, so the storage folder is never half a
+repository, and the undo removes only a folder holding restic's `config`,
+remaking the empty folder the seller named. The block is saved last as the
+commit point: once it names the folder the schedule may back up into it, so
+the folder must already hold a complete, checked repository; the save checks
+the revision again. A new repository is refused beside a destination's copy
+because the copy would then look changed. When connecting, a wrong password
+stops at the first copy, since every copy has the same keys, and a wrong
+password read from `.env` says how to change it there, because it is never
+asked for again.
 
 A missing repository has two ways back, in `core/application/backup_missing.py`,
 both refused while the configured folder holds restic's `config`.
@@ -1541,6 +1559,10 @@ First-time set-up connects too. `backup_setup.prepare_set_up` refuses what
 only set-up refuses, and asks `backup_provisioning.source_for` whether the
 destinations hold a repository: copies of one repository share `config`'s
 bytes, and only a copy holding every file the others hold may be the source.
+A copy whose files are all in another (one still syncing) is left out, so the
+first copy back only adds to it; a source missing files the other has would
+have them deleted as expired. Part of a copy without `config`, two different
+repositories, and copies that each lack files the other has are refused.
 When one does, `POST /api/backup/setup` and `backup init` connect it (the
 first copy that opens and passes a check) instead of creating, and the
 coordinator holds the `connect` slot meanwhile. The answer's `connected` names
