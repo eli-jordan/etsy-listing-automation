@@ -34,7 +34,7 @@ from etsy_listings.core.application.template_rename import RenameHosts
 from etsy_listings.core.application.template_rename import rename_template as rename
 from etsy_listings.core.batches.records import BatchRecords
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.preparation.readiness import catalog_readiness
+from etsy_listings.core.preparation.readiness import NOT_REQUIRED, maps_required
 from etsy_listings.core.render.config import AnyTemplate, TemplateConfig
 from etsy_listings.core.workspace.template_state import (
     TemplateConfigMissingError,
@@ -113,9 +113,10 @@ def list_templates(request: Request) -> list[TemplateSummary]:
         if overview.config is not None:
             summary.renderer = overview.config.renderer.type
             # Metadata only: the per-template status endpoint validates the maps.
-            known = catalog_readiness(overview.config)
-            if known is not None:
-                summary.maps = MapReadinessResponse(**asdict(known), can_render=known.can_render)
+            if not maps_required(overview.config):
+                summary.maps = MapReadinessResponse(
+                    **asdict(NOT_REQUIRED), can_render=NOT_REQUIRED.can_render
+                )
         summaries.append(summary)
     return summaries
 
