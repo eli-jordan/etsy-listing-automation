@@ -1,12 +1,3 @@
-"""Creating a listing: naming one is what writes it.
-
-Both creation paths write through ``ListingDocuments.create``. The listings
-editor creates through :func:`create_listing`. The ``new`` wizard builds its
-stub with :func:`build_media_entries` for the template's kind and
-:class:`ListingStub`, checks it with :func:`validate_listing_stub`, and
-creates it directly.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping

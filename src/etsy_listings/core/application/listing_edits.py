@@ -1,12 +1,3 @@
-"""Editing a saved listing: the editor's patch, merged into the document.
-
-Autosave makes concurrent edits ordinary. The editor saves each field as the
-seller moves between them, and an AI run writes in the background.
-``ListingDocuments.edit`` holds the listing's lock around the read, the merge
-and the write, so two edits cannot lose one another. This module owns what a
-patch means.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -58,19 +49,15 @@ def _restore_rows_if_undeleted(
         batches.restore_listing(name, default)
 
 
+_KEYS_A_NULL_REMOVES = frozenset({"lifecycle", "template_positions"})
+
+
 def _merge(base: Document, patch: Mapping[str, Any]) -> Document:
-    """A shallow merge, except for ``etsy:``, which merges one level deep.
-    The editor's tabs each own a slice of it (title, tags, section, and so
-    on), and a shallow overwrite there would let one tab's autosave silently
-    erase whatever the last edit wrote to a sibling field. ``lifecycle:
-    null`` deletes the key (Un-retire, Cancel) rather than writing
-    ``active``. ``template_positions: null`` removes that optional key on Reset
-    as well (ADR-0058)."""
     merged = dict(base)
     for key, value in patch.items():
         if key == "etsy" and isinstance(value, dict) and isinstance(merged.get("etsy"), dict):
             merged["etsy"] = {**merged["etsy"], **value}
-        elif key in {"lifecycle", "template_positions"} and value is None:
+        elif key in _KEYS_A_NULL_REMOVES and value is None:
             merged.pop(key, None)
         else:
             merged[key] = value

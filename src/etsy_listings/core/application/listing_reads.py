@@ -1,22 +1,3 @@
-"""A listing as the editor and the listings table read it.
-
-Two-tier validation, and only the first tier is decided here:
-
-* **Structural** -- does a candidate even parse as a ``Listing``? A draft that
-  does not is described as the empty draft beside its ``field_errors``.
-* **Business** -- valid but incomplete (empty media, a blank title, a
-  colour-swatch template missing a colour). That is
-  ``config/listing_validation.py``'s ``check_listing``, applied here, never
-  restated; its issues ride along unchanged.
-
-Status and gestures are ``engine/status.py``'s, from the same facts for the
-table's row and the editor's detail, so the two cannot disagree. The one fact
-the workspace cannot answer -- Etsy's state for a listing -- arrives through
-:data:`~etsy_listings.core.application.dependencies.EtsyStates`, asked once
-per read. Assembling ``check_listing``'s inputs is ``WorkspaceFacts``' job: a
-read gathers it once however many listings it describes.
-"""
-
 from __future__ import annotations
 
 import time
@@ -66,9 +47,6 @@ class PricedSize:
 
 
 class Priced(Protocol):
-    """What a price summary reads: a listing, or a listing template, which
-    carries the same price fields and the same resolution."""
-
     garment_profile: str
     colors: list[str]
     pricing_plan: str | None
@@ -83,13 +61,6 @@ class Priced(Protocol):
 
 @dataclass(frozen=True)
 class ListingView:
-    """Everything the editor shows about one listing, saved or not.
-
-    ``field_errors`` is set only when a candidate failed structural
-    validation; the rest then describes what is on disk (an edit) or the
-    empty draft (an unsaved candidate), never the rejected document.
-    """
-
     name: str
     listing: Listing
     status: ListingStatus
@@ -108,10 +79,6 @@ class ListingView:
 
 @dataclass(frozen=True)
 class ListingRow:
-    """One row of the listings table. ``listing`` is ``None`` for a
-    directory left with a lockfile and no ``listing.yaml``, whose one issue
-    says so."""
-
     name: str
     listing: Listing | None
     status: ListingStatus
@@ -195,13 +162,6 @@ def _artwork(
 
 
 def describe_draft(workspace: Workspace, document: Mapping[str, Any]) -> ListingView:
-    """A candidate listing with no name yet, written nowhere.
-
-    One that validates is described as it stands -- incomplete but sound, with
-    its real issues. One that will not is the *empty* draft beside its
-    ``field_errors``: there is no previous state to echo, so the caller must
-    prefer its own copy of the candidate to everything but the errors.
-    """
     currency = workspace.defaults.etsy.currency
     field_errors: dict[str, str] = {}
     try:
@@ -225,15 +185,6 @@ def describe_draft(workspace: Workspace, document: Mapping[str, Any]) -> Listing
 
 
 class PhaseTimer:
-    """Wall-clock time per named phase of one read, summed over every entry
-    into the phase -- so a per-row phase reports the whole table's cost of
-    it, not the last row's.
-
-    For finding where a slow listings table spends its time: the server
-    answers with these as a ``Server-Timing`` header, which the browser's
-    network panel draws with nothing else to install.
-    """
-
     def __init__(self, clock: Callable[[], float] = time.perf_counter) -> None:
         self._clock = clock
         self.seconds: dict[str, float] = {}
@@ -325,11 +276,6 @@ def pricing_summary(
     *,
     resolve: Callable[[str], Path],
 ) -> tuple[str | None, list[PricedSize]]:
-    """The resolved plan's name, and one resolved price per size -- using the
-    first enabled colour as representative, since the editor's price table
-    has no per-colour axis. ``resolve`` finds the plan's ref from wherever
-    its owner lives: a listing's directory or a listing template's. A plan
-    that will not load prices as though there were none."""
     plan = None
     plan_name = None
     if priced.pricing_plan is not None:
@@ -343,11 +289,11 @@ def pricing_summary(
 
     profile = facts.garment_profile(priced.garment_profile)
     sizes = profile.sizes if profile is not None else sorted(priced.prices)
-    colour = priced.colors[0] if priced.colors else ""
+    representative_colour = priced.colors[0] if priced.colors else ""
     prices: list[PricedSize] = []
     for size in sizes:
         try:
-            money = priced.resolved_price(colour, size, pricing_plan=plan)
+            money = priced.resolved_price(representative_colour, size, pricing_plan=plan)
         except KeyError:
             continue
         prices.append(PricedSize(size=size, amount=money))
@@ -376,10 +322,6 @@ class _ListingContext:
 def _describe(
     workspace: Workspace, facts: WorkspaceFacts, listing: Listing, context: _ListingContext
 ) -> ListingView:
-    """A `Listing` as the editor reads it, whether or not it is on disk: the
-    unnamed draft carries the same computed issues and resolved prices as a
-    saved listing, or the editor would show one thing before the listing was
-    named and another after."""
     listing_dir = context.listing_dir
     description = workspace.resolve_description(listing.etsy.description)
     issues = _business_issues(

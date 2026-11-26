@@ -142,6 +142,20 @@ class TestReadListing:
         assert view.resolved_prices
         assert {price.size for price in view.resolved_prices} <= set(view.listing.prices)
 
+    def test_a_pricing_plan_that_will_not_load_prices_as_though_there_were_none(
+        self, workspace: Workspace
+    ) -> None:
+        plain = read_listing(workspace, NAME, etsy_states=etsy_reports())
+        broken = workspace.root / "pricing-plans" / "broken.yaml"
+        broken.parent.mkdir(parents=True, exist_ok=True)
+        broken.write_bytes(b"name: [unclosed\n")
+        edit_listing_file(workspace.root, pricing_plan="pricing-plans/broken.yaml")
+
+        view = read_listing(workspace, NAME, etsy_states=etsy_reports())
+
+        assert view.pricing_plan_name is None
+        assert view.resolved_prices == plain.resolved_prices
+
 
 class TestDescribeDraft:
     def test_the_empty_draft_blocks_on_each_thing_still_to_pick(self, workspace: Workspace) -> None:
@@ -414,6 +428,22 @@ class TestDeleteListing:
             (NAME, True),
             ("someone-else", False),
         ]
+
+    def test_its_batch_rows_are_marked_deleted_before_its_ai_run_is_stopped(
+        self, workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        store = batch_naming(workspace, "b1", NAME)
+        runs, run = ai_run(NAME)
+        rows_deleted_at_stop: list[bool] = []
+        monkeypatch.setattr(
+            run,
+            "request_stop",
+            lambda _reason: rows_deleted_at_stop.append(batch_rows(store, "b1")[0].deleted),
+        )
+
+        _delete(workspace, ai_runs=runs)
+
+        assert rows_deleted_at_stop == [True]
 
     def test_forgets_the_listings_finished_ai_run(self, workspace: Workspace) -> None:
         """A new listing given the name must not reattach to it."""

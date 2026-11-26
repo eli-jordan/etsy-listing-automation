@@ -1,16 +1,3 @@
-"""Adding artwork to ``designs/`` from the editor's design strip.
-
-A file dropped on the strip becomes a listing design: a PNG in ``designs/``
-that any listing can then point at. That directory holds artwork listings
-actually ship and that other listings may already print, so an upload never
-overwrites a different file -- a name that is taken by other bytes gets the
-next free ``-2``, ``-3`` suffix instead, and the same bytes under the same name
-are simply the file that is already there.
-
-Decoding the multipart request is the route's; uploaded bytes and the
-filename enter here (module-structure plan, PR 7).
-"""
-
 from __future__ import annotations
 
 from io import BytesIO
@@ -29,7 +16,7 @@ def save_listing_design(workspace: Workspace, filename: str, payload: bytes) -> 
     if filename != Path(filename).name:
         raise ListingDesignUploadRefusedError(f"{filename!r} is not a plain filename")
     stem = Path(filename).stem
-    # `Path(".png").stem` is ".png": a dotfile, not a name.
+    # `Path(".png").stem` is ".png".
     if not stem or stem.startswith("."):
         raise ListingDesignUploadRefusedError(f"{filename!r} has no name to save it under")
 
