@@ -321,6 +321,7 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
             )
         return Verdict.no_work(drift=drift_found)
 
+    @override
     def snapshot(self, desired: EtsyMediaDesired, live: EtsyMediaLive | None) -> EtsyMediaSnapshot:
         desired_rows = tuple(
             DesiredImageSnapshot(rank=rank, ref=entry.ref, file=entry.file)

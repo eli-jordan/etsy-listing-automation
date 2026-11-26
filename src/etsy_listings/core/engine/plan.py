@@ -5,8 +5,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
-
 from etsy_listings.core.engine.change import Plan, StagePlan
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.events import (
@@ -88,12 +86,6 @@ def build_plan(
     )
 
 
-def _chosen_at_apply(stage: AnyStage) -> bool:
-    """Whether the apply adds ``stage`` by the seller's choice
-    (``Stage.chosen_at_apply``). Optional, like ``needs_every_earlier_stage``."""
-    return bool(getattr(stage, "chosen_at_apply", False))
-
-
 def _blocked(states: list[StageState]) -> bool:
     return any(
         state.stage_plan.blocked is not None
@@ -106,8 +98,8 @@ def _held_by_earlier_block(stage: AnyStage, earlier: list[StageState]) -> StageS
     """A stage that declares ``needs_every_earlier_stage`` is blocked, without
     being asked, while any stage before it is. ``etsy_activate`` is the one:
     publishing a listing whose images could not be uploaded would show buyers
-    Printify's mockups. Optional, like ``snapshot``."""
-    if not getattr(stage, "needs_every_earlier_stage", False):
+    Printify's mockups."""
+    if not stage.needs_every_earlier_stage:
         return None
     blocker = next((state for state in earlier if state.stage_plan.blocked is not None), None)
     if blocker is None:
@@ -122,7 +114,7 @@ def _held_by_earlier_block(stage: AnyStage, earlier: list[StageState]) -> StageS
         applied=None,
         live=None,
         stage_plan=StagePlan.block(
-            stage.name, message, group=stage.group, chosen_at_apply=_chosen_at_apply(stage)
+            stage.name, message, group=stage.group, chosen_at_apply=stage.chosen_at_apply
         ),
     )
 
@@ -142,7 +134,7 @@ def _all_blocked(
             applied=None,
             live=None,
             stage_plan=StagePlan.block(
-                stage.name, message, group=stage.group, chosen_at_apply=_chosen_at_apply(stage)
+                stage.name, message, group=stage.group, chosen_at_apply=stage.chosen_at_apply
             ),
         )
         for stage in stages
@@ -167,7 +159,7 @@ def _walk(
                 stage.name,
                 desired.message,
                 group=stage.group,
-                chosen_at_apply=_chosen_at_apply(stage),
+                chosen_at_apply=stage.chosen_at_apply,
             ),
         )
         on_event(EngineStagePlanned(listing, state.stage_plan))
@@ -179,10 +171,10 @@ def _walk(
         stage=stage.name,
         outcome=verdict.outcome,
         drift=verdict.drift,
-        snapshot=_snapshot(stage, desired, live),
+        snapshot=stage.snapshot(desired, live),
         group=stage.group,
-        review_hash=_review_hash(stage, desired),
-        chosen_at_apply=_chosen_at_apply(stage),
+        review_hash=stage.review_hash(desired),
+        chosen_at_apply=stage.chosen_at_apply,
     )
     state = StageState(
         stage=stage, desired=desired, applied=applied, live=live, stage_plan=stage_plan
@@ -192,31 +184,9 @@ def _walk(
 
 
 def _rewrites(ctx: RunContext, state: StageState) -> Mapping[Path, Path | None]:
-    """The local files ``state``'s stage will rewrite with different bytes,
-    for :attr:`RunContext.rewrites`. Only a stage that will run rewrites
-    anything, and like ``snapshot`` the hook is optional: ``render`` is the
-    one stage that writes files a later stage reads."""
-    method = getattr(state.stage, "rewrites", None)
-    if method is None or not state.stage_plan.will_run:
+    if not state.stage_plan.will_run:
         return {}
-    result: Mapping[Path, Path | None] = method(ctx, state.desired, state.live)
-    return result
-
-
-def _review_hash(stage: AnyStage, desired: Any) -> str | None:
-    method = getattr(stage, "review_hash", None)
-    if method is None:
-        return None
-    result: str = method(desired)
-    return result
-
-
-def _snapshot(stage: AnyStage, desired: Any, live: Any) -> BaseModel | None:
-    method = getattr(stage, "snapshot", None)
-    if method is None:
-        return None
-    result: BaseModel | None = method(desired, live)
-    return result
+    return state.stage.rewrites(ctx, state.desired, state.live)
 
 
 def _assemble(

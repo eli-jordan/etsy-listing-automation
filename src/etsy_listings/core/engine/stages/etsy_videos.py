@@ -249,6 +249,7 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
             )
         return Verdict.no_work()
 
+    @override
     def snapshot(
         self, desired: EtsyVideosDesired, live: EtsyVideosLive | None
     ) -> EtsyVideosSnapshot:

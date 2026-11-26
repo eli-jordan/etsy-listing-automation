@@ -219,6 +219,7 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
             actions=comparison.actions,
         )
 
+    @override
     def snapshot(self, desired: PrintifyProductDesired, live: Product | None) -> ProductSnapshot:
         """Every variant, both sides, named.
 

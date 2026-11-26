@@ -245,6 +245,7 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
             return Verdict.work("the variant matrix differs from what Etsy has", drift=drift)
         return Verdict.no_work(drift=drift)
 
+    @override
     def snapshot(self, desired: PublishDesired, live: PublishLive | None) -> PublishSnapshot:
         if live is None or not live.variant_costs:
             return PublishSnapshot()

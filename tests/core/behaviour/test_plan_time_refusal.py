@@ -11,12 +11,14 @@ stage reads is ``tests/cli/unit/test_format_plan.py``'s.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.change import Verdict
 from etsy_listings.core.engine.plan import build_plan
+from etsy_listings.core.engine.stage import Stage
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock
@@ -28,7 +30,7 @@ class _Empty(BaseModel):
     """A stage's applied document, for a stage that has nothing to remember."""
 
 
-class _RefusingStage:
+class _RefusingStage(Stage[Any, _Empty, Any]):
     """A stage that gets as far as comparing and *then* finds it cannot run.
 
     Stands in for `publish`'s below-cost check, which needs ``variants[].cost``

@@ -291,6 +291,7 @@ class EtsyListingStage(Stage[EtsyListingDesired, AppliedEtsyListing, EtsyListing
             )
         return Verdict.no_work(drift=drift_found)
 
+    @override
     def snapshot(
         self, desired: EtsyListingDesired, live: EtsyListing | None
     ) -> EtsyListingSnapshot:

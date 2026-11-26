@@ -854,6 +854,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             for work in desired.works
         )
 
+    @override
     def snapshot(self, desired: RenderDesired, live: RenderLive | None) -> RenderSnapshot:
         scenes = []
         for work in desired.works:
@@ -878,6 +879,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             )
         return RenderSnapshot(scenes=tuple(scenes))
 
+    @override
     def rewrites(
         self, ctx: RunContext, desired: RenderDesired, live: RenderLive | None
     ) -> dict[Path, Path | None]:
@@ -1033,6 +1035,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         }
         return StageApplyResult(applied=document, outputs=outputs)
 
+    @override
     def review_hash(self, desired: RenderDesired) -> str:
         return self._input_hash(desired)
 

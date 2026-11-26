@@ -21,13 +21,14 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.engine.change import Action, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, StageApplyResult
-from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stage import Blocked, Stage
 from etsy_listings.core.engine.stages.etsy_target import etsy_listing_id
 from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.core.errors import UserFacingError
@@ -57,7 +58,7 @@ class RetractLive:
     etsy_listing_id: int | None
 
 
-class RetractStage:
+class RetractStage(Stage[RetractDesired, AppliedRetract, RetractLive]):
     name = "retract"
     local = False
     group: str | None = None
@@ -79,12 +80,14 @@ class RetractStage:
         self._now = now or time.monotonic
         self._poll_ceiling = poll_ceiling
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedRetract | None
     ) -> RetractDesired | Blocked:
         del ctx, listing, applied
         return RetractDesired()
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedRetract | None
     ) -> RetractLive:
@@ -95,6 +98,7 @@ class RetractStage:
             etsy_listing_id=etsy_listing_id(lock),
         )
 
+    @override
     def plan(
         self,
         desired: RetractDesired,
@@ -122,6 +126,7 @@ class RetractStage:
             actions=tuple(actions),
         )
 
+    @override
     def apply(
         self,
         ctx: RunContext,

@@ -24,7 +24,7 @@ from etsy_listings.core.engine.events import (
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, StageState
 from etsy_listings.core.engine.run import apply_listings
-from etsy_listings.core.engine.stage import StageApplyResult
+from etsy_listings.core.engine.stage import Stage, StageApplyResult
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -38,7 +38,7 @@ class _AppliedDoc(BaseModel):
 
 
 @dataclass
-class _Stage:
+class _Stage(Stage[Any, _AppliedDoc, Any]):
     name: str
     local: bool = True
     group: str | None = None
@@ -76,7 +76,7 @@ def _planned(*stages: _Stage, listing: str = LISTING) -> PlannedRun:
         plan=Plan(listing=listing, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(
             StageState(
-                stage=s,  # type: ignore[arg-type]
+                stage=s,
                 desired={"stage": s.name},
                 applied=None,
                 live=None,
@@ -158,7 +158,7 @@ def test_a_stage_that_never_runs_emits_no_apply_event(workspace_root: Path) -> N
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=(stage_plan,)),
         states=(
             StageState(
-                stage=stage,  # type: ignore[arg-type]
+                stage=stage,
                 desired={"stage": "render"},
                 applied=None,
                 live=None,
