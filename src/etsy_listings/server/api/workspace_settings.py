@@ -1,5 +1,3 @@
-"""Settings reads and revision-checked saves (Admin plan PR 4, ADR-0055)."""
-
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -141,8 +139,6 @@ def template_positions_impact(
         return _invalid(exc)
     impact = template_position_impact.template_position_impact(request.app.state.workspace, limits)
     if isinstance(impact, SettingsProblem):
-        # An unreadable settings.yaml is refused naming the file and key, as
-        # listings report it (a51ec1f4), never a server error.
         return JSONResponse(
             status_code=422,
             content=SettingsSaveRefusal(kind="invalid", message=impact.message).model_dump(),

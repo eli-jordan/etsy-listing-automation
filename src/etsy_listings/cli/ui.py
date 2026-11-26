@@ -1,12 +1,3 @@
-"""The ``ui`` command: the CLI's launcher for the HTTP server.
-
-This is the only CLI module allowed to import the server, and only its
-startup interface, :mod:`etsy_listings.server.hosting` (ADR-0052; the
-module-structure spec's Import Linter table). The import sits inside the
-command body, so ``cli/app.py`` registering this command -- which every CLI
-invocation does -- loads neither FastAPI nor uvicorn.
-"""
-
 from __future__ import annotations
 
 import typer
@@ -29,7 +20,7 @@ def ui(
     The UI includes the dashboard, calibrator, listing editor and run runner.
     Ctrl-C stops the server once any in-flight apply finishes its current stage.
     """
-    from etsy_listings.server.hosting import (  # noqa: PLC0415 -- startup cost: see module docstring
+    from etsy_listings.server.hosting import (  # noqa: PLC0415 -- only `ui` pays the server's import cost (ADR-0052)
         serve,
     )
 

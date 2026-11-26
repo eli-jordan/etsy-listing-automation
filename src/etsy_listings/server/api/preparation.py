@@ -1,10 +1,3 @@
-"""Thin HTTP adapters for durable preparation and calibration masks.
-
-Refusals pass through to the app's one refusal table (``app.py``'s
-``REFUSAL_STATUS``): a Prepare against a calibration revision that has moved
-is a ``412``, an unknown template a ``404``. Only a refused Prepare keeps its
-own body, the ``reason`` beside the sentence."""
-
 import time
 from collections.abc import AsyncIterator
 from dataclasses import asdict
@@ -270,7 +263,6 @@ def cancel(request: Request, identity: str) -> PreparationJobResponse:
 
 
 async def _caught_up(preparations: Preparations, identity: str, after: int) -> bool:
-    """Whether the job has ended and every event it emitted has been sent."""
     job = await run_in_threadpool(preparations.status, identity)
     return job.phase in TERMINAL and after >= job.last_event_sequence
 

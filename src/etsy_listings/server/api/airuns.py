@@ -1,29 +1,3 @@
-"""The AI runs resource (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's
-*Run contract*).
-
-```
-POST /api/ai/runs {listing, draft_brief} -> 202 AiRunSummary
-                                 | 409 {active_run} | 409 {reason}
-                                 | 409 {reason: "batch_pending"}
-                                 | 409 {reason: "deploying"}
-GET /api/ai/runs?listing= the listing's current or most recent run, or 404
-GET /api/ai/runs/{id} AiRunDetail: phase, steps, events so far
-GET /api/ai/runs/{id}/events text/event-stream; replays after Last-Event-ID
-DELETE /api/ai/runs/{id} cancel; 409 if already finished
-```
-
-``POST`` asks core's AI coordinator (``core/application/ai/coordinator.py``)
-to start the run, which re-checks readiness whatever the browser last saw;
-this module maps its refusals to the codes above. The chain itself is
-``core/application/ai/runner.py``'s, on its own thread; this module only
-starts, reads and cancels runs.
-
-**The SSE bridge** is ``server/api/runs.py``'s: a blocking wait on the run's
-condition, awaited through ``run_in_executor`` with a short timeout so the
-generator notices a client leaving. A client leaving ends the stream and
-nothing else -- only ``DELETE`` cancels.
-"""
-
 from __future__ import annotations
 
 import asyncio

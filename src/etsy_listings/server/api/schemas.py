@@ -1,10 +1,3 @@
-"""API request/response shapes. Template CRUD (list/get/put config) reuses
-:mod:`etsy_listings.core.render.config`'s models directly -- ``template.yaml`` *is*
-what the calibrator edits, so there is no meaningful wire-schema divergence to
-keep separate here, unlike the preview endpoint's request shapes below (which
-add a ``design`` selector nothing in the engine's config needs).
-"""
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -48,12 +41,6 @@ from etsy_listings.core.config.settings import (
     RetentionSettings,
     TemplatePositionLimits,
 )
-
-# ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
-# the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
-# command have to agree on it), and a second `Literal` here would be a second
-# place a state could be added to. Derived on every read, never persisted --
-# the same principle `TemplateSummary.status` states below.
 from etsy_listings.core.engine.status import ListingGesture, ListingStatus
 from etsy_listings.core.render.config import BoundingBox, Placement, Renderer, TemplateConfig
 from etsy_listings.core.workspace.calibration import MaskEdit, Stroke
@@ -222,12 +209,6 @@ PreviewRequest = ColourMatrixPreviewRequest | MultiplePreviewRequest | SinglePre
 is -- the endpoint validates the body against that one kind's model, rather
 than relying on shape-sniffing across all three."""
 
-
-# ──────────────────────────────────────────────────────────────────────────
-# Listings UI (phase 5). ListingDetail reuses `Listing` directly for the
-# read/write body -- the wire shape *is* listing.yaml -- the same rule
-# TemplateSummary above follows for template.yaml.
-# ──────────────────────────────────────────────────────────────────────────
 
 IssueSeverity = Literal["block", "warn", "info"]
 """`listing_validation.Severity` on the wire. ``info`` (ADR-0045's stripped
@@ -512,12 +493,6 @@ class TemplateRenameResponse(BaseModel):
     unresolved: list[str]
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Listing templates (ADR-0047, template completeness). The detail reuses `ListingTemplate` directly,
-# as `ListingDetail` reuses `Listing`: the wire shape *is* template.yaml.
-# ──────────────────────────────────────────────────────────────────────────
-
-
 class PixelSize(BaseModel):
     width: int
     height: int
@@ -618,11 +593,6 @@ class CreateListingTemplateRequest(BaseModel):
         if (self.from_listing is None) == (self.from_template is None):
             raise ValueError("give exactly one of from_listing and from_template")
         return self
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Staging and batches (cache-record persistence; batch plan PR 2).
-# ──────────────────────────────────────────────────────────────────────────
 
 
 class StagingRowDetail(BaseModel):
@@ -773,14 +743,6 @@ class ListingBatch(BaseModel):
     reviewable: bool
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Runs. ``RunEvent`` itself, and the ``Plan``/``StagePlan`` DTOs it
-# carries, live in ``core/application/deploy/events.py`` beside the engine types they mirror --
-# only the request/response envelope belongs here, next to every other
-# endpoint's shapes.
-# ──────────────────────────────────────────────────────────────────────────
-
-
 class _CreateRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -844,9 +806,6 @@ CreateRunRequest = (
 
 
 class _RunSummary(BaseModel):
-    """Enough to show a page-head control (decision 8's table) or a row in a
-    future batch view -- everything except the event log itself."""
-
     id: str
     scope: RunScope
     batch_id: str | None = None
@@ -890,18 +849,6 @@ class ApplyRunDetail(ApplyRunSummary):
 RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind")]
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# AI SEO (AI SEO implementation plan, PR5; ADR-0049). A proposal is cached on the
-# server (`ai/proposals.py`) and reaches the browser two ways: as an AI
-# run's `proposal` event (`core/application/ai/events.py`) the moment it is written,
-# and from `GET /api/listings/{name}/proposal` after that. Both are
-# :class:`ListingProposal`. The choices' field shapes mirror
-# `ai/models.py.SeoProposal` field for field, the same "wire shape *is* the
-# domain shape" rule `ListingDetail` follows for `Listing` above; they live
-# in `ai/proposals.py` because the cache record is made of them.
-# ──────────────────────────────────────────────────────────────────────────
-
-
 class SeoReadinessResponse(BaseModel):
     """Whether AI Mode can be enabled for one saved listing right now
     (implementation plan, "Entry point"). The frontend leaves the control
@@ -928,13 +875,6 @@ class ProposalResolutionPatch(BaseModel):
     title: Resolution | None = None
     tags: Resolution | None = None
     lead: Resolution | None = None
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# AI runs (features/market-seo-20260924/spec.md, *AI runs*): what
-# `server/api/airuns.py` takes and answers besides the events themselves,
-# which are core's (`core/application/ai/events.py`) and travel unchanged.
-# ──────────────────────────────────────────────────────────────────────────
 
 
 class CreateAiRunRequest(BaseModel):
@@ -1069,12 +1009,6 @@ class MarigoldRuntimeResponse(BaseModel):
 
 class PreparationResyncResponse(BaseModel):
     resync: Literal[True] = True
-
-
-# ------------------------------------------------------------- Admin: Shop
-#
-# Admin plan, PR 3. The editable shop.yaml values and the revision every save
-# names; core/application/shop_settings.py owns the rules.
 
 
 class ReturnPolicyTermsBody(BaseModel):

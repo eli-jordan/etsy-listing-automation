@@ -1,19 +1,3 @@
-"""The ``new`` wizard: a design, garment, provider, template and pricing
-plan picked in turn, and a listing stub written from the answers.
-
-Thin by design. This module only sequences the questions and says what
-happened; *how* a question gets asked is :mod:`etsy_listings.cli.prompts`,
-which picks a backend that can actually drive the terminal it was given
-(questionary cannot, under cygwin), and the rows each picker offers are
-:mod:`etsy_listings.cli.pickers`'. Every decision and write is core's --
-:mod:`~etsy_listings.core.application.garment_profiles`,
-:mod:`~etsy_listings.core.application.pricing_plans` and
-:mod:`~etsy_listings.core.application.listing_creation` -- which the
-behaviour tests also drive through a fake catalog without prompting.
-
-:func:`run_new` is the interface.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -57,19 +41,10 @@ from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
-MIN_SIZES_TO_COMPARE = 2  # one print area has nothing to be the largest of
+MIN_SIZES_TO_COMPARE = 2
 
 
 def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Blueprint:
-    """Pick from ``marker brand model title`` rows.
-
-    Even ``--category tshirt`` leaves dozens of blueprints, and Printify's
-    titles bury the useful word in the middle ("Unisex Garment-Dyed Heavy
-    Weight Tee"), so a scrolling list is the wrong instrument. Garments this
-    workspace already has a garment profile for sort to the top and carry a marker: a
-    shop reuses a handful of blueprints, and re-finding the one used yesterday
-    is this picker's most common job.
-    """
     marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
     choices = build_blueprint_choices(blueprints, local_blueprint_keys(workspace), marker=marker)
     return prompts.pick(
@@ -193,8 +168,6 @@ def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
 def _pick_or_create_pricing_plan(
     workspace: Workspace, catalog: CatalogClient, offer: GarmentOffer
 ) -> Path:
-    """Returns the chosen/generated plan's absolute path -- turning that into
-    a ref is the caller's job (`pricing_plan_ref`, ADR-0046)."""
     candidates = load_candidate_pricing_plans(workspace)
     choices = build_pricing_plan_choices(candidates, offer.garment_profile_slug)
     rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]

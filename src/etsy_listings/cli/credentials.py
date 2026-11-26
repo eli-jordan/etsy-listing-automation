@@ -119,14 +119,6 @@ ANTHROPIC = CredentialPrompt(
 
 @dataclass(frozen=True)
 class Capture[T]:
-    """A credential that has been answered for, and what proving it produced.
-
-    ``values`` is parallel to the credential's ``variables``. ``proof`` is
-    whatever the caller's verification handed back -- a shop list, an Etsy
-    application id -- so the call that proves a credential is not a call whose
-    answer is then thrown away and made again.
-    """
-
     values: tuple[str, ...]
     proof: T | None
     """``None`` when nothing was proved -- a reused credential the caller
@@ -137,7 +129,6 @@ class Capture[T]:
 
     @property
     def skipped(self) -> bool:
-        """A blank answer to a credential that allows one."""
         return not any(value.strip() for value in self.values)
 
     def require_proof(self) -> T:
@@ -213,12 +204,6 @@ def _ask(prompt: CredentialPrompt, existing: Sequence[str | None]) -> tuple[str,
 
 
 def store[T](root: Path, prompt: CredentialPrompt, capture: Capture[T]) -> None:
-    """Write what was captured into the workspace's ``.env``.
-
-    Separate from :func:`capture` because the two commands disagree about
-    *when*. Reused and skipped captures write nothing: there is nothing new to
-    write.
-    """
     if capture.reused or capture.skipped:
         return
     credentials.store(root, prompt.credential, capture.values)
@@ -237,12 +222,6 @@ def refuse(message: str, *, command: str) -> NoReturn:
 
 
 def announce_gitignore(root: Path) -> None:
-    """Write the workspace's ``.gitignore`` if it needs one, and say so.
-
-    Both wizards do this before the first secret, with the same message: a
-    workspace inside an existing repository is one where a ``.env`` written a
-    moment too early is already tracked.
-    """
     if scaffold.update_gitignore(root):
         typer.echo("  wrote .gitignore (.env, .auth/ and .cache/ stay out of git)")
 

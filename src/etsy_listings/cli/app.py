@@ -1,11 +1,3 @@
-"""Typer CLI. One module per command; this module wires them into one app.
-
-``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth``, ``unlock``, ``marigold`` and
-``backup`` (``init``, ``run``, ``check``, ``snapshots``, ``status``, ``restore``) are built,
-per strict phase order.
-``catalog refresh`` and ``status`` remain for Phase 6.
-"""
-
 from __future__ import annotations
 
 import os
@@ -94,13 +86,6 @@ def _root_callback() -> None:
     # the moment a second command is added.
 
 
-# How a client is built is `connections`', not this module's. Which credential
-# is resolved when, what a missing one means, and where the Etsy token file
-# lives were written out here *and* in `setup`, `auth` and the e2e layer --
-# four copies of one five-step sequence. What is left here is deciding *when*
-# to ask for a connection, which is genuinely the entry point's business.
-
-
 SWATCH_GLYPH = "██"
 SWATCH_FALLBACK = "##"
 
@@ -167,13 +152,6 @@ def _echo_blocked(plan: Plan) -> None:
 
 
 def _echo_failure(listing: str, error: UserFacingError) -> None:
-    """One listing's refusal, as a message rather than a stack.
-
-    Every refusal the user can act on -- a config error, a design too small, a
-    colour that does not exist, copy still carrying a sentinel -- reaches here
-    instead of ending the run: continue-on-error is why one bad listing cannot halt fifty
-    good ones. The engine decides that; this only says it out loud.
-    """
     typer.echo(f"{listing}: {error}", err=True)
     typer.echo("", err=True)
 
@@ -418,12 +396,6 @@ def apply(
     workspace = open_workspace(root)
 
     def announce(event: EngineRunEvent) -> None:
-        """The header and the refusals, before the work they frame.
-
-        ``on_planned`` fires between planning and executing, which is the only
-        point at which both are true: the plan is known, and none of its
-        progress events have been printed yet.
-        """
         if isinstance(event, EngineListingPlanned):
             typer.echo(f"applying {event.listing}")
             _echo_blocked(event.plan)
@@ -460,8 +432,6 @@ def unlock(
 def unlock_listing(
     workspace: Workspace, listing: str, printify_client: Callable[[Workspace], PrintifyClient]
 ) -> None:
-    """`unlock`'s body, with the Printify client it asks through as an
-    argument so a test hands it a fake."""
     lock = Lockfile.read(workspace.lock_file(listing))
     product_id = lock.remote.get(PRODUCT_ID_KEY) if lock is not None else None
     if not product_id:
@@ -506,16 +476,10 @@ def new(
         raise typer.Exit(code=1) from exc
 
 
-# The HTTP launcher lives in `cli/ui.py`, the one CLI module that may import
-# the server (ADR-0052); registering it here loads no server code.
 app.command(epilog=EPILOG)(ui)
 
 
 def main() -> None:
-    # Before Typer, so every command's output is already on a stream that can
-    # print what `terminal` is about to ask it for. Here rather than in the
-    # Typer callback because it mutates process-global streams, which a test
-    # driving `app` through CliRunner should not have done to it.
     terminal.adopt_declared_encoding()
     try:
         app()

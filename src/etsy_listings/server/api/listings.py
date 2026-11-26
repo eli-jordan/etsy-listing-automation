@@ -1,30 +1,3 @@
-"""Listings UI endpoints (features/listings-ui-20260915/spec.md): the dashboard/editor's
-``/api/listings*`` surface, plus the read-only endpoints the editor's pickers
-need (garment profiles, pricing plans, designs).
-
-The HTTP adapter over ``core/application``'s listing operations
-(module-structure plan, PR 6): ``listing_reads`` describes a listing or the
-table, ``listing_edits`` merges an editor save, ``listing_creation`` names a
-new one, ``listing_identity`` renames and deletes. Each owns its locking,
-existence re-checks and the records that follow a listing. This module
-decodes requests, passes in the process's coordinators (batch store, AI run
-registry, Etsy state memo) and projects results onto the wire schemas. The
-operations' refusals pass through to the app's one refusal table
-(``app.py``'s ``REFUSAL_STATUS``), which decides their status codes.
-
-Follows ``templates.py``'s conventions: a ``target()`` dependency for
-existence-checking, ``Listing`` reused directly for the read/write body (the
-wire shape *is* ``listing.yaml``), new API-only schemas only where the shape
-genuinely differs.
-
-A document that fails structural validation is not a status code: PATCH,
-POST and the draft endpoints answer **200** with ``field_errors`` and the
-listing as it was (or the empty draft), so the editor never branches on a
-status to show inline validation. Only a *name* gets a status: not a path
-segment is the 400 ``InvalidNameError`` becomes app-wide, unknown is 404,
-taken is 409. Deleting a published listing is a 409 too (ADR-0035).
-"""
-
 from __future__ import annotations
 
 import dataclasses
@@ -118,9 +91,6 @@ from etsy_listings.server.api.thumbnails import thumbnail_response
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
 
-# Distinct prefixes from `router` above (garment profiles/pricing plans/
-# designs are not listings), so they get their own router rather than being
-# force-fit under "/api/listings".
 support_router = APIRouter(tags=["listings-support"])
 
 
@@ -130,8 +100,6 @@ def _ai_runs(request: Request) -> AiRunRegistry:
 
 
 def _warm_scenes(request: Request, name: str) -> None:
-    """Compose ``name``'s gallery scenes in the background, so the Listing
-    Images tab finds them cached (:mod:`~etsy_listings.core.application.scene_warming`)."""
     warmer: SceneWarmer = request.app.state.scene_warmer
     warmer.request(name)
 
@@ -177,14 +145,6 @@ def _wire_issues(issues: Sequence[ValidationIssue]) -> list[dict[str, str]]:
 
 
 def _representative_name(listing: Listing) -> str | None:
-    """The representative artwork's name, or ``None`` when there isn't one.
-
-    The spec's *Representative artwork* (A35's ``representative``): the
-    first non-null of ``default``, ``on-light``, ``on-dark``, never a
-    colour's own file. The stem is what
-    ``GET /api/listing-designs/{name}/thumbnail`` takes, since
-    ``workspace.design_file`` derives one fixed path per name.
-    """
     ref = representative(listing.design)
     return None if ref is None else Path(ref).stem
 
@@ -241,9 +201,6 @@ def _detail(
 
 
 def _describe_draft(workspace: Workspace, document: Mapping[str, Any]) -> ListingDetail:
-    """A candidate with no name, written nowhere: incomplete is described as
-    it stands, malformed is ``field_errors`` over the empty draft -- see
-    :func:`~etsy_listings.core.application.listing_reads.describe_draft`."""
     return _project(workspace, describe_draft(workspace, document))
 
 
@@ -266,7 +223,6 @@ def list_listings(request: Request, response: Response) -> list[ListingSummary]:
 
 
 def server_timing(seconds: Mapping[str, float]) -> str:
-    """``seconds`` as a ``Server-Timing`` header value, in milliseconds."""
     return ", ".join(f"{name};dur={value * 1000:.1f}" for name, value in seconds.items())
 
 

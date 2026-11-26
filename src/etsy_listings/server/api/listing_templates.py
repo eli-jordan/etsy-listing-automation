@@ -1,21 +1,4 @@
-"""Listing-template endpoints (ADR-0047, template completeness; batch plan PR 1): the Listing
-templates page's index, the *name it* page's draft, create (Save as listing
-template and Clone), read, valid-only ``PUT``, rename and delete.
-
-The operations are
-:mod:`etsy_listings.core.application.listing_template_library`'s
-(module-structure plan, PR 7); this module only projects their answers
-onto the wire, in the listings endpoints' idiom. Their refusals pass through to
-the app's one refusal table (``app.py``'s ``REFUSAL_STATUS``):
-
-* A **name** the server will not take is a status code -- ``400`` for one
-  that is not a single path segment or is ``draft``, ``409`` for one already
-  taken, which is never suffixed.
-* A **document** it will not write is a ``200`` with ``saved: false`` and the
-  issues or field errors, and nothing on disk changes. That is what lets
-  the editor keep the seller's values and say why.
-* A **source** that cannot become a template -- no such listing, a ``./``
-  file that cannot be read -- is ``404`` or ``422`` with the sentence.
+"""Listing-template endpoints (ADR-0047).
 
 ``GET /draft`` is declared before ``GET /{name}``, so ``draft`` is refused as
 a name: a template called that could be created and never opened.

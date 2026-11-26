@@ -80,8 +80,6 @@ _Array = TypeVar("_Array", bound="np.ndarray[Any, Any]")
 
 @dataclass(frozen=True)
 class ScaledBase:
-    """A mockup photo decoded for a preview, possibly downscaled."""
-
     image: RGB
     """What to render onto -- at ``scale``, not necessarily the true size."""
 
@@ -114,15 +112,7 @@ def _stamp(path: Path) -> tuple[int | str, ...]:
 
 
 class PreviewImages:
-    """Everything the preview endpoint has to load, memoised across requests.
-
-    One instance is shared by the app ( :data:`PREVIEW_IMAGES`); tests build
-    their own so the memo cannot leak between them.
-    """
-
     def __init__(self, budget_bytes: int = CACHE_BUDGET_BYTES) -> None:
-        # Budgeted in bytes, not entries: one full-size design array is worth
-        # fifty editor-scale bases.
         self._cache: BoundedCache[object, np.ndarray[Any, Any]] = BoundedCache(
             budget_bytes, size=_nbytes
         )
@@ -214,8 +204,6 @@ class PreviewImages:
         return self.base(path).image
 
     def canvas(self, scene: PreviewScene) -> EditorCanvas:
-        """``scene``'s photo at :data:`EDITOR_MAX_EDGE`, with its derived maps
-        at that size: a drag is a burst of requests for all of them."""
         base = self.base(scene.photo.path, EDITOR_MAX_EDGE)
         directory, key = scene.derived_dir, scene.photo.map_key
         return EditorCanvas(

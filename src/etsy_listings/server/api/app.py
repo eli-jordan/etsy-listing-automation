@@ -1,8 +1,3 @@
-"""FastAPI app factory for the calibrator, listings, AI runs and batch workflows.
-
-The routes share one workspace and the same engine services as the CLI.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
@@ -75,15 +70,11 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     # One of each per process, so their locks mean something: the cache
     # records' stores. Listing, mockup-template and listing-template locks need
     # no instance; `core/workspace/locks.py` keys them by workspace root.
-    # The backup's pause (workspace-backup spec, *Pausing jobs*): one gate,
-    # shared by every coordinator below, so a backup holds them all at once.
     job_gate = JobGate()
     preparations = Preparations(workspace, runtime=preparation_runtime, gate=job_gate)
     proposal_store = ProposalStore(workspace)
     staging_store = StagingStore(workspace)
     batch_store = BatchStore(workspace)
-    # Constructing the coordinators starts nothing; the lifespan below does.
-    # Deploying takes precedence over AI work (ADR-0050).
     ai = AiCoordinator(
         workspace,
         proposals=proposal_store,
@@ -94,40 +85,11 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     )
     deployments = Deployments(workspace, context_factory, ai=ai, gate=job_gate)
     scene_warmer = SceneWarmer(workspace, gate=job_gate)
-    # The schedule and the one backup operation at a time; it owns the
-    # gate's pause during a run. `backup` lets a test keep the state under
-    # tmp_path and replace restic (workspace-backup plan, P2 and P3).
     backups = BackupCoordinator(workspace, gate=job_gate, environment=backup)
 
     @asynccontextmanager
     async def lifespan(running: FastAPI) -> AsyncIterator[None]:
-        """Starts the deployment worker thread with the app, and waits
-        for it on the way out -- "finish what's in flight, start nothing
-        else" (decision 7), on the path every ASGI server already calls
-        (uvicorn's own shutdown when ``ui`` is interrupted, and
-        ``TestClient``'s ``with`` block).
-
-        AI work stops first: its batch queue starts nothing more, then every
-        AI run is cancelled -- each on its own daemon thread, its provider
-        subprocess tree killed -- so a server stopping never waits out a
-        model, and a deploy yielding to a run is not left waiting on it.
-
-        Expired staging sessions are swept on the way in. The batch queue
-        starts with the app, returning rows a previous server left running
-        to the queue.
-
-        The scene warmer stops before the rest, abandoning its queue: what
-        it composes is only ever a head start.
-
-        The job gate stops first of all: a backup waiting for quiet gives
-        up, and work its pause holds stays held, for each coordinator's own
-        stop to drop as it drops queued work. The backup scheduler starts
-        last, so an overdue backup's pause finds every coordinator running,
-        and stops next, stopping restic part way; the run is recorded as
-        stopped."""
         await run_in_threadpool(preparations.start)
-        # ADR-0056: discovery is advisory. Its owned worker must not hold
-        # application availability behind installed CLI processes.
         # Read from app.state, so a test can put its own discovery there first.
         discovery: ModelDiscovery = running.state.model_discovery
         discovery.start()
@@ -154,24 +116,12 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     app.state.deployments = deployments
     app.state.job_gate = job_gate
     app.state.backups = backups
-    # Shared with the preview endpoint (`listings.py`), which needs a
-    # `RunContext` to ask the render stage for a scene's current hash but has
-    # nothing to do with running a run -- reaching through `deployments` for
-    # it would couple that endpoint to deployment's own shape for no reason.
     app.state.context_factory = context_factory
-    # The Etsy and Printify clients the routes ask through (`app_state.clients`),
-    # injected for the same reason as the context factory: a test passes fakes.
     app.state.clients = clients
-    # AI runs (features/market-seo-20260924/spec.md, *AI runs*) and the
-    # batch AI queue (ADR-0048): a thread per run, never `deployments`.
     app.state.ai = ai
     app.state.staging_store = staging_store
     app.state.batch_store = batch_store
-    # ADR-0049: the cached proposals, written by AI runs and read and resolved
-    # through `seo.py`. One store, for the same reason.
     app.state.proposal_store = proposal_store
-    # Composes a saved listing's gallery scenes ahead of the Listing Images
-    # tab asking for them (`listings.py`'s create and PATCH).
     app.state.scene_warmer = scene_warmer
 
     # Permissive CORS for local dev only -- the Vite dev server proxies /api in
@@ -250,7 +200,6 @@ answers as the first category among its bases."""
 
 
 def register_refusals(app: FastAPI) -> None:
-    """Answer every refusal category with its :data:`REFUSAL_STATUS`."""
     for category, status in REFUSAL_STATUS.items():
         app.add_exception_handler(category, _refusal_handler(status))
 

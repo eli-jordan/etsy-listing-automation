@@ -1,19 +1,6 @@
 """The ``auth`` wizard: every credential this tool needs, each verified
 against its own API before it is stored.
 
-The division of labour with ``setup`` is ADR-0025: **credentials here, ids
-there**, and this command runs first because every id ``setup`` discovers
-needs a credential to discover it with. This module sequences the questions
-and says what happened; finding, proving and storing a credential, the
-workspace's credential status and the Etsy grant itself are core's
-(:mod:`etsy_listings.core.application.credentials`).
-
-Three orderings matter here and none of them is arbitrary:
-
-- **The ``.gitignore`` is written before the first secret.** ``auth`` runs
-  before ``setup``, so it may be the first thing ever written into this
-  directory -- and a directory inside an existing repository is one where a
-  ``.env`` written a moment too early is already tracked.
 - **Every credential is verified before it is stored**, against its own API:
   Printify's shop list, Etsy's ping, and for the bearer, the token exchange
   itself. Storing an unverified credential produces a workspace that looks
@@ -22,10 +9,6 @@ Three orderings matter here and none of them is arbitrary:
 - **The browser is opened after the app key pair is known good.** A keystring
   typo surfaces as an Etsy error page mid-consent otherwise, which is a long
   way from the question that caused it.
-
-Every external effect arrives through :class:`Backends`, so the whole flow --
-browser included -- runs in a test without a socket or a network.
-:func:`run_auth` is the interface.
 """
 
 from __future__ import annotations
@@ -59,13 +42,6 @@ from etsy_listings.core.config.secrets import (
 
 @dataclass(frozen=True)
 class Backends:
-    """Everything that leaves the process, in one injectable value.
-
-    A single object rather than six keyword arguments: a test replaces the two
-    it cares about and inherits the rest, and a new external effect does not
-    change the signature of every caller.
-    """
-
     printify_client: Callable[[str], PrintifyClient] = connections.printify_client_for
     etsy_transport: Callable[[EtsyAppKey], Transport] = Transport
     oauth_client: Callable[[str], OAuthClient] = OAuthClient
@@ -93,12 +69,6 @@ def run_auth(
     check: bool = False,
     parts: Sequence[Part] = ALL_PARTS,
 ) -> None:
-    """Capture (or report on) the credentials named by ``parts``.
-
-    ``check`` reports and writes nothing -- it is the answer to "am I still
-    signed in?", which should never be a question you have to risk changing
-    something to ask.
-    """
     back = backends or Backends()
     root.mkdir(parents=True, exist_ok=True)
     store = _token_store(root, back)
@@ -129,9 +99,6 @@ def run_auth(
         typer.echo("Next: `etsy-listings setup` writes the workspace and reads back the shop ids.")
 
 
-# --------------------------------------------------------------- credentials
-
-
 def _printify_token(root: Path, back: Backends) -> None:
     def verify(values: tuple[str, ...]) -> tuple[list[Shop], str]:
         try:
@@ -147,7 +114,6 @@ def _printify_token(root: Path, back: Backends) -> None:
 
 
 def _etsy_app_key(root: Path, back: Backends) -> EtsyAppKey:
-    """The keystring and shared secret, verified together by one ping."""
 
     def verify(values: tuple[str, ...]) -> tuple[EtsyAppKey, str]:
         app_key = EtsyAppKey(values[0], values[1])
@@ -186,8 +152,6 @@ def _etsy_sign_in(app_key: EtsyAppKey, store: TokenStore, back: Backends) -> Non
 
     sign_in = core_credentials.begin_etsy_sign_in(app_key)
 
-    # Presenting the human step is the CLI's; the grant on either side of it
-    # is core's (ADR-0026, ADR-0027).
     typer.echo("")
     typer.echo("Opening Etsy's consent page in your browser. If it does not open,")
     typer.echo("paste this URL yourself:")
@@ -208,12 +172,6 @@ def _etsy_sign_in(app_key: EtsyAppKey, store: TokenStore, back: Backends) -> Non
 
 
 def _anthropic_key(root: Path) -> None:
-    """Optional, and asked last.
-
-    Nothing before Phase 4 uses it, so a blank answer is a complete run rather
-    than a skipped step -- and unverified, because Anthropic has no free
-    endpoint that proves a key without spending on one.
-    """
     captured = credentials.capture(
         root,
         credentials.ANTHROPIC,
@@ -223,11 +181,7 @@ def _anthropic_key(root: Path) -> None:
     credentials.store(root, credentials.ANTHROPIC, captured)
 
 
-# -------------------------------------------------------------------- report
-
-
 def summary_line(summary: TokenSummary) -> str:
-    """The stored Etsy consent as the one line ``auth`` prints about it."""
     if not summary.present:
         return "Etsy sign-in: none stored"
     access = "valid" if summary.access_valid else "expired (refreshed on next use)"
@@ -238,7 +192,6 @@ def summary_line(summary: TokenSummary) -> str:
 
 
 def renewal_warning(summary: TokenSummary) -> str | None:
-    """The line to print when the 90-day clock is nearly up, or ``None``."""
     if not summary.renewal_due:
         return None
     return (
@@ -264,11 +217,4 @@ def _report(root: Path, store: TokenStore, back: Backends) -> None:
 
 
 def _token_store(root: Path, back: Backends) -> TokenStore:
-    """This workspace's token store, with `auth`'s own OAuth client and clock.
-
-    Both are ``Backends`` fields so the whole flow runs without a socket; the
-    store's shape -- where the file lives, and that its refresh resolves the
-    keystring lazily so `auth --check` works on a workspace holding no
-    credentials at all -- is ``connections``'.
-    """
     return connections.etsy_token_store(root, oauth=back.oauth_client, now=back.now)

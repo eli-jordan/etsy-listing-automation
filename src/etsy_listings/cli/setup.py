@@ -66,22 +66,12 @@ RENEWAL = ["manual", "auto"]
 
 @dataclass(frozen=True)
 class EtsyFindings:
-    """What `setup` managed to learn about the Etsy side. Every field may be
-    ``None``: a workspace is usable before Etsy is reachable at all.
-
-    No shop section here -- Phase 3 drops it from `shop.yaml` entirely
-    (decision 7): which section a listing files under is a fact about that
-    listing, not the shop, so it is asked (optionally) in `new`/`listing.yaml`
-    instead, never resolved by `setup`.
-    """
-
     shop: EtsyShop | None = None
     return_policy: dict[str, Any] | None = None
     """The three terms a return policy is addressed by, not an id."""
 
 
 def _sync_prompts(root: Path, *, replace: bool) -> None:
-    """Say what seeding, checking or replacing each packaged prompt did."""
     for synced in workspace_setup.sync_packaged_prompts(root, replace=replace):
         where, label, backup = synced.where, synced.label, synced.backup
         if synced.outcome == "created":
@@ -195,7 +185,6 @@ def _discover_etsy(
 def _find_etsy_shop(
     access: EtsyAccess, printify_shop: Shop, existing_etsy: dict[str, Any]
 ) -> EtsyShop | None:
-    """Discovery's answer if it has a certain one, else a name to look up."""
     found = shop_discovery.find_etsy_shop(access, printify_shop)
     if found is None:
         return _ask_for_etsy_shop(access, existing_etsy)
@@ -238,7 +227,6 @@ def _ask_for_etsy_shop(access: EtsyAccess, existing_etsy: dict[str, Any]) -> Ets
 def _pick_return_policy(
     access: EtsyAccess, shop: EtsyShop, current: dict[str, Any] | None
 ) -> dict[str, Any] | None:
-    """Zero-config when the shop has exactly one; a question for two or more."""
     options = shop_discovery.return_policy_options(access.client, shop, current)
     policies = options.policies
     if not policies:
@@ -287,9 +275,6 @@ def run_setup(
     token, shops = _verified_token(root, factory)
     shop = _pick_shop(shops)
 
-    # Every prompt is seeded from the file, which is what makes "the answer
-    # wins" safe on a re-run: pressing enter through the whole wizard changes
-    # nothing, and typing something different is taken at face value.
     existing = workspace_setup.read_shop_document(root) or {}
     existing_etsy = existing.get("etsy") or {}
     existing_printify = existing.get("printify") or {}

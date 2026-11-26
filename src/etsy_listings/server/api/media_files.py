@@ -1,20 +1,3 @@
-"""The file locator's endpoints: the two directories a `media:`
-file ref can name, listed with each file's kind, and served.
-
-A file ref has two roots, and the locator offers one group per root: the
-listing's own directory (``./close-up.mp4``) and ``common-media/``
-(``common-media/size-guide.png``). Both groups answer the same three
-questions -- what is here, a picture to pick it by, the file itself -- so both
-are one schema and one pair of responses, differing only in which `Workspace`
-accessor finds the file.
-
-The listing-local half is a security boundary. Its listing name and path
-both come from URLs, and the directory it serves from also holds
-``listing.yaml`` and the lockfile. The boundary is `Workspace`'s
-(``_media_file_in``); this module only decides that a refusal is a ``400``
-(the app-wide ``InvalidNameError`` handler) and a missing file a ``404``.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path

@@ -125,7 +125,6 @@ def live_listing_ids(
     client_for: ClientFor,
     now: Clock = time.monotonic,
 ) -> set[int]:
-    """Which of ``listing_ids`` Etsy reports as published."""
     return {
         i
         for i, state in etsy_states(root, listing_ids, client_for=client_for, now=now).items()
@@ -140,8 +139,6 @@ def _remembered(ids: set[int], moment: float, max_age: float) -> dict[int, str |
 def _ask_and_keep(
     client: EtsyListingClient, listing_ids: set[int], moment: float
 ) -> dict[int, str | None]:
-    """Ask in the foreground, where a failure is remembered as "not live"
-    like any other answer -- see the module docstring."""
     asked = sorted(listing_ids)
     states = _ask(client, asked)
     answers: dict[int, str | None] = dict.fromkeys(asked)
@@ -183,7 +180,6 @@ def _refresh_behind(
 
 
 def _ask(client: EtsyListingClient, listing_ids: list[int]) -> dict[int, str] | None:
-    """Etsy's answer, or ``None`` when it could not be asked."""
     try:
         return client.listing_states(listing_ids)
     except (EtsyApiError, EtsyAuthError, EtsyRefreshBusyError, MissingCredentialError):

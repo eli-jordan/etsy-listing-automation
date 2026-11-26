@@ -28,5 +28,4 @@ def serve(
     host: str = "0.0.0.0",
     port: int = 8000,
 ) -> None:
-    """Block serving ``workspace`` over HTTP until the process is interrupted."""
     uvicorn.run(create_app(workspace), host=host, port=port)

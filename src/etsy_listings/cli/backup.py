@@ -1,11 +1,3 @@
-"""``etsy-listings backup``: the workspace's restic repository from a terminal
-(workspace-backup spec, *CLI*).
-
-``init``, ``run``, ``check``, ``snapshots``, ``status`` and ``restore``.
-The CLI does not coordinate with a running server, so ``run`` pauses no
-jobs; restic's own repository lock keeps two processes apart.
-"""
-
 from __future__ import annotations
 
 import json
@@ -52,7 +44,6 @@ JsonOption = Annotated[bool, typer.Option("--json", help="Print the result as JS
 
 @contextmanager
 def _reported() -> Iterator[None]:
-    """A user-facing failure is its message and exit status 1."""
     try:
         yield
     except UserFacingError as exc:
@@ -64,7 +55,6 @@ def _reported() -> Iterator[None]:
 
 
 def _ask_password(source: Source) -> str:
-    """A new repository's password, typed twice; an existing one's, once."""
     if not isinstance(source, NewRepository):
         return prompts.ask_text("Password of the existing backup:")
     password = prompts.ask_text(f"New backup password (at least {MIN_PASSWORD_LENGTH} characters):")
@@ -134,9 +124,6 @@ PROGRESS_EVERY_SECONDS = 5.0
 
 
 class _ProgressLines:
-    """Each step once per destination, and the files read at most every few
-    seconds."""
-
     def __init__(self) -> None:
         self._step: tuple[str, str | None] | None = None
         self._printed = 0.0
@@ -222,8 +209,6 @@ def snapshots(root: str | None = root_option(), *, json_output: JsonOption = Fal
 
 
 class _RestoreLines:
-    """The percentage and files at most every few seconds."""
-
     def __init__(self) -> None:
         self._printed = 0.0
 

@@ -45,13 +45,7 @@ from a menu while looking at a photograph."""
 
 
 def resolve_design(workspace: Workspace, design: str) -> Path:
-    """Turn an id from the library into a file on disk.
-
-    A stale id is :class:`CalibrationDesignMissingError`, a 404 like every
-    other missing thing, rather than a ``KeyError`` escaping as a 500: the
-    client picked it from a list this API handed out, so an id that no longer
-    exists means the list moved on, not that the server broke.
-    """
+    """Turn an id from the library into a file on disk."""
     bundled = BUNDLED_DESIGNS.get(design)
     if bundled is not None:
         return bundled

@@ -1,23 +1,3 @@
-"""AI Mode's readiness endpoint, the market snapshot the top listings panel
-reads, and the cached proposal (AI SEO implementation plan, PR5;
-features/market-seo-20260924/spec.md, *AI runs*; market-seo implementation
-plan, PR 8).
-
-```
-GET /api/listings/{name}/ai-seo/readiness -> SeoReadinessResponse
-GET /api/listings/{name}/market -> MarketSnapshot | 404
-GET /api/listings/{name}/proposal -> ListingProposal | 404
-PATCH /api/listings/{name}/proposal/resolution -> ListingProposal | 404 | 412
-```
-
-Generation itself is an AI run (``core/application/ai/``, served by
-``server/api/airuns.py``): the brief, market research and the proposal as one
-run per listing, on its own thread, reattachable and cancellable. The rules a
-run is refused by, which the **AI Mode** button is lit by, are core's
-(``core/application/ai/readiness.py``), so the button is lit exactly when
-``POST /api/ai/runs`` would accept the run the click starts.
-"""
-
 from __future__ import annotations
 
 from typing import Annotated

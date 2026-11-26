@@ -1,14 +1,3 @@
-"""Picker rows for the ``new`` wizard: what each question offers, and how.
-
-Printify offers hundreds of blueprints and ``--category tshirt`` still leaves
-dozens, so rows are columned and called out. Building them lives here rather
-than in the prompt so it can be tested without a terminal; *which* plans suit
-a garment and which garments a workspace already has are core's answers
-(``core/application/pricing_plans.py``, ``garment_profiles.py``) -- only the
-rendering is the wizard's. Filtering, on a terminal that can do it at all, is
-fzf's job -- see :mod:`etsy_listings.cli.prompts`.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
@@ -21,14 +10,6 @@ from etsy_listings.core.application.pricing_plans import pricing_plan_options
 from etsy_listings.core.clients.printify.models import Blueprint
 from etsy_listings.core.clients.printify.resolve import normalise
 from etsy_listings.core.config.pricing_plan import PricingPlan
-
-# ----------------------------------------------------------------------
-# The garment picker's rows.
-#
-# Printify offers hundreds of blueprints and `--category tshirt` still leaves
-# dozens, so the rows are columned -- marker, brand, model, title -- and the
-# ones this workspace already has a garment profile for sort to the top.
-# ----------------------------------------------------------------------
 
 LOCAL_MARKER = "⭐"
 LOCAL_MARKER_FALLBACK = "* "
@@ -68,13 +49,6 @@ def marked_choices[T](
     label: Callable[[T], str],
     marker: str = LOCAL_MARKER,
 ) -> list[Choice[T]]:
-    """Rows with the marked ones first, each label behind an aligned marker column.
-
-    The shape both "which of these have I used before?" pickers want: mark,
-    sort marked-first then by the picker's own key, and reserve the marker
-    column on every row so the columns after it line up whether or not the row
-    carries one.
-    """
     entries = [(item, marked(item)) for item in items]
     entries.sort(key=lambda entry: (not entry[1], sort_key(entry[0])))
     return [
@@ -159,10 +133,6 @@ def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Cho
         for path, modified in entries
     ]
 
-
-# ----------------------------------------------------------------------
-# The pricing-plan picker's rows, and the sentinel row that creates a plan.
-# ----------------------------------------------------------------------
 
 CREATE_NEW_PLAN_LABEL = "+ create a new pricing plan"
 

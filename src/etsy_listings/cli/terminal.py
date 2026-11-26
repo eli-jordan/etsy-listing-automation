@@ -30,7 +30,6 @@ others are not consulted."""
 
 
 def declared_utf8(environ: Mapping[str, str] | None = None) -> bool:
-    """Has the shell said its terminal is UTF-8?"""
     env = os.environ if environ is None else environ
     for var in LOCALE_VARS:
         value = env.get(var)
@@ -100,12 +99,6 @@ def discard_stdout() -> None:
 
 
 def encodable(text: str, *, stream: TextIO | None = None) -> bool:
-    """Can ``stream`` (default stdout) actually represent ``text``?
-
-    ``LookupError`` is caught alongside the encoding failure: a stream can
-    report an encoding name Python has no codec for, and a decoration is never
-    worth raising over.
-    """
     target = sys.stdout if stream is None else stream
     encoding = getattr(target, "encoding", None) or "utf-8"
     try:
@@ -116,10 +109,4 @@ def encodable(text: str, *, stream: TextIO | None = None) -> bool:
 
 
 def choose(preferred: str, fallback: str, *, stream: TextIO | None = None) -> str:
-    """``preferred`` if the stream can print it, else ``fallback``.
-
-    Callers pair these so both occupy the same number of terminal columns --
-    an emoji is usually two, so its fallback is two ASCII characters, and a
-    column of them stays aligned either way.
-    """
     return preferred if encodable(preferred, stream=stream) else fallback

@@ -1,27 +1,3 @@
-"""Template authoring endpoints: listing, kind assignment, config, and a live
-preview through the real renderer. Each change produces the actual composite,
-so the preview shows the same output as deployment.
-
-The calibration rules are
-:mod:`etsy_listings.core.application.mockup_templates`' (module-structure
-plan, PR 7); this module keeps what only serving a browser needs, and lets
-their refusals through to the app's one refusal table (``app.py``'s
-``REFUSAL_STATUS``):
-
-* A template, config or photo that is not there is a ``404``; a kind the
-  photos cannot be, colliding colour slugs or preview geometry for another
-  kind or a new label breaking its rules is a ``422``; assigning a kind to a
-  calibrated template is a ``409``.
-  A save against a calibration revision that has moved is a ``412``; a save
-  request ID reused for different content is a ``409``. An unusable name is
-  a ``400``.
-* Previews decode through the process's memo (:mod:`.imagecache`), which a
-  drag hits several times a second. Core finishes the picture
-  (:mod:`etsy_listings.core.application.scene_previews`) and
-  :mod:`.scene_responses` serves it.
-* Thumbnails and photos are HTTP media responses.
-"""
-
 from __future__ import annotations
 
 from contextlib import suppress
@@ -96,10 +72,6 @@ router = APIRouter(prefix="/api/templates", tags=["templates"])
 
 @dataclass(frozen=True)
 class Target:
-    """A template that exists, and the workspace it lives in -- a 404 before
-    the handler runs for one that is not there. The operations check again
-    for callers that are not this router."""
-
     workspace: Workspace
     name: str
 
@@ -112,9 +84,6 @@ def target(request: Request, name: str) -> Target:
 
 @dataclass(frozen=True)
 class AfterSave:
-    """Preparation work a calibration save starts: the coordinator, and the
-    tasks run after the response."""
-
     preparations: Preparations
     background: BackgroundTasks
 
@@ -231,14 +200,10 @@ def photo(template: Annotated[Target, Depends(target)], colour: str | None = Non
 
 
 def _queue_preparation(name: str, after: AfterSave) -> None:
-    """The preparation work a save of ``name`` starts."""
     # Incomplete multiple geometry or missing evidence needs explicit Prepare.
     # The committed Save succeeds; read-only readiness explains that refusal.
     with suppress(UserFacingError, ValueError, OSError):
         after.preparations.reconcile_saved(name)
-    # A positioned template's new padded quad may leave its evidence: saving
-    # its geometry is the explicit request ADR-0058 names (option B), queued
-    # after the response because finding the worker can take seconds.
     after.background.add_task(cover_recalibrated, after.preparations, name)
 
 
@@ -301,9 +266,6 @@ def _geometry(body: PreviewRequest) -> PreviewGeometry:
 
 
 def _draft(workspace: Workspace, body: PreviewRequest) -> SceneDraft:
-    """The wire body as core's draft. The document is the body less what only
-    a request carries; a colour-matrix body's ``colour`` picks a photo, where
-    a single template's is part of the template."""
     request_only = {"design", "calibration_revision", "mask_edits"}
     if isinstance(body, ColourMatrixPreviewRequest):
         request_only.add("colour")

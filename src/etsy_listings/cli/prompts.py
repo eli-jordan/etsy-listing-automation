@@ -1,33 +1,5 @@
 """How an interactive command asks a question, given the terminal it got.
 
-The CLI's, beside :mod:`etsy_listings.cli.terminal` and for the same
-reason: it answers a question about the terminal rather than about any one
-wizard, and only the CLI talks to a terminal -- core never prompts
-(ADR-0052). It lived in ``newcmd/`` while ``new`` was the only thing that
-prompted, then at the package root once ``setup`` became the second.
-
-This module exists because of a hard constraint discovered while building the
-garment picker: **questionary cannot prompt at all under cygwin.**
-prompt_toolkit on ``sys.platform == "win32"`` only ever builds a Win32,
-Windows-10-VT100 or ConEmu output, and a cygwin pty is a named pipe with no
-console screen buffer behind it, so ``create_output()`` raises
-``NoConsoleScreenBufferError`` before a single key is read. Verified under a
-real pty (``script -q -c... /dev/null``), not just a redirect. CLAUDE.md
-mandates cygwin zsh as *the* shell for this project, so "run it somewhere
-else" is not an answer -- ``new`` has to work there.
-
-So each question picks the best backend that can actually run:
-
-=============== =========================================================
-``choose`` ``fzf`` if this machine has one -- fuzzy, scrollable, and
-                 the tool asked for. Otherwise a plain selector
-                 that does not filter at all: questionary's arrow-key list
-                 where prompt_toolkit works, else a numbered list over
-                 ``input()``, which works anywhere.
-``text`` questionary, else ``input()``.
-``confirm`` questionary, else ``input()``.
-=============== =========================================================
-
 **Only fzf filters.** Filtering was tried in the other two backends and both
 were worse than not having it. questionary's autocomplete copies the
 highlighted row into the input buffer as you arrow through the menu, so the
@@ -37,21 +9,6 @@ avoids that but costs a full redraw per query to save scrolling a list the
 terminal already scrolls for free. A selector that only selects beats a filter
 that surprises you, and ``fzf`` is one package away for anyone who wants the
 fuzzy version.
-
-Finding fzf is its own problem here, and ``shutil.which`` is not the answer:
-see :func:`fzf_command`.
-
-Every question that has to ask the machine something -- is fzf installed,
-can prompt_toolkit draw, what did the user type -- asks a :class:`PromptHost`.
-Each function takes one as ``host``; omitted, it is this machine
-(``LOCAL_PROMPT_HOST``), so a wizard never passes one and a test describes
-the machine it wants instead of patching this module.
-
-Every backend returns ``None`` for "the user cancelled", so callers handle
-cancellation one way regardless of which one ran -- and above them sit
-:func:`pick`, :func:`ask_choice`, :func:`ask_text` and :func:`ask_confirm`,
-which raise :class:`Cancelled` instead. That is what the wizards use; see the
-note above them for why a `None` nobody checks is worse than an exception.
 """
 
 from __future__ import annotations
@@ -97,15 +54,6 @@ def _read_line(prompt: str) -> str:
 
 @dataclass(frozen=True, eq=False)
 class PromptHost:
-    """The machine a question is asked on.
-
-    ``commands`` finds and runs fzf and cygwin's shell; ``windows`` is
-    whether cygwin's shell is worth looking for at all; ``prompt_toolkit``
-    answers :func:`prompt_toolkit_works`; ``read_line`` is the plain
-    backend's ``input()``. Compared by identity, so :func:`fzf_command`
-    caches one answer per host.
-    """
-
     commands: CommandHost = LOCAL_CLI_HOST
     windows: bool = os.name == "nt"
     prompt_toolkit: Callable[[], bool] = prompt_toolkit_works
@@ -129,21 +77,6 @@ class _FzfFailedError(Exception):
 
 @cache
 def fzf_command(host: PromptHost) -> list[str] | None:
-    """The argv prefix that runs fzf here, or ``None`` if nothing can.
-
-    ``shutil.which`` is the whole answer everywhere except the environment
-    this project actually runs in. Under cygwin the tool is *native-Windows*
-    Python, so ``which`` searches with Windows rules -- and cygwin's ``fzf``
-    package installs ``/usr/bin/fzf`` as a shebang script with no ``.exe``,
-    which Windows can neither find nor execute. The symptom is precise and
-    confusing: ``ls | fzf`` works in the shell, and ``new`` insists there is
-    no fzf.
-
-    So when the native lookup fails, ask cygwin's own shell whether it has one
-    and, if it does, run fzf *through* that shell so the shebang is honoured.
-    Returning an argv prefix rather than a path is what lets the two cases --
-    a real ``fzf.exe`` and ``sh -c 'exec fzf...'`` -- reach one call site.
-    """
     native = host.commands.which("fzf")
     if native is not None:
         return [native]
@@ -183,12 +116,6 @@ def _cygwin_sh(host: PromptHost) -> str | None:
 def choose(
     message: str, rows: Sequence[str], *, marker_hint: str = "", host: PromptHost | None = None
 ) -> str | None:
-    """Pick one of ``rows``. ``None`` if the user cancelled.
-
-    ``rows`` arrive in the order they should be offered and every backend
-    preserves it -- that is what keeps the already-used-here garments at the
-    top of the list.
-    """
     listed = list(rows)
     if not listed:
         return None
@@ -258,18 +185,12 @@ def confirm(message: str, *, default: bool = False, host: PromptHost | None = No
 
 
 class Cancelled(Exception):  # noqa: N818 -- a decision, not an error condition
-    """The user declined to answer.
-
-    Not a failure: ctrl-C out of a picker is an ordinary way to leave a
-    wizard, and the CLI turns this into a message and a non-zero exit rather
-    than a traceback.
-    """
+    ...
 
 
 def ask_choice(
     message: str, rows: Sequence[str], *, marker_hint: str = "", host: PromptHost | None = None
 ) -> str:
-    """:func:`choose`, where declining ends the wizard."""
     answer = choose(message, rows, marker_hint=marker_hint, host=host)
     if answer is None:
         raise Cancelled
@@ -312,10 +233,6 @@ def ask_text(
 
 
 def ask_confirm(message: str, *, default: bool = False, host: PromptHost | None = None) -> bool:
-    """:func:`confirm`, where declining ends the wizard.
-
-    Distinct from answering *no*, which is an answer and comes back ``False``.
-    """
     answer = confirm(message, default=default, host=host)
     if answer is None:
         raise Cancelled
@@ -359,8 +276,6 @@ def _choose_with_fzf(
 
 
 def _choose_with_questionary(message: str, rows: list[str], marker_hint: str) -> str | None:
-    """Arrow keys over the list, no filtering -- ``questionary.select``, not
-    ``autocomplete``. See this module's docstring for why."""
     import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
     answer: str | None = questionary.select(
@@ -374,14 +289,6 @@ def _choose_with_questionary(message: str, rows: list[str], marker_hint: str) ->
 def _choose_with_input(
     host: PromptHost, message: str, rows: list[str], marker_hint: str
 ) -> str | None:
-    """A numbered list in plain ``input()``: one page at a time, ``n``/``p``
-    to move between pages, a number to pick.
-
-    The last resort, and the one that always works -- no console handle, no
-    raw mode, no external binary. Numbers are absolute positions in the whole
-    list rather than positions on the page, so a number means the same thing
-    wherever it is typed.
-    """
     pages = (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE
     paged = pages > 1
     hint = (
@@ -404,8 +311,6 @@ def _choose_with_input(
 
 
 def _typed(host: PromptHost, prompt: str) -> str:
-    """One line from ``input()``, normalised; blank when the input ended or
-    was interrupted, which cancels like a blank line does."""
     try:
         return host.read_line(prompt).strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -413,7 +318,6 @@ def _typed(host: PromptHost, prompt: str) -> str:
 
 
 def _turned(typed: str, page: int, pages: int) -> int:
-    """The page ``n``/``p`` moves to; anything else is refused in place."""
     paged = pages > 1
     if paged and typed in {"n", "p"}:
         return (page + (1 if typed == "n" else -1)) % pages
