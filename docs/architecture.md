@@ -115,7 +115,7 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and holds a listing template's lock around each of its check-then-writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 | `core/engine` | Stage protocol, comparison, lockfile, lifecycle, runs, previews and status | Stages return values; the engine decides execution and records progress |
 | `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `locks.py`, the process-wide keyed locks for listings, mockup templates and listing templates; `listing_documents.py` is the one reader and writer of `listing.yaml` and takes each listing's lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
-| `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Batch rows and AI runs stay with `core/application/listing_identity.py` |
+| `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Designs, garment profiles and pricing plans are reusable and stay. A delete pending its remote retraction (ADR-0035) drops only the snapshot and proposal, since the seller has finished researching the listing. Batch rows and AI runs stay with `core/application/listing_identity.py` |
 | `core/render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
 | `core/clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs, OAuth tokens and fakes | Shared transport per vendor; separate caller authority through protocols |
 | `core/config` | Validated documents, settings, money, slugs, secrets and local listing refusals | No knowledge of directory layout; path-based loaders and the design-resolution check currently perform file I/O |
@@ -133,6 +133,20 @@ data tree, including how to enumerate it. Only `core/engine` computes
 deployment changes and folds a run's lockfile. Render passes are pure, so
 input hashes and golden images describe deterministic work shared by
 calibration and deployment.
+
+A `UserFacingError` means the run stopped for a reason the user can act on (a
+design too small, a colour that does not exist, copy still carrying a
+sentinel), and its message is the whole useful output: the CLI prints it, and
+`--all` carries on to the next listing. Anything else is a defect and prints a
+traceback; a client sees `INTERNAL_ERROR_MESSAGE` in its place. A refusal picks
+one of four categories:
+
+| Category | Means |
+|---|---|
+| `MissingError` | What the request names is not there: it never was, or something removed or moved it first |
+| `ConflictError` | The request is well formed, but what the workspace holds now forbids it: a name already taken, a row with nothing to retry, a template that must be prepared first |
+| `StaleError` | The request was made against a revision that has since changed; nothing was written, and the caller reloads and asks again |
+| `RefusedError` | The request's own content cannot be taken, whatever the workspace holds: a file that is not an image, a kind the photos cannot be, mask strokes outside the photo |
 
 A core refusal reaches HTTP through one seam. Each refusal class inherits a
 category from `core/errors.py` (missing, conflict, stale or refused), and

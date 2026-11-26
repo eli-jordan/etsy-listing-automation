@@ -125,6 +125,22 @@ class TestRemove:
             "proposal": True,
         }
 
+    def test_the_reusable_files_it_was_built_from_stay(self, workspace: Workspace) -> None:
+        listing = workspace.load_listing(NAME)
+        plan = workspace.pricing_plans_dir() / "tees.yaml"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        plan.write_text("{}\n", encoding="utf-8")
+        reusable = [
+            *workspace.design_files(),
+            workspace.garment_profile_file(listing.garment_profile),
+            plan,
+        ]
+
+        remove_listing(workspace, NAME)
+
+        assert len(reusable) > 2
+        assert all(path.is_file() for path in reusable)
+
     def test_survives_a_read_only_listing_directory(self, workspace: Workspace) -> None:
         """The bug as a seller met it: Delete wiped ``listing.yaml`` and then
         failed on the directory, leaving an empty husk the listings table

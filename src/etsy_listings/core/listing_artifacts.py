@@ -44,8 +44,6 @@ def move_listing(workspace: Workspace, old: str, new: str) -> None:
 
 
 def remove_listing(workspace: Workspace, name: str) -> None:
-    """Wipe listing ``name`` and everything keyed by it. Designs, garment
-    profiles and pricing plans stay, because they are reusable."""
     with ListingDocuments(workspace).lock(name):
         for path_of in _KEYED_PATHS:
             path = path_of(workspace, name)
@@ -57,9 +55,6 @@ def remove_listing(workspace: Workspace, name: str) -> None:
 
 
 def discard_research(workspace: Workspace, name: str) -> None:
-    """Remove ``name``'s market snapshot and proposal and leave the listing.
-    A delete pending its remote retraction (ADR-0035) does this, because
-    the seller has finished researching the listing."""
     with ListingDocuments(workspace).lock(name):
         workspace.market_snapshot_file(name).unlink(missing_ok=True)
         ProposalStore(workspace).remove(name)
