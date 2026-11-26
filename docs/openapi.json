@@ -186,7 +186,7 @@
       },
       "AiProviderSettings": {
         "additionalProperties": false,
-        "description": "One provider's preferences for every task (ADR-0056).\n\nDiscovery is advisory, so model and effort are intentionally not enums.\nA retired value stays usable until the seller replaces it.",
+        "description": "One provider's preferences for every task.",
         "properties": {
           "effort": {
             "anyOf": [
@@ -2094,7 +2094,6 @@
         "type": "object"
       },
       "ChangedFile": {
-        "description": "A destination file that differs from the local one of its name. For\n``config``, or a change the sample check found, the sizes can match.",
         "properties": {
           "actual_size": {
             "title": "Actual Size",
@@ -2242,7 +2241,7 @@
       },
       "ColourMatrixTemplate": {
         "additionalProperties": false,
-        "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
+        "description": "One photo per colour, named by colour slug, with the design in the same position.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -2881,7 +2880,6 @@
       },
       "DisplaceConfig": {
         "additionalProperties": false,
-        "description": "Implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
           "enabled": {
             "default": false,
@@ -3089,7 +3087,7 @@
         "type": "object"
       },
       "EtsyListingFacts": {
-        "description": "One side of the review: the fields the mock shows unchanged\ncontext for, named rather than left as an id.",
+        "description": "One side of the review, its section and shipping profile named rather than left as ids.",
         "properties": {
           "description": {
             "anyOf": [
@@ -3156,7 +3154,7 @@
         "type": "object"
       },
       "EtsyListingSnapshot": {
-        "description": "Both sides, in full -- the ``Plan`` this stage also returns carries\nonly what changed.",
+        "description": "Both sides of the review, in full.",
         "properties": {
           "desired": {
             "$ref": "#/components/schemas/EtsyListingFacts"
@@ -4229,7 +4227,7 @@
         "type": "object"
       },
       "ListingFailedEvent": {
-        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.core.engine.run.StalePlanError`.",
+        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for\nword, or the generic internal-error text for a defect, which also fails\nthe run. ``stale_plan`` is set only when the error was a\n:class:`~etsy_listings.core.engine.run.StalePlanError`.",
         "properties": {
           "id": {
             "title": "Id",
@@ -4358,7 +4356,7 @@
         "type": "object"
       },
       "ListingProposal": {
-        "description": "A listing's cached proposal as the editor and the batch summary read\nit: the record, and whether it still describes the saved listing.\n``stale`` is computed from the saved listing on every read, never\nstored.",
+        "description": "A listing's cached proposal, with ``stale`` computed on every read.",
         "properties": {
           "generated_at": {
             "format": "date-time",
@@ -5177,7 +5175,7 @@
         "type": "object"
       },
       "MarketSnapshot": {
-        "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (features/market-seo-20260924/spec.md, *What the\nproposal sees*).",
+        "description": "One listing's latest market research, as the top listings panel reads it back.",
         "properties": {
           "block": {
             "title": "Block",
@@ -5543,7 +5541,6 @@
       },
       "MultipleTemplate": {
         "additionalProperties": false,
-        "description": "Several garments in one photo. ``displace``/``shade`` are scene-level\nonly -- one photo, one lighting pass; a placement needing different\nrendering treatment belongs in its own template instead.",
         "properties": {
           "colour_coverage": {
             "default": "exact",
@@ -5602,7 +5599,7 @@
         "type": "object"
       },
       "PhaseEvent": {
-        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be (ADR-0041, decision 7).",
+        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be.",
         "properties": {
           "id": {
             "title": "Id",
@@ -5706,7 +5703,7 @@
         "type": "object"
       },
       "PhraseScore": {
-        "description": "One tag used by the scored listings: how many use it, and the sum of\ntheir scores normalised so the best phrase is 1.",
+        "description": "One tag the scored listings use, with its normalised score.",
         "properties": {
           "listings": {
             "title": "Listings",
@@ -6755,7 +6752,7 @@
         "type": "object"
       },
       "ProposalChoices": {
-        "description": "What the seller chooses from: the validated `ai/models.py.SeoProposal`,\nfield for field, as JSON can carry it.",
+        "description": "The validated proposal the seller chooses from.",
         "properties": {
           "description_leads": {
             "items": {
@@ -6809,7 +6806,7 @@
         "type": "object"
       },
       "ProposalResolution": {
-        "description": "Each section's state (spec, *Durable AI proposals*): a section the\nseller accepted or dismissed stays resolved after a reload, so its drawer\ndoes not present itself as new again. ``pending`` is still open.",
+        "description": "Each section's state: an accepted or dismissed section stays resolved after a reload.",
         "properties": {
           "lead": {
             "default": "pending",
@@ -7751,8 +7748,22 @@
         "title": "RunningBackup",
         "type": "object"
       },
+      "SceneCheckResponse": {
+        "description": "Whether the Listing Images preview showed the wrong scene: one found\nunder a pixel digest remembered from before a restart that no longer\nnames the file's pixels. The digest is corrected either way.",
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "SceneCheckResponse",
+        "type": "object"
+      },
       "ScoredListing": {
-        "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (features/market-seo-20260924/interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal\nsees*).",
+        "description": "One scored comparable listing, as the top listings panel shows it.",
         "properties": {
           "favourites_per_day": {
             "anyOf": [
@@ -7889,7 +7900,7 @@
         "type": "object"
       },
       "SeoProposalSnapshot": {
-        "description": "The generation inputs, frozen before the provider starts: everything\n`ai/models.py.SeoRequest` sent except the design image itself, plus the\ndesign's identity and content hash. :func:`proposal_staleness` compares\none of these against the same inputs read from the listing now.",
+        "description": "The generation inputs, frozen before the provider starts: the\nrequest's fields but the image, plus the design's name and content hash.",
         "properties": {
           "brief": {
             "title": "Brief",
@@ -7971,7 +7982,7 @@
         "type": "object"
       },
       "SeoRationaleEntry": {
-        "description": "One of the proposal's seven priority-phrase rationales -- the wire\nshape of `ai/models.py.PhraseRationale`.",
+        "description": "One of the proposal's seven priority-phrase rationales.",
         "properties": {
           "intent": {
             "enum": [
@@ -8048,7 +8059,7 @@
         "type": "object"
       },
       "SeoWarningEntry": {
-        "description": "The wire shape of `ai/models.py.ProposalWarning`.",
+        "description": "One disclosure attached to a proposal: a general note or a trademark warning.",
         "properties": {
           "kind": {
             "default": "general",
@@ -8101,7 +8112,7 @@
       },
       "ShadeConfig": {
         "additionalProperties": false,
-        "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
+        "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign. On by default: almost every mockup needs it.",
         "properties": {
           "blend": {
             "default": "soft-light",
@@ -8528,7 +8539,7 @@
       },
       "SingleTemplate": {
         "additionalProperties": false,
-        "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
+        "description": "One photo, one garment.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -9105,7 +9116,7 @@
       },
       "TemplateEtsyConfig": {
         "additionalProperties": false,
-        "description": "`EtsyListingConfig` without the copy an instance writes for itself.\nThe four settings keep the meanings `EtsyListingConfig` documents.",
+        "description": "`EtsyListingConfig` without the copy an instance writes for itself.",
         "properties": {
           "description": {
             "$ref": "#/components/schemas/TemplateDescriptionConfig",
@@ -13132,7 +13143,7 @@
     },
     "/api/listings/{name}/scene-preview": {
       "get": {
-        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL, so\nthe editor shows the file Printify prints.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\nEach layer prints at the listing's *saved* position where it holds one\n(ADR-0058), so a landed position save is the composite the render writes.\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.",
+        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL, so\nthe editor shows the file Printify prints.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\nEach layer prints at the listing's *saved* position where it holds one\n(ADR-0058), so a landed position save is the composite the render writes.\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.\n\nA full-size scene may be found under pixel digests remembered from before\na restart, which saves seconds of decoding; the editor then asks\n:func:`check_scene_preview` whether that was the right one.",
         "operationId": "scene_preview_api_listings__name__scene_preview_get",
         "parameters": [
           {
@@ -13221,6 +13232,104 @@
           }
         },
         "summary": "Scene Preview",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
+    "/api/listings/{name}/scene-preview/check": {
+      "get": {
+        "description": "Whether :func:`scene_preview` showed a scene found under a remembered\ndigest that no longer names its file's pixels, so the editor should\nfetch the picture again. Computes the digests, which corrects them.",
+        "operationId": "check_scene_preview_api_listings__name__scene_preview_check_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Colour"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scale",
+            "required": false,
+            "schema": {
+              "default": "full",
+              "enum": [
+                "editor",
+                "full"
+              ],
+              "title": "Scale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneCheckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Scene Preview",
         "tags": [
           "listings"
         ]

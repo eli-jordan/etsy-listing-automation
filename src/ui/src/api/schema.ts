@@ -2976,11 +2976,7 @@ export interface components {
       /** Request Id */
       request_id: string;
     };
-    /**
-     * ChangedFile
-     * @description A destination file that differs from the local one of its name. For
-     *     ``config``, or a change the sample check found, the sizes can match.
-     */
+    /** ChangedFile */
     ChangedFile: {
       /** Actual Size */
       actual_size: number;
@@ -3301,11 +3297,7 @@ export interface components {
        */
       unexpected: string[];
     };
-    /**
-     * DisplaceConfig
-     * @description Implemented but off by default -- over-strong displacement looks
-     *     melted, so it's tuned per template in the calibrator's live preview.
-     */
+    /** DisplaceConfig */
     DisplaceConfig: {
       /**
        * Enabled
@@ -4387,12 +4379,7 @@ export interface components {
       renderer:
         components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
-    /**
-     * MultipleTemplate
-     * @description Several garments in one photo. ``displace``/``shade`` are scene-level
-     *     only -- one photo, one lighting pass; a placement needing different
-     *     rendering treatment belongs in its own template instead.
-     */
+    /** MultipleTemplate */
     MultipleTemplate: {
       /**
        * Colour Coverage
