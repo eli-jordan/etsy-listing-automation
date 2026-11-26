@@ -15,9 +15,6 @@ export interface AiSeoMode {
   requirements: { label: string; ready: boolean }[];
   reason: string | null;
   phase: AiSeoPhase;
-  /** The listing's cached proposal while any of its sections is still
-   * pending, else `null` -- none was ever made, or every drawer has been
-   * resolved (the server keeps the record either way). */
   proposal: ListingProposal | null;
   staleReason: string | null;
   generate: () => void;
@@ -58,8 +55,6 @@ export function useAiSeoMode(
   onUpdate: (patch: Record<string, unknown>) => void,
   onFlush: () => void,
   save?: SaveState,
-  /** Puts a value the server already wrote into the editor without saving
-   * it again (`useAutosave`'s `adopt`). The drafted brief arrives this way. */
   onAdopt?: (patch: Record<string, unknown>) => void,
 ): AiSeoMode {
   // Only what the endpoint answered. The prerequisites below come straight
@@ -75,9 +70,6 @@ export function useAiSeoMode(
     latestDetail.current = detail;
     latestOnAdopt.current = onAdopt;
   });
-  // Only into an empty field: the seller may have started typing their own
-  // brief while it was drafted, and their text wins. (The server made the
-  // same check before it wrote, but the editor can be ahead of the disk.)
   const onBrief = useCallback((text: string) => {
     if (latestDetail.current.brief.trim() !== "") return;
     latestOnAdopt.current?.({ brief: text });
@@ -95,9 +87,6 @@ export function useAiSeoMode(
   const saved = save === undefined || save.kind === "saved";
   const canCheck = prerequisitesMet && saved;
 
-  // A check after an edit can read the old file. Recheck when autosave
-  // succeeds, even if modified_at is unchanged. Proposal review observes
-  // the same saves to refresh server-computed staleness.
   useEffect(() => {
     if (!canCheck) return;
     let current = true;

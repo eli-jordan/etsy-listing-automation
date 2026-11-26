@@ -26,7 +26,6 @@ export function AiChoiceDrawer({
   observedText: string;
   onChoose: (value: string) => void;
   onReject: () => void;
-  /** Play the draw-out only when generation finishes while this page is open. */
   enter?: boolean;
 }) {
   const relevantRationale = rationale.filter((entry) => entry.used_in.includes(field));

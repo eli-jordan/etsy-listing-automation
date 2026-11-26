@@ -131,6 +131,23 @@ describe("useAiSeoMode availability", () => {
     expect(result.current.reason).toBeNull();
   });
 
+  it("asks again after every successful save, even one that leaves modified_at as it was", async () => {
+    const readiness = vi
+      .spyOn(seoApi, "getSeoReadiness")
+      .mockResolvedValue({ ready: true, batch_pending: false, deploying: false });
+    const listing = detail();
+    const { result, rerender } = renderHook(
+      ({ savedAt }) => useAiSeoMode(listing, vi.fn(), vi.fn(), { kind: "saved", savedAt }),
+      { initialProps: { savedAt: 1 } },
+    );
+    await waitFor(() => expect(result.current.available).toBe(true));
+    const asked = readiness.mock.calls.length;
+
+    rerender({ savedAt: 2 });
+
+    await waitFor(() => expect(readiness.mock.calls.length).toBeGreaterThan(asked));
+  });
+
   /** Holds the readiness answer back, so a case sees "checking" before it settles. */
   function pendingReadiness() {
     const answer = deferred<SeoReadinessResponse>();

@@ -23,7 +23,6 @@ export function AiTagsDrawer({
   onToggle: (tag: string) => void;
   onAcceptBest: () => void;
   onClose: () => void;
-  /** Play the draw-out only when generation finishes while this page is open. */
   enter?: boolean;
 }) {
   const relevantRationale = rationale.filter((entry) => entry.used_in.includes("tags"));

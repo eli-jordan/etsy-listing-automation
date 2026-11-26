@@ -106,8 +106,7 @@ export function AiWorkflowIndicator({
   const finished =
     steps.length > 0 && steps.every((s) => s.state === "done" || s.state === "skipped");
 
-  // Both adjusted while rendering, not in an effect, so a new run never
-  // paints a frame with the last run's faded state.
+  // Set during render: an effect would paint one frame of the last run's fade first.
   const [watched, setWatched] = useState(running);
   const nowWatched = steps.length === 0 ? running : watched || running;
   if (nowWatched !== watched) setWatched(nowWatched);

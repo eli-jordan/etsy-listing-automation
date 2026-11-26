@@ -610,6 +610,17 @@ proposals remain reviewable. A proposal is persisted before its streamed
 event, and full successful apply clears it through the engine, including CLI
 apply (ADR-0049, ADR-0050).
 
+In the editor, `useProposalReview` (`pages/editor/aiSeo/`) is the one owner of
+which proposal is shown and how a seller's drawer choices reach the store. A
+live run's `proposal` event outranks any cache read; a finished run's replay is
+history and is ignored, because the server's record owns the resolutions.
+Resolution writes go one at a time, and a choice not yet acknowledged overlays
+every read, so an autosave's read cannot reopen a drawer whose resolution is
+still in flight. Queued choices still go out after the editor navigates away.
+An answer that lands after a newer read acknowledges its section without
+replacing that read's staleness, then reads again. The accepted text itself
+travels through ordinary autosave, not these writes.
+
 Listing templates are distinct from mockup templates: they capture commercial
 configuration and media references, while mockup templates define render
 geometry. Upload staging freezes the selected listing-template document and

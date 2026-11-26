@@ -22,25 +22,16 @@ import type {
 export type AiRunViewPhase = "idle" | "starting" | AiRunPhase;
 
 export interface AiRun {
-  /** `"idle"` until this editor starts or finds a run; `"starting"` while
-   * the `POST` is in flight; then the run's own phase. */
   phase: AiRunViewPhase;
   busy: boolean;
-  /** The three nodes, brief → market → seo, each as its latest `step`
-   * event left it. Empty until there is a run. */
   steps: WorkflowStep[];
   queries: string[] | null;
   market: MarketSnapshot | null;
   message: string | null;
-  /** When the run began working (ms since the epoch), from the server:
-   * `null` while a backup holds it, so the wait is not generating time. */
   startedAt: number | null;
   origin: AiRunSummary["origin"] | null;
   start: (options: { draftBrief: boolean; automatic?: boolean }) => void;
   cancel: () => void;
-  /** Attaches to the listing's run if one is running that this editor is
-   * not following yet -- a batch run whose turn came while the editor was
-   * open. */
   follow: () => void;
   arm: () => void;
   autoNotice: boolean;
@@ -49,7 +40,6 @@ export interface AiRun {
 
 export interface AiRunHandlers {
   onBrief?: (text: string) => void;
-  /** Raw event and attachment context; proposal review owns replay precedence. */
   onProposal?: (event: Extract<AiRunEvent, { type: "proposal" }>, source: AiRunSummary) => void;
 }
 
@@ -125,11 +115,8 @@ export function useAiRun(
   const [view, setView] = useState<View>(IDLE);
   const [autoNotice, setAutoNotice] = useState(false);
   const stream = useRef<EventStreamHandle | null>(null);
-  /** Bumped by every start and attach: an answer or an event that arrives for
-   * an older one is ignored. */
+  /** Answers and events for an older start or attach are dropped. */
   const generation = useRef(0);
-  /** While armed: the last save state the trigger judged (at first, the one
-   * showing when the design was picked). */
   const armed = useRef<{ baseline: SaveState | undefined } | null>(null);
   const latest = useRef({ detail, save, handlers, runId: view.runId });
   useEffect(() => {
@@ -194,10 +181,6 @@ export function useAiRun(
   const running = isActivePhase(view.phase);
   const cancel = useCallback(() => {
     if (runId === null || !running) return;
-    // The run stays busy until its own `cancelled` phase arrives, moments
-    // later, once the provider's process tree is gone. Showing it idle
-    // sooner would let a click on AI Mode land while the run still holds the
-    // listing, and reattach to the run being cancelled.
     cancelAiRun(runId).catch(() => {});
   }, [runId, running]);
 
@@ -234,10 +217,6 @@ export function useAiRun(
     };
   }, [name, hasDesign, attach]);
 
-  // The auto chain's trigger. Each save is judged once, in the render it
-  // arrives in, where the editor still shows what that save wrote: an edit
-  // made afterwards (choosing a garment profile) changes the editor at once
-  // but not the file, and the chain must wait for the save that carries it.
   const brief = detail.brief;
   const garmentProfile = detail.garment_profile;
   useEffect(() => {
