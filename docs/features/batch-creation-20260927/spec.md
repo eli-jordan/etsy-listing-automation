@@ -312,6 +312,15 @@ filesystem failure is recorded against its row and does not roll back or block
 other rows. Retry resumes the idempotent row creation from its recorded state.
 Only rows whose listing was created enter the AI queue.
 
+Every step can be repeated, so Retry, a second confirm, or a confirm after a
+crash re-enters at whatever the disk and the record say is done. A directory
+already at a row's name is the row's own when its `listing.yaml` names the
+row's design, or when it has none and the record says the row claimed the
+name. Anything else there belongs to somebody else, and the row takes a fresh
+suffix instead, keeping a design that already holds its bytes. A failed row's
+upload is copied beside the batch, so Retry still has it; the staging session
+goes once every row is created or has its upload kept that way.
+
 ## Batch AI queue
 
 ### Scheduling
