@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import * as batchesApi from "../api/batches";
 import * as calibrator from "../api/calibrator";
 import * as listingsApi from "../api/listings";
@@ -868,6 +868,36 @@ describe("ListingEditorPage", () => {
     await waitFor(() =>
       expect(screen.getByText("failed to load listing does-not-exist")).toBeInTheDocument(),
     );
+  });
+
+  it("keeps a load failure up until another listing has loaded", async () => {
+    const other = deferred<ListingDetail>();
+    vi.spyOn(listingsApi, "getListing").mockImplementation((name) =>
+      name === "does-not-exist" ? Promise.reject(new Error("404")) : other.promise,
+    );
+    function GoElsewhere() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/listings/take-a-hike")}>
+          elsewhere
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/listings/does-not-exist"]}>
+        <GoElsewhere />
+        <Routes>
+          <Route path="/listings/:name" element={<ListingEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText("failed to load listing does-not-exist");
+
+    fireEvent.click(screen.getByRole("button", { name: "elsewhere" }));
+
+    expect(screen.getByText("failed to load listing does-not-exist")).toBeInTheDocument();
+    await act(async () => other.resolve(detail({ name: "take-a-hike" })));
+    expect(screen.queryByText("failed to load listing does-not-exist")).not.toBeInTheDocument();
   });
 });
 

@@ -91,8 +91,6 @@ export function ListingEditorPage() {
     (routeName === null ? getListingDraft() : getListing(routeName))
       .then((loaded) => {
         if (!current) return;
-        // Cleared here rather than at the top of the effect: a failure is about
-        // one listing, and the thing that ends it is another one loading.
         setLoadError("");
         setFetched(loaded);
       })
@@ -145,10 +143,7 @@ function ListingEditorPageContent({
   const fromBatch = useSearchParams()[0].get("batch");
   const [member, setMember] = useListingBatch(detail.name);
   const [nameFromDesign, setNameFromDesign] = useState("");
-  /** A name the seller has started typing but not committed. `detail.name` is
-   * still `""` at that point -- an uncommitted name is not the listing's name
-   * -- so without this a design pick would overwrite what they were typing. */
-  const [typedName, setTypedName] = useState("");
+  const [uncommittedName, setUncommittedName] = useState("");
   const aiSeo = useAiSeoMode(detail, update, flush, save, adopt);
   const phone = useIsPhone();
 
@@ -156,7 +151,7 @@ function ListingEditorPageContent({
     update({ design: next });
     const chosen = representative(next);
     if (chosen === null || chosen === representative(detail.design)) return;
-    if (detail.name === "" && typedName.trim() === "") {
+    if (detail.name === "" && uncommittedName.trim() === "") {
       const named = refName(chosen);
       setNameFromDesign(named);
       commitName(named);
@@ -217,7 +212,7 @@ function ListingEditorPageContent({
             <EditableName
               value={name ?? nameFromDesign}
               onCommit={commitName}
-              onDraftChange={setTypedName}
+              onDraftChange={setUncommittedName}
               error={
                 save.kind === "name-taken"
                   ? { name: save.name, message: "that name is already taken" }
@@ -313,15 +308,10 @@ type ShellProps = {
   | {
       kind?: "listing";
       onDesignChange: (next: DesignMap) => void;
-      /** Owned by `ListingEditorPageContent`, not by this shell and not by
-       * `DetailsTab`: a run outlives the tab it was started from --
-       * switching to Variants unmounts the tab. */
       aiSeo: AiSeoMode;
     }
   | {
       kind: "listing-template";
-      /** Whose `./` files the Images tab shows: the template's, or -- not
-       * saved yet -- its source's, through `copies`. */
       owner: MediaOwner | null;
     }
 );
@@ -372,13 +362,7 @@ export function ListingEditorShell(props: ShellProps) {
   const scope = viewScope(template ? "listing-template" : "listing", detail.name);
   const [tab, setTab] = useViewState<Tab>(scope, "tab", "variants", isTab);
   useViewScroll(scope);
-  /** Which base slot's Recent designs panel is open. Here, not in the strip,
-   * so the card under the Variants stage can open one too (interactions
-   * Part 2 §2). */
   const [openSlot, setOpenSlot] = useState<SlotTarget | null>(null);
-  /** The colour on the Variants stage. Here, not in the tab, so the strip's
-   * "Also printing their own design" names can preview one too -- and so
-   * leaving Variants and coming back keeps the colour the seller chose. */
   const [previewed, setPreviewed] = useViewState<string | null>(
     scope,
     "previewed",
@@ -391,8 +375,6 @@ export function ListingEditorShell(props: ShellProps) {
     if (tab !== "variants") pickTab("variants");
   }
 
-  /** The card under the stage's fix for an empty slot: that slot's panel,
-   * scrolled into view, because filling it fixes every colour that needs it. */
   function chooseSlot(tone: Tone) {
     setOpenSlot({ kind: "slot", tone });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -520,8 +502,7 @@ export function ListingEditorShell(props: ShellProps) {
   );
 }
 
-/** Scrolls the page so `content` starts just under the tab strip at its
- * stuck position: the strip's own position says nothing while it is stuck. */
+/** A stuck strip's rect says where it is pinned, not where the content starts: work from its CSS `top`. */
 function scrollUnderStrip(
   strip: HTMLElement | null,
   content: HTMLElement | null,
