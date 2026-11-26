@@ -16,8 +16,6 @@ function sharedEnds(a: string, b: string): { start: number; end: number } {
   return { start, end };
 }
 
-/** One word swapped for another, marked only where the two differ, so a
- * single changed character is findable in a long description. */
 function narrowed(del: string, ins: string): DiffSegment[] {
   const { start, end } = sharedEnds(del, ins);
   const parts: DiffSegment[] = [

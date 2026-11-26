@@ -71,11 +71,6 @@ export function PhoneListingList({
   );
 }
 
-/**
- * The status filter as a row of chips, one tap each instead of a select:
- * All, then every state that some listing is in (plus the chosen one, so
- * a filter that empties never strands its own chip), each with its count.
- */
 export function PhoneStatusChips<F extends "all" | ListingStatus>({
   listings,
   value,

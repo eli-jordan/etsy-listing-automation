@@ -157,8 +157,6 @@ function StepCell({
   );
 }
 
-/** The strip's cells, each stage with the ones grouped under it. A stage
- * whose group is not in the plan stands on its own. */
 function nest(stagePlans: readonly StagePlanDTO[]): StagePlanDTO[][] {
   const present = new Set(stagePlans.map((s) => s.stage as string));
   const rows: StagePlanDTO[][] = [];

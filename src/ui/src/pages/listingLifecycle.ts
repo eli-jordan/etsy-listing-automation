@@ -39,8 +39,6 @@ export function deleteDetails(listing: RemoteIds): string {
   return deleteOnlyMarks(listing) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS;
 }
 
-/** What each non-delete gesture writes to `lifecycle`: `null`
- * deletes the key, which is both Un-retire and Cancel. */
 export const LIFECYCLE_OF: Record<Exclude<Gesture, "delete">, "retired" | "renew" | null> = {
   retire: "retired",
   "un-retire": null,
