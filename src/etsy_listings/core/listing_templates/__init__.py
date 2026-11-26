@@ -1,16 +1,7 @@
-"""Listing templates: a listing's reusable production settings, saved as their
-own workspace resource (ADR-0047, template completeness; spec *Listing templates*).
+"""Listing templates (ADR-0047): turning a listing or another template into a
+draft, judging it complete, writing it, and freezing one for a staging session.
 
-The model is `config.ListingTemplate` and the files are `Workspace`'s
-(``listing_template_*``). This package is what happens between them: turning
-a listing -- or another listing template -- into a draft
-(:func:`from_listing`, :func:`from_template`), judging it complete, and
-writing it (:func:`save`). FrozenListingTemplate captures the document,
-owned assets and saved-at time together for a staging session.
-
-Deliberately withheld: instantiating a template into listings. That is
-`batches`', which freezes a template before it creates anything and
-asks FrozenListingTemplate to capture, carry and check its owned content.
+Withheld: instantiating a template into listings, which is ``batches``'.
 """
 
 from etsy_listings.core.listing_templates.check import template_issues

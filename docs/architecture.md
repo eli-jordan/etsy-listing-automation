@@ -1027,7 +1027,10 @@ later. Each traces to a decision.
   one.** Everything else asks for `workspace.lock_file(name)` rather than
   joining `listings/<name>/state.lock.json`, and for
   `workspace.template_photos(name)` rather than globbing
-  `mockup-templates/<name>/*.png`. Two rules enforce it: `resolve()` rejects
+  `mockup-templates/<name>/*.png`. Reading is the same: `load_listing`,
+  `load_garment_profile`, `load_pricing_plan` and `load_exceptions` open the
+  tree's files, so no caller runs its own `yaml.safe_load` on a path it
+  assembled. Two rules enforce it: `resolve()` rejects
   paths escaping the root (`ADR-0013`), and the layout accessors reject any
   name that is not a single path segment. Together they keep the server's
   endpoints safe — template names arrive from URLs — so this is a security

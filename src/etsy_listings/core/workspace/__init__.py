@@ -1,54 +1,8 @@
-"""The user's data tree: where every file lives, and the only door to it. ADR-0013.
+"""The user's data tree, and the only code that knows its layout (ADR-0013).
 
-The workspace (``shop.yaml``, ``designs/``, ``listings/``,
-``mockup-templates/``, ``.cache/``) is a directory the user owns, found by
-walking up from cwd for ``shop.yaml`` -- never this repository.
-
-Two rules make this a security boundary rather than tidiness, and both matter
-because template and listing names reach here from config files *and from
-URLs*: :meth:`Workspace.resolve` refuses any reference that would land outside
-the root, and the layout accessors refuse any name that is not a single path
-segment. Together they are why the calibrator's endpoints need no path checks
-of their own.
-
-So: ask for ``workspace.lock_file(name)``, never join
-``listings/<name>/state.lock.json``. The same goes for reading -- ``load_listing``,
-``load_garment_profile``, ``load_pricing_plan`` and ``load_exceptions`` are how
-the tree's files are opened, so no caller writes its own ``yaml.safe_load``
-against a path it assembled.
-
-Reading ``template.yaml`` has one module of its own,
-:mod:`~etsy_listings.core.workspace.template_state`: ``template_state`` tells
-absent, unreadable, needs repair and loaded apart, and a caller names what it
-needs from the answer. It is imported from its own module, as ``atomic`` is.
-
-Writing ``listing.yaml`` has one module of its own,
-:mod:`~etsy_listings.core.workspace.listing_documents`. Every writer goes
-through ``ListingDocuments`` for its lock, retrying read and atomic replace,
-and for the one answer to "is there a listing?" and "is this name free?".
-It is imported from its own module, as ``atomic`` is, rather than from here.
-
-:mod:`~etsy_listings.core.workspace.locks` is every name-keyed lock in the
-process: ``hold(workspace, domain, *names)`` for a listing, a mockup template or
-a listing template. It too is imported from its own module.
-
-``calibration.CalibrationStore`` owns mockup-template writes, recovery,
-revision conflicts, save receipts, inactive renderer selection and durable mask
-operations. Its template lock is the ``mockup-template`` domain of
-:mod:`~etsy_listings.core.workspace.locks`, separate from the listing and
-listing-template domains. ``template_state`` takes that lock and reads a
-transaction as needing repair, so concurrent CLI reads never recover a live
-server save. Server operations read through ``CalibrationStore.state``, which
-recovers interrupted transactions first. ``Workspace`` knows neither: the store
-depends on it, never the reverse.
-Mask PNGs and transactions are template assets; only stroke Undo is cached.
-This module deliberately does not re-export the store or its edit models.
-
-:class:`WorkspaceFacts` is the same rule applied to *repeated* reading: the
-garment profiles and template configs a listing check needs, gathered once for
-a request rather than re-parsed inside every check of every row -- and the
-videos `media:` names, each probed once. :func:`probe_video` is the
-probe itself, the one reader of a clip's facts.
+Withheld, and imported from their own modules: ``template_state``,
+``listing_documents``, ``locks``, ``atomic``, and ``calibration``'s
+``CalibrationStore`` and edit models.
 """
 
 from etsy_listings.core.workspace import layout
@@ -79,9 +33,7 @@ __all__ = [
     "WorkspaceFacts",
     "WorkspaceNotFoundError",
     "layout",
-    # A video file's facts, never an exception.
     "probe_video",
     "template_info",
-    # Cygwin/Windows path translation, for user-supplied path options (--root).
     "to_native_path",
 ]

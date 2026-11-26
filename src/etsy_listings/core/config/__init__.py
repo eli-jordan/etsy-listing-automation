@@ -1,29 +1,9 @@
-"""The models for the workspace's commercial and creative files, and the value
-types they are built from.
+"""The validated models of the workspace's files, and the value types they are
+built from. Every file is loaded by path: where it lives is ``workspace``'s.
 
-``shop.yaml`` ( :class:`Defaults`), ``garment-profiles/*.yaml``
-( :class:`GarmentProfile`), ``listings/*/listing.yaml`` ( :class:`Listing`),
-``listing-templates/*/template.yaml`` ( :class:`ListingTemplate`, ADR-0047),
-``pricing-plans/**.yaml``
-( :class:`PricingPlan`) and ``exceptions.yaml``. Every one of them is loaded
-*by path* -- this module has no idea where any of those files live, which is
-``workspace``'s job. It owns no rendering or catalog workflow.
-
-A *mockup* template's ``template.yaml`` is deliberately not here: it is render
-geometry, so its models live in:mod:`etsy_listings.core.render`.
-
-``settings.Settings``, ``AiSettings`` and ``AiProviderSettings`` describe
-workspace tuning and ADR-0056's provider preferences. Import them directly
-from ``settings``; this initializer deliberately does not re-export them.
-
-``template_positions.TemplatePositions``, ``BoxPosition`` and ``PlacementPositions``
-describe a listing's absolute mockup geometry (ADR-0058); import from that module.
-They reuse ``render.config.BoundingBox`` rather than duplicating its schema.
-``settings.TemplatePositionLimits`` (``scale: PositionScaleLimits``, ``offset``,
-``rotation``) is ``Settings.template_positions``; the render pose functions
-accept it directly. ``listing_validation.check_template_positions`` takes a
-``Listing``, a name-to-template mapping, these limits and optional ``name=``;
-it returns blocking Images issues without changing the stored boxes.
+Withheld: a mockup template's ``template.yaml`` models, which are render
+geometry and live in :mod:`etsy_listings.core.render`; and the ``settings`` and
+``template_positions`` models, imported from their own modules.
 """
 
 from etsy_listings.core.config.defaults import Defaults
