@@ -41,19 +41,18 @@ export function useCarousel(
 ): RefObject<HTMLDivElement | null> {
   const { count, index, enabled, onIndexChange } = options;
   const track = useRef<HTMLDivElement>(null);
-  /** Set while a released swipe settles; the strip takes no drag meanwhile. */
-  const timer = useRef<number | undefined>(undefined);
+  const settleTimer = useRef<number | undefined>(undefined);
   const previous = index > 0 ? index - 1 : null;
   const next = index < count - 1 ? index + 1 : null;
 
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => () => window.clearTimeout(settleTimer.current), []);
 
   // When the index moves, the new current slide is where the neighbour was,
   // so the strip goes back to rest without a transition and nothing on
   // screen moves.
   useLayoutEffect(() => {
-    window.clearTimeout(timer.current);
-    timer.current = undefined;
+    window.clearTimeout(settleTimer.current);
+    settleTimer.current = undefined;
     if (track.current !== null) pose(track.current, "", "");
   }, [index]);
 
@@ -68,13 +67,13 @@ export function useCarousel(
     enabled,
     onDrag: (offset) => {
       const element = track.current;
-      if (element === null || timer.current !== undefined) return;
+      if (element === null || settleTimer.current !== undefined) return;
       const towards = offset < 0 ? next : previous;
       pose(element, `translateX(${towards === null ? resist(offset) : offset}px)`, "none");
     },
     onEnd: (direction) => {
       const element = track.current;
-      if (element === null || timer.current !== undefined) return;
+      if (element === null || settleTimer.current !== undefined) return;
       const target = targetOf(direction);
       if (target === null || direction === null) {
         springBack(element);
@@ -86,8 +85,8 @@ export function useCarousel(
         return;
       }
       pose(element, centring(direction), `transform ${SETTLE_MS}ms ease-out`);
-      timer.current = window.setTimeout(() => {
-        timer.current = undefined;
+      settleTimer.current = window.setTimeout(() => {
+        settleTimer.current = undefined;
         onIndexChange(target);
       }, SETTLE_MS);
     },

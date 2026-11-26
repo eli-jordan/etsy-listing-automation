@@ -29,9 +29,11 @@ export interface SheetDragOptions {
 
 const OUT_MS = 180;
 
-/** How faint a fading element is `down` px from where it started. */
+const FADE_FLOOR = 0.4;
+const FADE_DISTANCE_PX = 400;
+
 function fadeAt(down: number): string {
-  return String(Math.max(0.4, 1 - down / 400));
+  return String(Math.max(FADE_FLOOR, 1 - down / FADE_DISTANCE_PX));
 }
 
 export function useSheetDrag(zone: RefObject<HTMLElement | null>, options: SheetDragOptions): void {

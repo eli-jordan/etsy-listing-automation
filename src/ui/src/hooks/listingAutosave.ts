@@ -67,7 +67,7 @@ function mergePatch(base: Patch, patch: Patch): Patch {
   return merged;
 }
 
-/** `design:` as `config/listing.py`'s `_coerce_design` will store it.
+/** `design:` as `core/config/listing.py`'s `_coerce_design` will store it.
  *
  * The editor sends the bare ref a human writes in `listing.yaml`, and the
  * server normalises it to `{default: ref}` -- so between the edit and the
@@ -83,9 +83,15 @@ function coerceDesign(detail: Patch): Patch {
   return { ...detail, design: { default: detail.design } };
 }
 
+/** The field error no single field owns. */
+export const ROOT_FIELD_ERROR = "__root__";
+
+/** A write that carries nothing but the create itself. */
+const CREATE_ONLY: Patch = {};
+
 function refusalMessage(fieldErrors: Record<string, string>): string {
   return (
-    fieldErrors.__root__ ??
+    fieldErrors[ROOT_FIELD_ERROR] ??
     Object.values(fieldErrors)[0] ??
     "The server would not write this document"
   );
@@ -171,8 +177,7 @@ export class ListingAutosave {
 
   private create(next: string): Promise<Settled> {
     this.draftName = next;
-    // Nothing to carry is still a write owed: the create itself.
-    this.loop.edit({});
+    this.loop.edit(CREATE_ONLY);
     return this.loop.flush();
   }
 
@@ -268,9 +273,9 @@ export class ListingAutosave {
   }
 
   private refused(outcome: SaveOutcome & { saved: false }): Settled {
-    // A contradiction no single field owns has no field to highlight, so
-    // the page head is the only place left to say what it is.
-    const reason = outcome.field_errors.__root__;
+    // With no field to highlight, the page head is the only place left to
+    // say what it is.
+    const reason = outcome.field_errors[ROOT_FIELD_ERROR];
     this.show({
       detail: {
         ...this.view.detail,

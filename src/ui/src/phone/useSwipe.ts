@@ -35,8 +35,7 @@ export interface SwipeOptions {
 const OWNS_DRAG = "input[type='range'], [role='slider'], [role='separator'], [data-swipe-ignore]";
 const TYPED_IN = "input, textarea, [contenteditable=''], [contenteditable='true']";
 
-/** The field the keyboard is typing into, if the touch starts on it. */
-function typingInto(target: Element): boolean {
+function isFocusedField(target: Element): boolean {
   const field = target.closest(TYPED_IN);
   return field !== null && field === document.activeElement;
 }
@@ -63,7 +62,7 @@ export function ownedElsewhere(
   axis: "x" | "y",
 ): boolean {
   if (!(target instanceof Element)) return false;
-  if (target.closest(OWNS_DRAG) || typingInto(target)) return true;
+  if (target.closest(OWNS_DRAG) || isFocusedField(target)) return true;
   for (let node: Element | null = target; node && node !== root; node = node.parentElement) {
     if (scrollsAlong(node, axis)) return true;
   }
@@ -76,8 +75,7 @@ interface Track {
   y: number;
   at: number;
   axis: "x" | "y" | null;
-  /** Locked to the other axis: this touch is a scroll, not ours. */
-  ignored: boolean;
+  lockedToOtherAxis: boolean;
 }
 
 export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptions): void {
@@ -102,9 +100,9 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
 
     const end = (event: PointerEvent, cancelled: boolean) => {
       if (!track || event.pointerId !== track.id) return;
-      const { x, y, at, axis: locked, ignored } = track;
+      const { x, y, at, axis: locked, lockedToOtherAxis } = track;
       track = null;
-      if (ignored) return;
+      if (lockedToOtherAxis) return;
       ended(
         cancelled
           ? null
@@ -125,19 +123,19 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
         y: event.clientY,
         at: event.timeStamp,
         axis: null,
-        ignored: false,
+        lockedToOtherAxis: false,
       };
     };
     const onMove = (event: PointerEvent) => {
-      if (!track || event.pointerId !== track.id || track.ignored) return;
+      if (!track || event.pointerId !== track.id || track.lockedToOtherAxis) return;
       const dx = event.clientX - track.x;
       const dy = event.clientY - track.y;
       if (track.axis === null) {
         const locked = lockAxis(dx, dy);
         if (locked === null) return;
         track.axis = locked;
-        track.ignored = locked !== axis;
-        if (track.ignored) return;
+        track.lockedToOtherAxis = locked !== axis;
+        if (track.lockedToOtherAxis) return;
       }
       dragged(axis === "x" ? dx : dy);
     };

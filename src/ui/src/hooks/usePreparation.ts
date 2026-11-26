@@ -6,6 +6,12 @@ import {
   type PreparationEvent,
 } from "../api/preparation";
 
+/** CPU checkpoints arrive in bursts; reading masks and map readiness for each
+ * one would compete with interactive composition. */
+const EVENT_READ_THROTTLE_MS = 250;
+const STREAM_RETRY_MS = 1000;
+const READ_RETRY_MS = 3000;
+
 /** Where a reconnect resumes after `event`: nowhere in particular after a
  * resync, which asks for a fresh read. */
 function eventCursor(event: PreparationEvent): number | undefined {
@@ -35,20 +41,18 @@ export function usePreparation(name: string | null, version: number, previewPend
         ...(cursor === undefined ? {} : { lastEventId: cursor }),
         onEvent: (event) => {
           cursor = eventCursor(event);
-          // CPU checkpoints arrive in bursts. Reading all masks and map
-          // readiness per event competes with interactive composition.
           if (!eventTimer)
             eventTimer = setTimeout(() => {
               eventTimer = undefined;
               void read();
-            }, 250);
+            }, EVENT_READ_THROTTLE_MS);
         },
         onDone: () => {
-          timer = setTimeout(() => void read(), 250);
+          timer = setTimeout(() => void read(), EVENT_READ_THROTTLE_MS);
         },
         onError: () => {
           cursor = undefined;
-          timer = setTimeout(() => void read(), 1000);
+          timer = setTimeout(() => void read(), STREAM_RETRY_MS);
         },
       });
     }
@@ -65,7 +69,7 @@ export function usePreparation(name: string | null, version: number, previewPend
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Could not read map status");
-          timer = setTimeout(() => void read(), 3000);
+          timer = setTimeout(() => void read(), READ_RETRY_MS);
         }
       } finally {
         reading = false;

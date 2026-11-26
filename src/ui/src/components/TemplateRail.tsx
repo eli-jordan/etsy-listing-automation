@@ -6,18 +6,8 @@ import { LabelSearch } from "./LabelSearch";
 import { holdsLabels } from "./labelRules";
 import type { TemplateKind, TemplateSummary } from "../types";
 
-/**
- * The template picker, as a rail rather than a dropdown (wireframe 2a).
- *
- * The point of the change is ordering: a dropdown presents 34 templates as an
- * undifferentiated list you have to already know your way around, while the
- * rail leads with the ones that are not finished and says what each is missing.
- * "Which do I open next?" stops being a question the user has to answer from
- * memory.
- *
- * Status is server-derived (`TemplateSummary.status`), so this component never
- * decides what "calibrated" means -- it only arranges what it is told.
- */
+/** Status is server-derived (`TemplateSummary.status`); the rail only
+ * arranges what it is told. */
 
 const KIND_LABELS: Record<TemplateKind, string> = {
   "colour-matrix": "Colour Matrix",
@@ -240,7 +230,7 @@ export function TemplateRail({
   const isReady = (t: TemplateSummary) =>
     t.renderer === "marigold" ? marigoldMapsReady(t.maps) : !needsCalibration(t);
   const doneCount = templates.filter(isReady).length;
-  const nextUp = outstanding.find((template) => template.renderer !== "marigold") ?? null;
+  const nextToCalibrate = outstanding.find((template) => template.renderer !== "marigold") ?? null;
 
   const filtered = useMemo(
     () =>
@@ -261,14 +251,18 @@ export function TemplateRail({
 
   return (
     <nav className="template-rail" aria-label="Templates">
-      {nextUp && (
+      {nextToCalibrate && (
         <div className="template-rail__banner">
           <p className="template-rail__banner-text">
             {`${countLabel(outstanding.length, "template")} need${
               outstanding.length === 1 ? "s" : ""
             } calibration`}
           </p>
-          <button type="button" className="btn btn-primary" onClick={() => onSelect(nextUp.name)}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => onSelect(nextToCalibrate.name)}
+          >
             Calibrate next →
           </button>
         </div>

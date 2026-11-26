@@ -18,6 +18,9 @@ afterEach(() => {
 globalThis.URL.createObjectURL = vi.fn(() => "blob:mock-url");
 globalThis.URL.revokeObjectURL = vi.fn();
 
+// jsdom does not implement image decoding.
+HTMLImageElement.prototype.decode = () => Promise.resolve();
+
 // jsdom has no layout, so nothing scrolls; the search box keeps its highlight in
 // view with this.
 Element.prototype.scrollIntoView = vi.fn();

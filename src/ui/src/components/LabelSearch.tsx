@@ -52,9 +52,11 @@ function optionsFor(items: string[][], term: string, on: string[]): Option[] {
     );
 }
 
-/** The highlight after an arrow key: it wraps at both ends, and -1 is nothing yet. */
+const NO_HIGHLIGHT = -1;
+
+/** The highlight after an arrow key: it wraps at both ends. */
 function stepped(active: number, count: number, step: 1 | -1): number {
-  if (active < 0) return step === 1 ? 0 : count - 1;
+  if (active === NO_HIGHLIGHT) return step === 1 ? 0 : count - 1;
   return (active + step + count) % count;
 }
 
@@ -85,7 +87,7 @@ export function LabelSearch({
   onQuery: (next: string) => void;
 }) {
   const [menu, setMenu] = useState(false);
-  const [active, setActive] = useState(-1);
+  const [active, setActive] = useState(NO_HIGHLIGHT);
   const id = useId();
   const box = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
@@ -96,7 +98,7 @@ export function LabelSearch({
     const onDown = (event: MouseEvent) => {
       if (box.current?.contains(event.target as Node)) return;
       setMenu(false);
-      setActive(-1);
+      setActive(NO_HIGHLIGHT);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -115,7 +117,7 @@ export function LabelSearch({
 
   const close = () => {
     setMenu(false);
-    setActive(-1);
+    setActive(NO_HIGHLIGHT);
   };
 
   const take = (option: Option) => {
@@ -144,7 +146,7 @@ export function LabelSearch({
     Backspace: () => {
       if (query !== "" || on.length === 0) return;
       onOn(on.slice(0, -1));
-      setActive(-1);
+      setActive(NO_HIGHLIGHT);
     },
   };
 
@@ -168,7 +170,7 @@ export function LabelSearch({
               onClick={(event) => {
                 event.stopPropagation();
                 onOn(on.filter((t) => t !== tag));
-                setActive(-1);
+                setActive(NO_HIGHLIGHT);
                 // The button is about to go, and focus would fall out of the page.
                 field.current?.focus();
               }}
@@ -192,7 +194,7 @@ export function LabelSearch({
           onChange={(event) => {
             onQuery(event.target.value);
             setMenu(true);
-            setActive(-1);
+            setActive(NO_HIGHLIGHT);
           }}
           onKeyDown={(event) => keys[event.key]?.(event)}
         />

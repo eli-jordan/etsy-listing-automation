@@ -24,15 +24,16 @@ export interface Pager<T> {
 const OUT_MS = 110;
 const IN_MS = 200;
 /** How far an item travels out and in, as a share of its own width. */
-const TRAVEL = 28;
-/** How faint an item is at the far end of its travel. */
-const DIM = "0.2";
+const TRAVEL_PERCENT = 28;
+const OPACITY_AT_FULL_TRAVEL = "0.2";
+const RESIST_RATIO = 0.35;
+const RESIST_MAX_PX = 80;
 
-/** Rubber-banding past an end: the further the drag, the less it moves, the
- * way a native list resists being pulled past its end. */
+/** Rubber-banding past an end, the way a native list resists being pulled
+ * past its end. */
 export function resist(distance: number): number {
   const sign = distance < 0 ? -1 : 1;
-  return sign * Math.min(Math.abs(distance) * 0.35, 80);
+  return sign * Math.min(Math.abs(distance) * RESIST_RATIO, RESIST_MAX_PX);
 }
 
 function neighbour<T>(items: readonly T[], current: T, step: 1 | -1): T | null {
@@ -41,7 +42,12 @@ function neighbour<T>(items: readonly T[], current: T, step: 1 | -1): T | null {
 }
 
 function slideIn(element: HTMLElement, fromRight: boolean) {
-  pose(element, `translateX(${fromRight ? TRAVEL : -TRAVEL}%)`, "none", DIM);
+  pose(
+    element,
+    `translateX(${fromRight ? TRAVEL_PERCENT : -TRAVEL_PERCENT}%)`,
+    "none",
+    OPACITY_AT_FULL_TRAVEL,
+  );
   // Reading layout commits the start position before the transition starts.
   element.getBoundingClientRect();
   pose(element, "", `transform ${IN_MS}ms ease-out, opacity ${IN_MS}ms ease-out`);
@@ -75,9 +81,9 @@ export function usePager<T>(
   }, [current, enabled, items, moves]);
 
   const leave = (element: HTMLElement, target: T, direction: SwipeDirection) => {
-    const travel = direction === "left" ? -TRAVEL : TRAVEL;
+    const travel = direction === "left" ? -TRAVEL_PERCENT : TRAVEL_PERCENT;
     const transition = `transform ${OUT_MS}ms ease-in, opacity ${OUT_MS}ms ease-in`;
-    pose(element, `translateX(${travel}%)`, transition, DIM);
+    pose(element, `translateX(${travel}%)`, transition, OPACITY_AT_FULL_TRAVEL);
     away.current = true;
     timer.current = window.setTimeout(() => {
       onPick(target);

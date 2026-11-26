@@ -1,25 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { renderPreview } from "../api/calibrator";
 
-/** How long the editor waits after the last edit before asking the server for
- * a new composite.
- *
- * Short, because an editor frame is now a downscaled render off a warm
- * in-process cache rather than a full-resolution one off disk. The debounce is
- * no longer what protects the server -- {@link usePreview}'s one-at-a-time
- * rule is -- it just avoids spending a request on the first pixel of a drag
- * that is about to travel two hundred more. */
+/** Skips a request for the first pixel of a drag that is about to travel two
+ * hundred more; {@link usePreview}'s one-at-a-time rule protects the server. */
 export const PREVIEW_DEBOUNCE_MS = 80;
 
 type PreviewBody = Parameters<typeof renderPreview>[1];
 
-/** A job's request in the shape `requestIdentity` names the newest one. */
-function jobIdentity(job: Job): string {
-  return JSON.stringify({
-    templateName: job.templateName,
-    body: JSON.parse(job.key) as PreviewBody,
-    design: job.design,
-  });
+function identityOf(templateName: string, key: string | null, design: string): string {
+  return JSON.stringify([templateName, key, design]);
 }
 
 function replacingUrl(next: string | null) {
@@ -33,17 +22,12 @@ interface Job {
   templateName: string;
   key: string;
   design: string;
+  identity: string;
 }
 
 /**
- * The debounced preview loop, shared by all three editors.
- *
- * Each editor used to carry its own copy of this: the same `setTimeout`,
- * `renderPreview`, revoke-the-previous-URL and `clearTimeout` cleanup, written
- * out three times. All three had the same leak -- the cleanup cleared the
- * timer but never revoked the object URL still held in state, so every
- * template switch and every unmount stranded one blob in the document. There
- * is one implementation now, and it revokes on the way out.
+ * The editors' debounced preview loop; it revokes every object URL it no
+ * longer shows (docs/architecture.md, *Two sizes, one pipeline*).
  *
  * `body` is compared by value, not identity: an editor rebuilds it on every
  * render, and comparing by identity would restart the debounce on renders that
@@ -73,7 +57,8 @@ export function usePreview(
   const pendingListener = useRef(onPending);
   const [displayedTemplate, setDisplayedTemplate] = useState(templateName);
   const latest = useRef("");
-  const requestIdentity = JSON.stringify({ templateName, body, design });
+  const key = body === null ? null : JSON.stringify(body);
+  const requestIdentity = identityOf(templateName, key, design);
   const strictMode = useRef(strict);
   useLayoutEffect(() => {
     latest.current = requestIdentity;
@@ -112,7 +97,8 @@ export function usePreview(
           "editor",
         );
         const current = sent === generation.current;
-        if (!current || (strictMode.current && latest.current !== jobIdentity(job))) {
+        const stale = !current || (strictMode.current && latest.current !== job.identity);
+        if (stale) {
           URL.revokeObjectURL(next);
           return;
         }
@@ -123,7 +109,7 @@ export function usePreview(
         // A refused strict frame must not leave an old material composite
         // under newly edited geometry. Its caller can show the local overlay.
         const current = sent === generation.current;
-        if (current && latest.current === jobIdentity(job)) pendingListener.current?.(false);
+        if (current && latest.current === job.identity) pendingListener.current?.(false);
         if (strictMode.current && current) setUrl(replacingUrl(null));
       }
     }
@@ -162,8 +148,6 @@ export function usePreview(
     [],
   );
 
-  const key = body === null ? null : JSON.stringify(body);
-
   useEffect(() => {
     if (key === null) {
       pendingListener.current?.(false);
@@ -171,7 +155,12 @@ export function usePreview(
     }
     pendingListener.current?.(true);
     const timer = setTimeout(() => {
-      queued.current = { templateName, key, design };
+      queued.current = {
+        templateName,
+        key,
+        design,
+        identity: identityOf(templateName, key, design),
+      };
       void pump();
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);

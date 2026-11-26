@@ -67,24 +67,22 @@ export function Lightbox({
   const isPhone = useIsPhone();
   const root = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
-  // On a phone a sideways swipe on the picture pages through the set, and a
-  // swipe down closes. At 1:1 a finger pans the picture, so neither is armed
-  // then.
-  const carousel = isPhone && !actualSize;
+  const fingerPans = actualSize;
+  const swipesEnabled = isPhone && !fingerPans;
   const track = useCarousel(stage, {
     count: items.length,
     index,
-    enabled: carousel,
+    enabled: swipesEnabled,
     onIndexChange,
   });
-  useSheetDrag(root, { moves: stage, fade: true, enabled: !actualSize, onDismiss: onClose });
+  useSheetDrag(root, { moves: stage, fade: true, enabled: !fingerPans, onDismiss: onClose });
   usePreloadNeighbours(items, index);
 
   if (!item) return null;
 
   const slides: { at: SlidePlace; position: number }[] = [{ at: "current", position: index }];
-  if (carousel && index > 0) slides.unshift({ at: "previous", position: index - 1 });
-  if (carousel && index < items.length - 1) slides.push({ at: "next", position: index + 1 });
+  if (swipesEnabled && index > 0) slides.unshift({ at: "previous", position: index - 1 });
+  if (swipesEnabled && index < items.length - 1) slides.push({ at: "next", position: index + 1 });
 
   const box = (
     <div
@@ -131,7 +129,7 @@ export function Lightbox({
         ref={stage}
         className={actualSize ? "lightbox__stage lightbox__stage--actual" : "lightbox__stage"}
       >
-        {carousel ? (
+        {swipesEnabled ? (
           <div ref={track} className="lightbox__track">
             {slides.map(({ at, position }) => {
               const slide = items[position] as LightboxItem;
@@ -200,8 +198,7 @@ function usePreloadNeighbours(items: readonly LightboxItem[], index: number) {
       image.src = item.url;
       // Decoding ahead too, so the swap does not wait on it; a failure here
       // is the visible <img>'s to show, not this one's.
-      // (jsdom has no decode.)
-      if (typeof image.decode === "function") image.decode().catch(() => {});
+      image.decode().catch(() => {});
       loaded.current.set(item.url, image);
     }
   }, [items, index]);

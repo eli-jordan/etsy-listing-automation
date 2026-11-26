@@ -12,29 +12,8 @@ import {
 } from "./api/listingTemplates";
 import type { MediaEntry, TemplateSummary } from "./types";
 
-/**
- * What `media:` holds, and what it looks like.
- *
- * `media:` carries two shapes in one list (`config/listing.py`'s `MediaEntry`):
- * a `{template, colour}` entry the tool renders, and a file ref uploaded
- * as-is -- a shared file under `common-media/`, or one of the listing's own
- * spelled `./…` -- which may be an image or a video. Every
- * question about either one -- what is it called, what kind is it, is it
- * already in the listing, which picture shows it, which file on disk does it
- * come from -- is answered here.
- *
- * It exists because those answers were spread across whichever tab first
- * needed them. Six near-identical URL builders lived in two api modules;
- * "strip the directory and the `.png`" was written three times with three
- * different regexes; and "composite the design if there is one, otherwise show
- * the bare photo" was written twice, in `ImagesTab` and `VariantsTab`, with
- * *different* fallback orders. A component that wants a picture of something
- * now needs to know one function, not which of two api modules to import from
- * and which of five builders applies.
- *
- * The api modules keep their builders: those are the HTTP surface, one function
- * per endpoint, and this is the domain question layered over them.
- */
+/** The domain questions about a `media:` entry (its name, kind, picture and
+ * source file), layered over the api modules' one-per-endpoint URL builders. */
 
 export type PictureSize = "tile" | "full";
 
@@ -49,10 +28,7 @@ export function refName(ref: string): string {
   return file.replace(/\.[^.]+$/, "");
 }
 
-/** A shared ref's path under `common-media/` -- what the picture endpoints
- * take. The whole path, not the stem: a shared file may be a JPEG and may sit
- * in a subdirectory, and only its full path says which file it is. */
-function sharedName(ref: string): string {
+function commonMediaPath(ref: string): string {
   const prefix = "common-media/";
   return ref.startsWith(prefix) ? ref.slice(prefix.length) : ref;
 }
@@ -61,7 +37,7 @@ function isListingLocal(ref: string): boolean {
   return ref.startsWith("./");
 }
 
-/** Whether an entry is a picture or a clip -- `config/media.py`'s
+/** Whether an entry is a picture or a clip -- `core/config/media.py`'s
  * `media_kind`, mirrored.
  *
  * A template entry is always an image (a render is a PNG) and a file ref is a
@@ -182,7 +158,7 @@ function filePicture(ref: string, size: PictureSize, owner: MediaOwner | null): 
     if (owner === null) return "";
     return ownFilePicture(owner, (owner.copies?.[ref] ?? ref).slice(2), tile);
   }
-  const name = sharedName(ref);
+  const name = commonMediaPath(ref);
   return tile ? commonMediaThumbnailUrl(name) : commonMediaFileUrl(name);
 }
 

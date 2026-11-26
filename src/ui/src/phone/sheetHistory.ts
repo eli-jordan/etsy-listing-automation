@@ -25,8 +25,7 @@ let counter = 0;
 
 interface OpenSheet {
   token: string;
-  /** The history state under this sheet's entry. */
-  base: unknown;
+  stateBeneath: unknown;
   close: () => void;
 }
 
@@ -68,7 +67,7 @@ function onPopState(event: PopStateEvent) {
   if (top !== undefined && tokenOf(state) !== top.token) {
     // Left the top sheet's entry: back onto its page, which the router is
     // already showing, or further, which the router handles as usual.
-    if (sameEntry(state, top.base)) event.stopImmediatePropagation();
+    if (sameEntry(state, top.stateBeneath)) event.stopImmediatePropagation();
     top.close();
     return;
   }
@@ -99,7 +98,7 @@ export function pushSheetEntry(close: () => void): () => void {
   const state = typeof base === "object" && base !== null ? { ...base } : {};
   window.history.pushState({ ...state, phoneSheet: token }, "", window.location.href);
   landed = window.history.state;
-  const sheet: OpenSheet = { token, base, close };
+  const sheet: OpenSheet = { token, stateBeneath: base, close };
   open.push(sheet);
 
   return () => {

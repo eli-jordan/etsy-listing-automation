@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { BoundingBox, Point } from "../types";
+import { useLatest } from "../hooks/useLatest";
 import { useIsPhone } from "../phone/usePhone";
 import {
   cornerDragged,
@@ -40,15 +41,7 @@ interface Props {
    * colour set's "Show design box" hides everything so you can judge
    * the render clean ("none"). */
   outlines?: "all" | "selected" | "none";
-  /** Per-box caption drawn under the box and edited by clicking it.
-   *
-   * This is where a `multiple`-kind placement's colour lives now. It used to
-   * be a field in a side panel, which meant the one thing a box *cannot* show
-   * you -- which garment it is -- was the one thing you had to look away from
-   * the photo to read. A caption on the box says it in place.
-   *
-   * Drawn under exactly the boxes whose outline is drawn, so `outlines`
-   * governs both: hiding the chrome to judge a render hides the captions too. */
+  /** Per-box caption drawn under the box and edited by clicking it. */
   labels?: (string | undefined)[];
   onLabelChange?: (index: number, value: string) => void;
   labelPlaceholder?: string;
@@ -81,7 +74,7 @@ const DRAG_TARGETS = ".quad-editor__polygon, .quad-editor__handle, .quad-editor_
 function useTouchClaim(
   svg: SVGSVGElement | null,
   enabled: boolean,
-  dragging: { current: boolean },
+  dragging: { readonly current: boolean },
 ): void {
   useEffect(() => {
     if (!svg || !enabled) return;
@@ -95,17 +88,21 @@ function useTouchClaim(
 }
 
 function useGripRadius(svg: SVGSVGElement | null, imageWidth: number, dotRadius: number): number {
-  const [shownWidth, setShownWidth] = useState(0);
+  const [overlayWidth, setOverlayWidth] = useState(0);
   useLayoutEffect(() => {
     if (!svg) return;
-    const measure = () => setShownWidth(svg.getBoundingClientRect().width);
+    const measure = () => setOverlayWidth(svg.getBoundingClientRect().width);
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(svg);
     return () => observer.disconnect();
   }, [svg]);
-  return gripRadius(shownWidth, imageWidth, dotRadius);
+  return gripRadius(overlayWidth, imageWidth, dotRadius);
+}
+
+function isTypingInField(event: React.KeyboardEvent): boolean {
+  return (event.target as Element).closest("input, textarea") !== null;
 }
 
 function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
@@ -222,27 +219,16 @@ export function QuadEditor({
     setSvgNode(node);
   }, []);
   const phone = useIsPhone();
-  // Purely a gate on drawing the overlay: the SVG is stretched over the image,
-  // so it has no size of its own until the image has laid out. Deliberately
-  // not a measurement -- `space` is where coordinates come from.
-  const [loaded, setLoaded] = useState(false);
+  const [imageLaidOut, setImageLaidOut] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [editingLabel, setEditingLabel] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const labelInputRef = useRef<HTMLInputElement>(null);
   const suggestionsId = useId();
 
   useLayoutEffect(() => {
     if (menu && menuRef.current) positionMenu(menuRef.current, menu);
   }, [menu]);
-
-  // A caption only becomes an input when it is clicked, so the caret has to be
-  // put there afterwards -- otherwise the click that opened the field leaves
-  // it unfocused and the next keystroke nudges the box instead.
-  useEffect(() => {
-    if (editingLabel !== null) labelInputRef.current?.focus();
-  }, [editingLabel]);
 
   function toImageSpace(clientX: number, clientY: number): Point | null {
     const svg = svgRef.current;
@@ -256,11 +242,7 @@ export function QuadEditor({
     return { x: transformed.x, y: transformed.y };
   }
 
-  // Mirrors `drag` for the phone's touchstart listener, which outlives renders.
-  const dragging = useRef(false);
-  useEffect(() => {
-    dragging.current = drag !== null;
-  }, [drag]);
+  const dragging = useLatest(drag !== null);
   useTouchClaim(svgNode, phone && interactive, dragging);
   const dotRadius = Math.max(space[0], space[1]) * 0.015;
   const gripR = useGripRadius(phone ? svgNode : null, space[0], dotRadius);
@@ -313,9 +295,7 @@ export function QuadEditor({
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (!interactive) return;
-    // The caption editor lives inside the canvas, so its arrows, Backspace and
-    // Delete would otherwise reach the box while you are typing a colour name.
-    if ((event.target as Element).closest("input, textarea")) return;
+    if (isTypingInField(event)) return;
     if ((event.key === "Delete" || event.key === "Backspace") && onDeleteSelected) {
       event.preventDefault();
       onDeleteSelected();
@@ -344,10 +324,10 @@ export function QuadEditor({
       <img
         src={imageUrl}
         alt="Rendered preview"
-        onLoad={() => setLoaded(true)}
+        onLoad={() => setImageLaidOut(true)}
         className="quad-editor__image"
       />
-      {loaded && (
+      {imageLaidOut && (
         <svg
           ref={attachSvg}
           className="quad-editor__overlay"
@@ -418,7 +398,7 @@ export function QuadEditor({
         </svg>
       )}
 
-      {loaded && labels && (
+      {imageLaidOut && labels && (
         <div className="quad-editor__labels">
           {boxes.map((box, boxIndex) => {
             if (!chromeVisible(boxIndex)) return null;
@@ -432,7 +412,7 @@ export function QuadEditor({
               return (
                 <input
                   key={boxIndex}
-                  ref={labelInputRef}
+                  autoFocus
                   className="quad-editor__label quad-editor__label--editing"
                   style={style}
                   value={text}

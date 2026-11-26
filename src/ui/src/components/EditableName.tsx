@@ -61,10 +61,9 @@ export function EditableName({
     setOpened(false);
   }
 
-  // Derived, not stored. A listing with no name has nothing to double-click, and
-  // a refused name has to stay reachable for correcting.
+  const unnamed = value === "";
   const refused = error !== null && text.trim() === error.name;
-  const editing = opened || value === "" || refused;
+  const editing = opened || unnamed || refused;
 
   function commit() {
     const trimmed = text.trim();

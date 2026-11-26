@@ -13,17 +13,20 @@ export const AXIS_LOCK_PX = 10;
  * or a quick flick that is still more than a twitch. */
 export const DISTANCE_PX = 64;
 export const FLICK_PX = 28;
-export const FLICK_SPEED = 0.45; // px per ms
+export const FLICK_PX_PER_MS = 0.45;
+
+/** How much more along one axis than the other a move must be, so a slightly
+ * slanted scroll never turns into a swipe. */
+const AXIS_DOMINANCE = 1.2;
 
 /** The axis a move has committed to, or null while it is still too small,
- * or too diagonal, to say. A move must be clearly more along one axis than
- * the other, so a slightly slanted scroll never turns into a swipe. */
+ * or too diagonal, to say. */
 export function lockAxis(dx: number, dy: number): "x" | "y" | null {
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
   if (Math.max(ax, ay) < AXIS_LOCK_PX) return null;
-  if (ax > ay * 1.2) return "x";
-  if (ay > ax * 1.2) return "y";
+  if (ax > ay * AXIS_DOMINANCE) return "x";
+  if (ay > ax * AXIS_DOMINANCE) return "y";
   return null;
 }
 
@@ -38,7 +41,7 @@ export function classifySwipe(
   const distance = Math.abs(along);
   const speed = distance / Math.max(ms, 1);
   const far = distance >= DISTANCE_PX;
-  const flick = distance >= FLICK_PX && speed >= FLICK_SPEED;
+  const flick = distance >= FLICK_PX && speed >= FLICK_PX_PER_MS;
   if (!far && !flick) return null;
   if (axis === "x") return along < 0 ? "left" : "right";
   return along < 0 ? "up" : "down";

@@ -27,11 +27,8 @@ function centre(box: BoundingBox): Point {
   };
 }
 
-/** `start` slid by the pointer's travel from `origin`. Both are the gesture's
- * starting values, so every move is measured from the press, never from the
- * last move -- the corners keep their offsets and a skewed quad stays skewed. */
-export function moved(start: BoundingBox, origin: Point, pointer: Point): BoundingBox {
-  return translated(start, pointer.x - origin.x, pointer.y - origin.y);
+export function moved(boxAtPress: BoundingBox, pointerAtPress: Point, pointer: Point): BoundingBox {
+  return translated(boxAtPress, pointer.x - pointerAtPress.x, pointer.y - pointerAtPress.y);
 }
 
 export function nudged(box: BoundingBox, key: string, fast: boolean): BoundingBox | null {
@@ -120,14 +117,14 @@ export function menuPlacement(
 export const GRIP_RADIUS_PX = 22;
 
 /** The phone grip's radius in image units, so it covers `GRIP_RADIUS_PX` on
- * screen whatever the photo's size and however far it is scaled down.
- *
- * `shownWidth` is the overlay's width on screen and `imageWidth` the photo's
- * true width (the viewBox's). Before the overlay has a width there is no
- * scale to convert by, so it falls back to the drawn dot's own radius. */
-export function gripRadius(shownWidth: number, imageWidth: number, dotRadius: number): number {
-  if (shownWidth <= 0 || imageWidth <= 0) return dotRadius;
-  return Math.max(dotRadius, (GRIP_RADIUS_PX * imageWidth) / shownWidth);
+ * screen. Before the overlay has a width, the drawn dot's own radius. */
+export function gripRadius(
+  overlayScreenWidth: number,
+  viewBoxWidth: number,
+  dotRadius: number,
+): number {
+  if (overlayScreenWidth <= 0 || viewBoxWidth <= 0) return dotRadius;
+  return Math.max(dotRadius, (GRIP_RADIUS_PX * viewBoxWidth) / overlayScreenWidth);
 }
 
 /** Where a phone grip of radius `r` sits for the corner at `p`: on the corner,

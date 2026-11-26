@@ -65,18 +65,16 @@ export function PlacementOverlay({
       Math.max(0, Math.min(space[1] - 1, result.y)),
     ];
   }
-  // The finger (or mouse) painting the stroke. Only its moves extend the
-  // stroke, and only its release or cancel ends it.
-  const owner = useRef<number | null>(null);
+  const strokePointerId = useRef<number | null>(null);
   function finish() {
     const next = current.current;
     current.current = null;
-    owner.current = null;
+    strokePointerId.current = null;
     setStroke(null);
     if (next) onStroke(next);
   }
   function finishFrom(event: React.PointerEvent<SVGRectElement>) {
-    if (owner.current !== null && event.pointerId !== owner.current) return;
+    if (strokePointerId.current !== null && event.pointerId !== strokePointerId.current) return;
     finish();
   }
   /** A second finger landing means a pinch, not paint: the stroke so far is
@@ -188,21 +186,21 @@ export function PlacementOverlay({
             onPointerDown={(event) => {
               if (event.button !== 0) return;
               event.stopPropagation();
-              if (owner.current !== null) {
-                if (event.pointerId !== owner.current) drop();
+              if (strokePointerId.current !== null) {
+                if (event.pointerId !== strokePointerId.current) drop();
                 return;
               }
               const p = point(event);
               if (!p) return;
               event.currentTarget.setPointerCapture(event.pointerId);
-              owner.current = event.pointerId;
+              strokePointerId.current = event.pointerId;
               const next: Stroke = { type: "stroke", mode, diameter_px: diameter, points: [p] };
               current.current = next;
               setStroke(next);
             }}
             onPointerMove={(event) => {
               const p = point(event);
-              if (!current.current || event.pointerId !== owner.current) return;
+              if (!current.current || event.pointerId !== strokePointerId.current) return;
               event.stopPropagation();
               if (p) {
                 const next = { ...current.current, points: [...current.current.points, p] };

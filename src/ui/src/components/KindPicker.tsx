@@ -5,6 +5,11 @@ import type { ColourReportRow, TemplateKind } from "../types";
 /** A takeover rather than an inspector field: kind decides the whole shape of
  * template.yaml, so every other control is meaningless until it is answered. */
 
+function effectiveKind(chosen: TemplateKind | null, colourMatrixDisabled: boolean): TemplateKind {
+  if (colourMatrixDisabled) return chosen && chosen !== "colour-matrix" ? chosen : "single";
+  return chosen ?? "colour-matrix";
+}
+
 const KINDS: { kind: TemplateKind; label: string; blurb: string }[] = [
   { kind: "colour-matrix", label: "Colour Matrix", blurb: "one photo per colour" },
   { kind: "multiple", label: "Multiple", blurb: "many garments, one photo" },
@@ -35,12 +40,7 @@ export function KindPicker({ templateName, onAssigned }: Props) {
   // reads as a single garment.
   const photos = report.length;
   const colourMatrixDisabled = photos === 1;
-  const fallback: TemplateKind = colourMatrixDisabled ? "single" : "colour-matrix";
-  // Falls back whenever the choice isn't (or is no longer) available -- which
-  // covers picking colour-matrix before the report landed and learning
-  // afterwards that there is only one photo.
-  const kind: TemplateKind =
-    chosen && !(colourMatrixDisabled && chosen === "colour-matrix") ? chosen : fallback;
+  const kind = effectiveKind(chosen, colourMatrixDisabled);
 
   const messy = report.filter((row) => !row.clean);
 

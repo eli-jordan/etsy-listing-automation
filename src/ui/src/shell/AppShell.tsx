@@ -34,9 +34,8 @@ function Shell() {
   // failure is silence, not an error banner: the shop's name is orientation,
   // and no page here stops working without it.
   const [shopName, setShopName] = useState<string | null>(null);
-  // A batch is made from a listing template, and its pages sit under it.
   const { pathname } = useLocation();
-  const inBatches = pathname.startsWith("/batches/");
+  const underListingTemplates = pathname.startsWith("/batches/");
   const warning = useBackupStatus().view.banner;
   const isPhone = useIsPhone();
   const listingTemplates = navLabel(isPhone, "Listing Templates", "Templates");
@@ -99,7 +98,7 @@ function Shell() {
           </NavLink>
           <NavLink
             to="/listing-templates"
-            className={({ isActive }) => navClass({ isActive: isActive || inBatches })}
+            className={({ isActive }) => navClass({ isActive: isActive || underListingTemplates })}
             aria-label={listingTemplates.aria}
           >
             <StackIcon />
