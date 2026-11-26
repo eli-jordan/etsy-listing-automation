@@ -9,15 +9,15 @@ import { ownedTile } from "../media";
 import { useIsPhone } from "../phone/usePhone";
 import type { ListingTemplateSummary } from "../types";
 
-/** A refusal, and the names of the files it was about. Names rather than
- * the files: it may arrive in history state from a card drop. */
 export interface Refused extends StagingRefusal {
-  files: string[];
+  fileNames: string[];
 }
 
-function refusedHeading(files: string[]): string {
-  const [only] = files;
-  return files.length === 1 && only ? `${only} was not staged.` : "These files were not staged.";
+function refusedHeading(fileNames: string[]): string {
+  const [only] = fileNames;
+  return fileNames.length === 1 && only
+    ? `${only} was not staged.`
+    : "These files were not staged.";
 }
 
 function dropTitle(busy: boolean, refused: boolean, phone = false): string {
@@ -61,7 +61,7 @@ export function NewBatchPage() {
       .catch((exc: unknown) => {
         setBusy(false);
         if (exc instanceof StagingRefused) {
-          setRefused({ ...exc.refusal, files: files.map((file) => file.name) });
+          setRefused({ ...exc.refusal, fileNames: files.map((file) => file.name) });
         } else setError(exc instanceof Error ? exc.message : "The designs could not be staged.");
       });
   }
@@ -143,7 +143,7 @@ export function NewBatchPage() {
             >
               <WarningCircleIcon className="dv-callout__icon" />
               <div>
-                <strong>{refusedHeading(refused.files)}</strong>
+                <strong>{refusedHeading(refused.fileNames)}</strong>
                 <div>{refused.message}</div>
                 <div className="dv-callout__remedy">{refused.remedy}</div>
               </div>

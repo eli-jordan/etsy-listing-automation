@@ -6,6 +6,7 @@ import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { type DragEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { stageDesigns, StagingRefused } from "../api/batches";
+import type { Refused } from "./NewBatchPage";
 import { deleteListingTemplate, listListingTemplates } from "../api/listingTemplates";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MutedClip } from "../components/MutedClip";
@@ -201,7 +202,12 @@ export function ListingTemplatesPage() {
       .catch((exc: unknown) => {
         if (exc instanceof StagingRefused) {
           navigate(`/batches/new?template=${encodeURIComponent(name)}`, {
-            state: { refused: { ...exc.refusal, files: files.map((file) => file.name) } },
+            state: {
+              refused: {
+                ...exc.refusal,
+                fileNames: files.map((file) => file.name),
+              } satisfies Refused,
+            },
           });
           return;
         }
