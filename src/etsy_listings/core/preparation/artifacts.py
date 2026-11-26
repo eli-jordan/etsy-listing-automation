@@ -50,7 +50,8 @@ SCHEMA: Literal[2] = 2
 MAX_PIXELS = 32 * 1024 * 1024
 MAX_DIMENSION = 8192
 MAX_POINTER_BYTES = 64 * 1024
-_EXTENTS_SCHEMA = 2  # the manifest schema that records placement extents
+_FULL_PHOTO_SCHEMA = 1
+_EXTENTS_SCHEMA = 2
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 SEMANTICS = {
     "array_axes": "row,column,channel",
@@ -518,6 +519,10 @@ def _check_payload(
 _READERS: dict[tuple[str, str], int] = {}
 
 
+def _register_reader_locked(key: tuple[str, str]) -> None:
+    _READERS[key] = _READERS.get(key, 0) + 1
+
+
 def _maps_bytes(maps: Mapping[str | None, MaterialMaps]) -> int:
     return sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
 
@@ -538,16 +543,16 @@ def _no_checkpoint(_step: str) -> None:
 
 @dataclass(frozen=True)
 class PublishOptions:
-    """How :meth:`Artifacts.publish` records and paces a generation.
-    ``provenance`` is stored in its manifest; ``checkpoint`` is told each
-    durable step and may raise to stop before the next. ``copy_maps=False``
-    transfers immutable array ownership to the bounded reader cache: the
-    coordinator uses it after freezing its private maps, and ordinary callers
-    keep the default independent input snapshot."""
+    """How :meth:`Artifacts.publish` records and paces a generation."""
 
     provenance: Provenance = field(default_factory=Provenance)
+    """Stored in the generation's manifest."""
     checkpoint: Callable[[str], None] = _no_checkpoint
+    """Told each durable step; may raise to stop before the next."""
     copy_maps: bool = True
+    """False transfers immutable array ownership to the bounded reader cache:
+    the coordinator does so after freezing its private maps. True keeps an
+    independent snapshot of the input."""
 
 
 @dataclass(frozen=True)
@@ -590,14 +595,17 @@ class Artifacts:
         # and template lock cover publishers, readers and alias-aware cleanup.
         key = self._key(name, generation)
         with self.calibration.lock(name):
-            _READERS[key] = _READERS.get(key, 0) + 1
+            _register_reader_locked(key)
         try:
             yield
         finally:
-            with self.calibration.lock(name):
-                _READERS[key] -= 1
-                if not _READERS[key]:
-                    del _READERS[key]
+            self._release_reader(name, key)
+
+    def _release_reader(self, name: str, key: tuple[str, str]) -> None:
+        with self.calibration.lock(name):
+            _READERS[key] -= 1
+            if not _READERS[key]:
+                del _READERS[key]
 
     def _pointer(self, name: str) -> MapPointer:
         path = self.workspace.template_map_current(name)
@@ -741,7 +749,7 @@ class Artifacts:
     ) -> MaterialMaps:
         photo = manifest.preparation_inputs.photo
         size = (photo.width, photo.height)
-        if manifest.schema_version == 1 and placement.extent != (0, 0, *size):
+        if manifest.schema_version == _FULL_PHOTO_SCHEMA and placement.extent != (0, 0, *size):
             raise ArtifactError("Prepared map extent does not match main photo")
         return read_maps(
             self.workspace.template_map_file(
@@ -961,7 +969,7 @@ class Artifacts:
             with self.calibration.lock(name):
                 pointer, manifest = self._current(name)
                 key = self._key(name, pointer.generation_id)
-                _READERS[key] = _READERS.get(key, 0) + 1
+                _register_reader_locked(key)
         except (OSError, ValueError) as exc:
             if isinstance(exc, ArtifactError):
                 raise
@@ -976,13 +984,10 @@ class Artifacts:
                 raise ArtifactError(
                     "Invalid prepared generation; prepare the template again"
                 ) from exc
-            # Exceptions from the renderer belong to the caller, not artifact loading.
-            yield acquired
+            else:
+                yield acquired
         finally:
-            with self.calibration.lock(name):
-                _READERS[key] -= 1
-                if not _READERS[key]:
-                    del _READERS[key]
+            self._release_reader(name, key)
 
     def readiness(
         self, name: str, inputs: PreparationInputs, *, target_size: tuple[int, int] | None = None

@@ -35,6 +35,15 @@ Role = Literal["normals", "lighting", "depth"]
 ROLES: Final[tuple[Role, ...]] = ("normals", "lighting", "depth")
 RequestId = Annotated[str, Field(min_length=1, max_length=128)]
 
+CHECKPOINT_REVISIONS: Final[dict[Role, str]] = {
+    "normals": "09cfdd258cb281fa006cf1afcd2284376d16687d",
+    "lighting": "08c3930bb641abf786ba44ce92547507ebefbc16",
+    "depth": "9571e7123e258cf052b4e54241f17971c290e9a8",
+}
+"""The pinned Hugging Face revision of each role's checkpoint."""
+PROCESSING_RESOLUTION: Final = 768
+SEED: Final = 2026
+
 
 def _cache_file(suffix: str) -> AfterValidator:
     """A ``/``-separated path under the cache root. Containment in the actual

@@ -48,15 +48,12 @@ SHUTDOWN_TIMEOUT = 15.0
 
 @dataclass(frozen=True)
 class InferenceCall:
-    """One inference: which ``role`` to predict for the ``input`` crop, the
-    ``output`` artifact to write (both relative to the worker's cache root),
-    the crop's ``size`` the prediction must match, and the inference
-    settings. ``request_id`` names the call for progress and cancellation."""
-
     request_id: str
     role: Role
     input: str
+    """The crop to predict for, relative to the worker's cache root."""
     output: str
+    """The artifact to write, relative to the worker's cache root."""
     size: tuple[int, int]
     num_inference_steps: int = 10
     ensemble_size: int = 3

@@ -15,6 +15,7 @@ from typing import Any, NoReturn, Protocol
 from PIL import Image
 
 from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
+    CHECKPOINT_REVISIONS,
     ROLES,
     Capabilities,
 )
@@ -27,11 +28,7 @@ VERIFIED_FILE = "verified.json"
 verification."""
 
 PYTHON_VERSION = "3.12.14"
-REVISIONS = (
-    "09cfdd258cb281fa006cf1afcd2284376d16687d",
-    "08c3930bb641abf786ba44ce92547507ebefbc16",
-    "9571e7123e258cf052b4e54241f17971c290e9a8",
-)
+REVISIONS = tuple(CHECKPOINT_REVISIONS.values())
 
 
 def _unverified(message: str) -> NoReturn:
