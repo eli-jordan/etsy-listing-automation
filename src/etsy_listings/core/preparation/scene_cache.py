@@ -26,10 +26,6 @@ _IDENTITY = re.compile(r"^sha256:([0-9a-f]{64})$")
 
 
 class SceneCache:
-    """Encoded scenes under ``.cache/scenes/``, least recently read evicted
-    first. Reading an entry refreshes its modification time, which is the
-    recency eviction sorts by."""
-
     def __init__(self, workspace: Workspace, *, budget: int = SCENE_CACHE_BYTES) -> None:
         self._root = workspace.scene_cache_dir()
         self._budget = budget
@@ -45,9 +41,7 @@ class SceneCache:
         return data
 
     def get_or_compose(self, identity: str, compose: Callable[[], bytes]) -> bytes:
-        """``identity``'s entry, or ``compose()``'s PNG, stored before it is
-        returned. One composition per identity at a time: a second caller
-        waits, then reads the first one's entry."""
+        """One composition per identity at a time: a second caller reads the first's entry."""
         with _composing(identity):
             png = self.read(identity)
             if png is None:
@@ -107,9 +101,7 @@ def _composing(identity: str) -> Iterator[None]:
 
 
 def write_atomic(path: Path, data: bytes) -> None:
-    """Write beside ``path`` and rename over it, so a reader never sees a
-    partial file. A rename refused because a reader holds the file open
-    (Windows) leaves the existing entry, which has the same bytes."""
+    """Write beside ``path`` and rename over it, so a reader never sees a partial file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
@@ -119,6 +111,7 @@ def write_atomic(path: Path, data: bytes) -> None:
             stream.write(data)
         Path(temporary).replace(path)
     except OSError:
+        # Windows refuses the rename while a reader holds the file; it has these bytes.
         if not path.is_file():
             raise
     finally:
@@ -131,11 +124,6 @@ _Pixels = TypeVar("_Pixels", RGB, RGBA)
 
 
 class PixelDigests:
-    """Pixel digests of files, remembered while the file's stamp is unchanged.
-
-    A digest is remembered only when the stamp read before decoding matches
-    the one read after, so a write racing the decode is never recorded."""
-
     def __init__(self, maxsize: int = 1024) -> None:
         self._known: BoundedCache[tuple[str, Path], tuple[tuple[int | str, ...], str]] = (
             BoundedCache(maxsize)
@@ -150,8 +138,7 @@ class PixelDigests:
     def decode_photo(
         self, path: Path, load: Callable[[Path], RGB] = load_template_base
     ) -> tuple[RGB, str]:
-        """``path``'s pixels through ``load``, and their digest. Compose
-        with these pixels, not a second decode, so the digest names them."""
+        """Compose with these pixels, not a second decode, so the digest names them."""
         return self._decode("photo", path, load, photo_digest)
 
     def decode_design(
@@ -176,10 +163,7 @@ class PixelDigests:
         load: Callable[[Path], _Pixels],
         digest: Callable[[_Pixels], str],
     ) -> tuple[_Pixels, str]:
-        """A digest already known for the stamp read before *and* after the
-        decode names these pixels, so it is reused: hashing a full-size
-        design costs more than decoding it from the host's memo, and every
-        colour of a scene decodes the same design again."""
+        # Reuse a digest only when the stamps before and after the decode agree.
         key = (kind, path.resolve())
         before = file_version(path)
         known = self._known.get(key)
@@ -194,7 +178,6 @@ class PixelDigests:
 
 
 def photo_digest(base: RGB) -> str:
-    """The ``photo_pixels`` input of ``prepared_scene_identity``."""
     return hashlib.sha256(np.ascontiguousarray(base).tobytes()).hexdigest()
 
 
