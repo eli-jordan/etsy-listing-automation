@@ -130,6 +130,18 @@ class TestWrongVerb:
 
         assert _blocked_text(_plan(root, etsy=etsy)) == DELETED_ON_PUBLISHED
 
+    def test_a_wrong_verb_blocks_every_stage_of_the_pipeline(self, workspace_root: Path) -> None:
+        root = _ready(workspace_root)
+        edit_listing(root, lifecycle="retired")
+        _write_lock(root, _lock(product_id=PRODUCT_ID))
+
+        outcome = _plan(root, etsy=_etsy())
+
+        assert outcome.planned is not None
+        stage_plans = outcome.planned.plan.stage_plans
+        assert [sp.stage for sp in stage_plans] == [stage.name for stage in STAGES]
+        assert {sp.blocked for sp in stage_plans} == {RETIRED_ON_NEVER_LIVE}
+
     def test_retired_on_a_never_live_listing_is_blocked(self, workspace_root: Path) -> None:
         root = _ready(workspace_root)
         edit_listing(root, lifecycle="retired")

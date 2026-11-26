@@ -32,6 +32,7 @@ from etsy_listings.core.batches import (
 from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.locks import LockDomain
+from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import LOCAL_PICTURE, a_listing_template, png, uploads
@@ -223,6 +224,36 @@ class TestFailureAndRetry:
         assert batch.rows[1].creation == "created"
         assert workspace.design_file("cedar-trail").read_bytes() == png(2)
         assert sorted(_created(workspace)) == sorted(NAMES)
+
+    def test_a_row_whose_name_was_taken_after_it_wrote_its_design_keeps_that_design(
+        self,
+        workspace: Workspace,
+        staging: StagingStore,
+        batches: BatchStore,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        id_ = _stage(workspace, staging, DESIGNS[1])
+        real_replace = os.replace
+
+        class Crash(BaseException):
+            pass
+
+        def replace(source: str, target: str) -> None:
+            if str(target).endswith("listing.yaml"):
+                raise Crash
+            real_replace(source, target)
+
+        monkeypatch.setattr(os, "replace", replace)
+        with contextlib.suppress(Crash):
+            _confirm(workspace, staging, batches, id_)
+        monkeypatch.setattr(os, "replace", real_replace)
+        remove_tree(workspace.listing_dir("cedar-trail"))
+        copy_listing(workspace.root, "cedar-trail")
+
+        (row,) = _confirm(workspace, staging, batches, id_).rows
+
+        assert (row.name, row.design, row.creation) == ("cedar-trail-2", "cedar-trail", "created")
+        assert not workspace.design_file("cedar-trail-2").exists()
 
     # Sixteen durable writes for three rows: the batch record, then per row
     # the claim, the design, the owned picture, listing.yaml and "created".

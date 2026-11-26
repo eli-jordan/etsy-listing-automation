@@ -69,6 +69,32 @@ describe("Lightbox", () => {
     expect(container.querySelector(".lightbox__stage--actual")).toBeNull();
   });
 
+  it("closes on Escape after focus has left the dialog", () => {
+    const { onClose } = setup();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(screen.getByRole("dialog")).not.toContainElement(
+      document.activeElement as HTMLElement | null,
+    );
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("swaps in a fresh picture element on a step, so the old picture never lingers", () => {
+    const { rerender } = setup();
+    const before = screen.getByRole("img");
+    rerender(
+      <Lightbox
+        items={ITEMS}
+        index={2}
+        actualSize={false}
+        onActualSizeChange={vi.fn()}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("img")).not.toBe(before);
+  });
+
   it("1:1 is a toggle owned above, so it survives stepping between images", () => {
     const { onActualSizeChange } = setup();
     fireEvent.click(screen.getByRole("button", { name: "1:1" }));

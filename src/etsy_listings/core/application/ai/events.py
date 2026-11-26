@@ -1,18 +1,11 @@
-"""An AI run's events and the indicator nodes they move
-(features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's
-*Run contract*).
+"""An AI run's events and the indicator nodes they move, which are also the
+SSE payload (features/market-seo-20260924/spec.md, *AI runs*).
 
-Transport-independent models, so the same models are the SSE payload rather
-than a second representation (module-structure spec, *Responsibility and
-dependency rules*). The request, refusal and summaries only the HTTP
-endpoints use are the server's (``server/api/schemas.py``).
-
-Every event carries ``type``, the SSE ``event:`` name a client switches on,
-and ``seq``, the SSE ``id:`` a reconnect sends back as ``Last-Event-ID``. The
-sequence number is not called ``id`` because a ``step`` event's ``id`` is
-already the node it moves (``brief``, ``market`` or ``seo``): a step event is
-a :class:`WorkflowStep` plus those two fields, so the browser can reduce the
-latest one per node straight into its indicator.
+Every event carries ``type``, the SSE ``event:`` name, and ``seq``, the SSE
+``id:`` a reconnect sends back as ``Last-Event-ID``. It is not called ``id``
+because a step event's ``id`` is the node it moves: a step event is a
+:class:`WorkflowStep` plus those two fields, which the browser reduces
+straight into its indicator.
 """
 
 from __future__ import annotations

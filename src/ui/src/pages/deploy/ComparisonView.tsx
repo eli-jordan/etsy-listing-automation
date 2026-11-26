@@ -2,59 +2,25 @@ import { useState } from "react";
 import { MutedClip } from "../../components/MutedClip";
 import { pictureFor, type SceneSource } from "../../media";
 import type { RenderSnapshot } from "../../types";
-import type {
-  AfterImageTile,
-  AfterVideoTile,
-  BeforeImageTile,
-  BeforeVideoTile,
-  ColoursBlock,
-  Comparison as ComparisonData,
-  DescriptionBlock,
-  DriftedField,
-  PriceBlock,
-  TagsBlock,
-  TitleBlock,
+import {
+  formatPriceRange,
+  type AfterImageTile,
+  type AfterVideoTile,
+  type BeforeImageTile,
+  type BeforeVideoTile,
+  type ColoursBlock,
+  type Comparison as ComparisonData,
+  type DriftedField,
+  type PriceBlock,
+  type StringListBlock,
+  type TextBlock,
 } from "./comparison";
 import { DriftTextRow, DriftValueRow } from "./DriftRows";
+import { previewKey } from "./deployState";
 import { wordDiff } from "./wordDiff";
-
-/**
- * The centre of the page: "On Etsy now" / "After apply", or a single column
- * once there is nothing to compare or the run has applied (spec's
- * "Comparison" element, decision 3).
- *
- * Named `ComparisonView`, not `Comparison` -- the frontend module table
- * names this file `Comparison.tsx` beside the pure `comparison.ts` it
- * consumes, differing only in case. That collides on Windows and macOS's
- * default case-insensitive filesystems (this repo's own toolchain, per
- * CLAUDE.md's Environment section) and `tsc` refuses to build it even on a
- * case-sensitive one, having seen both spellings resolve to one path. One
- * of the two names had to move; the pure module keeps the plain noun.
- *
- * **Where a gallery tile's picture comes from** is the one place this
- * component adds a rule `comparison.ts` does not carry, because it needs
- * the DOM-facing side of `media.ts` `comparison.ts` is pure and must not
- * import:
- *
- * - "On Etsy now" prefers the live `url` (Etsy's own CDN image). A `ref`
- * with no `url` yet (freshly uploaded, or a hand-added Shop Manager image
- * this tool never uploaded) falls back to the local render the same way
- * the spec says to.
- * - "After apply" for a scene the render stage will re-render shows a
- * spinner until `previewsRendered` names it, then the preview endpoint's
- * own file. A scene whose render is already current (`state: "cached"`)
- * shows today's picture directly -- there is nothing new to wait for.
- * Neither of those endpoints exists for a bare shared-media ref, which
- * renders through `pictureFor` like the editor's own reel does.
- * - A video is drawn "after" from its own file, as a muted clip the
- * browser gives a poster frame, and "now" from Etsy's `thumbnail_url` --
- * the one picture of it the API offers.
- */
 
 export interface ListingMediaContext {
   name: string;
-  /** Where a cached scene's picture resolves its artwork from (A35), or
-   * `null` to show the bare photo. */
   scene: SceneSource | null;
 }
 
@@ -81,13 +47,9 @@ function sceneState(
 
 interface TileImage {
   src: string | null;
-  /** The plan's preview of this scene is still rendering. */
   pending: boolean;
 }
 
-/** Where an after-apply tile's image comes from: the caller's own lookup,
- * the listing's picture for a plain file, or the scene -- its cached render,
- * or this plan's preview once that has rendered. */
 function afterTileImage(
   ref: string,
   listing: ListingMediaContext,
@@ -101,7 +63,7 @@ function afterTileImage(
     return { src: pictureFor(ref, listing.scene, "full", listing.name || null), pending: false };
   }
   const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
-  const key = `${parsed.template}|${parsed.colour ?? ""}`;
+  const key = previewKey(parsed.template, parsed.colour);
   const ready =
     scene === null || scene.state === "cached" || scene.preview || previewsRendered.has(key);
   if (!ready) return { src: null, pending: true };
@@ -139,8 +101,8 @@ function AfterTile({
   return (
     <figure className="dv-thumb-wrap">
       <div
-        className={`dv-thumb${tile.badge === "new" ? " dv-thumb--new" : ""}${tile.replaced ? " dv-thumb--replaced" : ""}`}
-        title={tile.replaced ? "Changed" : undefined}
+        className={`dv-thumb${tile.badge === "new" ? " dv-thumb--new" : ""}${tile.reRendered ? " dv-thumb--replaced" : ""}`}
+        title={tile.reRendered ? "Changed" : undefined}
       >
         {pending ? (
           <span className="dv-spinner" aria-hidden="true" />
@@ -156,8 +118,7 @@ function AfterTile({
   );
 }
 
-/** This plan's own preview of the scene, named by the hash the plan computed
- * for it -- a file read, where asking without the hash re-plans the listing. */
+/** Without `hash` the server re-plans the listing to find the preview. */
 function previewUrl(
   listing: string,
   template: string,
@@ -173,8 +134,8 @@ function BeforeTile({ tile }: { tile: BeforeImageTile }) {
   return (
     <figure className="dv-thumb-wrap">
       <div
-        className={`dv-thumb${tile.badge === "removed" ? " dv-thumb--gone" : ""}${tile.replaced ? " dv-thumb--replaced" : ""}`}
-        title={tile.replaced ? "Changed" : undefined}
+        className={`dv-thumb${tile.badge === "removed" ? " dv-thumb--gone" : ""}${tile.reRendered ? " dv-thumb--replaced" : ""}`}
+        title={tile.reRendered ? "Changed" : undefined}
       >
         {tile.url !== null ? (
           <img alt={tile.ref ?? "listing image"} src={tile.url} />
@@ -257,7 +218,7 @@ function StringList({
   side,
 }: {
   label: string;
-  block: TagsBlock;
+  block: StringListBlock;
   side: "before" | "after";
 }) {
   const isAfter = side === "after";
@@ -281,8 +242,6 @@ function StringList({
   );
 }
 
-/** A text field on one side: the word diff after a change, the plain
- * value otherwise, and a dash for nothing on Etsy yet. */
 function TextDiff({
   field,
   isAfter,
@@ -301,12 +260,9 @@ function TextDiff({
 
 type Side = "before" | "after";
 
-/** One field across the comparison. Fields are rows, not two free-standing
- * columns, so a drifted field's two sides line up and can open together. */
 interface FieldRow {
   key: string;
   cell: (side: Side) => React.ReactNode;
-  /** Set when this field drifted, which replaces the plain row. */
   drift?: DriftedField | null;
 }
 
@@ -355,7 +311,7 @@ function mediaRows({ images, videos }: ComparisonData, media: MediaContext): Fie
 function copyRow(
   key: "title" | "description",
   label: string,
-  block: TitleBlock | DescriptionBlock,
+  block: TextBlock,
   drifted: DriftedField[],
 ): FieldRow {
   return {
@@ -398,14 +354,14 @@ function priceRow(price: PriceBlock): FieldRow {
     cell: (side) => (
       <Block label="Price" changed={price.changed} side={side}>
         <div className="dv-price dv-tnum">
-          {formatRange(side === "after" ? price.after : price.before)}
+          {formatPriceRange(side === "after" ? price.after : price.before)}
         </div>
       </Block>
     ),
   };
 }
 
-function listRow(label: string, block: TagsBlock): FieldRow {
+function listRow(label: string, block: StringListBlock): FieldRow {
   return {
     key: label,
     cell: (side) => <StringList label={label} block={block} side={side} />,
@@ -458,16 +414,6 @@ function ColumnHeads({ sides, idLabel }: { sides: Side[]; idLabel: string }) {
   );
 }
 
-/** `"349 NOK"` alone, or `"349–399 NOK"` -- the bare low amount, an
- * en-dash, then the high amount with its unit, matching how the design mock
- * reads a price range. */
-function formatRange(range: { min: string; max: string } | null): string {
-  if (range === null) return "—";
-  if (range.min === range.max) return range.min;
-  const minAmount = range.min.split(" ")[0] ?? range.min;
-  return `${minAmount}–${range.max}`;
-}
-
 export function ComparisonView({
   comparison,
   listing,
@@ -483,15 +429,11 @@ export function ComparisonView({
   listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
-  /** Collapse to one "On Etsy now" column -- once applied, or when the plan
-   * found nothing to compare. */
   collapsed: boolean;
   etsyListingId: number | null;
   /** Optional fixture resolver for canvases and component galleries. The app
    * normally derives these URLs from the listing's media refs. */
   imageUrlForRef?: (ref: string) => string | null;
-  /** The drifted field shown open, when the page links to fields from
-   * outside. Left out, the view keeps this itself. */
   openDrift?: string | null;
   onOpenDriftChange?: (key: string | null) => void;
 }) {

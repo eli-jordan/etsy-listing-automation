@@ -4,49 +4,33 @@ import { useIsPhone } from "./usePhone";
 import { useSwipe } from "./useSwipe";
 
 /**
- * Pull down to dismiss, for anything the phone layout shows as a sheet: the
- * grab bar of every bottom sheet (`SheetGrabber`), the deploy drawer, and the
- * Lightbox's picture. Every one goes through here, so they all feel the same:
- *
- * - Pulled down, the moving element follows the finger one to one. Pulled
- *   up, it stays put, unless `grow` hands the upward drag to the caller.
- * - A swipe down slides it the rest of the way out in 180ms, then dismisses;
- *   a release short of one springs back over 180ms.
- * - With `prefers-reduced-motion`, a swipe down dismisses at once.
- *
- * Phone only, and a finger only: off the phone layout nothing listens and
- * nothing moves. A scrolling body inside keeps its own scroll.
- *
  * The element stays slid out until the sheet closes (`enabled` goes false or
  * the hook unmounts), so a dialog's closing animation never shows it
  * flashing back into place first.
  */
 
 export interface SheetGrow {
-  /** The finger is `by` px above where it started. */
-  onDrag: (by: number) => void;
-  /** The finger lifted after any drag; `swiped` when it was a swipe up. */
-  onRelease: (swiped: boolean) => void;
+  onDrag: (pxAboveStart: number) => void;
+  onRelease: (swipedUp: boolean) => void;
 }
 
 export interface SheetDragOptions {
   onDismiss: () => void;
-  /** Off while the sheet is closed. */
   enabled?: boolean;
   /** The element that moves, when it is not `zone` itself. */
   moves?: RefObject<HTMLElement | null>;
-  /** Fade the element as it is pulled down, for something with no box of
-   * its own to read as leaving (the Lightbox's picture on its dark ground). */
+  /** For something with no box of its own to read as leaving. */
   fade?: boolean;
-  /** Up grows the sheet (the deploy drawer) rather than doing nothing. */
   grow?: SheetGrow;
 }
 
 const OUT_MS = 180;
 
-/** How faint a fading element is `down` px from where it started. */
+const FADE_FLOOR = 0.4;
+const FADE_DISTANCE_PX = 400;
+
 function fadeAt(down: number): string {
-  return String(Math.max(0.4, 1 - down / 400));
+  return String(Math.max(FADE_FLOOR, 1 - down / FADE_DISTANCE_PX));
 }
 
 export function useSheetDrag(zone: RefObject<HTMLElement | null>, options: SheetDragOptions): void {

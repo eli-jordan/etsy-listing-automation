@@ -1,5 +1,3 @@
-"""Settings reads and revision-checked saves (Admin plan PR 4, ADR-0055)."""
-
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -9,15 +7,12 @@ from etsy_listings.core.application import (
     template_position_impact,
     workspace_settings,
 )
-from etsy_listings.core.application.position_coverage import cover_widened_limits
-from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.refusals import (
     InvalidSettingsEditError,
     SettingsRevisionConflictError,
 )
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.settings import PROVIDER_NAMES, AiProviderSettings, SettingsProblem
-from etsy_listings.core.render.positions import PositionLimits
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
     ListingOutsideBody,
@@ -93,7 +88,7 @@ def edit_settings(
     coordinators = settings_save.SettingsCoordinators(
         ai_queue=request.app.state.ai.queue,
         backups=app_state.backups(request),
-        coverage=_AfterResponse(request.app.state.preparations, background),
+        coverage=app_state.after_response(request, background),
     )
     try:
         view = settings_save.save_settings(
@@ -112,18 +107,6 @@ def edit_settings(
     return _response(view)
 
 
-class _AfterResponse:
-    """Coverage queued once the save has answered, so a slow template scan
-    never holds the response."""
-
-    def __init__(self, preparations: Preparations, background: BackgroundTasks) -> None:
-        self._preparations = preparations
-        self._background = background
-
-    def cover_widened(self, saved: PositionLimits, limits: PositionLimits) -> None:
-        self._background.add_task(cover_widened_limits, self._preparations, saved, limits)
-
-
 @router.post(
     "/template-positions/impact",
     response_model=TemplatePositionImpactResponse,
@@ -132,7 +115,7 @@ class _AfterResponse:
 def template_positions_impact(
     request: Request, body: TemplatePositionImpactRequest
 ) -> TemplatePositionImpactResponse | JSONResponse:
-    """A read for Settings' confirmation (template positions PR 5): who the
+    """A read for Settings' confirmation: who the
     candidate limits would block, and which Marigold templates would need
     model inference to cover them."""
     try:
@@ -141,8 +124,6 @@ def template_positions_impact(
         return _invalid(exc)
     impact = template_position_impact.template_position_impact(request.app.state.workspace, limits)
     if isinstance(impact, SettingsProblem):
-        # An unreadable settings.yaml is refused naming the file and key, as
-        # listings report it (a51ec1f4), never a server error.
         return JSONResponse(
             status_code=422,
             content=SettingsSaveRefusal(kind="invalid", message=impact.message).model_dump(),

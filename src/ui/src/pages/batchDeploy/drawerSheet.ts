@@ -1,9 +1,3 @@
-/**
- * The listing drawer's finger arithmetic on a phone, free of the DOM so it
- * is tested on numbers. The drawer is a bottom sheet there: pulled up it
- * grows towards its expanded height.
- */
-
 export interface DrawerBounds {
   minimum: number;
   collapsed: number;

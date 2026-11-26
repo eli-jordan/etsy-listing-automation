@@ -1,12 +1,3 @@
-/**
- * Where "Open in Etsy" and "Open in Printify" actually go.
- *
- * Beside `OpenInMenu` rather than inside it because the listings table asks
- * the same question the menu does -- is there anything to open -- before it
- * decides whether to render the menu at all, and a component file that also
- * exports plain functions is a file Vite cannot hot-reload.
- */
-
 /** Whether this menu has anything to show. Exported because the two callers
  * decide for themselves whether an empty menu is worth rendering, and an
  * absent id arrives as `null` from the API and `undefined` from a partial

@@ -1,28 +1,5 @@
 """Reading the Etsy market: other sellers' active listings, their stats, and
-their review counts (features/market-seo-20260924/spec.md, *Search* and *Stats*).
-
-Three calls, each the one the spec names and nothing more -- the filtering,
-scoring and rationing that decide *which* calls to make live in research, not
-here:
-
-- :meth:`~EtsyMarketClient.search_active`: `findAllListingsActive`, ranked by
-  Etsy's own relevance for a US buyer, with no ``taxonomy_id`` (the item type
-  at the end of each query does that job).
-- :meth:`~EtsyMarketClient.listings_by_ids`: `getListingsByListingIds` with
-  the shop and images attached, a hundred ids a call.
-- :meth:`~EtsyMarketClient.review_count`: `getReviewsByListing`, one review
-  asked for and only its total read.
-
-Read-only by type, like:mod:`shops`: a caller holding an
-:class:`EtsyMarketClient` cannot reach a write however the transport underneath
-is shared. All three calls are unscoped -- the app key pair is enough --
-so the client needs no sign-in (see ``connections.etsy_market_client``).
-
-Pacing and retries are the transport's: header pacing through
-:class:`~etsy_listings.core.clients.etsy.transport.RateGate`, and the shared retry
-policy for 429, 5xx and network errors. What surfaces here after those is a
-failure research reports as *Etsy market search failed*.
-"""
+their review counts."""
 
 from __future__ import annotations
 
@@ -31,7 +8,12 @@ from collections.abc import Sequence
 from typing import Any, Protocol
 
 from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing
-from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+from etsy_listings.core.clients.etsy.transport import (
+    HTTP_NOT_FOUND,
+    EtsyApiError,
+    Transport,
+    results_of,
+)
 
 SEARCH_PATH = "/v3/application/listings/active"
 BATCH_PATH = "/v3/application/listings/batch"
@@ -50,8 +32,8 @@ _MISSING_IDS = re.compile(r"Missing listing_ids:\s*([\d,\s]+)")
 
 
 class EtsyMarketClient(Protocol):
-    """What market research asks Etsy. Reads only, and safe to call from
-    several threads at once -- research keeps up to five calls in flight."""
+    """What market research asks Etsy. Reads only; implementations must be
+    thread-safe (research keeps ``MAX_IN_FLIGHT`` calls going)."""
 
     def search_active(self, query: str, *, limit: int = 25) -> list[MarketCandidate]: ...
 
@@ -65,22 +47,13 @@ class HttpEtsyMarketClient:
         self._transport = transport
 
     def search_active(self, query: str, *, limit: int = 25) -> list[MarketCandidate]:
-        """Active listings matching ``query``, in the order Etsy ranks them
-        for a buyer (``sort_on=score``) who ships to the US -- the country the
-        seo prompt writes for. Deliberately no ``taxonomy_id``: nothing in a
-        listing or garment profile records one (features/market-seo-20260924/spec.md, *Search*)."""
         response = self._transport.get(SEARCH_PATH, params=search_params(query, limit=limit))
-        return [MarketCandidate.model_validate(row) for row in _results(response.json())]
+        return [MarketCandidate.model_validate(row) for row in results_of(response.json())]
 
     def listings_by_ids(self, ids: Sequence[int]) -> list[MarketListing]:
         """Each listing's stats, shop and thumbnail, in chunks of
-        :data:`BATCH_LIMIT`.
-
-        An id Etsy no longer has is **absent** from the answer. Etsy refuses
-        the whole chunk with a ``404`` naming the missing ids (measured), and
-        a listing deactivated between the search and this call is ordinary --
-        so the chunk is asked again without them, once.
-        """
+        :data:`BATCH_LIMIT`. Etsy 404s a whole chunk naming any gone ids
+        (measured), so the chunk is asked again once without them."""
         listings: list[MarketListing] = []
         wanted = list(ids)
         for start in range(0, len(wanted), BATCH_LIMIT):
@@ -105,17 +78,12 @@ class HttpEtsyMarketClient:
                 "includes": "Shop,Images",
             },
         )
-        return [MarketListing.model_validate(row) for row in _results(response.json())]
+        return [MarketListing.model_validate(row) for row in results_of(response.json())]
 
     def review_count(self, listing_id: int) -> int:
-        """How many reviews the listing has: the nearest thing to per-listing
-        sales the API offers, and the one per-listing call, so the one
-        research rations (features/market-seo-20260924/spec.md, *Stats*).
-
-        ``limit=1`` because ``count`` is the total whatever the page size
-        (measured). A listing gone since the batch counts zero rather than
-        failing the run; a body with no ``count`` is refused, since zero
-        there would be a guess scored as evidence.
+        """A listing gone since the batch counts zero rather than failing the
+        run; a body with no ``count`` is refused, since zero there would be a
+        guess scored as evidence.
         """
         try:
             response = self._transport.get(
@@ -135,21 +103,11 @@ class HttpEtsyMarketClient:
 
 
 def search_params(query: str, *, limit: int) -> dict[str, str | int]:
-    """The exact parameters :meth:`HttpEtsyMarketClient.search_active` sends
-    for ``query``."""
     return {"keywords": query, "limit": limit, **SEARCH_DEFAULTS}
 
 
-def _results(body: Any) -> list[Any]:
-    """Etsy's list envelope is always ``{count, results}``."""
-    if isinstance(body, dict) and isinstance(body.get("results"), list):
-        return list(body["results"])
-    return []
-
-
 def _missing_ids(error: EtsyApiError) -> set[int] | None:
-    """The ids a batch ``404`` names as gone, or ``None`` for any other
-    failure -- only the one measured shape is read as "some ids are gone"."""
+    """The ids a batch ``404`` names as gone, or ``None`` for any other failure."""
     if error.status_code != HTTP_NOT_FOUND:
         return None
     match = _MISSING_IDS.search(error.error)

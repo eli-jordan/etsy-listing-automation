@@ -207,6 +207,20 @@ def test_a_run_without_the_password_is_recorded_as_failed(workspace: Workspace, 
     assert BackupStateStore(home).runs() == [record]
 
 
+def test_a_refused_configuration_is_recorded_as_a_failed_run(
+    workspace: Workspace, home: Path, tmp_path: Path
+) -> None:
+    configure_backups(workspace.root, workspace.root / "backups", restic_binary=tmp_path / "r")
+    restic = _restic()
+
+    record = _run(workspace, home, restic)
+
+    assert (record.outcome, record.failed_step) == ("failed", "starting")
+    assert "overlaps" in (record.message or "")
+    assert BackupStateStore(home).runs() == [record]
+    assert restic.operations == []
+
+
 def test_cancelling_part_way_stops_restic_and_resumes_jobs(
     workspace: Workspace, home: Path
 ) -> None:

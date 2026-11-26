@@ -253,6 +253,21 @@ describe("a listing-template card as a drop target (UI doc §2)", () => {
     expect(within(target).queryByText(/Drop to stage/)).not.toBeInTheDocument();
   });
 
+  it("keeps the drop overlay while the drag moves onto something inside the card", async () => {
+    renderRoutes();
+    await screen.findByText("heavyweight-tee");
+    const target = cardFor("heavyweight-tee");
+    const inside = within(target).getByText("heavyweight-tee");
+
+    fireEvent.dragEnter(target, { dataTransfer: transfer(pngs(2)) });
+    fireEvent.dragEnter(inside, { dataTransfer: transfer(pngs(2)) });
+    fireEvent.dragLeave(target, { dataTransfer: transfer(pngs(2)) });
+    expect(within(target).getByText("Drop to stage 2 PNGs")).toBeInTheDocument();
+
+    fireEvent.dragLeave(inside, { dataTransfer: transfer(pngs(2)) });
+    expect(within(target).queryByText(/Drop to stage/)).not.toBeInTheDocument();
+  });
+
   it("names a ZIP being dragged as a ZIP (batch plan PR 7)", async () => {
     renderRoutes();
     await screen.findByText("heavyweight-tee");

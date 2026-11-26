@@ -1,27 +1,11 @@
-"""What Printify's endpoints return, on both sides of the client.
+"""What Printify's catalog and shop endpoints return and accept.
 
-Two families in one module, because they are one API's vocabulary and a stage
-routinely holds both: the product stage resolves a :class:`Variant` id out of
-the catalog and puts it in a :class:`ProductSpec` in the same breath.
-
-*Reference data* -- :class:`Blueprint`, :class:`PrintProvider`,
-:class:`Variant`, :class:`ShippingRates` -- is the read-only, shop-agnostic
-half. Read-only, but not unauthenticated: every catalog call needs a
-token with the ``catalog.read`` scope, same as the rest of the API.
-
-*Shop-scoped state* -- :class:`Shop`, :class:`Upload`, :class:`Product`,
-:class:`ProductSpec` -- is what a shop owns and this tool writes.
-
-Every model is deliberately lenient about extra keys and strict about the ones
-it names: Printify adds fields without warning, and a client that treats a new
-one as a validation error breaks on a day nobody deployed anything.
+Every model ignores keys it does not name: Printify adds fields without warning.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, model_validator
-
-# --------------------------------------------------------------- reference data
 
 
 class Blueprint(BaseModel):
@@ -90,7 +74,6 @@ class VariantSet(BaseModel):
         return list(seen)
 
     def positions(self) -> list[str]:
-        """Every print position this combination offers, first seen first."""
         seen: dict[str, None] = {}
         for variant in self.variants:
             for placeholder in variant.placeholders:
@@ -98,12 +81,7 @@ class VariantSet(BaseModel):
         return list(seen)
 
     def placeholder_sizes(self, position: str) -> list[PrintAreaPlaceholder]:
-        """Every distinct size offered at ``position``, largest first.
-
-        Distinct by dimensions rather than by variant: a 229-variant set
-        typically offers two or three sizes across all of them, and the same
-        size repeated under several decoration methods.
-        """
+        """Every distinct size (by dimensions) offered at ``position``, largest first."""
         distinct = {
             (p.width, p.height): p
             for variant in self.variants
@@ -113,14 +91,7 @@ class VariantSet(BaseModel):
         return sorted(distinct.values(), key=lambda p: (p.area, p.width, p.height), reverse=True)
 
     def placeholder(self, position: str) -> PrintAreaPlaceholder | None:
-        """The **largest** size offered at ``position``, or ``None``.
-
-        A profile carries one print area and the catalog offers
-        several, so one has to win. The largest does, because the print area
-        is a resolution target -- a design must come within 10% of it in each
-        axis -- and art sized for the 3XL panel still covers the S
-        panel, while the reverse prints soft on the sizes that need it most.
-        """
+        """The largest size offered at ``position`` (ADR-0018), or ``None``."""
         sizes = self.placeholder_sizes(position)
         return sizes[0] if sizes else None
 
@@ -155,19 +126,7 @@ class ShippingRates(BaseModel):
         return None
 
 
-# ------------------------------------------------------------ shop-scoped state
-
-
 class Shop(BaseModel):
-    """One row of ``GET /v1/shops.json`` -- which is the whole of what that
-    endpoint knows. No currency, no settings, no draft preference
-    (docs/research/api-findings.md).
-
-    The call is scoped to the token, so its answer is also the answer to "which
-    shops may this token write to?" -- which is what makes ``setup`` able to
-    discover the shop id rather than asking a human to find one.
-    """
-
     model_config = ConfigDict(frozen=True)
 
     id: int
@@ -179,25 +138,10 @@ class Shop(BaseModel):
 
     @property
     def is_connected(self) -> bool:
-        """Whether a publish could reach a sales channel at all.
-
-        ``publish.json`` against a disconnected shop is
-        ``400 code 8254``, so this is the difference between "Phase 3 will
-        work here" and "Phase 3 cannot be tested here".
-        """
         return self.sales_channel not in (None, "", "disconnected")
 
 
 class Upload(BaseModel):
-    """What ``POST /v1/uploads/images.json`` gives back.
-
-    Uploads are **content-addressed**: the same bytes return the same ``id``
-    and the same ``upload_time``, and ``file_name`` takes no part in it. So
-    re-uploading is safe -- merely wasteful, since it still ships the
-    megabytes -- which is why the id is cached in the lockfile against the
-    design's content hash rather than guarded by anything cleverer.
-    """
-
     model_config = ConfigDict(frozen=True)
 
     id: str
@@ -207,20 +151,6 @@ class Upload(BaseModel):
 
 
 class PlacedImage(BaseModel):
-    """A design placed in a print area, projected to the five fields we set.
-
-    We send five; the product returns fourteen -- ``name``, ``type``,
-    ``width``, ``height``, ``flipX``, ``flipY``, ``src``, ``layerType`` and an
-    ``imageId`` distinct from the upload id. Comparing all of them against a
-    desired document is a permanent spurious diff, so the extras are dropped
-    on the way in rather than filtered at every comparison
-    (docs/research/api-findings.md).
-
-    The defaults are fixed placement: centred, fit inside the print
-    area, unrotated. There is no configuration surface for them in v1 --
-    ADR-0018's >=90% gate is what makes the constant right rather than arbitrary.
-    """
-
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     id: str
@@ -259,11 +189,6 @@ class ProductVariant(BaseModel):
 
 
 class ProductExternal(BaseModel):
-    """A published product's link to the sales channel, narrowed to what
-    Phase 3 reads. ``type`` (observed ``4``, undocumented) is dropped
-    deliberately -- recording it only so the next reader does not think it
-    means something."""
-
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     id: str
@@ -272,15 +197,6 @@ class ProductExternal(BaseModel):
 
 
 class Product(BaseModel):
-    """A product as Printify holds it, projected to what we can actually set.
-
-    ``variants`` arrives as the **whole blueprint matrix** -- 238 entries for a
-    product created with 6 -- so every comparison goes through
-    :meth:`enabled_variants`. The full list is kept because an update has to
-    name every variant in ``print_areas.variant_ids`` (the coverage rule), and
-    that is the only place it is needed.
-    """
-
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     id: str
@@ -303,9 +219,6 @@ class Product(BaseModel):
 
     @model_validator(mode="after")
     def _drop_empty_placeholders(self) -> Product:
-        """`back` comes back with `images: []` on a product that only uses
-        `front`. A placeholder we never placed anything in is not a
-        difference, and carrying it makes every comparison report one."""
         pruned = tuple(
             area.model_copy(
                 update={"placeholders": tuple(p for p in area.placeholders if p.images)}
@@ -317,18 +230,12 @@ class Product(BaseModel):
         return self
 
     def enabled_variants(self) -> dict[int, int]:
-        """``{variant_id: price}`` for the enabled subset -- the product's real
-        content, and the only part a desired document describes."""
         return {v.id: v.price for v in self.variants if v.is_enabled}
 
     def all_variant_ids(self) -> tuple[int, ...]:
         """Every variant the product carries, for the update coverage rule.
-
-        The print areas name them, not ``variants``: an older product listed
-        399 variants against 238 in its print areas, and naming the other 161
-        (unavailable, disabled) got 400 code 8251. The variant list is the
-        fallback for a product read without print areas.
-        """
+        The print areas say which, not ``variants``: naming a variant only
+        ``variants`` lists gets 400 code 8251 (measured)."""
         named = {vid for area in self.print_areas for vid in area.variant_ids}
         return tuple(v.id for v in self.variants if v.id in named) or tuple(
             v.id for v in self.variants
@@ -336,9 +243,6 @@ class Product(BaseModel):
 
 
 class ProductSpec(BaseModel):
-    """What we want a product to be. Not what Printify returns -- see
-    :class:`Product` for the difference and why it matters."""
-
     model_config = ConfigDict(frozen=True)
 
     title: str

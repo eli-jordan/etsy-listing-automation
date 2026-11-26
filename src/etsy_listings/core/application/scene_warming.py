@@ -1,42 +1,3 @@
-"""Compose a listing's gallery scenes in the background, so the Listing Images
-tab finds them in the scene cache rather than waiting seconds per picture.
-
-A save that leaves a listing with a template entry in ``media:`` asks
-:meth:`SceneWarmer.request` for that listing. One worker thread then takes
-each template entry through :func:`~etsy_listings.core.application.scene_previews.saved_scene`
-at full size -- the very path ``GET /api/listings/{name}/scene-preview``
-takes -- so what it stores is under the identity that endpoint looks up, and
-the render stage's too. Already-cached scenes cost a digest lookup.
-
-**One thread, one composition at a time.** A preview request answers on its
-own thread and composes alongside the warmer rather than behind it; the
-warmer only ever takes one of
-:data:`~etsy_listings.core.preparation.scenes.MAX_CONCURRENT_RENDERS`. A
-preview of a scene the warmer is composing waits on the scene cache's
-per-identity lock and reads the warmer's entry, so nothing is composed twice.
-
-**The latest save wins.** Listings are queued by name, oldest first, and a
-name already queued keeps its place. A listing saved again while it is being
-warmed stops after the scene in hand and goes back on the queue, so the
-next pass reads the listing as it now stands.
-
-**Then it prunes.** At startup, and each time the queue drains, the warmer
-removes the position fits no listing's current position produces
-(:func:`~etsy_listings.core.application.position_fit_pruning.prune_position_fits`),
-so a position change prunes the fit it replaced once its new fit is stored.
-:meth:`SceneWarmer.wait_idle` waits for the prune too.
-
-**A backup's pause** (workspace-backup spec, *Pausing jobs*) starts no
-pass: requests queue as usual, and the worker waits in the gate's line for
-the next pass to begin after resume. A pass -- one listing and the prune
-after it -- holds a gate ticket, which a backup's wait for quiet counts; a
-shutdown during the pause ends the wait (the gate stops before the warmer).
-
-A scene that cannot be composed -- a template not prepared, a photo or design
-missing, a listing that no longer loads -- is skipped: the preview endpoint
-reports the same refusal when the seller opens it.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -69,7 +30,6 @@ Scene = tuple[str, str | None]
 
 
 def gallery_scenes(workspace: Workspace, name: str) -> list[Scene]:
-    """Every template entry in ``name``'s saved ``media:``, in gallery order."""
     listing = workspace.load_listing(name)
     return [
         (entry.template, entry.colour)
@@ -79,9 +39,6 @@ def gallery_scenes(workspace: Workspace, name: str) -> list[Scene]:
 
 
 def warm_scene(workspace: Workspace, name: str, template: str, colour: str | None) -> None:
-    """Compose one of ``name``'s scenes at full size into the scene cache,
-    or find it there, at the listing's saved position. Refusals are the
-    preview endpoint's."""
     listing = listing_scenes(workspace, name)
     saved_scene(
         workspace,
@@ -93,8 +50,6 @@ def warm_scene(workspace: Workspace, name: str, template: str, colour: str | Non
 
 
 class SceneWarmer:
-    """The worker thread and its queue of listing names; see the module."""
-
     def __init__(
         self,
         workspace: Workspace,
@@ -122,8 +77,7 @@ class SceneWarmer:
         self._thread.start()
 
     def stop(self, *, timeout: float = 10.0) -> None:
-        """Start nothing more; the scene in hand finishes or is abandoned
-        with the daemon thread when it outlasts ``timeout``."""
+        """A scene outlasting ``timeout`` is abandoned with the daemon thread."""
         with self._wake:
             self._stopping = True
             self._queued.clear()
@@ -132,7 +86,6 @@ class SceneWarmer:
             self._thread.join(timeout=timeout)
 
     def request(self, name: str) -> None:
-        """Warm ``name``'s gallery as it is saved now."""
         with self._wake:
             if self._stopping:
                 return
@@ -141,8 +94,6 @@ class SceneWarmer:
             self._wake.notify_all()
 
     def wait_idle(self, *, timeout: float) -> bool:
-        """Block until every request so far is warmed. What a test waits on
-        instead of a sleep; ``False`` on timeout."""
         return self._idle.wait(timeout)
 
     def _loop(self) -> None:
@@ -165,10 +116,7 @@ class SceneWarmer:
                 self._settle()
 
     def _take(self) -> tuple[str, Ticket] | None:
-        """The next listing and its gate ticket, once one is queued and the
-        gate admits its pass; ``None`` on stopping. Only this thread takes
-        from the queue, so the listing the ticket names stays first until
-        it is taken here, under the queue's lock."""
+        """Only this thread pops the queue, so the name peeked here stays first."""
         while True:
             with self._wake:
                 self._wake.wait_for(lambda: bool(self._queued) or self._stopping)
@@ -184,7 +132,6 @@ class SceneWarmer:
             ticket.release()
 
     def _settle(self) -> None:
-        """Prune once the queue has drained, then report idle if it still has."""
         with self._wake:
             if self._queued:
                 return

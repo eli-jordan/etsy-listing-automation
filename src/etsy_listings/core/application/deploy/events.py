@@ -1,41 +1,12 @@
-"""The ``RunEvent`` union the SSE route streams, and how a ``Plan``/``StagePlan``
-turns into JSON (ADR-0041, decision 7).
-
-Two things are true about the engine's own ``Plan``/``StagePlan``/``Change``
-types that make them unfit to serialise directly. They are plain dataclasses,
-and changes may carry a :class:`~etsy_listings.core.config.money.Money` that JSON
-does not convert on its own. And the four ``Change`` shapes (``FieldChange``,
-``ListChange``, ``PriceChange``, ``MediaChange``) are a plain union with no
-field a frontend union type could discriminate on -- exactly the ambiguity
-``StagePlan.blocked``/``Verdict.refused`` already solved once for "why didn't
-this run" (see ``engine/stage.py``'s docstring) by picking one vocabulary
-rather than reusing whatever shape happened to be lying around.
-
-So every engine type gains a small DTO mirror here, each with an explicit
-``kind``/``type`` literal a frontend can switch on, built by walking the real
-value once ( :func:`_jsonable`) rather than leaning on pydantic to already know
-what a ``Money`` is. This is *not* :func:`~etsy_listings.core.engine.run._canonical`
-reused: that helper exists to drop ``snapshot`` for the plan fingerprint
-and must never be tempted to keep it; this one exists to keep it, because the
-whole reason a plan run streams a ``listing_planned`` event is to show the
-snapshot the fingerprint is not allowed to see.
-
-**Why the union lives here and not beside each engine type.** ``engine``
-computes a diff and is not allowed to know anyone is going to serialise it
-over a socket (`plan.py`'s own docstring: only ``engine`` computes one, and
-the CLI renderer and the UI's serialiser both consume the result without
-re-deriving it). A DTO next to ``FieldChange`` would be exactly the drift this
-module's docstring elsewhere warns about -- one shape, two owners.
-"""
-
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
 from functools import singledispatch
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, assert_never
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -90,19 +61,7 @@ to know a listing's lock may be released."""
 
 
 @singledispatch
-def _jsonable(value: Any) -> Any:  # a generic tree walk, by construction
-    """``value``, turned into something ``BaseModel`` can hold in an ``Any``
-    field and get back out again as plain JSON.
-
-    Handles exactly the shapes a ``Change``/``Drift``'s ``before``/``after``/
-    ``last_applied``/``live`` or a stage's ``snapshot`` can actually be: a
-    :class:`Money`, a nested pydantic model (a snapshot, or a snapshot field
-    that is itself one), a dataclass, a ``Path``, an ``Enum``, a
-    list/tuple/dict of any of those, or a plain JSON scalar already. Unlike
-    :func:`~etsy_listings.core.engine.run._canonical`, this keeps every field by
-    name (including one literally called ``snapshot``) -- there is no
-    fingerprint here for a snapshot to spoil.
-    """
+def _jsonable(value: Any) -> Any:
     if is_dataclass(value) and not isinstance(value, type):
         return {f.name: _jsonable(getattr(value, f.name)) for f in fields(value)}
     return value
@@ -137,9 +96,6 @@ def _sequence(value: list[Any] | tuple[Any, ...]) -> list[Any]:
 @_jsonable.register(dict)
 def _mapping(value: dict[Any, Any]) -> dict[Any, Any]:
     return {key: _jsonable(item) for key, item in value.items()}
-
-
-# ------------------------------------------------------------------ Change
 
 
 class FieldChangeDTO(BaseModel):
@@ -179,26 +135,29 @@ ChangeDTO = Annotated[
 
 
 def _change_dto(change: Change) -> FieldChangeDTO | ListChangeDTO | PriceChangeDTO | MediaChangeDTO:
-    if isinstance(change, FieldChange):
-        return FieldChangeDTO(
-            path=change.path, before=_jsonable(change.before), after=_jsonable(change.after)
-        )
-    if isinstance(change, ListChange):
-        return ListChangeDTO(
-            path=change.path,
-            added=tuple(_jsonable(item) for item in change.added),
-            removed=tuple(_jsonable(item) for item in change.removed),
-            reordered=change.reordered,
-        )
-    if isinstance(change, PriceChange):
-        return PriceChangeDTO(
-            size=change.size,
-            before=str(change.before),
-            after=str(change.after),
-            color=change.color,
-        )
-    assert isinstance(change, MediaChange)  # `Change` has exactly four members
-    return MediaChangeDTO(rank=change.rank, before=change.before, after=change.after)
+    match change:
+        case FieldChange():
+            return FieldChangeDTO(
+                path=change.path, before=_jsonable(change.before), after=_jsonable(change.after)
+            )
+        case ListChange():
+            return ListChangeDTO(
+                path=change.path,
+                added=tuple(_jsonable(item) for item in change.added),
+                removed=tuple(_jsonable(item) for item in change.removed),
+                reordered=change.reordered,
+            )
+        case PriceChange():
+            return PriceChangeDTO(
+                size=change.size,
+                before=str(change.before),
+                after=str(change.after),
+                color=change.color,
+            )
+        case MediaChange():
+            return MediaChangeDTO(rank=change.rank, before=change.before, after=change.after)
+        case _:
+            assert_never(change)
 
 
 class DriftDTO(BaseModel):
@@ -233,9 +192,6 @@ def _action_dto(action: Action) -> ActionDTO:
         outputs=action.outputs,
         missing_outputs=action.missing_outputs,
     )
-
-
-# --------------------------------------------------------------- StagePlan/Plan
 
 
 class _StageOutcomeDTO(BaseModel):
@@ -371,15 +327,26 @@ _SnapshotStagePlanDTO = (
     | EtsyMediaStagePlanDTO
     | EtsyVideosStagePlanDTO
 )
-_SNAPSHOT_STAGES: dict[str, tuple[type[_SnapshotStagePlanDTO], type[BaseModel]]] = {
-    "render": (RenderStagePlanDTO, RenderSnapshot),
-    "printify_product": (ProductStagePlanDTO, ProductSnapshot),
-    "publish": (PublishStagePlanDTO, PublishSnapshot),
-    "etsy_listing": (EtsyListingStagePlanDTO, EtsyListingSnapshot),
-    "etsy_media": (EtsyMediaStagePlanDTO, EtsyMediaSnapshot),
-    "etsy_videos": (EtsyVideosStagePlanDTO, EtsyVideosSnapshot),
+_SNAPSHOT_STAGES: dict[str, Callable[[StagePlan, dict[str, Any]], _SnapshotStagePlanDTO]] = {
+    "render": lambda sp, values: RenderStagePlanDTO(
+        **values, snapshot=_snapshot(sp, RenderSnapshot)
+    ),
+    "printify_product": lambda sp, values: ProductStagePlanDTO(
+        **values, snapshot=_snapshot(sp, ProductSnapshot)
+    ),
+    "publish": lambda sp, values: PublishStagePlanDTO(
+        **values, snapshot=_snapshot(sp, PublishSnapshot)
+    ),
+    "etsy_listing": lambda sp, values: EtsyListingStagePlanDTO(
+        **values, snapshot=_snapshot(sp, EtsyListingSnapshot)
+    ),
+    "etsy_media": lambda sp, values: EtsyMediaStagePlanDTO(
+        **values, snapshot=_snapshot(sp, EtsyMediaSnapshot)
+    ),
+    "etsy_videos": lambda sp, values: EtsyVideosStagePlanDTO(
+        **values, snapshot=_snapshot(sp, EtsyVideosSnapshot)
+    ),
 }
-"""Each stage that carries a snapshot: its plan DTO and the snapshot type it holds."""
 
 
 def stage_plan_dto(
@@ -403,10 +370,7 @@ def stage_plan_dto(
         return EtsyActivateStagePlanDTO(**fields)
     if stage_plan.stage not in _SNAPSHOT_STAGES:
         raise ValueError(f"unknown stage {stage_plan.stage!r}")
-    dto, expected = _SNAPSHOT_STAGES[stage_plan.stage]
-    # _snapshot has checked it is ``expected``, the type the table pairs with ``dto``.
-    snapshot: Any = _snapshot(stage_plan, expected)
-    return dto(**fields, snapshot=snapshot)
+    return _SNAPSHOT_STAGES[stage_plan.stage](stage_plan, fields)
 
 
 class PlanDTO(BaseModel):
@@ -429,13 +393,10 @@ def plan_dto(plan: Plan) -> PlanDTO:
     )
 
 
-# ----------------------------------------------------------------------- events
-
-
 class PhaseEvent(BaseModel):
     """The run (or one of the two run kinds) moved to a new phase. Always the
     first event of a run and always its last, whichever phase that turns out
-    to be (ADR-0041, decision 7)."""
+    to be."""
 
     type: Literal["phase"] = "phase"
     id: int
@@ -511,11 +472,10 @@ class StageFailedEvent(BaseModel):
 
 class ListingFailedEvent(BaseModel):
     """The engine's ``EngineListingFailed`` wire twin. ``message`` is the
-    :class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word
-    (decision 5) -- never the generic internal-error text, which belongs to a
-    :class:`PhaseEvent` naming the whole run ``failed`` instead, since a
-    defect is not about any one listing. ``stale_plan`` is set only when the
-    error was a :class:`~etsy_listings.core.engine.run.StalePlanError`."""
+    :class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for
+    word, or the generic internal-error text for a defect, which also fails
+    the run. ``stale_plan`` is set only when the error was a
+    :class:`~etsy_listings.core.engine.run.StalePlanError`."""
 
     type: Literal["listing_failed"] = "listing_failed"
     id: int
@@ -542,4 +502,4 @@ discriminator annotation is needed to construct or inspect one."""
 RunEvent = Annotated[AnyRunEvent, Field(discriminator="type")]
 """The typed union :class:`~etsy_listings.server.api.schemas.RunDetail` exposes,
 so ``openapi.json`` -- and ``gen:api`` after it -- carries every event shape a
-frontend needs to switch on by ``type`` (ADR-0041, decision 7)."""
+frontend needs to switch on by ``type``."""

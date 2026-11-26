@@ -43,7 +43,14 @@ def test_unsafe_numeric_artifacts_are_refused(tmp_path, array, reason):
 
 @pytest.mark.parametrize(
     "relative",
-    ["../outside.png", "/outside.png", "C:/outside.png", "bad//crop.png", "bad/crop.jpg"],
+    [
+        "../outside.png",
+        "bad\\crop.png",
+        "/outside.png",
+        "C:/outside.png",
+        "bad//crop.png",
+        "bad/crop.jpg",
+    ],
 )
 def test_cache_paths_refuse_escapes_and_unexpected_files(tmp_path, relative):
     from etsy_listings.core.preparation.predictions import cache_path

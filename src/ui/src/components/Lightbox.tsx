@@ -5,35 +5,19 @@ import { useCarousel } from "../phone/useCarousel";
 import { useIsPhone } from "../phone/usePhone";
 import { useSheetDrag } from "../phone/useSheetDrag";
 
-/**
- * One preview, as large as the screen allows, over everything else.
- *
- * The Preview tab exists to be *judged* from, and a 140px tile cannot answer
- * the questions calibration is actually about -- whether the print's edge is
- * following a fold, whether the shading has gone muddy, whether the artwork
- * sits a few millimetres high. So a tile opens here, and here has a 1:1 view:
- * at fit-to-screen a 4000px render is being downsampled by the browser, which
- * is the one thing guaranteed to hide a resampling artefact.
- *
- * Arrow keys walk the set. That is the whole point for a colour matrix -- the
- * fault you are looking for is usually "this one colour is wrong", and finding
- * it means comparing neighbours, not opening and closing twelve times.
- */
+/** Has a 1:1 view because at fit-to-screen the browser downsamples a 4000px
+ * render, which hides exactly the resampling artefacts calibration looks for. */
 
 export interface LightboxItem {
   id: string;
   label: string;
   url: string;
-  /** A video plays with the browser's own controls instead. */
   kind?: "image" | "video";
 }
 
 interface Props {
   items: LightboxItem[];
   index: number;
-  /** True pixels rather than fit-to-screen. Owned by the parent so it
-   * survives stepping between images -- having to re-press it on every
-   * neighbour would defeat comparing them. */
   actualSize: boolean;
   onActualSizeChange: (actual: boolean) => void;
   onIndexChange: (index: number) => void;
@@ -59,9 +43,6 @@ export function Lightbox({
     [index, items.length, onIndexChange],
   );
 
-  // On the window, not on the dialog: the dialog is what has focus when it
-  // opens, but a click on the image or a scroll of the 1:1 view moves it, and
-  // Escape has to keep working afterwards.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -81,26 +62,22 @@ export function Lightbox({
   const isPhone = useIsPhone();
   const root = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
-  // On a phone a sideways swipe on the picture pages through the set, and a
-  // swipe down closes. At 1:1 a finger pans the picture, so neither is armed
-  // then.
-  const carousel = isPhone && !actualSize;
+  const fingerPans = actualSize;
+  const swipesEnabled = isPhone && !fingerPans;
   const track = useCarousel(stage, {
     count: items.length,
     index,
-    enabled: carousel,
+    enabled: swipesEnabled,
     onIndexChange,
   });
-  useSheetDrag(root, { moves: stage, fade: true, enabled: !actualSize, onDismiss: onClose });
+  useSheetDrag(root, { moves: stage, fade: true, enabled: !fingerPans, onDismiss: onClose });
   usePreloadNeighbours(items, index);
 
   if (!item) return null;
 
-  // The neighbours sit either side of the picture, so a swipe drags the next
-  // one in beside it. Off the phone, and at 1:1, there is only the one.
   const slides: { at: SlidePlace; position: number }[] = [{ at: "current", position: index }];
-  if (carousel && index > 0) slides.unshift({ at: "previous", position: index - 1 });
-  if (carousel && index < items.length - 1) slides.push({ at: "next", position: index + 1 });
+  if (swipesEnabled && index > 0) slides.unshift({ at: "previous", position: index - 1 });
+  if (swipesEnabled && index < items.length - 1) slides.push({ at: "next", position: index + 1 });
 
   const box = (
     <div
@@ -109,9 +86,6 @@ export function Lightbox({
       role="dialog"
       aria-modal="true"
       aria-label={`${item.label}, preview ${index + 1} of ${items.length}`}
-      // Only a press that both starts and ends on the backdrop closes it:
-      // releasing a drag from inside the image happens to land on the backdrop
-      // and would otherwise shut the thing you are studying.
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -150,13 +124,11 @@ export function Lightbox({
         ref={stage}
         className={actualSize ? "lightbox__stage lightbox__stage--actual" : "lightbox__stage"}
       >
-        {carousel ? (
+        {swipesEnabled ? (
           <div ref={track} className="lightbox__track">
             {slides.map(({ at, position }) => {
               const slide = items[position] as LightboxItem;
               return (
-                // Keyed by item, so the picture that slid in keeps its loaded
-                // element when it becomes the current one.
                 <div
                   key={slide.id}
                   className={`lightbox__slide lightbox__slide--${at}`}
@@ -174,14 +146,11 @@ export function Lightbox({
       </div>
     </div>
   );
-  // On the body on a phone, out of the editor's swiping tab content.
   return isPhone ? createPortal(box, document.body) : box;
 }
 
 type SlidePlace = "previous" | "current" | "next";
 
-/** Keyed by its caller, so a step swaps in a fresh element: reusing one keeps
- * painting the old picture until the new one arrives. */
 function Picture({ item }: { item: LightboxItem }) {
   const url = useCheckedPicture(item.url);
   return item.kind === "video" ? (
@@ -198,17 +167,9 @@ function Picture({ item }: { item: LightboxItem }) {
   );
 }
 
-/** How many pictures either side of the shown one load ahead of a step. */
 const PRELOAD_REACH = 2;
 
-/**
- * Fetches and decodes the pictures a step or a swipe could land on next, so
- * the one that slides in is already there. Full renders are large and can take
- * a while, and a swipe settles in a fifth of a second. The browser cache is
- * what serves them to the `<img>`; the elements are kept so it holds them
- * while the box is open.
- * Videos are left alone, because their element loads only metadata anyway.
- */
+/** The browser cache serves these to the `<img>`; the elements are kept so it holds them. */
 function usePreloadNeighbours(items: readonly LightboxItem[], index: number) {
   const loaded = useRef(new Map<string, HTMLImageElement>());
   useEffect(() => {
@@ -220,10 +181,8 @@ function usePreloadNeighbours(items: readonly LightboxItem[], index: number) {
       const image = new Image();
       image.decoding = "async";
       image.src = item.url;
-      // Decoding ahead too, so the swap does not wait on it; a failure here
-      // is the visible <img>'s to show, not this one's.
-      // (jsdom has no decode.)
-      if (typeof image.decode === "function") image.decode().catch(() => {});
+      // The visible <img> reports a failure.
+      image.decode().catch(() => {});
       loaded.current.set(item.url, image);
     }
   }, [items, index]);

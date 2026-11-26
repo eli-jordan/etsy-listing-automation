@@ -80,6 +80,15 @@ edit is still a conflict. Never retry a refused revision with the new revision
 and the old patch automatically. The seller reloads and makes the change again.
 This preserves hand edits under [ADR-0055](../../adr/0055-preserve-yaml-source-when-editing.md).
 
+On a phone the sections are one sticky row of chips that scrolls sideways, in
+place of the desktop's stacked list, which would fill the first screen before
+any setting. The current chip stays in view, and Backup's two pages sit under
+the row while Backup is open. The page head scrolls away under those chips, so
+a field's save shows in a toast above the tab bar instead, with Retry and
+Reload. Saving and a failure stay until they change; Saved goes after a
+moment. The toast's live region is always present, so a screen reader hears
+each change.
+
 ## Connected shops and currency
 
 ![Connected shops with read-only identities and the currency danger zone](screenshots/connected.png)
@@ -200,6 +209,8 @@ Drag by the handle and release on another row to reorder. A focused handle's
 Up/Down arrows perform the same move. Dropping in place or moving beyond an end
 does not save. Reordering disabled rows retains their position for re-enabling.
 Do not make dragging the model selector or number toggle reorder a row.
+On a phone, Up and Down buttons replace the handle, because native drag and
+drop does not answer a finger.
 
 Model and Reasoning change the provider's choice for all tasks, starting with
 the next run. Account default omits the corresponding CLI flag, rather than

@@ -11,21 +11,11 @@ import { BackupStatusProvider } from "./BackupStatusProvider";
 import { pageTitle } from "./pageTitle";
 import { ShellSidebar } from "./ShellSidebar";
 
-/**
- * The app shell (phase 5): a fixed sidebar (brand, nav, the Admin entry
- * at the bottom) around whatever page the router picks, from the design mockup's
- * app-shell markup (`Main.dc.html`). The Dashboard/Listings/Mockup Templates
- * routes are declared by the caller (`main.tsx`) as child routes rendered
- * into `<Outlet/>` -- this component only ever draws the chrome around them.
- */
-
 function navClass({ isActive }: { isActive: boolean }): string {
   return isActive ? "nav-item nav-item--active" : "nav-item";
 }
 
-/** On a phone the nav is a bottom tab bar with a fifth of the width per
- * entry, so the two long names shorten there; the link keeps its full name
- * for assistive technology either way. */
+/** A phone's tab bar gives each entry a fifth of the width. */
 function navLabel(isPhone: boolean, full: string, short: string) {
   return isPhone ? { label: short, aria: full } : { label: full, aria: undefined };
 }
@@ -39,15 +29,9 @@ export function AppShell() {
 }
 
 function Shell() {
-  // One workspace is one shop, and the sidebar is where that is said. A
-  // failure is silence, not an error banner: the shop's name is orientation,
-  // and no page here stops working without it.
   const [shopName, setShopName] = useState<string | null>(null);
-  // A batch is made from a listing template, and its pages sit under it.
   const { pathname } = useLocation();
-  const inBatches = pathname.startsWith("/batches/");
-  // A backup warning shows on every page but Admin, which has its own
-  // (workspace-backup interactions, *Warnings*); it cannot be dismissed.
+  const underListingTemplates = pathname.startsWith("/batches/");
   const warning = useBackupStatus().view.banner;
   const isPhone = useIsPhone();
   const listingTemplates = navLabel(isPhone, "Listing Templates", "Templates");
@@ -112,12 +96,9 @@ function Shell() {
             </svg>
             Listings
           </NavLink>
-          {/* Between Listings and Mockup Templates (UI doc, *App sidebar*):
-              a listing template is made from a listing, and names mockup
-              templates in its gallery. */}
           <NavLink
             to="/listing-templates"
-            className={({ isActive }) => navClass({ isActive: isActive || inBatches })}
+            className={({ isActive }) => navClass({ isActive: isActive || underListingTemplates })}
             aria-label={listingTemplates.aria}
           >
             <StackIcon />

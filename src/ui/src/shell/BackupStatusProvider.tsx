@@ -3,14 +3,6 @@ import { type BackupStatus, getBackupStatus } from "../api/backup";
 import { backupView } from "./backupAttention";
 import { BackupStatusContext, FAST_POLL_MS, SLOW_POLL_MS } from "./backupStatus";
 
-/**
- * The one poll of `GET /api/backup` (workspace-backup interactions, *What the
- * production implementation must finish*). The shell mounts it, so its banner
- * and dot, the Admin nav icon and the Backup page all read the same answer,
- * as one `BackupView` (`backupAttention.ts`).
- * It polls faster while an operation or a restore runs, and not at all while the tab is
- * hidden; showing the tab again reads at once.
- */
 export function BackupStatusProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [error, setError] = useState<string | null>(null);

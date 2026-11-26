@@ -14,6 +14,7 @@ from etsy_listings.core.workspace.yaml_source import (
     UneditableYamlError,
     edit_yaml,
     edit_yaml_bytes,
+    without_top_level_key,
 )
 
 SOURCE = """\
@@ -290,6 +291,20 @@ def test_adding_then_removing_a_last_key_gives_back_the_same_text() -> None:
 
     assert added == "kept: 1\nmore:\n- a"
     assert edit_yaml(added, {"kept": 1}) == source
+
+
+def test_taking_out_a_key_a_save_added_gives_back_the_bytes_from_before() -> None:
+    source = b"# my notes\nkind: single  # kept\n"
+    labelled = edit_yaml_bytes(source, {"kind": "single", "labels": ["tee"]})
+
+    assert labelled != source
+    assert without_top_level_key(labelled, "labels") == source
+
+
+def test_taking_out_a_key_from_a_file_that_will_not_parse_gives_it_back_as_it_is() -> None:
+    source = b"labels: [unclosed\n"
+
+    assert without_top_level_key(source, "labels") is source
 
 
 def test_replacing_the_only_key_of_a_file_with_no_final_newline() -> None:

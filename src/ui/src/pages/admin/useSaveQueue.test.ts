@@ -39,7 +39,7 @@ function mount() {
   // A field's error is answered by a patch that carries that field.
   const clears = (key: string, changes: Changes) => key in changes;
   const hook = renderHook(() =>
-    useSaveQueue({ send, clears, fallback: "could not save", onSaved }),
+    useSaveQueue({ send, answersError: clears, fallbackMessage: "could not save", onSaved }),
   );
   act(() => hook.result.current.reset("r1"));
 

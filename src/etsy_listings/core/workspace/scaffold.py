@@ -1,16 +1,8 @@
-"""The two files a workspace needs before it is one, and the rules for
-editing them without disturbing what the user put there.
+"""A workspace's ``.gitignore`` and ``.env``, edited without disturbing what the
+user put there.
 
-Both were `setup`'s until `auth` needed them too: `auth` writes
-credentials into `.env`, and it runs *before* `setup`, so it is also the
-command that must put the `.gitignore` in place -- a secret written into a
-directory that some enclosing repository is already tracking is not something
-a later `setup` run can take back.
-
-They live under `workspace/` rather than in whichever command reached for them
-first, because both are statements about the layout of a workspace, and
-because a second copy of the ignore list is exactly the drift that rule
-exists to prevent.
+``.gitignore`` must be in place before the first secret is written: a secret in
+a directory an enclosing repository already tracks cannot be taken back.
 """
 
 from __future__ import annotations
@@ -35,17 +27,9 @@ because it is large and fully derivable.
 
 
 def update_gitignore(root: Path) -> tuple[str, ...]:
-    """Append any missing entry to ``.gitignore``; return the lines added.
-
-    Appends rather than rewrites: the file may already carry rules that have
-    nothing to do with us, and a workspace's ``.gitignore`` is the user's.
-    """
     path = root / ".gitignore"
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
-    # The pattern, not the line: the entries this function writes carry a
-    # trailing `# why` comment, so comparing whole lines made every run think
-    # its own previous output was missing and append it again.
-    present = {line.split("#", 1)[0].strip() for line in existing.splitlines()}
+    present = {_ignore_pattern(line) for line in existing.splitlines()}
 
     added = tuple(
         f"{pattern:<12} # {why}" for pattern, why in GITIGNORE_ENTRIES if pattern not in present
@@ -58,14 +42,11 @@ def update_gitignore(root: Path) -> tuple[str, ...]:
     return added
 
 
-def env_with(existing: str, key: str, value: str) -> str:
-    """``existing`` with ``key`` set to ``value``, everything else untouched.
+def _ignore_pattern(line: str) -> str:
+    return line.split("#", 1)[0].strip()
 
-    Rewriting the line in place rather than appending keeps a second
-    assignment from shadowing the first, and leaves comments and unrelated
-    keys exactly where the user put them. A commented-out assignment is not a
-    match -- it is a note, and silently un-commenting one would be a surprise.
-    """
+
+def env_with(existing: str, key: str, value: str) -> str:
     lines = existing.splitlines()
     prefix = f"{key}="
     replaced = False
@@ -80,17 +61,8 @@ def env_with(existing: str, key: str, value: str) -> str:
 
 
 def write_env_value(root: Path, key: str, value: str) -> Path:
-    """Set one variable in the workspace's ``.env``, creating it if needed.
-
-    The one place the read-modify-write is spelled, because both commands that
-    store a credential do exactly this and neither should be deciding on its
-    own what happens to a file it did not fully read.
-
-    Replaced atomically and durably, never rewritten in place: ``.env`` holds
-    the only copy of the backup password on this machine, and a write cut
-    short would lose it (workspace-backup plan, PR 2). Written as bytes, so
-    the file keeps LF endings on Windows too.
-    """
+    """Replaced atomically and durably: ``.env`` holds this machine's only copy
+    of the backup password, and a write cut short would lose it."""
     path = root / layout.ENV_FILE
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
     write_bytes_atomic(path, env_with(existing, key, value).encode("utf-8"), durable=True)

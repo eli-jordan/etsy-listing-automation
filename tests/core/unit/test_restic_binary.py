@@ -205,3 +205,19 @@ def test_each_supported_platform_downloads_its_own_release(
         binaries.install()
 
     assert served.urls[0].endswith(f"/restic_{RESTIC_VERSION}_{suffix}")
+
+
+def test_an_install_that_loses_the_race_answers_with_the_winners_binary(tmp_path: Path) -> None:
+    archive = _zip(f"restic_{RESTIC_VERSION}_test.exe", BINARY)
+
+    def another_install_finishes_first(url: str, target: Path) -> None:
+        binaries.pinned.parent.mkdir(parents=True)
+        binaries.pinned.write_bytes(b"the winner's restic")
+        target.write_bytes(archive)
+
+    binaries = ResticBinaries(
+        home=tmp_path, fetch=another_install_finishes_first, asset=_asset(archive)
+    )
+
+    assert binaries.install().read_bytes() == b"the winner's restic"
+    assert [path.name for path in binaries.root.iterdir()] == [RESTIC_VERSION]

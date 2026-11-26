@@ -4,6 +4,7 @@ import * as listingsApi from "../../api/listings";
 import type { ListingDetail } from "../../types";
 import { PricingTab } from "./PricingTab";
 import { listingDetail } from "../../test/listings";
+import { onPhone } from "../../test/touch";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -80,6 +81,16 @@ describe("PricingTab", () => {
     render(<PricingTab detail={detail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Price for size S"), { target: { value: "399" } });
     expect(onUpdate).toHaveBeenCalledWith({ prices: { S: "399 NOK" } });
+  });
+
+  it("asks a phone for the decimal keyboard, which iOS gives a number field only on request", () => {
+    onPhone();
+    try {
+      render(<PricingTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+      expect(screen.getByLabelText("Price for size S")).toHaveAttribute("inputmode", "decimal");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("does not claim every plan is for a different garment when none is chosen", async () => {

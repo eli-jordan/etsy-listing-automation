@@ -364,6 +364,30 @@ def test_no_catalog_degrades_to_no_live_label_or_live_names(root: Path, etsy) ->
     assert snapshot.live.shipping_profile is None
 
 
+def test_an_empty_live_partner_list_is_not_drift(root: Path) -> None:
+    etsy = FakeEtsyListingClient(
+        shipping_profiles=[SHIPPING_PROFILE],
+        policies=[RETURN_POLICY],
+        production_partners=[
+            ProductionPartner(production_partner_id=5785693, partner_name="The Print Provider")
+        ],
+    )
+    etsy.seed_listing(ETSY_LISTING_ID, shop_id=12345678)
+    set_etsy_listing_defaults(root, who_made="someone_else")
+    ctx = _ctx(root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+    applied = lock.parse_applied_for("etsy_listing", STAGE.applied_model)
+    assert applied is not None
+    assert applied.production_partner_ids
+    live = STAGE.read_live(ctx, LISTING, lock, applied)
+    assert live is not None
+    unreturned = live.model_copy(update={"production_partners": []})
+
+    verdict = STAGE.plan(STAGE.desired(ctx, LISTING, applied), applied, unreturned)
+
+    assert all(d.path != "production_partner_ids" for d in verdict.drift)
+
+
 def test_an_unknown_live_profile_id_has_no_label(root: Path, etsy) -> None:
     """Never guessed at: a live id the catalog does not recognise is left
     unlabelled rather than shown as ``None``'s stringified nonsense."""

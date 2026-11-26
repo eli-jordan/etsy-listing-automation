@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import * as batchesApi from "../api/batches";
 import * as calibrator from "../api/calibrator";
 import * as listingsApi from "../api/listings";
@@ -287,6 +287,24 @@ describe("ListingEditorPage", () => {
 
       expect(await screen.findByRole("button", { name: "Undo mark for deletion" })).toBeVisible();
       expect(screen.getByText("Pending delete")).toBeInTheDocument();
+    });
+
+    it("keeps the delete confirmation on screen after the phone's ⋯ sheet closes", async () => {
+      onPhone();
+      try {
+        vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+          detail({ printify_product_id: "p1", gestures: ["delete"] }),
+        );
+        renderAt("/listings/take-a-hike");
+
+        fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+        fireEvent.click(screen.getByRole("button", { name: "Mark for deletion" }));
+
+        const confirm = await screen.findByRole("dialog", { name: /deletion/i });
+        expect(confirm.closest("[hidden]")).toBeNull();
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it("sends a retire as an edit to lifecycle, straight away", async () => {
@@ -869,6 +887,36 @@ describe("ListingEditorPage", () => {
       expect(screen.getByText("failed to load listing does-not-exist")).toBeInTheDocument(),
     );
   });
+
+  it("keeps a load failure up until another listing has loaded", async () => {
+    const other = deferred<ListingDetail>();
+    vi.spyOn(listingsApi, "getListing").mockImplementation((name) =>
+      name === "does-not-exist" ? Promise.reject(new Error("404")) : other.promise,
+    );
+    function GoElsewhere() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/listings/take-a-hike")}>
+          elsewhere
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/listings/does-not-exist"]}>
+        <GoElsewhere />
+        <Routes>
+          <Route path="/listings/:name" element={<ListingEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText("failed to load listing does-not-exist");
+
+    fireEvent.click(screen.getByRole("button", { name: "elsewhere" }));
+
+    expect(screen.getByText("failed to load listing does-not-exist")).toBeInTheDocument();
+    await act(async () => other.resolve(detail({ name: "take-a-hike" })));
+    expect(screen.queryByText("failed to load listing does-not-exist")).not.toBeInTheDocument();
+  });
 });
 
 describe("ListingEditorPage at /listings/new", () => {
@@ -941,6 +989,29 @@ describe("ListingEditorPage at /listings/new", () => {
     });
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "cosmic-cat" })).toBeInTheDocument(),
+    );
+  });
+
+  it("keeps the AI chain armed across the naming its design pick sets off", async () => {
+    /* ADR-0003: the pick arms the chain before the draft has a name, and the
+       create that names it is the save that fires it. */
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(
+      detail({ name: "", design: {}, media: [] }),
+    );
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    vi.spyOn(listingsApi, "createListing").mockResolvedValue(
+      detail({ name: "cosmic-cat", design: { default: "designs/cosmic-cat.png" } }),
+    );
+    renderAt("/listings/new");
+    await screen.findByLabelText("Listing name");
+
+    fireEvent.click(screen.getByRole("button", { name: /Choose design for all shirts/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() =>
+      expect(runs.start).toHaveBeenCalledWith("cosmic-cat", { draftBrief: true }),
     );
   });
 

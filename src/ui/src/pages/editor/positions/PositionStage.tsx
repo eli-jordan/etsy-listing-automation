@@ -4,38 +4,23 @@ import { type Point, type Quad, compose, homography, toPhoto } from "./pose";
 import { type LiveSource, useLiveScene } from "./useLiveScene";
 import type { Gesture, Layer, Positioning } from "./usePositioning";
 
-/**
- * The preview stage in Position mode: the saved composite, the handles for
- * the selected box, the other placements dimmed, the template's box as a
- * ghost, and -- while the position is ahead of the composite -- the whole scene
- * drawn live over it, so nothing waits on a render. The composite underneath
- * loads unseen, and the live scene fades once it has. Copied from the
- * prototype's `PositionStage`
- * (`design/scenes/template-positions/_PositionStage.tsx`), except that every
- * box is the template's quad under the pose through its homography, so
- * handles sit on the mapped corners rather than an axis-aligned rectangle.
- */
-
 interface Props {
   positioning: Positioning;
-  /** The saved composite. */
-  picture: string;
+  composite: string;
   title: string;
-  /** The pictures the live scene is drawn from. */
   source: LiveSource;
 }
 
-/** Handle half-size and tilt-stem length, in screen pixels. */
-const HANDLE = 5;
-const STEM = 22;
+const HANDLE_HALF_SCREEN_PX = 5;
+const STEM_SCREEN_PX = 22;
 
 const points = (quad: readonly Point[]) => quad.map((p) => `${p.x},${p.y}`).join(" ");
 
 function safeCompose(layer: Layer): Quad {
   try {
-    return compose(layer.box, layer.pose);
+    return compose(layer.templateBox, layer.pose);
   } catch {
-    return layer.box;
+    return layer.templateBox;
   }
 }
 
@@ -46,35 +31,39 @@ function warp(quad: Quad, w: number, h: number): string {
   return `matrix3d(${m.join(",")})`;
 }
 
-/** The tilt handle: above the top edge's middle, away from the box's centre. */
-function stemOf(layer: Layer, corners: Quad, k: number) {
+function stemOf(layer: Layer, corners: Quad, photoPxPerScreenPx: number) {
   const top = { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 };
   let centre = { x: top.x, y: top.y + 1 };
   try {
     const unit = { x: 0.5 + layer.pose.offsetX, y: 0.5 + layer.pose.offsetY };
-    centre = toPhoto(layer.box, unit);
+    centre = toPhoto(layer.templateBox, unit);
   } catch {
     // Keep the straight-up fallback.
   }
   const dx = top.x - centre.x;
   const dy = top.y - centre.y;
   const length = Math.hypot(dx, dy) || 1;
-  return { top, end: { x: top.x + (dx / length) * STEM * k, y: top.y + (dy / length) * STEM * k } };
+  return {
+    top,
+    end: {
+      x: top.x + (dx / length) * STEM_SCREEN_PX * photoPxPerScreenPx,
+      y: top.y + (dy / length) * STEM_SCREEN_PX * photoPxPerScreenPx,
+    },
+  };
 }
 
-export function PositionStage({ positioning, picture, title, source }: Props) {
-  const { size, layers, selected, live } = positioning;
+export function PositionStage({ positioning, composite, title, source }: Props) {
+  const { size, layers, selected, aheadOfComposite: live } = positioning;
   const svg = useRef<SVGSVGElement>(null);
   const phone = useIsPhone();
   const canvas = useRef<HTMLCanvasElement>(null);
-  /** Photo pixels per screen pixel, so handles keep their screen size. */
-  const [k, setK] = useState(size.w / 480);
+  const [photoPxPerScreenPx, setPhotoPxPerScreenPx] = useState(size.w / 480);
 
   useLayoutEffect(() => {
     const measure = () => {
       const rect = svg.current?.getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) {
-        setK(1 / Math.min(rect.width / size.w, rect.height / size.h));
+        setPhotoPxPerScreenPx(1 / Math.min(rect.width / size.w, rect.height / size.h));
       }
     };
     measure();
@@ -110,17 +99,16 @@ export function PositionStage({ positioning, picture, title, source }: Props) {
       id: layer.id,
       placement: layer.placement,
       quad: safeCompose(layer),
-      box: layer.box,
+      box: layer.templateBox,
     })),
     size,
-    backing: backingOf(size, k),
+    backing: backingOf(size, photoPxPerScreenPx),
     visible: live,
   });
 
   return (
     <svg
       ref={svg}
-      // Its drags move the design; the phone's tab swipe must leave them be.
       {...(phone ? { "data-swipe-ignore": "" } : {})}
       className="tp-stage"
       viewBox={`0 0 ${size.w} ${size.h}`}
@@ -131,11 +119,11 @@ export function PositionStage({ positioning, picture, title, source }: Props) {
       aria-label={`${title} — position`}
     >
       <image
-        href={picture}
+        href={composite}
         width={size.w}
         height={size.h}
         aria-label={title}
-        onLoad={() => positioning.loaded(picture)}
+        onLoad={() => positioning.loaded(composite)}
         onError={positioning.recheck}
       />
       {live && !drawn && <Flat layers={layers} source={source} size={size} />}
@@ -150,30 +138,39 @@ export function PositionStage({ positioning, picture, title, source }: Props) {
       </foreignObject>
       {positioning.ghost && active !== undefined && (
         <>
-          <polygon className="tp-halo" points={points(active.box)} />
-          <polygon className="tp-ghost" points={points(active.box)} />
+          <polygon className="tp-halo" points={points(active.templateBox)} />
+          <polygon className="tp-ghost" points={points(active.templateBox)} />
         </>
       )}
       {layers.map((layer) =>
         layer.id === selected ? (
-          <Selected key={layer.id} layer={layer} k={k} onStart={start} onKey={key} />
+          <Selected
+            key={layer.id}
+            layer={layer}
+            photoPxPerScreenPx={photoPxPerScreenPx}
+            onStart={start}
+            onKey={key}
+          />
         ) : (
-          <Other key={layer.id} layer={layer} k={k} onSelect={positioning.select} />
+          <Other
+            key={layer.id}
+            layer={layer}
+            photoPxPerScreenPx={photoPxPerScreenPx}
+            onSelect={positioning.select}
+          />
         ),
       )}
     </svg>
   );
 }
 
-/** The canvas's size for a stage of `k` photo pixels per screen pixel: sharp on
+/** The canvas's size for this stage: sharp on
  * this screen, and never more pixels than the photo has. */
-function backingOf(size: { w: number; h: number }, k: number) {
-  const ratio = Math.min(1, window.devicePixelRatio / k);
+function backingOf(size: { w: number; h: number }, photoPxPerScreenPx: number) {
+  const ratio = Math.min(1, window.devicePixelRatio / photoPxPerScreenPx);
   return { width: Math.round(size.w * ratio), height: Math.round(size.h * ratio) };
 }
 
-/** The live scene without a GPU, or before its pictures arrive: the bare photo
- * with each layer's artwork flat on its box. */
 function Flat({
   layers,
   source,
@@ -208,8 +205,16 @@ function FlatPrint({
   size: { w: number; h: number };
 }) {
   const corners = safeCompose(layer);
-  const w = Math.hypot(layer.box[1].x - layer.box[0].x, layer.box[1].y - layer.box[0].y) || 1;
-  const h = Math.hypot(layer.box[3].x - layer.box[0].x, layer.box[3].y - layer.box[0].y) || 1;
+  const w =
+    Math.hypot(
+      layer.templateBox[1].x - layer.templateBox[0].x,
+      layer.templateBox[1].y - layer.templateBox[0].y,
+    ) || 1;
+  const h =
+    Math.hypot(
+      layer.templateBox[3].x - layer.templateBox[0].x,
+      layer.templateBox[3].y - layer.templateBox[0].y,
+    ) || 1;
   return (
     <foreignObject x={0} y={0} width={size.w} height={size.h} className="tp-overlay">
       <div
@@ -228,25 +233,24 @@ function FlatPrint({
 
 function Selected({
   layer,
-  k,
+  photoPxPerScreenPx,
   onStart,
   onKey,
 }: {
   layer: Layer;
-  k: number;
+  photoPxPerScreenPx: number;
   onStart: (event: PointerEvent, gesture: Gesture, id: string) => void;
   onKey: (event: KeyboardEvent) => void;
 }) {
   const corners = safeCompose(layer);
-  // A refused box is drawn where it is stored, not where the fit would put it.
-  const outline = layer.invalid !== null && layer.stored !== null ? layer.stored : corners;
-  const stem = stemOf(layer, corners, k);
-  const half = HANDLE * k;
+  const outline = layer.refusal !== null && layer.stored !== null ? layer.stored : corners;
+  const stem = stemOf(layer, corners, photoPxPerScreenPx);
+  const half = HANDLE_HALF_SCREEN_PX * photoPxPerScreenPx;
   return (
     <g>
       <polygon
         className={
-          layer.invalid === null ? "tp-box tp-box--on" : "tp-box tp-box--on tp-box--invalid"
+          layer.refusal === null ? "tp-box tp-box--on" : "tp-box tp-box--on tp-box--invalid"
         }
         points={points(outline)}
         role="button"
@@ -286,11 +290,11 @@ function Selected({
 
 function Other({
   layer,
-  k,
+  photoPxPerScreenPx,
   onSelect,
 }: {
   layer: Layer;
-  k: number;
+  photoPxPerScreenPx: number;
   onSelect: (id: string) => void;
 }) {
   const corners = safeCompose(layer);
@@ -315,7 +319,12 @@ function Other({
           }
         }}
       />
-      <text className="tp-tag" x={corners[0].x + 4 * k} y={corners[0].y - 6 * k} fontSize={13 * k}>
+      <text
+        className="tp-tag"
+        x={corners[0].x + 4 * photoPxPerScreenPx}
+        y={corners[0].y - 6 * photoPxPerScreenPx}
+        fontSize={13 * photoPxPerScreenPx}
+      >
         {label}
       </text>
     </g>

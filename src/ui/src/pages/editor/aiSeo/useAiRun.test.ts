@@ -381,7 +381,7 @@ describe("useAiRun reattaching", () => {
 });
 
 describe("useAiRun cancelling", () => {
-  it("cancels the run it is following", async () => {
+  it("stays busy after a cancel until the run's own cancelled phase arrives", async () => {
     const view = setup();
     await started(view);
 

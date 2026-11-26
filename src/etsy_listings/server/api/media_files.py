@@ -1,20 +1,3 @@
-"""The file locator's endpoints: the two directories a `media:`
-file ref can name, listed with each file's kind, and served.
-
-A file ref has two roots, and the locator offers one group per root: the
-listing's own directory (``./close-up.mp4``) and ``common-media/``
-(``common-media/size-guide.png``). Both groups answer the same three
-questions -- what is here, a picture to pick it by, the file itself -- so both
-are one schema and one pair of responses, differing only in which `Workspace`
-accessor finds the file.
-
-The listing-local half is a security boundary. Its listing name and path
-both come from URLs, and the directory it serves from also holds
-``listing.yaml`` and the lockfile. The boundary is `Workspace`'s
-(``_media_file_in``); this module only decides that a refusal is a ``400``
-(the app-wide ``InvalidNameError`` handler) and a missing file a ``404``.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -159,18 +142,15 @@ def _existing(path: Path, name: str) -> Path:
 
 
 def _thumbnail(path: Path) -> Response:
-    """A picture to pick an image by. A video answers ``415``: the locator
-    draws its own poster from the first frame with a ``<video>`` element, and
-    a still would be a second rendition of the same frame to keep in step."""
+    """A picture to pick an image by; a video answers ``415`` because the
+    locator draws its own poster with ``<video>``."""
     if media_kind(path.name) == "video":
         raise HTTPException(status_code=415, detail="a video has no thumbnail; use /file")
     return thumbnail_response(path)
 
 
 def _file(path: Path) -> FileResponse:
-    """The file as-is, through `FileResponse` so a ``Range`` request is
-    answered ``206`` -- which is how ``<video>`` seeks. ``no-cache`` means
-    revalidate, so a replaced file shows without a hard refresh."""
+    """The file as-is; `FileResponse` answers ``Range`` with ``206`` for ``<video>`` seeking."""
     return FileResponse(
         path,
         media_type=_MEDIA_TYPES[path.suffix.lower()],

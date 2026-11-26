@@ -1,12 +1,6 @@
-"""Serve the workspace's HTTP app in the foreground.
-
-This is the server's startup interface: what ``etsy-listings ui``
-(``cli/ui.py``) calls, and the only server module the CLI may import
-(ADR-0052; the Import Linter contracts in ``pyproject.toml``). The
-module-structure specification removed the native pywebview window: the
-command serves HTTP and the user opens the printed URL in any browser. It is
-the former ``--browser`` path unchanged -- uvicorn on the main thread, where
-it owns the Ctrl-C handling.
+"""Serve the workspace's HTTP app in the foreground: the startup interface
+``etsy-listings ui`` calls, and the only server module the CLI may import
+(ADR-0052). Uvicorn runs on the main thread, where it owns the Ctrl-C handling.
 
 Shutdown goes through the ASGI lifespan ``create_app`` wires up: uvicorn
 waits for it without a timeout, so a queued run is cancelled, a plan run
@@ -28,5 +22,4 @@ def serve(
     host: str = "0.0.0.0",
     port: int = 8000,
 ) -> None:
-    """Block serving ``workspace`` over HTTP until the process is interrupted."""
     uvicorn.run(create_app(workspace), host=host, port=port)

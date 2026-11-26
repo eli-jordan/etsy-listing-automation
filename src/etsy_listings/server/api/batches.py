@@ -1,27 +1,7 @@
-"""Staging and batch endpoints (batch plan PR 2, 4 and 7; ADR-0048, ADR-0051, staging expiry):
-stage one ZIP or loose PNGs against a listing template, review and edit the session,
-cancel it or confirm it, then read the batch confirming made and steer its
-AI queue -- cancel, resume, retry.
+"""Staging and batch endpoints.
 
-The operations are :mod:`etsy_listings.core.application.batch_staging`'s and
-:mod:`~etsy_listings.core.application.batch_workflow`'s (module-structure
-plan, PR 7). This module decodes the multipart upload into ``Upload``
-streams and supplies the AI coordinator's batch queue (which also says
-whether AI could run). The refusals reach the wire through the app's one
-refusal table (``app.py``'s ``REFUSAL_STATUS``):
-
-* An upload refused before staging is a ``422`` whose ``detail`` is the
-  sentence and the remedy (`StagingRefusal`), with nothing on disk -- the one
-  refusal this module answers itself, for its body.
-* A session that cannot be confirmed yet is a ``409`` with the sentence, and
-  nothing is created. So is one whose AI could not run (spec, *Design
-  validation*), which the staging detail already says as ``ai_blocked``.
-* An id nobody holds -- a session, a batch or a row -- is a ``404``. An id
-  that is not a single path segment is a ``400``.
-
-Both stores are the app's (`app.state`). A confirm and an editor's create of
-the same name wait for each other on the listing's document lock
-(``core/workspace/listing_documents.py``).
+A confirm and an editor's create of the same name wait for each other on the
+listing's document lock (``core/workspace/listing_documents.py``).
 """
 
 from __future__ import annotations
@@ -104,7 +84,6 @@ def _staging_detail(request: Request, session: StagingSession) -> StagingDetail:
 
 
 def _steps(request: Request, row: BatchRow) -> list[WorkflowStep]:
-    """A running row's live run, else its last run as it ended."""
     if row.ai == "running":
         registry: AiRunRegistry = request.app.state.ai.registry
         run = registry.latest(row.name)
@@ -167,10 +146,7 @@ def create_staging(
     listing_template: Annotated[str, Form()],
     files: list[UploadFile] | None = None,
 ) -> StagingDetail:
-    """Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
-    already spooled the parts to temporary files; each is handed on as a
-    stream, which staging reads a PNG or a ZIP's entries out of with a
-    running count."""
+    """Stage one ZIP or loose PNGs (spec, *Accepted input*)."""
     received = [Upload(filename=f.filename or "unnamed.png", stream=f.file) for f in files or []]
     try:
         session = batch_staging.stage_upload(
@@ -305,9 +281,6 @@ def resume_batch(request: Request, batch_id: str) -> BatchDetail:
         queue=_queue(request),
     )
     return _batch_detail(request, batch)
-
-
-# ------------------------------------------------ review and the batch index
 
 
 @router.get("/api/batches", response_model=list[BatchIndexEntry])

@@ -1,11 +1,3 @@
-"""Frozen listing-template content.
-
-Document, owned files and saved-at time are captured together, before an
-upload can outlive the template. Shared refs still resolve through Workspace
-and are checked again at confirm. Batches owns durable row writes, not the
-protocol for locating frozen content.
-"""
-
 from __future__ import annotations
 
 import shutil
@@ -33,12 +25,8 @@ class FrozenListingTemplate:
 
     @classmethod
     def capture(cls, workspace: Workspace, name: str, directory: Path) -> FrozenListingTemplate:
-        """Capture under the same lock as template edits, rename and delete.
-
-        The lock covers only content capture, never the design upload.
-        No record or listing is created here; the caller owns cleanup if
-        receiving or saving its staging session fails.
-        """
+        """Holds the template's lock for the capture only, never the design
+        upload; the caller cleans ``directory`` up if staging then fails."""
         with locks.hold(workspace, "listing-template", name):
             template = workspace.load_listing_template(name)
             saved_at = datetime.fromtimestamp(
@@ -56,14 +44,12 @@ class FrozenListingTemplate:
     def restore(
         cls, workspace: Workspace, document: Mapping[str, Any], directory: Path, saved_at: datetime
     ) -> FrozenListingTemplate:
-        """Read a staging or batch record's content, independent of its source."""
         template = ListingTemplate.model_validate(
             dict(document), context={"currency": workspace.defaults.etsy.currency}
         )
         return cls(workspace, template, directory, saved_at)
 
     def assets(self) -> tuple[AssetCopy, ...]:
-        """Only owned content; shared refs are never copied."""
         return tuple(
             AssetCopy(
                 ref=ref,
@@ -74,7 +60,6 @@ class FrozenListingTemplate:
         )
 
     def copy_to(self, directory: Path) -> FrozenListingTemplate:
-        """Keep frozen assets in a batch after staging goes."""
         directory.mkdir(parents=True, exist_ok=True)
         for asset in self.assets():
             target = self.workspace.resolve_frozen_template_ref(asset.ref, frozen_dir=directory)
@@ -83,7 +68,6 @@ class FrozenListingTemplate:
         return replace(self, directory=directory)
 
     def issues(self, *, facts: WorkspaceFacts) -> list[Issue]:
-        """Recheck current shared refs against the frozen document."""
         return check_listing_template_files(
             self.workspace,
             self.template,

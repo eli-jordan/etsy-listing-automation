@@ -3,20 +3,28 @@ import type { ListingSummary } from "../../types";
 import { deleteLabel, GESTURE_LABELS, type Gesture } from "../listingLifecycle";
 import type { SheetAction } from "./ActionSheet";
 
-/** What the ⋯ sheet offers for a row, in the table's own words. */
 export function rowActions(
   row: ListingSummary,
   onGesture: (row: ListingSummary, gesture: Gesture) => void,
 ): SheetAction[] {
   const actions: SheetAction[] = [];
   if (row.etsy_listing_id != null) {
-    actions.push({ label: "Open in Etsy", href: etsyListingUrl(row.etsy_listing_id) });
+    actions.push({
+      kind: "link",
+      label: "Open in Etsy",
+      href: etsyListingUrl(row.etsy_listing_id),
+    });
   }
   if (row.printify_product_id != null) {
-    actions.push({ label: "Open in Printify", href: printifyProductUrl(row.printify_product_id) });
+    actions.push({
+      kind: "link",
+      label: "Open in Printify",
+      href: printifyProductUrl(row.printify_product_id),
+    });
   }
   for (const gesture of row.gestures ?? []) {
     actions.push({
+      kind: "action",
       label: gestureLabel(row, gesture),
       danger: gesture === "delete",
       onSelect: () => onGesture(row, gesture),

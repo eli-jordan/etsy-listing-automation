@@ -1,5 +1,3 @@
-"""Safe phases of explicit preparation, reached only through Preparations."""
-
 from __future__ import annotations
 
 import hashlib
@@ -62,12 +60,7 @@ class StoppedError(Exception):
 
 @dataclass
 class WorkerSlot:
-    """The one warm inference worker, shared by the coordinator and its execution.
-
-    Execution selects the worker and records the request in flight; the
-    coordinator cancels that request and closes the worker. ``call`` is read
-    and written under the store's condition.
-    """
+    """``call`` is read and written under the store's condition."""
 
     worker: InferenceWorker | None = None
     selection: tuple[str, str] | None = None
@@ -81,7 +74,6 @@ class WorkerSlot:
         *,
         cache_root: Path,
     ) -> InferenceWorker:
-        """The worker for this engine and installation, replacing any other."""
         selection = (engine_version, installation_id)
         if self.selection != selection:
             if self.worker:
@@ -186,8 +178,6 @@ class Execution:
             )
 
     def _work(self, identity: str, lane: str, job: Job) -> None:
-        """The lane's phase of ``job``: inference on the GPU lane, fitting and
-        publication on the CPU lane; a coverage job only infers."""
         if lane == "gpu" and job.kind == "coverage":
             self.cover(identity)
         elif lane == "gpu":
@@ -261,9 +251,6 @@ class Execution:
         self.write(identity, evidence=retained, placement_evidence=assignments, snapshot=inputs)
 
     def cover(self, identity: str) -> None:
-        """Infer evidence covering each padded quad, then retain it after the
-        template's current evidence, which so stays the first choice for the
-        template's own maps: those are not refitted (spec *Evidence coverage*)."""
         job = self.owner.status(identity)
         current = self.evidence.current(job.template)
         padded = job.snapshot.model_copy(
@@ -289,9 +276,6 @@ class Execution:
         self.write(identity, evidence=retained, phase="completed", step="coverage")
 
     def _infer_crop(self, run: _InferenceRun, placement: PlacementInput) -> CropEvidence:
-        """Evidence for a placement no existing crop covers: plan its crop (or
-        reuse a known one with the same rectangle), then predict each role it
-        lacks a valid prediction for."""
         identity = run.job.id
         planned = self.evidence.new_crop(run.job.snapshot, placement.quad)
         selected = next(
@@ -333,8 +317,6 @@ class Execution:
     def _predict(
         self, run: _InferenceRun, selected: CropEvidence, role: _Role, crop_path: Path
     ) -> CropEvidence:
-        """Run one model call for ``role`` on the crop; the evidence with its
-        validated prediction, recorded on the job."""
         job = run.job
         identity = job.id
         self.safe(identity, role)
@@ -379,8 +361,6 @@ class Execution:
         return selected
 
     def _claim_call(self, identity: str, request: str) -> None:
-        """Record ``request`` as the call in flight, so Cancel can reach it;
-        refuse once the job is cancelled."""
         with self.owner.store.condition:
             latest = self.owner.store.read(identity)
             if latest.cancel_intent:
@@ -428,8 +408,6 @@ class Execution:
                 for p in job.snapshot.placements
             )
             allowed = job.snapshot.model_copy(update={"placements": proposed})
-            # A save may have committed some planned masks before the job record.
-            # Accept only those exact bytes, and only with unchanged photo/geometry.
             reconciled = []
             for placement in current.placements:
                 original = next((p for p in job.snapshot.placements if p.id == placement.id), None)
@@ -492,8 +470,6 @@ class Execution:
     def _placement_mask(
         self, job: Job, placement: PlacementInput, base: NDArray[np.uint8]
     ) -> tuple[Job, FloatMap]:
-        """The placement's visibility mask, proposing and committing an
-        automatic one when it has none; with the job as it now stands."""
         mask_path = self.owner.workspace.preparation_work(
             job.id, "mask-" + placement_key(placement.id) + ".png"
         )
@@ -515,8 +491,7 @@ class Execution:
     def _propose_mask(
         self, job: Job, placement: PlacementInput, base: NDArray[np.uint8], mask_path: Path
     ) -> Job:
-        """Propose an automatic mask, plan it on the job, then install it
-        under the template lock."""
+        """Plans the mask on the job before installing it: recovery relies on that order."""
         identity = job.id
         proposal = propose_mask(base, np.array(placement.quad, np.float32))
         data = self.owner.calibration.encode_mask(
@@ -551,7 +526,6 @@ class Execution:
         )
 
     def _checkpointed_maps(self, job: Job, placement: PlacementInput) -> MaterialMaps | None:
-        """Maps an earlier attempt already fitted and checkpointed, if valid."""
         record = job.cpu_checkpoints.get(placement_key(placement.id))
         if record is None:
             return None
@@ -566,8 +540,6 @@ class Execution:
     def _fit_maps(
         self, job: Job, placement: PlacementInput, base: NDArray[np.uint8], mask: FloatMap
     ) -> MaterialMaps:
-        """Fit the placement from its accepted evidence and write the
-        read-only maps to the job's checkpoint archive."""
         identity = job.id
         value = next(
             v for v in job.evidence if v.id == job.placement_evidence[placement_key(placement.id)]
@@ -660,9 +632,6 @@ class Execution:
 
 @dataclass
 class _InferenceRun:
-    """One job's inference pass: the evidence it has gathered so far, in
-    order, and the earlier evidence it may reuse."""
-
     job: Job
     values: list[CropEvidence]
     candidates: tuple[CropEvidence, ...]
@@ -676,5 +645,4 @@ class _InferenceRun:
             self.values.append(value)
 
     def replace(self, value: CropEvidence) -> None:
-        """Put ``value`` last, in place of any earlier version of it."""
         self.values = [v for v in self.values if v.id != value.id] + [value]

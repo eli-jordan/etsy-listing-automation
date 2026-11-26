@@ -1,11 +1,5 @@
-"""The Etsy responses this tool reads, narrowed to the fields it uses.
-
-Etsy's `Shop` carries forty-seven fields, most of them about a storefront's
-presentation. Modelling all of them would make every one of them look load
-bearing, and would turn a field Etsy renames into a validation error in a
-workspace that never touched it. So: the few we act on, and `extra="ignore"`
-for the rest.
-"""
+"""The Etsy responses this tool reads, narrowed to the fields it uses;
+the rest are ignored so an Etsy rename never fails validation."""
 
 from __future__ import annotations
 
@@ -17,12 +11,7 @@ from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, mod
 
 
 class Shop(BaseModel):
-    """An Etsy shop, as `findShops` and `getShopByOwnerUserId` return it.
-
-    `currency_code` is the reason this model exists beyond the id: it is the
-    shop's own currency, and reading it is what stops a workspace being
-    configured in one currency while the shop sells in another.
-    """
+    """An Etsy shop, as `findShops` and `getShopByOwnerUserId` return it."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -34,8 +23,6 @@ class Shop(BaseModel):
 
 
 class ShopSection(BaseModel):
-    """A section a listing can be filed under (`etsy.shop_section_id`)."""
-
     model_config = ConfigDict(extra="ignore")
 
     shop_section_id: int
@@ -44,13 +31,6 @@ class ShopSection(BaseModel):
 
 
 class ReturnPolicy(BaseModel):
-    """A listing-level return policy (`etsy.return_policy_id`).
-
-    Etsy gives these no title, so the only way to tell two apart is the terms
-    themselves -- which is why all three fields are carried rather than the id
-    alone: a picker offering "1122334" and "1122335" would be a coin toss.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     return_policy_id: int
@@ -76,9 +56,6 @@ class ReturnPolicy(BaseModel):
 
 
 class ShippingProfile(BaseModel):
-    """A shipping profile (`etsy.shipping_profile_id`), addressed by title
-    -- Etsy gives these a title, unlike a return policy."""
-
     model_config = ConfigDict(extra="ignore")
 
     shipping_profile_id: int
@@ -88,15 +65,6 @@ class ShippingProfile(BaseModel):
 
 
 class ProductionPartner(BaseModel):
-    """A fulfilment relationship the shop has declared.
-
-    Etsy gives it a name and a location but not, notably, a link to
-    `profile.print_provider` -- the two describe different things (decision
-    3's resolution ladder). Read the same way whether it came from
-    `getShopProductionPartners` or nested in a listing's own
-    `production_partners`.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     production_partner_id: int
@@ -105,9 +73,6 @@ class ProductionPartner(BaseModel):
 
 
 class ListingImage(BaseModel):
-    """One image on a listing, as `getListing?includes=Images` and
-    `uploadListingImage` both return it."""
-
     model_config = ConfigDict(extra="ignore")
 
     listing_image_id: int
@@ -122,16 +87,6 @@ class ListingImage(BaseModel):
 
 
 class ListingVideo(BaseModel):
-    """One video on a listing, as `getListing?includes=Videos`,
-    `uploadListingVideo` and a re-attach by id all return it (decision 9).
-
-    `video_state` is carried because an `inactive` video stays in every list
-    Etsy returns -- a caller that took presence for "on the listing" would
-    miss one that no longer shows. The dimensions are Etsy's transcode, not
-    the file's: a 1440 px upload came back 1440, a 540 px one 540, and
-    neither says where in the gallery the video sits; nothing does.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     video_id: int
@@ -143,13 +98,6 @@ class ListingVideo(BaseModel):
 
 
 class VariationImageLink(BaseModel):
-    """One `(property, value) -> image` swatch binding.
-
-    `value` is present on a read (`getListingVariationImages` returns the
-    value string alongside each id, which is what makes the reverse
-    projection free) and absent on a write -- Etsy only wants the ids sent.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     property_id: int
@@ -159,12 +107,6 @@ class VariationImageLink(BaseModel):
 
 
 class InventoryPropertyValue(BaseModel):
-    """One property on one inventory product-combination -- e.g. this
-    combination's colour, or its size. `property_name` is the *blueprint's*
-    option name (ADR-0002, "Comfort Colors® Colors" rather than "Color"), which
-    is why the colour property is identified by matching `values` against the
-    listing's own colours rather than by name or id (decision 6)."""
-
     model_config = ConfigDict(extra="ignore")
 
     property_id: int
@@ -191,17 +133,12 @@ class InventoryProduct(BaseModel):
 
 
 class Inventory(BaseModel):
-    """`getListingInventory`'s response: Printify's variant matrix as Etsy
-    materialised it, including the disabled cross-product cells Etsy adds to
-    keep the grid rectangular (ADR-0029 -- read here, never written)."""
-
     model_config = ConfigDict(extra="ignore")
 
     products: tuple[InventoryProduct, ...] = ()
 
 
 def _unescape_copy(value: dict[str, Any]) -> dict[str, Any]:
-    """A copy with the title, description and tags' HTML entities decoded."""
     value = dict(value)
     for key in ("title", "description"):
         if isinstance(value.get(key), str):
@@ -213,15 +150,7 @@ def _unescape_copy(value: dict[str, Any]) -> dict[str, Any]:
 
 class Listing(BaseModel):
     """`getListing`'s response, narrowed to what the stages compare against
-    `applied` (the Etsy write surface table in features/etsy-listing-20260910/spec.md).
-
-    Read only through `GET /v3/application/listings/{id}` -- the *unscoped*
-    path. The shop-scoped one exists for `PATCH`/`DELETE` and 404s on `GET`,
-    which cost the probe a false "our copy was overwritten" verdict.
-
-    Text arrives **HTML-escaped** (measured: ``Don&#39;t``) and is unescaped
-    here, once. `applied` holds the plain text this tool sent, so an escaped
-    read would report every apostrophe as drift.
+    `applied`. Etsy sends text HTML-escaped (measured); it is unescaped here, once.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -257,12 +186,7 @@ class Listing(BaseModel):
     @field_validator("images", "videos", mode="before")
     @classmethod
     def _null_images_is_none_requested(cls, value: object) -> object:
-        """``getListing`` sends ``images: null``, not an omitted key or ``[]``,
-        when called without ``includes=Images`` (measured) -- the default
-        every ``read_live()`` but ``etsy_media``'s asks for. The field default
-        only covers a *missing* key, so without this a plain re-plan of an
-        existing listing fails validation on every run. ``videos`` has the
-        same shape without ``includes=Videos``."""
+        """Etsy sends ``null`` for media not in ``includes`` (measured)."""
         return () if value is None else value
 
 
@@ -270,9 +194,8 @@ class Listing(BaseModel):
 
 
 def _drop_nulls(value: object) -> object:
-    """Etsy sends ``null`` for a field it has no value for as readily as it
-    omits the key (``tags`` is documented as defaulting to null). Dropping
-    the nulls lets one set of field defaults answer both shapes."""
+    """Etsy sends ``null`` and omits a key interchangeably; dropping nulls
+    lets the field defaults answer both."""
     if isinstance(value, dict):
         return {key: item for key, item in value.items() if item is not None}
     return value
@@ -286,15 +209,8 @@ second pass would turn a seller's literal ``&amp;`` into ``&``."""
 
 class MarketCandidate(BaseModel):
     """Another seller's active listing, as `findAllListingsActive` returns
-    it: what market research filters, scores and quotes (features/market-seo-20260924/spec.md).
-
-    Every field but the two ids is optional, because one sparse row must not
-    fail a search of twenty-five. The defaults are the values scoring would
-    give an absent signal anyway: no favourites, no views, no tags.
-
-    Text arrives **HTML-escaped** (measured: ``Father&#39;s Day`` in titles,
-    descriptions and tags alike) and is unescaped here, once, so that no
-    phrase count or prompt ever sees an entity a buyer never typed.
+    it. Every field but the ids is optional, since Etsy rows are sparse, and
+    text arrives HTML-escaped (measured) and is unescaped here, once.
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
@@ -326,12 +242,7 @@ class MarketCandidate(BaseModel):
 
 class ShopStats(BaseModel):
     """The selling shop's signals, from the batch call's ``includes=Shop``.
-
-    `review_average` stays ``None`` when Etsy sends null -- a shop with no
-    reviews in the past year -- because scoring ranks that as the *lowest*
-    rating, which a default of ``0.0`` would merely imitate while claiming a
-    rating that was never given.
-    """
+    ``review_average`` is ``None`` for a shop with no reviews this year."""
 
     model_config = ConfigDict(extra="ignore", frozen=True)
 
@@ -347,9 +258,6 @@ class ShopStats(BaseModel):
 
 
 class MarketListing(MarketCandidate):
-    """A candidate with the stats `getListingsByListingIds` adds: its shop,
-    and the thumbnail the top listings panel shows."""
-
     shop: ShopStats | None = None
     thumbnail_url: str | None = None
     """``url_170x135`` of the listing's first image by rank -- Etsy's

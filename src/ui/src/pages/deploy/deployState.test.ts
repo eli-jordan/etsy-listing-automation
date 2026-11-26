@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deployState, initialDeployState } from "./deployState";
+import { controlPhase, deployState, initialDeployState } from "./deployState";
 import {
   stageBlocked,
   stageWillRun,
@@ -389,5 +389,15 @@ describe("initialDeployState", () => {
     expect(initialDeployState.plan).toBeNull();
     expect(initialDeployState.stageRuntime).toEqual({});
     expect(initialDeployState.previewsRendered.size).toBe(0);
+  });
+});
+
+describe("controlPhase", () => {
+  it("reads the planned hinge before previews or ready as still planning", () => {
+    reset();
+    const state = deployState([phase("planning"), planned(RENDER_RUN), phase("planned")]);
+
+    expect(state.phase).toBe("planned");
+    expect(controlPhase(state)).toBe("planning");
   });
 });

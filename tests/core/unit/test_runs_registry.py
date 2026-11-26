@@ -104,11 +104,11 @@ def test_the_current_workspace_run_is_retained_until_a_new_workspace_run() -> No
     assert isinstance(first, Run)
     first.transition_plan("ready")
 
-    assert registry.for_workspace() == [first]
+    assert registry.for_workspace() is first
 
     second = registry.create(WorkspaceApply((), {}, first.id))
     assert isinstance(second, Run)
-    assert registry.for_workspace() == [second]
+    assert registry.for_workspace() is second
     assert registry.get(first.id) is first, "the reviewed plan remains addressable"
 
 
@@ -145,14 +145,14 @@ def test_a_batch_run_is_retained_per_batch_and_never_as_a_listing_run() -> None:
     assert isinstance(first, Run)
     first.transition_plan("ready")
 
-    assert registry.for_batch("b1") == [first]
-    assert registry.for_batch("b2") == []
-    assert registry.for_listing("a") == [], "a listing's own page never follows a batch run"
+    assert registry.for_batch("b1") is first
+    assert registry.for_batch("b2") is None
+    assert registry.for_listing("a") is None, "a listing's own page never follows a batch run"
 
     second = registry.create(BatchApply("b1", ("a",), {"a": "hash"}, first.id))
     assert isinstance(second, Run)
     assert second.batch_id == "b1"
-    assert registry.for_batch("b1") == [second]
+    assert registry.for_batch("b1") is second
 
 
 def test_a_finished_run_does_not_block_a_new_one_for_the_same_listing() -> None:
@@ -186,7 +186,7 @@ def test_get_returns_the_run_by_id() -> None:
 
 
 def test_for_listing_is_empty_for_a_never_touched_listing() -> None:
-    assert _registry().for_listing("take-a-hike") == []
+    assert _registry().for_listing("take-a-hike") is None
 
 
 def test_for_listing_returns_the_current_holder_active_or_finished() -> None:
@@ -194,10 +194,10 @@ def test_for_listing_returns_the_current_holder_active_or_finished() -> None:
     run = _plan(registry, "take-a-hike")
     assert isinstance(run, Run)
 
-    assert registry.for_listing("take-a-hike") == [run]
+    assert registry.for_listing("take-a-hike") is run
 
     run.transition_plan("ready")
-    assert registry.for_listing("take-a-hike") == [run], "retention: kept until superseded"
+    assert registry.for_listing("take-a-hike") is run, "retention: kept until superseded"
 
 
 def test_for_listing_moves_on_once_a_new_run_is_created() -> None:
@@ -209,7 +209,7 @@ def test_for_listing_moves_on_once_a_new_run_is_created() -> None:
     second = _apply(registry, "take-a-hike")
     assert isinstance(second, Run)
 
-    assert registry.for_listing("take-a-hike") == [second]
+    assert registry.for_listing("take-a-hike") is second
 
 
 # -------------------------------------------------------------------- dequeue

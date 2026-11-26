@@ -172,6 +172,20 @@ def test_a_copy_without_config_keeps_old_backups(
     assert identities(old.root) == before
 
 
+def test_an_empty_backup_storage_folder_deletes_nothing_from_the_copy(
+    local: FakeRepository, destination: Path, tmp_path: Path
+) -> None:
+    copy_repository(local.root, destination)
+    before = identities(destination)
+    emptied = tmp_path / "emptied"
+    emptied.mkdir()
+
+    result = copy_repository(emptied, destination)
+
+    assert result.outcome == "failed"
+    assert identities(destination) == before
+
+
 @pytest.mark.parametrize("name", ["readme.copying-0a1b2c3d", "data/a/" + "a" * 64])
 def test_a_copy_keeps_non_restic_files_with_similar_names(
     local: FakeRepository, destination: Path, name: str
@@ -275,6 +289,23 @@ def test_temporary_files_an_interrupted_copy_left_are_deleted(
     assert not (destination / leftover).exists()
     assert lock.is_file()
     assert files(destination) == files(local.root) | {f"locks/{lock.name}": lock.read_bytes()}
+
+
+def test_a_copy_leaves_out_the_local_locks_and_restics_temporary_files(
+    local: FakeRepository, destination: Path
+) -> None:
+    whole = files(local.root)
+    lock = local.root / "locks" / ("5" * 64)
+    lock.parent.mkdir(exist_ok=True)
+    lock.write_bytes(b"a backup running")
+    unfinished = local.root / "data" / "55" / f"{'5' * 64}-tmp-123456"
+    unfinished.parent.mkdir(exist_ok=True)
+    unfinished.write_bytes(b"half a pack")
+
+    result = copy_repository(local.root, destination)
+
+    assert result.outcome == "copied"
+    assert files(destination) == whole
 
 
 def test_an_unreachable_destination_is_skipped_and_reported(

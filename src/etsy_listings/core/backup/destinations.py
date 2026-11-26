@@ -1,12 +1,3 @@
-"""Copy the backup storage folder one way to a destination folder
-(workspace-backup spec, *Copy to destinations*).
-
-Plain file operations with no restic, so any folder works, a NAS share
-included. The copy only adds files under names the destination lacks and
-deletes names the local repository no longer has. It never overwrites a file
-and never deletes one it does not recognise.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -51,19 +42,12 @@ CopyOutcome = Literal["copied", "unreachable", "changed", "damaged", "failed", "
 
 @dataclass(frozen=True)
 class CopyStep:
-    """One file operation, reported once it is done."""
-
     action: Literal["copied", "deleted", "set_aside"]
     name: str
 
 
 @dataclass(frozen=True)
 class CopyHooks:
-    """Observation points, for progress and for tests: ``after_listing``
-    runs once both folders are listed, before anything is written;
-    ``planned`` then hears how many files the destination lacks;
-    ``observe`` hears each operation as it completes."""
-
     after_listing: Callable[[], None] = lambda: None
     planned: Callable[[int], None] = lambda _: None
     observe: Callable[[CopyStep], None] = lambda _: None
@@ -71,9 +55,6 @@ class CopyHooks:
 
 @dataclass(frozen=True)
 class ChangedFile:
-    """A destination file that differs from the local one of its name. For
-    ``config``, or a change the sample check found, the sizes can match."""
-
     name: str
     expected_size: int
     actual_size: int
@@ -92,7 +73,6 @@ class CopyResult:
 
 
 def restic_name(name: str) -> bool:
-    """Whether restic writes a file by this ``/`` path."""
     match name.split("/"):
         case [top] if top == CONFIG:
             return True
@@ -116,8 +96,6 @@ def _walk(path: Path) -> Iterator[tuple[Path, os.stat_result]]:
 
 
 def list_repository(root: Path) -> dict[str, int]:
-    """``/`` path to size, in restic's read order, without ``locks/`` and
-    restic's temporary names."""
     before = _reference_directories(root)
     listing: dict[str, int] = {}
     for top in READ_ORDER:
@@ -126,7 +104,7 @@ def list_repository(root: Path) -> dict[str, int]:
             if stat.S_ISREG(info.st_mode) and restic_name(name):
                 listing[name] = info.st_size
     if _reference_directories(root) != before:
-        # Forget or prune may remove snapshots or indexes before deleting packs.
+        # A concurrent forget or prune removes snapshots or indexes before packs.
         raise OSError(f"{root} changed while it was being listed. Try the copy again.")
     return listing
 
@@ -142,7 +120,6 @@ def _reference_directories(root: Path) -> list[tuple[int, int, int, int, int] | 
 
 
 def list_destination(root: Path) -> dict[str, os.stat_result]:
-    """List the repository paths in read order, then any other files."""
     others = sorted(path.name for path in root.iterdir() if path.name not in READ_ORDER)
     found: dict[str, os.stat_result] = {}
     for top in (*READ_ORDER, *others):
@@ -159,29 +136,35 @@ def _in_order(names: list[str], order: tuple[str, ...]) -> list[str]:
     return sorted(names, key=lambda name: order.index(name.split("/")[0]))
 
 
-@dataclass
-class Sorted:
-    """A destination's files against the local listing (spec step 2)."""
+@dataclass(frozen=True)
+class Expiry:
+    config: os.stat_result
+    files: dict[str, os.stat_result] = field(default_factory=dict)
 
+
+@dataclass
+class DestinationPlan:
     missing: list[str] = field(default_factory=list)
-    expired: dict[str, os.stat_result] = field(default_factory=dict)
     changed: list[ChangedFile] = field(default_factory=list)
     unexpected: list[str] = field(default_factory=list)
     temporaries: dict[str, os.stat_result] = field(default_factory=dict)
-    config: os.stat_result | None = None
+    expiry: Expiry | None = None
+
+    @property
+    def expired(self) -> dict[str, os.stat_result]:
+        return self.expiry.files if self.expiry else {}
 
 
 def sort_destination(
     repository: Path, destination: Path, local: dict[str, int], suspect: frozenset[str]
-) -> Sorted:
-    """Sort ``destination``'s files. ``suspect`` names present files known
-    to be changed although their size matches."""
+) -> DestinationPlan:
     found = list_destination(destination)
-    result = Sorted(
+    config = found.get(CONFIG)
+    result = DestinationPlan(
         missing=_in_order([name for name in local if name not in found], WRITE_ORDER),
-        config=found.get(CONFIG),
+        expiry=None if config is None else Expiry(config),
     )
-    if result.config is None and any(restic_name(name) for name in found):
+    if config is None and any(restic_name(name) for name in found):
         # A sync client can remove config before the rest of the old copy.
         result.changed.append(ChangedFile(CONFIG, local[CONFIG], 0))
     for name, info in found.items():
@@ -196,11 +179,12 @@ def sort_destination(
     return result
 
 
-def _classify_other(result: Sorted, name: str, info: os.stat_result) -> None:
+def _classify_other(result: DestinationPlan, name: str, info: os.stat_result) -> None:
     regular = stat.S_ISREG(info.st_mode)
     temporary = _TEMP.fullmatch(name)
     if regular and restic_name(name):
-        result.expired[name] = info
+        if result.expiry is not None:
+            result.expiry.files[name] = info
     elif regular and temporary and restic_name(temporary[1]):
         result.temporaries[name] = info
     else:
@@ -226,8 +210,6 @@ class DestinationNotFoundError(UserFacingError):
 
 
 def create_destination(destination: Path) -> None:
-    """Set-up's one way to make a destination folder: inside a folder that
-    exists, and never over one that is already there."""
     if destination.is_dir():
         return
     if not destination.parent.is_dir():
@@ -239,9 +221,6 @@ def create_destination(destination: Path) -> None:
 
 
 def _unreachable(destination: Path) -> CopyResult:
-    """A copy never creates its destination: a missing folder can mean a
-    sync client signed out with its folder left behind, where a new folder
-    would fill up and never sync."""
     return CopyResult(
         destination,
         "unreachable",
@@ -257,8 +236,6 @@ def copy_repository(
     hooks: CopyHooks | None = None,
     cancel: threading.Event | None = None,
 ) -> CopyResult:
-    """Bring ``destination`` up to ``repository`` (spec steps 1 to 6).
-    ``suspect`` names files the sample check found changed."""
     hooks = hooks or CopyHooks()
     try:
         local = list_repository(repository)
@@ -285,7 +262,7 @@ def copy_repository(
 class _Copy:
     repository: Path
     destination: Path
-    plan: Sorted
+    plan: DestinationPlan
     observe: Callable[[CopyStep], None]
     cancel: threading.Event
     steps: list[CopyStep] = field(default_factory=list)
@@ -298,15 +275,13 @@ class _Copy:
         return self.apply()
 
     def apply(self) -> CopyResult:
-        """Copy in write order, delete in reverse, then drop leftovers."""
         try:
             for name in self.plan.missing:
                 self._continue()
                 _copy_file(self.repository, self.destination, name)
                 self._done("copied", name)
-            for name in _in_order(list(self.plan.expired), DELETE_ORDER):
-                self._continue()
-                self._expire(name)
+            if self.plan.expiry is not None:
+                self._expire_all(self.plan.expiry)
             for name, expected in self.plan.temporaries.items():
                 self._continue()
                 self._remove_temporary(name, expected)
@@ -321,13 +296,17 @@ class _Copy:
             return self.result("failed", _failure(exc, self.repository, self.destination))
         return self.result("copied")
 
-    def _expire(self, name: str) -> None:
-        config = self.plan.config
-        assert config is not None  # Expiry requires a matching config when we list the copy.
+    def _expire_all(self, expiry: Expiry) -> None:
+        for name in _in_order(list(expiry.files), DELETE_ORDER):
+            self._continue()
+            self._expire(expiry, name)
+
+    def _expire(self, expiry: Expiry, name: str) -> None:
+        config = expiry.config
         if not _unchanged(self.destination / CONFIG, config, CONFIG):
             raise _DestinationChangedError(ChangedFile(CONFIG, config.st_size, 0))
         path = _destination_path(self.destination, name)
-        expected = self.plan.expired[name]
+        expected = expiry.files[name]
         if not _unchanged(path, expected, name):
             return
         if _sha256(path) != path.name:
@@ -364,7 +343,7 @@ class _Copy:
 
 
 def _failure(exc: OSError, repository: Path, destination: Path) -> str:
-    # A rename's error names the target second.
+    # A failed rename's OSError carries its target as filename2.
     path = Path(exc.filename2 or exc.filename or "")
     if isinstance(exc, FileNotFoundError) and path.is_relative_to(repository):
         return (
@@ -415,12 +394,10 @@ def _destination_path(root: Path, name: str) -> Path:
 
 
 class DamagedError(Exception):
-    """A local repository file whose contents no longer match its name."""
+    pass
 
 
 def _copy_file(repository: Path, destination: Path, name: str) -> None:
-    """Stream ``source`` to a temporary name beside ``target``, hashing it,
-    then give it its name."""
     target = _destination_path(destination, name)
     folder = destination
     for part in Path(name).parts[:-1]:
@@ -440,7 +417,6 @@ def _copy_file(repository: Path, destination: Path, name: str) -> None:
 
 @contextmanager
 def _temporary(target: Path) -> Iterator[tuple[Path, BinaryIO]]:
-    """A new temporary name beside ``target``, removed unless renamed."""
     temp = target.with_name(f"{target.name}{TEMP_MARK}{secrets.token_hex(4)}")
     writer = temp.open("xb")
     try:
@@ -451,8 +427,6 @@ def _temporary(target: Path) -> Iterator[tuple[Path, BinaryIO]]:
 
 
 def _stream(source: Path, writer: BinaryIO) -> str:
-    """Copy ``source`` into the new file ``temp``, flushed to disk; the
-    SHA-256 of what was written."""
     digest = hashlib.sha256()
     with source.open("rb") as reader:
         while chunk := reader.read(CHUNK):
@@ -464,9 +438,8 @@ def _stream(source: Path, writer: BinaryIO) -> str:
 
 
 def _publish(temp: Path, target: Path) -> None:
-    """Give ``temp`` the name ``target`` only while nothing has it. Windows'
-    rename refuses an existing name; elsewhere rename would replace it, so
-    a hard link takes the name instead (``_temporary`` drops ``temp``)."""
+    # Never replace an existing name: Windows' rename refuses one, POSIX rename
+    # would replace it, so a hard link takes the name there (_temporary drops temp).
     if os.name == "nt":
         temp.rename(target)
     else:
@@ -495,9 +468,6 @@ def check_destination(
     fraction: float = SAMPLE_FRACTION,
     rng: random.Random | None = None,
 ) -> DestinationCheck:
-    """Hash a random sample of ``destination``'s files against their names
-    and compare ``config`` with the local one. Reads only: no lock, no
-    password, no restic."""
     try:
         return _sample_destination(repository, destination, fraction, rng)
     except OSError as exc:
@@ -543,8 +513,6 @@ def _sha256(path: Path) -> str:
 
 
 class ForeignCopyError(ConflictError):
-    """A destination whose ``config`` differs from the local one's."""
-
     def __init__(self, destination: Path) -> None:
         super().__init__(
             f"config in {destination} is missing or differs from the backup storage "
@@ -559,7 +527,6 @@ class ForeignCopyError(ConflictError):
 
 
 def holds_repository(folder: Path) -> bool:
-    """Whether the folder still has any of restic's repository paths."""
     return any((folder / name).exists() for name in READ_ORDER)
 
 
@@ -578,15 +545,11 @@ def repair_destination(
     today: date,
     suspect: frozenset[str] = frozenset(),
 ) -> RepairResult:
-    """Move changed and unexpected files to a new sibling folder, deleting
-    nothing, then copy again (spec, *Changed and unexpected files*)."""
     local = list_repository(repository)
     if CONFIG not in local or not destination.is_absolute() or not destination.is_dir():
         return RepairResult(None, (), copy_repository(repository, destination))
     plan = sort_destination(repository, destination, local, suspect)
     if any(file.name == CONFIG for file in plan.changed):
-        # Telling another repository's config from a damaged one needs the
-        # password, so either way nothing moves (plan, PR 8).
         raise ForeignCopyError(destination)
     moving = [file.name for file in plan.changed] + plan.unexpected
     moving.extend(
@@ -606,9 +569,6 @@ def repair_destination(
 
 
 def planned_set_aside(destination: Path, today: date) -> Path:
-    """The folder a repair today would set files aside in: the first of
-    ``<destination>-set-aside-<date>``, ``-2``, ``-3``... not taken yet.
-    Reads only; :func:`repair_destination` creates it."""
     return next(path for path in _set_aside_names(destination, today) if not path.exists())
 
 
@@ -620,8 +580,6 @@ def _set_aside_names(destination: Path, today: date) -> Iterator[Path]:
 
 
 def _new_sibling(destination: Path, today: date) -> Path:
-    """The first free set-aside name, created empty; a race that takes it
-    first moves on to the next."""
     names = _set_aside_names(destination, today)
     while True:
         candidate = next(names)

@@ -1,6 +1,3 @@
-/** "Saved 2 mins ago" doesn't need to be precise -- coarse buckets read as
- * true for longer, so nobody watches "Saved 1 minute ago" tick to "2" every
- * refresh. */
 export function timeAgo(savedAt: number, now: number): string {
   const seconds = Math.max(0, Math.round((now - savedAt) / 1000));
   if (seconds < 60) return "a moment ago";

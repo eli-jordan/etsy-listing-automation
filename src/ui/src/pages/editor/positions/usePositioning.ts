@@ -27,56 +27,38 @@ import {
 import { type PositionReadiness, usePositionReadiness } from "./usePositionReadiness";
 
 /**
- * Position mode's state for the one template entry the preview pane shows
- * (interactions: *Entry and the Adjust position switch*, *Adjusting*,
- * *Multiple templates*, *Position outside the limits*).
- *
- * A gesture edits a draft pose; it is saved once it completes -- pointer
- * release, or {@link NUDGE_DEBOUNCE_MS} after the last arrow key -- through
- * the editor's ordinary `onUpdate` and an immediate flush, so the head's save
- * status behaves as for any other field. From the gesture's first move until
- * the saved composite has loaded, the stage draws the scene live.
+ * Interactions: *Entry and the Adjust position switch*, *Adjusting*,
+ * *Multiple templates*, *Position outside the limits*.
  */
 
-/** Interactions, *Saving*: "a nudge after a short debounce (about 400 ms)". */
 export const NUDGE_DEBOUNCE_MS = 400;
 
 export type Gesture = "move" | "scale" | "rotate";
 
 export interface Layer {
   id: string;
-  /** The placement ID of a `multiple` template, which labels its box. */
   placement: string | null;
-  /** The template's own box. */
-  box: Quad;
+  templateBox: Quad;
   pose: Pose;
-  /** What `listing.yaml` holds for it, when anything. */
   stored: Quad | null;
-  /** Why `plan` refuses the stored box (spec, *Validation* rules 1-2). */
-  invalid: "limits" | "shape" | null;
+  /** Spec, *Validation* rules 1-2. */
+  refusal: PoseRefusal | null;
 }
 
-export interface Positioning {
+export type PoseRefusal = "limits" | "shape";
+
+export interface Positioning extends Pick<PositionReadiness, "waiting" | "attempt" | "recheck"> {
   on: boolean;
   toggle: () => void;
-  /** The template cannot be adjusted yet, so the switch refuses to turn on. */
-  waiting: boolean;
-  /** Counts each time the template becomes ready, so a failed picture retries. */
-  attempt: number;
-  /** A picture failed: find out whether preparation is why. */
-  recheck: () => void;
   size: { w: number; h: number };
   layers: Layer[];
   selected: string;
   select: (id: string) => void;
   note: { text: string; warn: boolean } | null;
-  /** `run` is null when there is nothing to reset: shown anyway, disabled,
-   * only on a steady foot. */
   reset: { label: string; run: (() => void) | null } | null;
   fit: (() => void) | null;
   ghost: boolean;
-  /** The position is ahead of the composite, so the stage draws it live. */
-  live: boolean;
+  aheadOfComposite: boolean;
   look: LiveLook;
   begin: (gesture: Gesture, id: string, point: Point) => void;
   move: (point: Point) => void;
@@ -87,30 +69,16 @@ export interface Positioning {
 
 interface Args {
   detail: ListingDetail;
-  /** The entry the pane shows, when it is a template entry in this listing. */
   template: string | null;
-  /** Which pane that is -- a template and colour. The switch belongs to it,
-   * so selecting another reel tile turns it off. */
   pane: string;
   summary: TemplateSummary | undefined;
-  /** The composite the stage shows: the saved listing's. */
-  picture: string;
-  /** Saved positions, as the last server response had them. */
+  savedComposite: string;
   saved: Positions | null | undefined;
   onUpdate: (patch: Record<string, unknown>) => void;
   onFlush: (() => void) | undefined;
-  /** A foot that keeps the same lines whether the switch is on or off --
-   * the note, Fit within limits when it applies, and Reset, disabled while
-   * there is nothing to reset -- so turning the switch changes only the
-   * handles on the picture. The phone's Adjust screen, where the foot
-   * moving would move the picture with it. */
-  steady?: boolean;
+  adjustScreen?: boolean;
 }
 
-/** Which template entry the pane may position, and which pane it is. Only
- * a saved listing's own entries: a listing template or a batch never
- * carries positions (spec, *Scope and decisions*), and an unnamed draft has
- * no saved composite to adjust. */
 export function positionTarget(
   focus: Focus | null,
   inListing: boolean,
@@ -121,8 +89,6 @@ export function positionTarget(
   return { template: editable && inListing ? focus.template : null, pane };
 }
 
-/** The workspace limits, read once (interactions, *What the production
- * implementation must finish*). `null` until read, or when unreadable. */
 function useLimits(): Limits | null {
   const [limits, setLimits] = useState<Limits | null>(null);
   useEffect(() => {
@@ -140,7 +106,6 @@ function useLimits(): Limits | null {
   return limits;
 }
 
-/** Each template's saved geometry, fetched the first time it is shown. */
 function useConfig(template: string | null): TemplateConfigState | null {
   const [configs, setConfigs] = useState<Record<string, TemplateConfigState | null>>({});
   useEffect(() => {
@@ -152,9 +117,6 @@ function useConfig(template: string | null): TemplateConfigState | null {
   return template === null ? null : (configs[template] ?? null);
 }
 
-/** Saved positions: what the last server response held. `modified_at` moves
- * only when a response lands, which is what makes the preview URL change with
- * the *saved* position rather than the optimistic one. */
 export function useSavedPositions(detail: ListingDetail): Positions | null | undefined {
   const [saved, setSaved] = useState({
     at: detail.modified_at,
@@ -173,14 +135,16 @@ function layerOf(
   stored: Quad | null,
   limits: Limits,
 ): Layer {
-  if (stored === null) return { id, placement, box, pose: IDENTITY, stored, invalid: null };
+  if (stored === null) {
+    return { id, placement, templateBox: box, pose: IDENTITY, stored, refusal: null };
+  }
   try {
     const fit = decompose(box, stored);
-    let invalid: Layer["invalid"] = withinLimits(fit.pose, limits) ? null : "limits";
-    if (fit.residual > RESIDUAL_PIXELS) invalid = "shape";
-    return { id, placement, box, pose: fit.pose, stored, invalid };
+    let refusal: Layer["refusal"] = withinLimits(fit.pose, limits) ? null : "limits";
+    if (fit.residualPixels > RESIDUAL_PIXELS) refusal = "shape";
+    return { id, placement, templateBox: box, pose: fit.pose, stored, refusal };
   } catch {
-    return { id, placement, box, pose: IDENTITY, stored, invalid: "shape" };
+    return { id, placement, templateBox: box, pose: IDENTITY, stored, refusal: "shape" };
   }
 }
 
@@ -214,10 +178,10 @@ function noteFor(
   template: string,
 ): Positioning["note"] {
   if (!on || layer === undefined) return null;
-  if (layer.invalid === "limits") {
+  if (layer.refusal === "limits") {
     return { text: "Outside the limits since the template's box moved", warn: true };
   }
-  if (layer.invalid === "shape") {
+  if (layer.refusal === "shape") {
     return { text: "Not a plain move, resize or tilt of the template's box", warn: true };
   }
   if (config.kind === "multiple") {
@@ -250,8 +214,6 @@ function dragged(d: Drag, box: Quad, point: Point, limits: Limits): Pose {
   return tilted(box, d.from, point, limits);
 }
 
-/** What the stage needs before it can show handles; `null` means no switch --
- * nothing loaded yet, or no photo size. Both renderers take positions. */
 function stageable(
   config: TemplateConfigState | null,
   limits: Limits | null,
@@ -264,23 +226,20 @@ function stageable(
   return { config, limits, size: { w, h } };
 }
 
-/** The draft pose stands in for the stored one while a gesture is unsaved. */
 function withDraft(base: Layer[], draft: Draft | null, name: string): Layer[] {
   return base.map((layer) =>
     draft?.template === name && draft.id === layer.id
-      ? { ...layer, pose: draft.pose, invalid: null }
+      ? { ...layer, pose: draft.pose, refusal: null }
       : layer,
   );
 }
 
-/** The chosen placement, else the first refused one, else the first in the
- * template's order (interactions, *Multiple templates*). */
 function selectionOf(
   layers: Layer[],
   chosen: { template: string; id: string } | null,
   name: string,
 ): Layer | undefined {
-  const fallback = layers.find((l) => l.invalid !== null) ?? layers[0];
+  const fallback = layers.find((l) => l.refusal !== null) ?? layers[0];
   const pick = chosen?.template === name ? layers.find((l) => l.id === chosen.id) : undefined;
   return pick ?? fallback;
 }
@@ -295,15 +254,11 @@ interface GestureContext {
   commit: (target: Layer, pose: Pose) => void;
 }
 
-/** The handles' state: the drag under way, the draft it has made, and the
- * nudge waiting out its debounce. */
 function useGestures() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const drag = useRef<Drag | null>(null);
   const draftRef = useRef<Draft | null>(null);
   const nudging = useRef<{ timer: ReturnType<typeof setTimeout>; save: () => void } | null>(null);
-  // Saved now rather than dropped: a tab switch unmounts this, and the editor
-  // that takes the edit outlives it, or still flushes when it does not.
   useEffect(
     () => () => {
       if (nudging.current === null) return;
@@ -334,7 +289,7 @@ function useGestures() {
         setDraftPose({
           template: ctx.name,
           id: d.id,
-          pose: dragged(d, target.box, point, ctx.limits),
+          pose: dragged(d, target.templateBox, point, ctx.limits),
         });
       },
       end: () => {
@@ -371,17 +326,16 @@ function lookOf({ renderer }: TemplateConfigState): LiveLook {
 
 function resetOf(
   layer: Layer,
-  editing: boolean,
-  steady: boolean,
+  footEditing: boolean,
+  adjustScreen: boolean,
   run: () => void,
 ): Positioning["reset"] {
   const label = layer.placement === null ? "Reset to template" : `Reset ${layer.placement}`;
   const positioned = layer.stored !== null || !isIdentity(layer.pose);
-  if (steady) return { label, run: positioned ? run : null };
-  return editing && positioned ? { label, run } : null;
+  if (adjustScreen) return { label, run: positioned ? run : null };
+  return footEditing && positioned ? { label, run } : null;
 }
 
-/** The switch turns off freely, and on only for a template that is ready. */
 function toggled(on: boolean, readiness: PositionReadiness, flip: () => void) {
   if (!on && readiness.waiting) readiness.refuse();
   else flip();
@@ -392,12 +346,11 @@ function refusal(readiness: PositionReadiness): Positioning["note"] {
 }
 
 export function usePositioning(args: Args): Positioning | null {
-  const { detail, template, pane, summary, picture, saved, onUpdate, onFlush } = args;
-  const steady = args.steady === true;
+  const { detail, template, pane, summary, savedComposite, saved, onUpdate, onFlush } = args;
+  const adjustScreen = args.adjustScreen === true;
   const limits = useLimits();
   const config = useConfig(template);
   const readiness = usePositionReadiness(config?.renderer.type === "marigold" ? template : null);
-  /** The switch, per pane: it belongs to the template it was turned on for. */
   const [adjust, setAdjust] = useState<{ pane: string; on: boolean } | null>(null);
   const [chosen, setChosen] = useState<{ template: string; id: string } | null>(null);
   const [edited, setEdited] = useState<string | null>(null);
@@ -412,34 +365,32 @@ export function usePositioning(args: Args): Positioning | null {
   const layers = withDraft(stored, gestures.draft, name);
   const layer = selectionOf(layers, chosen, name);
   if (layer === undefined) return null;
-  // Opened on by a refused *stored* box: a draft that looks valid must not
-  // switch the mode off under the pointer or the keyboard.
-  const on = adjust?.pane === pane ? adjust.on : stored.some((l) => l.invalid !== null);
-  /** Whether the foot reads as it does while adjusting. */
-  const editing = on || steady;
+  const on = adjust?.pane === pane ? adjust.on : stored.some((l) => l.refusal !== null);
+  const footEditing = on || adjustScreen;
 
-  // `detail` as of this render. A nudge's save runs from the render of its
-  // last key press, so it builds on the positions shown then.
+  // Deliberately this render's `detail`: a nudge's save builds on the positions its last key press saw.
   function write(positions: Positions | null) {
     onUpdate({ template_positions: positions });
     setEdited(name);
-    // Writes happen only in Position mode. Pin it, so a pane that opened on
-    // because its stored box was refused stays on once the box is fixed.
+    // Pin Position mode on, so a pane that opened on because its stored box
+    // was refused stays on once the box is fixed.
     setAdjust({ pane, on: true });
     onFlush?.();
   }
 
   function commit(target: Layer, pose: Pose) {
-    write(withPose(detail.template_positions, name, target.placement, target.box, pose, bounds));
+    write(
+      withPose(detail.template_positions, name, target.placement, target.templateBox, pose, bounds),
+    );
     gestures.clear();
   }
 
   const select = (id: string) => setChosen({ template: name, id });
   const savePending =
     positionSignature(detail.template_positions?.[name]) !== positionSignature(saved?.[name]);
-  const unseen = edited === name && loadedSrc !== picture;
+  const unseen = edited === name && loadedSrc !== savedComposite;
   const colours = detail.media.filter((e) => typeof e !== "string" && e.template === name).length;
-  const refused = layer.invalid === null ? null : layer.stored;
+  const refused = layer.refusal === null ? null : layer.stored;
 
   return {
     on,
@@ -451,19 +402,19 @@ export function usePositioning(args: Args): Positioning | null {
     layers,
     selected: layer.id,
     select,
-    note: refusal(readiness) ?? noteFor(layer, editing, layers, ready.config, colours, name),
-    reset: resetOf(layer, editing, steady, () => {
+    note: refusal(readiness) ?? noteFor(layer, footEditing, layers, ready.config, colours, name),
+    reset: resetOf(layer, footEditing, adjustScreen, () => {
       gestures.clear();
       write(withoutPosition(detail.template_positions, name, layer.placement));
     }),
     fit:
-      editing && refused !== null
+      footEditing && refused !== null
         ? () => {
-            commit(layer, nearestAllowedPose(layer.box, refused, bounds));
+            commit(layer, nearestAllowedPose(layer.templateBox, refused, bounds));
           }
         : null,
     ghost: on && !isIdentity(layer.pose),
-    live: on && (gestures.draft !== null || savePending || unseen),
+    aheadOfComposite: on && (gestures.draft !== null || savePending || unseen),
     look: lookOf(ready.config),
     ...gestures.handlers({ name, layers, layer, on, limits: bounds, select, commit }),
     loaded: setLoadedSrc,

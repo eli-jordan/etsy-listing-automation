@@ -1,8 +1,3 @@
-// Admin › Settings › Backup (workspace-backup plan, PR 6): Backups off, the
-// set-up form, Status and history, and Setup. Status comes from the shell's
-// one poll (`useBackupStatus`); Setup saves through settings.yaml's revision
-// check, like the AI section. Restore is in Restore.tsx; the missing-repository
-// actions are in MissingRepository.tsx (PR 8).
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
@@ -22,7 +17,7 @@ import type { SettingsChanges } from "../../../api/workspaceSettings";
 import type { BackupsOn } from "../../../shell/backupAttention";
 import { FAST_POLL_MS, useBackupStatus } from "../../../shell/backupStatus";
 import type { RepositoryAction } from "../useWorkspaceSettings";
-import { type Answer, BackupForm } from "./BackupForm";
+import { BackupForm } from "./BackupForm";
 import {
   ChangedFilesBanner,
   History,
@@ -45,6 +40,7 @@ import {
   NEW_BACKUP,
   repairNote,
   runningLine,
+  type SubmitFailure,
   summary,
 } from "./backupText";
 import "./backup.css";
@@ -57,8 +53,6 @@ export type SaveAnswer = { kind: "saved" } | Refusal | null;
 
 const RELOAD = "settings.yaml changed on disk. Nothing was overwritten. Reload, then try again.";
 
-/** Every refusal, worded one way: a stale file means reload; otherwise the
- * server's reason and the fields it names. */
 function refusal(outcome: Refusal): string {
   if (outcome.kind === "stale") return RELOAD;
   const fields = Object.values(outcome.fieldErrors).filter(
@@ -83,7 +77,6 @@ export function BackupSection({
 }: {
   page: BackupPage;
   onPage: (page: BackupPage) => void;
-  /** settings.yaml's `backup:` block; null while off, undefined while loading. */
   saved: BackupSettings | null | undefined;
   setUp: (answers: BackupAnswers & { password: string }) => Promise<SetUpOutcome>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
@@ -107,7 +100,7 @@ export function BackupSection({
 
   if (view.state === "off") {
     if (!creating) return <NotSetUp onStart={() => setCreating(true)} />;
-    const create = async (answers: BackupAnswers, password: string): Answer => {
+    const create = async (answers: BackupAnswers, password: string): Promise<SubmitFailure> => {
       // A destination that already holds a backup is connected, which can
       // take minutes; the status says so while the request runs.
       const polling = setInterval(() => void refresh(), FAST_POLL_MS);
@@ -137,7 +130,7 @@ export function BackupSection({
 
   if (page === "setup") {
     if (!saved) return <p role="status">Loading settings…</p>;
-    const edit = async (answers: BackupAnswers, base: BackupAnswers): Answer => {
+    const edit = async (answers: BackupAnswers, base: BackupAnswers): Promise<SubmitFailure> => {
       try {
         const answer = await save(changes(answers, base));
         if (answer === null) return RELOAD;
@@ -206,7 +199,6 @@ function StatusPage({
   refresh: () => Promise<unknown>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   onSetup: () => void;
-  /** What set-up said, such as the backup it connected. */
   setUpNote: string | null;
   onSetUpNoteSeen: () => void;
 }) {

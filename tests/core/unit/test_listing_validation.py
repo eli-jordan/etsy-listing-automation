@@ -786,6 +786,12 @@ class TestListingTemplateCompleteness:
             }
         )
 
+    def test_an_unclassified_colour_only_warns_because_any_block_refuses_the_save(self) -> None:
+        issues = self._check(self._template(colors=["black", "forest"]))
+        assert [(i.severity, i.where) for i in issues] == [
+            ("warn", "Fix it in garment-profiles/comfort-colors-1717.yaml")
+        ]
+
     def test_no_colours_enabled_blocks(self) -> None:
         issues = self._check(self._template(colors=[], media=["common-media/chart.png"]))
         assert [(i.severity, i.where) for i in issues] == [("block", "Variants › Colours")]

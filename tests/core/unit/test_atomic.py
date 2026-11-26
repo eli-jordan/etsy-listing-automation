@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
+from etsy_listings.core.workspace.atomic import (
+    read_bytes_retrying,
+    write_bytes_atomic,
+    write_json_atomic,
+    write_yaml_atomic,
+)
 
 from tests.support.refusals import refuse_reads
 
@@ -127,3 +132,35 @@ def test_a_read_that_stays_refused_is_raised_after_about_a_second(
         read_bytes_retrying(path)
 
     assert 0.5 <= sum(sleeps) <= 2
+
+
+def test_a_json_record_is_indented_utf8_for_a_person_opening_the_cache(tmp_path: Path) -> None:
+    path = tmp_path / "batch.json"
+
+    write_json_atomic(path, {"name": "Café tee", "rows": [1]})
+
+    assert path.read_bytes() == '{\n  "name": "Café tee",\n  "rows": [\n    1\n  ]\n}\n'.encode()
+
+
+def test_a_missing_yaml_file_is_written_as_its_owners_new_layout(tmp_path: Path) -> None:
+    path = tmp_path / "template.yaml"
+
+    assert write_yaml_atomic(path, {"a": 1}, new=lambda: "# fresh\na: 1\n")
+    assert path.read_bytes() == b"# fresh\na: 1\n"
+
+
+def test_a_yaml_file_that_already_reads_as_the_document_is_left_alone(tmp_path: Path) -> None:
+    path = tmp_path / "template.yaml"
+    path.write_bytes(b"a: 1  # the seller's note\n")
+    os.utime(path, (1_000_000, 1_000_000))
+
+    assert not write_yaml_atomic(path, {"a": 1}, new=lambda: "unused\n")
+    assert path.stat().st_mtime == 1_000_000
+
+
+def test_a_yaml_edit_keeps_every_byte_the_change_does_not_touch(tmp_path: Path) -> None:
+    path = tmp_path / "template.yaml"
+    path.write_bytes(b"a: 1  # the seller's note\nb: 2\n")
+
+    assert write_yaml_atomic(path, {"a": 3, "b": 2}, new=lambda: "unused\n")
+    assert path.read_bytes() == b"a: 3  # the seller's note\nb: 2\n"

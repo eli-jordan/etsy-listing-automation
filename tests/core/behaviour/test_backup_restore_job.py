@@ -166,7 +166,7 @@ def test_a_scheduled_backup_runs_during_a_restore_and_the_weekly_prune_waits(
     coordinator.start_restore(SNAPSHOT, tmp_path / "restored")
     wait_for(lambda: restic.ran("restore") == 1)
 
-    assert coordinator.check()
+    assert coordinator.start_if_due()
     coordinator.join(timeout=10)
     during = {name: restic.ran(name) for name in ("back_up", "forget", "prune", "check")}
     release.set()

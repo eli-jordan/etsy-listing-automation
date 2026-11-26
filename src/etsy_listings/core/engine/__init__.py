@@ -1,47 +1,8 @@
-"""What decides and what executes: the stage pipeline, the three-way diff and
-the lockfile. ADR-0007, ADR-0008, ADR-0009.
+"""The stage pipeline, the three-way diff and the lockfile (ADR-0007, ADR-0008, ADR-0009).
 
-**Only this module computes a diff.** ``cli`` renders the resulting
-:class:`Plan` as text and ``ui`` serialises the same object as JSON;
-neither compares state itself, which is what guarantees the "one set of
-rules regardless of route". Nothing here formats output or talks HTTP.
-
-:func:`build_plan` walks :data:`STAGES` in order, asking each for its desired
-and live state, handing it its own lockfile subtree, and letting the stage's
-own ``plan()`` compare the three. It returns a :class:`PlannedRun`: the
-:class:`Plan` that ``cli`` and ``ui`` render, plus the states it resolved
-getting there. :func:`execute` consumes that rather than asking every stage a
-second time -- strictly sequentially, because ``apply`` never parallelises
-writes.
-
-:func:`plan_listings` and :func:`apply_listings` are the layer above: a whole
-run over a set of listings, owning each lockfile's lifecycle and continue-on-error.
-Entry points call those and format the :class:`RunReport`;
-``build_plan``/``execute`` remain available for a caller
-holding one listing's lockfile itself.
-
-A stage that cannot run says so as a value, never an exception: a refusal is
-something ``plan`` must report, and an exception unwinds the walk and takes
-the other stages' plans with it. It says so from ``desired()`` -- a
-:class:`Blocked`, before a document is built for a run that was never going to
-happen -- or, when only the live state could prove it, from ``plan()`` as
-:meth:`Verdict.refused`. Both land in ``StagePlan.blocked``, so there is one
-refusal for every consumer to render and no way for a stage to decline
-silently.
-
-**The bookkeeping around a stage is this module's, not the stage's.** Looking
-up a stage's lockfile subtree, decoding it, deciding what an undecodable one
-means, naming the stage in the resulting plan, and turning a refusal into a
-blocked plan all happen in :func:`build_plan`. Each was written out once per
-stage until Phase 3, and each had already been written two different ways with
-only two stages in the pipeline -- which is what a wide protocol costs when
-the pipeline is about to double.
-
-Listing-level lifecycle -- which pipeline to walk, the published
-fact :attr:`~etsy_listings.core.engine.change.Plan.is_live` is filled from, wipe
-after retract, consume ``renew`` -- lives in ``lifecycle``, not split across
-``plan`` and ``run``. Render previews live in ``preview``, so the
-executor and the listings GET do not each peek at a ``RenderSnapshot``.
+Withholds each stage's class and lockfile snapshot (import them from
+``stages.<stage>``), the listing-level lifecycle in ``lifecycle`` and the
+lockfile template-rename helper in ``template_refs``.
 """
 
 from etsy_listings.core.engine.apply import execute
@@ -119,88 +80,74 @@ from etsy_listings.core.engine.status import (
     workspace_listing_status,
 )
 
-__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
-    # Running the pipeline over a set of listings -- what `cli` calls, and
-    # what the UI calls. Continue-on-error and the lockfile's lifecycle live
-    # behind these two, not in the entry point that drives them.
-    "plan_listings",
-    "apply_listings",
-    "RunHooks",
-    "preview_listing",
-    "needs_preview",
-    "lookup_preview",
-    "PreviewLookup",
-    "RunReport",
-    "ListingOutcome",
-    "fully_applied",
-    "EngineEventSink",
-    "EngineRunEvent",
-    "EngineStageChecking",
-    "EngineStagePlanned",
-    "EngineListingPlanned",
-    "EngineListingFailed",
-    "EnginePreviewRendered",
-    "EngineStageApplying",
-    "EngineProgress",
-    "EngineStageApplied",
-    "EngineStageFailed",
-    "StalePlanError",
-    "plan_fingerprint",
-    # One listing at a time, for a caller that owns its own lockfile.
-    "build_plan",
-    "execute",
-    "STAGES",
-    # What planning hands to applying: the plan, and the state behind it.
-    "PlannedRun",
-    "StageState",
-    # What a stage is (ADR-0007: one protocol, order encodes dependency).
-    "Stage",
-    "AnyStage",
-    "StageApplyResult",
-    "Blocked",
-    "StageBlockedError",
-    # What a stage's plan() answers with: a decision, not a plan. The engine
-    # supplies the stage's name and the refusal; a stage supplies neither.
-    "Verdict",
-    "StageOutcome",
-    "StageIdle",
-    "StageWork",
-    "StageBlocked",
-    # What plan produces and cli/ui consume -- never comparing state themselves.
-    "Plan",
-    "StagePlan",
-    "Action",
-    "Change",
-    "FieldChange",
-    "ListChange",
-    "MediaChange",
-    "PriceChange",
-    "Drift",
-    # The shared comparison helpers each stage's own plan() is written with.
-    "scalar",
-    "sequence",
-    "drift",
-    # Where a listing has got to -- the lifecycle rule the UI badges and
-    # (Phase 6) `status` prints, in one place so the two cannot disagree.
-    "ListingStatus",
-    "ListingLifecycle",
-    "ListingGesture",
-    "listing_status",
-    "StatusInputs",
-    "listing_gestures",
-    "edited_since_apply",
-    "is_live_etsy_state",
-    "remote_ids",
-    "workspace_listing_status",
-    # state.lock.json, and the hashing helpers everything must go through.
-    "Lockfile",
-    "canonical_hash",
-    "hash_file",
-    "to_workspace_relative_posix",
+__all__ = [
     "SCHEMA_VERSION",
-    # What a stage is handed, and how it reports progress while applying.
-    "RunContext",
+    "STAGES",
+    "Action",
+    "AnyStage",
+    "Blocked",
+    "Change",
+    "Drift",
+    "EngineEventSink",
+    "EngineListingFailed",
+    "EngineListingPlanned",
+    "EnginePreviewRendered",
+    "EngineProgress",
+    "EngineRunEvent",
+    "EngineStageApplied",
+    "EngineStageApplying",
+    "EngineStageChecking",
+    "EngineStageFailed",
+    "EngineStagePlanned",
     "Event",
     "EventSink",
+    "FieldChange",
+    "ListChange",
+    "ListingGesture",
+    "ListingLifecycle",
+    "ListingOutcome",
+    "ListingStatus",
+    "Lockfile",
+    "MediaChange",
+    "Plan",
+    "PlannedRun",
+    "PreviewLookup",
+    "PriceChange",
+    "RunContext",
+    "RunHooks",
+    "RunReport",
+    "Stage",
+    "StageApplyResult",
+    "StageBlocked",
+    "StageBlockedError",
+    "StageIdle",
+    "StageOutcome",
+    "StagePlan",
+    "StageState",
+    "StageWork",
+    "StalePlanError",
+    "StatusInputs",
     "Swatch",
+    "Verdict",
+    "apply_listings",
+    "build_plan",
+    "canonical_hash",
+    "drift",
+    "edited_since_apply",
+    "execute",
+    "fully_applied",
+    "hash_file",
+    "is_live_etsy_state",
+    "listing_gestures",
+    "listing_status",
+    "lookup_preview",
+    "needs_preview",
+    "plan_fingerprint",
+    "plan_listings",
+    "preview_listing",
+    "remote_ids",
+    "scalar",
+    "sequence",
+    "to_workspace_relative_posix",
+    "workspace_listing_status",
 ]

@@ -1,18 +1,10 @@
-"""Advisory installed-CLI catalogs, cached per host for 30 minutes (ADR-0056).
-
-Only explicit catalog fields are read. Discovery never changes preferences or
-starts generation, and no account configuration or credentials are read here.
-"""
-
 from __future__ import annotations
 
-import json
 import re
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -72,8 +64,6 @@ class ModelDiscovery:
         self._worker: threading.Thread | None = None
 
     def start(self) -> None:
-        """Attempt discovery off the host's startup path. Construction does
-        no work. Repeated starts share the active attempt."""
         with self._lock:
             if self._worker is not None and self._worker.is_alive():
                 return
@@ -84,8 +74,6 @@ class ModelDiscovery:
             self._worker.start()
 
     def stop(self, *, timeout: float = 6.0) -> None:
-        """Cancel the probe's managed process tree and wait a bounded time.
-        A stopped owner starts no new probes until ``start`` is called."""
         self._cancel.set()
         with self._lock:
             worker = self._worker
@@ -95,9 +83,13 @@ class ModelDiscovery:
     def read(self, *, refresh: bool = False) -> ModelCatalogs:
         with self._lock:
             if self._cancel.is_set():
-                return self._snapshot("Model discovery stopped. Restart the server to retry.")
+                return self._snapshot_locked(
+                    "Model discovery stopped. Restart the server to retry."
+                )
             if self._refreshing:
-                return self._snapshot("Model discovery is in progress. Refresh to check again.")
+                return self._snapshot_locked(
+                    "Model discovery is in progress. Refresh to check again."
+                )
             if not refresh and self._cached is not None and self._monotonic() < self._expires:
                 return self._cached.model_copy(deep=True)
             previous = self._cached.providers if self._cached is not None else {}
@@ -108,14 +100,7 @@ class ModelDiscovery:
             for name in ("codex", "grok"):
                 try:
                     catalogs[name] = _discover(self._host, name, deadline, self._cancel)
-                except (
-                    OSError,
-                    CliProcessError,
-                    ValueError,
-                    KeyError,
-                    TypeError,
-                    AttributeError,
-                ):
+                except (OSError, CliProcessError, ValueError):
                     kept = previous.get(name, ProviderCatalog())
                     catalogs[name] = kept.model_copy(
                         update={
@@ -132,8 +117,7 @@ class ModelDiscovery:
             with self._lock:
                 self._refreshing = False
 
-    def _snapshot(self, problem: str) -> ModelCatalogs:
-        """Read under the state lock, never under a process/pipe wait."""
+    def _snapshot_locked(self, problem: str) -> ModelCatalogs:
         cached = (
             self._cached.model_copy(deep=True)
             if self._cached
@@ -168,7 +152,7 @@ def _discover(
     if result.timed_out or result.cancelled or result.returncode != 0:
         raise ValueError("discovery failed")
     if name == "codex":
-        return _codex(json.loads(result.stdout))
+        return _codex(result.stdout)
     return _grok(result.stdout)
 
 
@@ -187,20 +171,34 @@ def _grok(stdout: str) -> ProviderCatalog:
     return ProviderCatalog(models=models, efforts=GROK_EFFORTS)
 
 
-def _codex(raw: Any) -> ProviderCatalog:  # untrusted CLI JSON
-    # Codex 0.166.0: models[].slug/display_name/supported_reasoning_levels[].effort.
+class _CodexLevel(BaseModel):
+    effort: str
+
+
+class _CodexModel(BaseModel):
+    slug: str
+    display_name: str | None = None
+    visibility: str | None = None
+    supported_reasoning_levels: tuple[_CodexLevel, ...] = ()
+
+
+class _CodexCatalog(BaseModel):
+    """Codex 0.166.0's ``debug models`` output, as far as discovery reads it."""
+
+    models: tuple[_CodexModel, ...]
+
+
+def _codex(stdout: str) -> ProviderCatalog:
     models = tuple(
         ModelChoice(
-            id=row["slug"],
-            label=row.get("display_name", row["slug"]),
+            id=row.slug,
+            label=row.display_name or row.slug,
             efforts=tuple(
-                level["effort"]
-                for level in row["supported_reasoning_levels"]
-                if level["effort"] != "ultra"
+                level.effort for level in row.supported_reasoning_levels if level.effort != "ultra"
             ),
         )
-        for row in raw["models"]
-        if row.get("visibility") != "hide"
+        for row in _CodexCatalog.model_validate_json(stdout).models
+        if row.visibility != "hide"
     )
     if not models:
         raise ValueError("empty Codex catalog")

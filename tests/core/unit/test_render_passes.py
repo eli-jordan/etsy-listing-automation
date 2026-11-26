@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from etsy_listings.core.render.config import DisplaceConfig, Point, ShadeConfig
-from etsy_listings.core.render.passes import displace, export, export_many, shade, warp
+from etsy_listings.core.render.passes import displace, export_many, shade, warp
 
 IDENTITY_QUAD = (
     Point(x=0.0, y=0.0),
@@ -80,17 +80,24 @@ def test_shade_multiply_darkens_toward_black_luminance() -> None:
     assert np.all(result[..., 0] < 10)
 
 
+def _straight_alpha_over(base: np.ndarray, layer: np.ndarray) -> np.ndarray:
+    """One layer over ``base``: straight alpha in float32, rounded, not truncated."""
+    alpha = layer[..., 3:4].astype(np.float32) / 255.0
+    composite = base.astype(np.float32) * (1 - alpha) + layer[..., :3].astype(np.float32) * alpha
+    return np.clip(composite + 0.5, 0, 255).astype(np.uint8)
+
+
 def test_export_zero_alpha_leaves_base_unchanged() -> None:
     base = np.full((8, 8, 3), 50, dtype=np.uint8)
     layer = _solid_rgba(8, (255, 0, 0, 0))
-    result = export(base, layer)
+    result = export_many(base, [layer])
     assert np.array_equal(np.array(result), base)
 
 
 def test_export_full_alpha_shows_print_layer() -> None:
     base = np.full((8, 8, 3), 50, dtype=np.uint8)
     layer = _solid_rgba(8, (255, 0, 0, 255))
-    result = export(base, layer)
+    result = export_many(base, [layer])
     result_array = np.array(result)
     assert np.all(result_array[..., 0] == 255)
     assert np.all(result_array[..., 1] == 0)
@@ -99,7 +106,7 @@ def test_export_full_alpha_shows_print_layer() -> None:
 def test_export_returns_rgb_image() -> None:
     base = np.zeros((4, 4, 3), dtype=np.uint8)
     layer = _solid_rgba(4, (0, 0, 0, 0))
-    result = export(base, layer)
+    result = export_many(base, [layer])
     assert result.mode == "RGB"
     assert result.size == (4, 4)
 
@@ -110,13 +117,10 @@ def test_export_many_with_no_layers_leaves_base_unchanged() -> None:
     assert np.array_equal(np.array(result), base)
 
 
-def test_export_many_with_one_layer_matches_export() -> None:
-    """The single-layer path through export_many must be byte-identical to
-    export() -- this is what keeps colour-matrix/single kind output
-    (which calls export() directly) unaffected by the multiple-kind addition."""
+def test_export_many_with_one_layer_is_straight_alpha_over_the_base() -> None:
     base = np.full((8, 8, 3), 50, dtype=np.uint8)
     layer = _solid_rgba(8, (255, 0, 0, 180))
-    assert np.array_equal(np.array(export_many(base, [layer])), np.array(export(base, layer)))
+    assert np.array_equal(np.array(export_many(base, [layer])), _straight_alpha_over(base, layer))
 
 
 def test_export_many_folds_layers_in_order() -> None:

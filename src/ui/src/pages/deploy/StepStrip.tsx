@@ -3,18 +3,6 @@ import type { StageRuntimeStatus } from "./deployState";
 import type { PlanDTO, StagePlanDTO } from "../../types";
 import { STAGE_LABELS, stageActions, stageBlocked, stageReason, stageWillRun } from "../../types";
 
-/**
- * "What apply will do" / "What apply did" -- one cell per stage the plan
- * actually returned, in pipeline order (spec's "Step strip" element,
- * decision 11: nothing here hard-codes five stages, so a `retract`-only
- * plan draws one cell and an `_all_blocked` listing draws every stage red).
- *
- * A stage the engine puts under another by `group` (`etsy_videos` under
- * `etsy_media`, ADR-0045) is drawn beside it inside one labelled group, so the
- * strip reads as the CLI's `etsy_media/etsy_videos` does. The grouping is the
- * engine's data, never inferred here from a name.
- */
-
 type CellState =
   "run" | "skip" | "blocked" | "running" | "applying-log" | "done" | "failed" | "not-reached";
 
@@ -169,8 +157,6 @@ function StepCell({
   );
 }
 
-/** The strip's cells, each stage with the ones grouped under it. A stage
- * whose group is not in the plan stands on its own. */
 function nest(stagePlans: readonly StagePlanDTO[]): StagePlanDTO[][] {
   const present = new Set(stagePlans.map((s) => s.stage as string));
   const rows: StagePlanDTO[][] = [];

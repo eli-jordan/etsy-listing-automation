@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.core.application import workspace_settings
 from etsy_listings.core.application.backup_repository import (
     SEVERAL_WORKSPACES,
     WorkspaceId,
@@ -166,6 +167,32 @@ def test_an_existing_id_is_never_changed(
     assert (workspace_root / "settings.yaml").read_bytes() == before
     assert record.notice is None
     assert ensure_workspace_id(workspace, restic.snapshot_list(lock=False)) == WorkspaceId(OURS)
+
+
+def test_an_id_another_writer_saves_first_is_the_one_both_end_with(
+    workspace_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = _workspace(workspace_root, tmp_path, None)
+    real_read = workspace_settings.read_settings
+    reads = 0
+
+    def read_then_lose_the_race(target: Workspace) -> workspace_settings.SettingsView:
+        nonlocal reads
+        reads += 1
+        current = real_read(target)
+        if reads == 1:
+            workspace_settings.edit_settings(
+                target,
+                expected_revision=current.revision,
+                changes={workspace_settings.BACKUP_WORKSPACE_ID: THEIRS},
+                editable=(workspace_settings.BACKUP_WORKSPACE_ID,),
+            )
+        return current
+
+    monkeypatch.setattr(workspace_settings, "read_settings", read_then_lose_the_race)
+
+    assert ensure_workspace_id(workspace) == WorkspaceId(THEIRS)
+    assert backup_settings(workspace).workspace_id == THEIRS
 
 
 def _runner_record(workspace: Workspace, home: Path, restic: InMemoryRestic) -> RunRecord:

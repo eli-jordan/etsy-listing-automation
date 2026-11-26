@@ -28,7 +28,6 @@ function message(error: unknown, fallback: string): string {
   return fallback;
 }
 
-/** The one status source for the Backup page, the banner and both nav icons. */
 export async function getBackupStatus(): Promise<BackupStatus> {
   const { data, error } = await api.GET("/api/backup");
   if (data) return data;
@@ -41,14 +40,12 @@ export async function getBackupHistory(): Promise<HistoryEntry[]> {
   throw new Error(message(error, "Could not read the backup history"));
 }
 
-/** Back up now. A backup operation already running is a 409. */
 export async function runBackup(): Promise<BackupStatus> {
   const { data, error } = await api.POST("/api/backup/run");
   if (data) return data;
   throw new Error(message(error, "Could not start a backup"));
 }
 
-/** A write's answer; an error that is no refusal throws. */
 function outcome(
   { data, error }: { data?: BackupStatus; error?: unknown },
   fallback: string,
@@ -59,8 +56,6 @@ function outcome(
   throw new Error(message(error, fallback));
 }
 
-/** Set up backups. When a destination already holds a backup, the server
- * connects it instead, answering once it is copied. */
 export async function setUpBackup(answers: BackupSetUp): Promise<SetUpOutcome> {
   const answer = await api.POST("/api/backup/setup", { body: answers });
   const result = outcome(answer, "Could not set up backups");
@@ -71,8 +66,6 @@ export async function setUpBackup(answers: BackupSetUp): Promise<SetUpOutcome> {
 export type NewRepository = components["schemas"]["BackupNewRepositoryRequest"];
 export type ConnectRepository = components["schemas"]["BackupConnectRequest"];
 
-/** Create a new repository while the configured one is missing; starts the
- * first backup. Refusals come back as set-up's do. */
 export async function createRepository(body: NewRepository): Promise<SetUpOutcome> {
   return outcome(
     await api.POST("/api/backup/repository", { body }),
@@ -80,8 +73,6 @@ export async function createRepository(body: NewRepository): Promise<SetUpOutcom
   );
 }
 
-/** Copy an existing repository to this computer and use it; answers once
- * it is connected. A wrong password is an `invalid` refusal. */
 export async function connectRepository(body: ConnectRepository): Promise<SetUpOutcome> {
   return outcome(
     await api.POST("/api/backup/connect", { body }),
@@ -89,7 +80,6 @@ export async function connectRepository(body: ConnectRepository): Promise<SetUpO
   );
 }
 
-/** Set aside a destination's changed files and copy again; answers when done. */
 export async function repairDestination(destination: string): Promise<RepairResult> {
   const { data, error } = await api.POST("/api/backup/repair", { body: { destination } });
   if (data) return data;
@@ -100,15 +90,12 @@ export type RestoreStatus = components["schemas"]["RestoreStatus"];
 export type BackupSnapshot = components["schemas"]["BackupSnapshot"];
 export type BackupSnapshots = components["schemas"]["BackupSnapshotsResponse"];
 
-/** restic's own snapshots, newest first, with the live workspace's path. */
 export async function getBackupSnapshots(): Promise<BackupSnapshots> {
   const { data, error } = await api.GET("/api/backup/snapshots");
   if (data) return data;
   throw new Error(message(error, "Could not read the backups"));
 }
 
-/** Start a restore. A refusal (the live workspace, a folder with files, a
- * restore already running) comes back for under the field. */
 export async function startRestore(snapshot: string, target: string): Promise<SetUpOutcome> {
   const { data, error } = await api.POST("/api/backup/restore", { body: { snapshot, target } });
   if (data) return { kind: "started", status: data };
@@ -117,7 +104,6 @@ export async function startRestore(snapshot: string, target: string): Promise<Se
   return refusalOf(error) ?? { kind: "refused", message: refused, fieldErrors: {} };
 }
 
-/** Stop the restore; answers once it has stopped. */
 export async function stopRestore(): Promise<BackupStatus> {
   const { data, error } = await api.POST("/api/backup/restore/stop");
   if (data) return data;

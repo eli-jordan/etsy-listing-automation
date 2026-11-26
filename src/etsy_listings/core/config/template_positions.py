@@ -26,13 +26,6 @@ Membership and current geometry are deployment checks, so stale positions still 
 
 
 def layer_boxes(positions: TemplatePositions | None, template: str) -> LayerBoxes:
-    """The listing's boxes for ``template``'s layers, as
-    :func:`~etsy_listings.core.render.config.scene_layers` takes them: the
-    effective box of a layer is the listing's when stored, else the template's.
-
-    A shape the template's kind does not take keys no layer and so moves
-    nothing; validation refuses it before anything renders (spec rules 3–4).
-    """
     match (positions or {}).get(template):
         case BoxPosition(bounding_box=box):
             return {None: box}

@@ -1,16 +1,6 @@
 import type { ListingSummary } from "../types";
 
-/** A listing's lifecycle gesture, as the server offers it on both
- * the Listings table's row and the editor's `ListingDetail`. */
 export type Gesture = ListingSummary["gestures"][number];
-
-/**
- * The words for a listing's lifecycle actions, shared by the two places that
- * offer them: the Listings table's row and the editor's action row. Which
- * gestures a listing has is the server's (`listing_gestures`); only the
- * labels and the delete confirmation's copy live here, so the two surfaces
- * cannot drift apart in what they call the same action.
- */
 
 export const GESTURE_LABELS: Record<Gesture, string> = {
   delete: "Delete",
@@ -31,28 +21,24 @@ interface RemoteIds {
   printify_product_id?: string | null;
 }
 
-/** Whether deleting only *marks* the listing: anything on Printify or Etsy
- * has to be retracted by the next apply first. */
-export function hasRemotes(listing: RemoteIds): boolean {
+export function deleteOnlyMarks(listing: RemoteIds): boolean {
   return listing.etsy_listing_id != null || listing.printify_product_id != null;
 }
 
 export function deleteLabel(listing: RemoteIds): string {
-  return hasRemotes(listing) ? "Mark for deletion" : "Delete";
+  return deleteOnlyMarks(listing) ? "Mark for deletion" : "Delete";
 }
 
 export function deleteTitle(listing: RemoteIds & { name: string }): string {
-  return hasRemotes(listing)
+  return deleteOnlyMarks(listing)
     ? `Are you sure you want to mark ${listing.name} for deletion?`
     : `Are you sure you want to delete ${listing.name}?`;
 }
 
 export function deleteDetails(listing: RemoteIds): string {
-  return hasRemotes(listing) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS;
+  return deleteOnlyMarks(listing) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS;
 }
 
-/** What each non-delete gesture writes to `lifecycle`: `null`
- * deletes the key, which is both Un-retire and Cancel. */
 export const LIFECYCLE_OF: Record<Exclude<Gesture, "delete">, "retired" | "renew" | null> = {
   retire: "retired",
   "un-retire": null,

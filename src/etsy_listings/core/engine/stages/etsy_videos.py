@@ -1,39 +1,3 @@
-"""The ``etsy_videos`` stage: a listing's videos, placed where `media:` puts
-them (ADR-0045, features/etsy-listing-20260910/spec.md decision 9).
-
-Etsy has no position for a video -- no rank, no ordering call. Where one
-shows follows from attach order, measured by eye in Shop Manager: the video
-attached longest is featured at position 2, and any other is anchored after
-the number of images the listing had when it was attached. So `media:` is
-read for two facts, the featured video (the one at position 2) and the
-second video's anchor (the images before it), and `apply` brings the
-listing to them in decision 9's four steps:
-
-1. **Sweep** every video on the listing that is not one of ours, `active` or
-   `inactive` -- a stranger may be holding a slot. Foreign videos never make
-   the stage run on their own, as `image_ids` treats foreign images.
-2. **Featured.** If it differs from the one last applied, delete both of
-   ours, because a survivor would be promoted, then attach it: uploaded when
-   its bytes are new, re-attached by id when Etsy already has them.
-3. **Second.** If it, its bytes or its anchor changed -- or step 2 ran --
-   delete it, cut `image_ids` to the first *n* images, attach it, and put the
-   full list back.
-4. **Swatches.** Detaching an image deletes its swatch link for good, so
-   step 3 is always followed by re-setting them, through the helper
-   `etsy_media` uses.
-
-**A position changed by hand in Shop Manager is invisible**: the API reports
-none, so there is nothing for `plan` to compare. Drift is what the API *can*
-show -- one of ours missing or `inactive` -- and it is healed by uploading
-that video again rather than trusting an id Etsy has stopped showing.
-
-**Its own stage, not a branch of `etsy_media`.** Videos have their own
-applied model, their own id map and their own daily budget (ten
-associations per listing, re-attaches included): a budget refusal fails this
-stage alone, after `etsy_media`'s ids are already recorded, so the
-next run re-uploads no image.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -45,7 +9,13 @@ from pydantic import BaseModel, ConfigDict
 from etsy_listings.core.config.media import media_kind
 from etsy_listings.core.engine.change import Action, Drift, FieldChange, Verdict
 from etsy_listings.core.engine.context import RunContext
-from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
+from etsy_listings.core.engine.lock import (
+    HASH_PREFIX,
+    Lockfile,
+    hash_file,
+    short_digest,
+    to_workspace_relative_posix,
+)
 from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_media import IMAGE_IDS_KEY
 from etsy_listings.core.engine.stages.etsy_target import (
@@ -135,7 +105,6 @@ class EtsyVideosLive:
 
     @property
     def drifted_refs(self) -> frozenset[str]:
-        """Ours, missing or `inactive`: the drift the API can show."""
         inactive = {v.ref for v in self.videos if v.ref is not None and v.state != "active"}
         return frozenset({*self.missing_refs, *inactive})
 
@@ -185,8 +154,6 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
         workspace = ctx.workspace
         config = workspace.load_listing(listing)
         listing_dir = workspace.listing_dir(listing)
-        # A listing that has never had a video asks nothing of Etsy, so it
-        # is not refused for want of a shop it would never use.
         if not any(media_kind(e) == "video" for e in config.media) and not (
             applied is not None and applied.videos
         ):
@@ -200,10 +167,9 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
         videos: list[DesiredVideo] = []
         images_before = 0
         for entry in config.media:
-            if media_kind(entry) == "image":
+            if not isinstance(entry, str) or media_kind(entry) == "image":
                 images_before += 1
                 continue
-            assert isinstance(entry, str)  # a template entry is always an image
             source = workspace.resolve_ref(entry, listing_dir=listing_dir)
             videos.append(
                 DesiredVideo(
@@ -211,8 +177,6 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
                     source=source,
                     content_hash=hash_file(source),
                     file=to_workspace_relative_posix(workspace.root, source),
-                    # The featured video's place is fixed; only the second
-                    # has an anchor, the images before it (decision 9).
                     after_images=images_before if videos else None,
                 )
             )
@@ -227,9 +191,6 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedEtsyVideos | None
     ) -> EtsyVideosLive | None:
-        """`getListing?includes=Videos`, split into ours and foreign by
-        ``etsy_video_ids``. ``None`` without a request before `publish` has
-        minted a listing."""
         del applied
         listing_id = etsy_listing_id(lock)
         if listing_id is None:
@@ -285,6 +246,7 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
             )
         return Verdict.no_work()
 
+    @override
     def snapshot(
         self, desired: EtsyVideosDesired, live: EtsyVideosLive | None
     ) -> EtsyVideosSnapshot:
@@ -372,8 +334,6 @@ class _Placer:
                 self._delete(video.video_id)
 
     def placed(self, video: DesiredVideo, *, slot: int) -> bool:
-        """Last applied in this slot with these bytes and anchor, and still
-        active on the listing."""
         video_id = self._known.get(video.ref)
         return (
             slot < len(self._applied)
@@ -394,8 +354,6 @@ class _Placer:
     def place_second(
         self, video: DesiredVideo, desired: EtsyVideosDesired, lock: Lockfile, *, moved: bool
     ) -> None:
-        """Keep the second video in place unless the featured one moved, which
-        removed it too; otherwise place it after its images."""
         if not moved and self.placed(video, slot=1):
             self.keep(video)
         else:
@@ -411,8 +369,6 @@ class _Placer:
             self._delete(video_id)
 
     def attach(self, video: DesiredVideo) -> None:
-        """Re-attach by id when Etsy already has these bytes from us;
-        upload otherwise, and always for a drifted one."""
         current = hash_file(video.source)
         video_id = self._known.get(video.ref)
         previous = {v.ref: v.hash for v in self._applied}.get(video.ref)
@@ -443,8 +399,6 @@ class _Placer:
         video_id = self._known.get(video.ref)
         if video_id is not None and video_id in self._on_listing:
             self._delete(video_id)
-        # `lock.remote` is threaded through the run, so these are the
-        # ids `etsy_media` set a moment ago in this same apply.
         image_ids_by_ref: dict[str, int] = dict(lock.remote.get(IMAGE_IDS_KEY) or {})
         image_ids = [image_ids_by_ref[r] for r in desired.image_refs if r in image_ids_by_ref]
         anchor = video.after_images or 0
@@ -478,16 +432,8 @@ class _Placer:
 def _changes(
     wanted: AppliedEtsyVideos, applied: AppliedEtsyVideos | None
 ) -> tuple[FieldChange, ...]:
-    """What differs, per slot, with the ref itself as the value.
-
-    A slot whose video changed is ``videos.featured``/``videos.second``,
-    ref before and after, so a reader can tell a new video from one that only
-    moved slot by the refs alone -- the deploy review's New and Removed badges
-    come from here rather than from a comparison of its own. The
-    same ref with new bytes is ``.contents``, digest before and after; the
-    second video moved among the images is ``.after_images``, its anchor
-    before and after.
-    """
+    """The deploy review's badges read these paths: ``videos.<slot>`` (refs),
+    ``.contents`` (digests) and ``.after_images`` (anchors)."""
     before_videos = applied.videos if applied is not None else ()
     changes: list[FieldChange] = []
     for slot, path in enumerate(("videos.featured", "videos.second")):
@@ -511,7 +457,6 @@ def _ref(video: AppliedVideo | None) -> str | None:
 
 
 def _same_video_changes(path: str, before: AppliedVideo, after: AppliedVideo) -> list[FieldChange]:
-    """New bytes, or a new anchor among the images, for the same ref."""
     changes: list[FieldChange] = []
     if after.hash != before.hash:
         changes.append(
@@ -531,9 +476,7 @@ def _same_video_changes(path: str, before: AppliedVideo, after: AppliedVideo) ->
 
 
 def _digest(content_hash: str) -> str:
-    """``sha256:`` and the first twelve hex digits: enough to tell two files
-    apart in a plan, short enough to read."""
-    return content_hash[: len("sha256:") + 12]
+    return HASH_PREFIX + short_digest(content_hash)
 
 
 def _actions(desired: EtsyVideosDesired) -> tuple[Action, ...]:

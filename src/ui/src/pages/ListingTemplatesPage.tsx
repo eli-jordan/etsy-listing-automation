@@ -6,6 +6,7 @@ import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { type DragEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { stageDesigns, StagingRefused } from "../api/batches";
+import type { Refused } from "./NewBatchPage";
 import { deleteListingTemplate, listListingTemplates } from "../api/listingTemplates";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MutedClip } from "../components/MutedClip";
@@ -14,28 +15,13 @@ import { mediaKind, mediaLabel, ownedTile, pictureFor } from "../media";
 import type { ListingTemplateSummary } from "../types";
 import { RecentBatches } from "./RecentBatches";
 
-/**
- * The Listing templates page (UI doc §2), from the `templates` mockup frame:
- * one card per listing template, with its gallery, garment, colour count,
- * pricing and how many batches used it.
- *
- * A card's footer holds Start batch, Edit, Clone and Delete; the
- * listing-template editor's action row offers Clone and Delete too, but
- * Start batch lives only here (UI doc §2, §3). Clone opens the same unsaved
- * *name it* state Create listing template does. Every card is also a drop target: a drop goes straight to staging
- * with that template, and a refused one lands on New batch with the template
- * chosen and the refusal shown (UI doc, closed question 2). Recent batches
- * sits below the cards (PR 5).
- */
-
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
 const ZIP_TYPES = new Set(["application/zip", "application/x-zip-compressed"]);
 
-/** What a drag over a card is carrying, as far as a drag can tell: only the
- * kinds and types of its items, never their names, until the drop. */
+/** Until the drop, a drag exposes only its items' kinds and types, not their names. */
 function dragged(transfer: DataTransfer): { count: number; allPngs: boolean; zip: boolean } {
   const files = Array.from(transfer.items ?? []).filter((item) => item.kind === "file");
   return {
@@ -45,7 +31,6 @@ function dragged(transfer: DataTransfer): { count: number; allPngs: boolean; zip
   };
 }
 
-/** How the drop overlay names what a drag carries. */
 function carryingLabel(carrying: ReturnType<typeof dragged>): string {
   if (carrying.zip) return "a ZIP";
   if (carrying.allPngs) return plural(carrying.count, "PNG", "PNGs");
@@ -64,9 +49,7 @@ function TemplateCard({
   const owner = { kind: "listing-template", name: template.name } as const;
   const pricing = template.pricing_plan_name ?? "Prices set per size";
   const encoded = encodeURIComponent(template.name);
-  // Every card is a drop target, and the overlay exists only during a drag
-  // (UI doc §2). A counter, not a flag: entering a child fires `dragleave`
-  // on the card before `dragenter` on the child.
+  // A depth counter: entering a child fires the card's dragleave before the child's dragenter.
   const [over, setOver] = useState<(ReturnType<typeof dragged> & { depth: number }) | null>(null);
 
   function enter(event: DragEvent<HTMLElement>) {
@@ -101,10 +84,6 @@ function TemplateCard({
       onDragLeave={leave}
       onDrop={drop}
     >
-      {/* The first three gallery entries as a fanned stack of prints (the
-          `template-cards` design frame): the first whole in front, the next
-          two fanned behind it. Mockups are square, and a strip of cells cut
-          each to a slice; a print shows the whole picture. */}
       <div className="bc-card__gallery">
         {template.media.length === 0 ? (
           <span className="bc-card__no-gallery">No gallery images</span>
@@ -117,8 +96,7 @@ function TemplateCard({
               >
                 {mediaKind(entry) === "video" ? (
                   <>
-                    {/* A clip has no tile to ask for: its own first frames
-                        are the poster, as everywhere else a video shows. */}
+                    {/* Videos have no tile; the clip's first frames are its poster. */}
                     <MutedClip src={pictureFor(entry, null, "full", owner)} />
                     <span className="bc-deck__play" aria-label="Video">
                       <PlayIcon weight="fill" aria-hidden="true" />
@@ -217,9 +195,6 @@ export function ListingTemplatesPage() {
       .catch(() => setError(`Could not delete ${name}`));
   }
 
-  /** A drop on a card: straight to staging, never past it (UI doc §2).
-   * Refused, it shows New batch's refusal state with the template chosen,
-   * the files named (closed question 2). */
   function stageOn(name: string, files: File[]) {
     setError("");
     stageDesigns(name, files)
@@ -227,7 +202,12 @@ export function ListingTemplatesPage() {
       .catch((exc: unknown) => {
         if (exc instanceof StagingRefused) {
           navigate(`/batches/new?template=${encodeURIComponent(name)}`, {
-            state: { refused: { ...exc.refusal, files: files.map((file) => file.name) } },
+            state: {
+              refused: {
+                ...exc.refusal,
+                fileNames: files.map((file) => file.name),
+              } satisfies Refused,
+            },
           });
           return;
         }

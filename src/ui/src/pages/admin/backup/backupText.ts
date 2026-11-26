@@ -12,6 +12,9 @@ import type {
 import type { BackupsOn } from "../../../shell/backupAttention";
 import { timeAgo } from "../../editor/timeAgo";
 
+/** The message a refused submit shows; null when it went through. */
+export type SubmitFailure = string | null;
+
 export const INTERVALS = [4, 6, 12, 24, 48] as const;
 
 /** What Set up and Setup edit: settings.yaml's `backup:` block. */
@@ -62,7 +65,6 @@ export function ago(iso: string, now: number): string {
   return timeAgo(Date.parse(iso), now);
 }
 
-/** "Mon 23 Nov, 09:12", in the seller's time zone. */
 export function when(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", {
     weekday: "short",
@@ -73,6 +75,9 @@ export function when(iso: string): string {
   });
 }
 
+/** Values from here up drop the tenth. */
+const WHOLE_FROM = 100;
+
 export function bytes(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -82,8 +87,7 @@ export function bytes(n: number | null | undefined): string {
     value /= 1000;
     unit += 1;
   }
-  // "16.8 MB", "41 MB", "312 MB": a tenth only while it still says something.
-  const shown = unit === 0 || value >= 100 ? Math.round(value) : Number(value.toFixed(1));
+  const shown = unit === 0 || value >= WHOLE_FROM ? Math.round(value) : Number(value.toFixed(1));
   return `${shown} ${units[unit]}`;
 }
 
@@ -100,7 +104,6 @@ const STEPS: Record<string, string> = {
   checking: "Checking the backup storage folder…",
 };
 
-/** What the operation in progress is doing, for the line under the detail. */
 export function runningLine(status: BackupStatus, running: RunningBackup): string {
   const name = running.destination ? nameOf(status, running.destination) : "the destination";
   const counted = filesCounted(running);
@@ -115,13 +118,11 @@ export function runningLine(status: BackupStatus, running: RunningBackup): strin
   return STEPS[running.step] ?? "Backing up…";
 }
 
-/** Set-up or Connect copying an existing backup to this computer. */
 export function connectingLine(status: BackupStatus, source?: string | null): string {
   if (!source) return "Copying the existing backup to this computer…";
   return `Connecting to the backup in ${nameOf(status, source)}… Copying it to this computer can take a while.`;
 }
 
-/** What set-up says once it connected a destination's backup. */
 export function connectedNote(status: BackupStatus, connected: BackupConnected): string {
   const count = `${connected.snapshots} ${connected.snapshots === 1 ? "snapshot" : "snapshots"}`;
   const note = `Connected to the backup in ${nameOf(status, connected.destination)}: ${count}.`;
@@ -133,7 +134,6 @@ function filesCounted({ files_done: done, files_total: total }: RunningBackup): 
   return ` ${done.toLocaleString("en-GB")} of ${total.toLocaleString("en-GB")} files`;
 }
 
-/** The status panel's headline and detail. */
 export function summary(
   { status, warnings }: BackupsOn,
   now: number,
@@ -182,7 +182,6 @@ function nextLine(due: string | null | undefined, now: number): string {
 
 export type RowResult = "ok" | "partial" | "failed" | "stopped";
 
-/** A history row's result and the one line under it. */
 export function rowResult(entry: HistoryEntry): { result: RowResult; detail: string } {
   const { result, detail } = runResult(entry);
   return { result, detail: entry.run.notice ? `${detail}. ${entry.run.notice}` : detail };
@@ -214,7 +213,6 @@ function runResult(entry: HistoryEntry): { result: RowResult; detail: string } {
   };
 }
 
-/** The note a finished repair leaves in the status panel. */
 export function repairNote(destination: DestinationStatus, result: RepairResult): string {
   const moved = result.moved.length;
   const files = moved === 1 ? "1 file was" : `${moved} files were`;
@@ -226,13 +224,12 @@ export function repairNote(destination: DestinationStatus, result: RepairResult)
   return `Repaired the ${destination.name} copy.${aside}${after}`;
 }
 
-/** A restore's progress, worded as the prototype's `restoreFigures`. */
 export function restoreFigures(restore: RestoreStatus) {
   const { bytes_total: total, files_total: files, seconds_left: left } = restore;
   const count = (n: number) => n.toLocaleString("en-GB");
   return {
     pctText: `${Math.round(restore.percent * 100)}%`,
-    bytes: total == null ? "" : bytesOf(restore.bytes_done ?? 0, total),
+    bytes: total == null ? "" : bytesProgress(restore.bytes_done ?? 0, total),
     files: files == null ? "" : `${count(restore.files_done ?? 0)} of ${count(files)} files`,
     left:
       left == null
@@ -241,31 +238,26 @@ export function restoreFigures(restore: RestoreStatus) {
   };
 }
 
-/** "7.6 of 20.1 GB": the unit once when both share it, as the prototype words it. */
-function bytesOf(done: number, total: number): string {
+export function bytesProgress(done: number, total: number): string {
   const [part, whole] = [bytes(done), bytes(total)];
   const unit = whole.slice(whole.indexOf(" "));
   return part.endsWith(unit) ? `${part.slice(0, -unit.length)} of ${whole}` : `${part} of ${whole}`;
 }
 
-/** The parts that are known, joined as the prototype joins figures. */
 export const joined = (...parts: string[]) => parts.filter(Boolean).join(" · ");
 
-/** Without trailing separators; a loop, as a regex here would backtrack. */
-function trimmed(path: string): string {
+function withoutTrailingSeparators(path: string): string {
   let end = path.length;
   while (end > 0 && "/\\".includes(path.charAt(end - 1))) end -= 1;
   return path.slice(0, end);
 }
 
-/** Whether two paths name one folder, as Windows compares them: the instant
- * pre-check under the restore field. The server refuses it either way. */
 export function samePath(a: string, b: string): boolean {
-  const normal = (path: string) => trimmed(path.trim()).replaceAll("\\", "/").toLowerCase();
+  const normal = (path: string) =>
+    withoutTrailingSeparators(path.trim()).replaceAll("\\", "/").toLowerCase();
   return normal(a) === normal(b);
 }
 
-/** The status panel's note once a restore has ended. */
 export function restoreNote(restore: RestoreStatus): string {
   const left =
     "The folder holds the files restored so far; delete it before restoring there again.";
@@ -276,18 +268,14 @@ export function restoreNote(restore: RestoreStatus): string {
   return `The restore failed at ${at}: ${restore.message ?? "no reason was given"} ${left}`;
 }
 
-/** The set-up form's password, typed twice, and the saved-it checkbox. */
 export interface Password {
-  pw: string;
-  pw2: string;
-  stored: boolean;
+  typed: string;
+  repeated: string;
+  savedInManager: boolean;
 }
 
-/** A new repository's password: at least the server's `password_min_length`
- * (plan, PR 5), typed alike twice. An instant pre-check; the server refuses
- * a short one either way. */
-export function passwordProblem({ pw, pw2 }: Password, minLength: number): string | null {
-  if (pw.length < minLength) return `Use at least ${minLength} characters.`;
-  if (pw !== pw2) return "The two passwords don't match.";
+export function passwordProblem({ typed, repeated }: Password, minLength: number): string | null {
+  if (typed.length < minLength) return `Use at least ${minLength} characters.`;
+  if (typed !== repeated) return "The two passwords don't match.";
   return null;
 }

@@ -168,6 +168,25 @@ def test_the_cygwin_fzf_is_what_choose_runs(tmp_path: Path) -> None:
     assert prompts.choose("Garment", ["row one"], host=host) == "row one"
 
 
+def test_a_question_reaches_cygwins_fzf_as_an_argument_never_as_script_text(
+    tmp_path: Path,
+) -> None:
+    host, commands = _cygwin(
+        tmp_path,
+        {
+            ("-c", "command -v fzf"): completed("/usr/bin/fzf\n"),
+            ("-c", 'exec fzf "$@"'): completed("row one\n"),
+        },
+    )
+    question = 'Design "$(rm -rf ~)"'
+
+    prompts.choose(question, ["row one"], host=host)
+
+    script_argv = commands.run_calls[-1].argv
+    assert script_argv[2] == 'exec fzf "$@"'
+    assert f"--prompt={question} > " in script_argv[3:]
+
+
 @pytest.mark.parametrize(
     "probe",
     [completed(returncode=1), completed(""), OSError("nope")],
@@ -307,11 +326,8 @@ def test_plain_prompts_treat_eof_as_cancellation() -> None:
     assert prompts.confirm("Sure?", host=host) is None
 
 
-def test_the_local_machine_reads_lines_through_input(monkeypatch) -> None:
-    # `builtins.input` is looked up per call, so wizard tests that redirect it
-    # still reach the plain backend through the default host.
-    monkeypatch.setattr("builtins.input", replies(["typed"]))
-    assert prompts.LOCAL_PROMPT_HOST.read_line("> ") == "typed"
+def test_the_local_machine_reads_lines_through_input() -> None:
+    assert prompts.LOCAL_PROMPT_HOST.read_line is input
 
 
 # --- declining, as the wizards see it ----------------------------------------

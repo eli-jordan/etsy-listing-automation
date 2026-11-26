@@ -7,15 +7,8 @@ this stage to ``build_plan`` *instead* of the pipeline when
 destroy is never rendered, PUT, or PATCHed -- updating it first is wasted
 writes and a way to recreate a product ``read_live`` just said was missing.
 
-**The 404 confirmation is polled, not a single GET.** The cascade this checks
--- Printify DELETE on a still-connected product taking the Etsy draft with it
--- was measured to land as an immediate 404 (docs/features/listing-lifecycle-20260916/spec.md, "The
-cascade"), but a user hit the single-GET version reporting the listing
-survived, then found it gone in Shop Manager moments later: read-after-write
-on Etsy's side is not guaranteed instant. A short backoff tolerates that lag
-without changing the policy -- a listing that never actually goes still fails
-the same way, files kept, after the same ceiling `publish`'s own poll uses the
-pattern for (`_poll_until_unlocked`).
+The Etsy 404 is polled, not one GET: Etsy's read-after-write lags the cascade
+(docs/features/listing-lifecycle-20260916/spec.md, *The cascade*).
 """
 
 from __future__ import annotations
@@ -23,13 +16,14 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.engine.change import Action, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, StageApplyResult
-from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stage import Blocked, Stage
 from etsy_listings.core.engine.stages.etsy_target import etsy_listing_id
 from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.core.errors import UserFacingError
@@ -50,7 +44,7 @@ class AppliedRetract(BaseModel):
 
 @dataclass(frozen=True)
 class RetractDesired:
-    """Marker: this listing should have no remotes and then no files."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -59,7 +53,7 @@ class RetractLive:
     etsy_listing_id: int | None
 
 
-class RetractStage:
+class RetractStage(Stage[RetractDesired, AppliedRetract, RetractLive]):
     name = "retract"
     local = False
     group: str | None = None
@@ -81,12 +75,14 @@ class RetractStage:
         self._now = now or time.monotonic
         self._poll_ceiling = poll_ceiling
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedRetract | None
     ) -> RetractDesired | Blocked:
         del ctx, listing, applied
         return RetractDesired()
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedRetract | None
     ) -> RetractLive:
@@ -97,6 +93,7 @@ class RetractStage:
             etsy_listing_id=etsy_listing_id(lock),
         )
 
+    @override
     def plan(
         self,
         desired: RetractDesired,
@@ -124,6 +121,7 @@ class RetractStage:
             actions=tuple(actions),
         )
 
+    @override
     def apply(
         self,
         ctx: RunContext,
@@ -154,8 +152,6 @@ class RetractStage:
         return StageApplyResult(applied=AppliedRetract().model_dump(mode="json"))
 
     def _wait_for_gone(self, ctx: RunContext, listing_id: int) -> bool:
-        """Poll for the 404 rather than trusting one GET -- the cascade is
-        real but not always instant (see the module docstring)."""
         delay = POLL_INITIAL_DELAY
         deadline = self._now() + self._poll_ceiling
         while True:

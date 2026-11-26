@@ -1,12 +1,5 @@
 import { useRef, type RefObject } from "react";
 
-/**
- * Play a muted clip while the pointer is over whatever holds it, and put it
- * back on its poster frame after. The holder -- a locator row, a
- * reel tile's face -- owns the hover, so the actions come out here and the
- * element goes to `MutedClip` through `ref`.
- */
-
 /** Where a muted clip rests: half a second in, since a first frame is often
  * black. */
 export const POSTER_TIME = 0.5;
@@ -17,6 +10,8 @@ export interface HoverPlay {
   rest: () => void;
 }
 
+/** The holder of a muted clip owns the hover, so the actions come out here
+ * and the element goes to `MutedClip` through `ref`. */
 export function useHoverPlay(): HoverPlay {
   const ref = useRef<HTMLVideoElement>(null);
   return {

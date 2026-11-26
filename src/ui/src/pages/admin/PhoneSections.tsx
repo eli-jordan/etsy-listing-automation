@@ -4,13 +4,6 @@ import { useBackupStatus } from "../../shell/backupStatus";
 import type { BackupPage } from "./backup/BackupSection";
 import { address, BACKUP_PAGES, type Section, SECTION_LABELS, SECTIONS } from "./adminSections";
 
-/**
- * Admin's sections on a phone: one sticky row of chips that scrolls
- * sideways, in place of the desktop's stacked list, which would fill the
- * first screen before any setting. The current chip is kept in view, and
- * Backup's two pages sit under the row while Backup is open.
- */
-
 type Pick = (section: Section, page?: BackupPage) => void;
 
 function prefersReducedMotion(): boolean {

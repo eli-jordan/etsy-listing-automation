@@ -14,8 +14,8 @@ function renderSwitcher(selected: string) {
       selected={selected}
       onSelect={onSelect}
       onOpen={onOpen}
-      chip={<span>calibrated</span>}
-      meta={<span>Colour Matrix · 4 colours</span>}
+      statusChip={<span>calibrated</span>}
+      contentsAndSaveState={<span>Colour Matrix · 4 colours</span>}
     />,
   );
   return { onSelect, onOpen };

@@ -182,11 +182,11 @@ def test_deadline_exceeded_before_any_provider_is_tried() -> None:
     assert codex.tasks == []
 
 
-def test_default_budget_allows_a_slow_response_and_shares_remaining_time_with_repair(
+def test_default_limits_allow_a_slow_response_and_share_remaining_time_with_repair(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = 1_000.0
-    monkeypatch.setattr(time, "monotonic", lambda: now)
+    budget = RunBudget.starting_now(clock=lambda: now)
     codex = FakeAiProvider(name="codex", responses=["not json", _valid_payload()])
     original_generate = codex.generate
     remaining: list[float] = []
@@ -201,7 +201,7 @@ def test_default_budget_allows_a_slow_response_and_shares_remaining_time_with_re
 
     monkeypatch.setattr(codex, "generate", generate)
 
-    proposal = orchestrator.generate_proposal(_request(), _PROMPT, [codex])
+    proposal = orchestrator.generate_proposal(_request(), _PROMPT, [codex], budget=budget)
 
     assert proposal.titles[0] == "a" * 10
     assert remaining == [300.0, 239.0]

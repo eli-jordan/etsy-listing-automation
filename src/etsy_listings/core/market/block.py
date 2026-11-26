@@ -1,16 +1,4 @@
-"""The market-data block the proposal prompt receives (features/market-seo-20260924/spec.md, *What
-the proposal sees*).
-
-Two parts, in this order:
-
-1. the **ranked phrase list** -- code's counting and weighting, which a model
-   is unreliable at; and
-2. the **top eight listings verbatim** -- title, every tag and the
-   description's lead, in score order -- which show how winning titles and
-   openings are *built*, as a list of phrases cannot.
-
-Full descriptions stay out: they cost the most tokens and carry the most
-copying and prompt-injection risk, and the proposal only writes a lead.
+"""The market-data block the proposal prompt receives.
 
 Everything in the block but its fixed note is other sellers' text, so it is
 sent as JSON between fixed delimiters -- the same "this is data" boundary
@@ -49,10 +37,7 @@ _DELIMITER_RUN = re.compile(r"<{3,}|>{3,}")
 
 
 def lead(description: str) -> str:
-    """A description's first sentence: up to and including the first ``.``,
-    ``!`` or ``?`` followed by a space, or up to the first line break,
-    whichever comes first. ``3.5 oz`` does not end a sentence; a heading
-    line with no full stop ends at its line break."""
+    """A description's first sentence, or its first line if that is shorter."""
     text = description.strip()
     match = _SENTENCE_END.search(text)
     if match is not None:
@@ -63,9 +48,7 @@ def lead(description: str) -> str:
 
 
 def market_block(result: MarketResult) -> str:
-    """The delimited block, or ``""`` for an empty result -- the one case
-    the proposal goes ahead without market data, and an empty block is one
-    more thing a model can decide means something."""
+    """The delimited block, or ``""`` for an empty result."""
     if result.empty:
         return ""
     payload = {
@@ -89,7 +72,6 @@ def market_block(result: MarketResult) -> str:
 
 
 def _defused(text: str) -> str:
-    """Other sellers' text with any run of three or more ``<`` or ``>``
-    shortened to two, so none of it can close the block early or open one
-    of its own."""
+    """Other sellers' text with ``<``/``>`` runs cut to two, so it cannot
+    close the block or open another."""
     return _DELIMITER_RUN.sub(lambda match: match.group(0)[0] * 2, text)

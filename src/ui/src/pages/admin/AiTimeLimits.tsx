@@ -15,11 +15,6 @@ type Limits = { step: number; run: number };
 const enabledCount = (providers: ProviderPreference[]) =>
   providers.filter((p) => p.enabled ?? true).length;
 
-/** AI providers and AI time limits share one coordinator, because an
- * enabled provider or a larger step can raise the run limit. The raise is
- * saved in the same write as its cause, so settings.yaml never holds a run
- * limit below the floor. Lowering either never lowers the run limit.
- */
 export function AiSettingsSections({
   providers,
   limits,

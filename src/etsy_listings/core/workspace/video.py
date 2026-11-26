@@ -1,19 +1,8 @@
-"""Reading a video file's facts, through PyAV.
+"""A video file's facts, through PyAV; never raises.
 
-The video gate (`config/listing_validation.check_videos`) is pure, so
-something has to open the file first; this is that something, and the only
-module that imports ``av``. It answers a :class:`VideoFacts` or a
-:class:`ProbeFailure` and never raises: a clip is a file the seller dropped
-in a directory, and one that will not open is a thing to tell them about in
-the issues banner, not a traceback that takes the editor or a ``--all`` batch
-down with it.
-
-Metadata plus one decoded frame. The frame is what "decodable" means -- a
-container can announce an H.264 stream whose packets are garbage, and Etsy
-answers a file it cannot decode with a bare ``500`` (decision 9), so the
-header alone is not proof enough. Nothing read here is hashed: the stage that
-uploads a clip hashes its bytes, never these facts, which is why ``av`` needs
-only a floor pin where OpenCV and Pillow are pinned exactly.
+Etsy answers a file it cannot decode with a bare ``500``, so a clip passes only
+once one frame decodes. Nothing read here is hashed, so ``av`` needs only a
+floor pin.
 """
 
 from __future__ import annotations
@@ -30,7 +19,6 @@ _QUICKTIME_FAMILY = frozenset({"mov", "mp4"})
 
 
 def probe_video(path: Path) -> VideoFacts | ProbeFailure:
-    """The file's size, duration, pixel size and whether it carries audio."""
     try:
         size_bytes = path.stat().st_size
     except OSError:
@@ -43,9 +31,8 @@ def probe_video(path: Path) -> VideoFacts | ProbeFailure:
 
 def _read(path: Path, size_bytes: int) -> VideoFacts | ProbeFailure:
     with av.open(str(path)) as container:
-        # FFmpeg opens a PNG as a one-frame "video", so the extension is
-        # checked against what the file actually is: Etsy takes MP4 and MOV,
-        # and both are FFmpeg's one QuickTime-family demuxer.
+        # FFmpeg opens a PNG as a one-frame video. Etsy takes MP4 and MOV, both
+        # FFmpeg's QuickTime-family demuxer.
         if not _QUICKTIME_FAMILY.intersection(container.format.name.split(",")):
             return ProbeFailure(
                 f"is not an MP4 or MOV file, whatever its name says "

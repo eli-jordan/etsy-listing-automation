@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.application.garment_profiles import (
+    blueprint_ref,
     build_garment_profile,
     filter_blueprints_by_category,
     garment_profile_slug_for,
@@ -162,6 +163,13 @@ def test_garment_profile_slug_drops_the_trademark_sign() -> None:
         id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
     )
     assert garment_profile_slug_for(catalog_entry) == "comfort-colors-1717"
+
+
+def test_a_profile_records_the_catalogs_brand_verbatim_trademark_sign_and_all() -> None:
+    catalog_entry = Blueprint(
+        id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
+    )
+    assert blueprint_ref(catalog_entry).brand == "Comfort Colors®"
 
 
 def test_write_garment_profile_if_absent_writes_once_then_reuses(workspace_root: Path) -> None:

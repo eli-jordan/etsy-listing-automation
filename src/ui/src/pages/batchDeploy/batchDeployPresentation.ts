@@ -35,8 +35,6 @@ export function candidateNames(summaries: readonly ListingSummary[]): CandidateN
     } else if (
       summary.status === "dirty" ||
       (summary.status === "draft" && hasEtsyListing) ||
-      // Normal table gestures (delete, retire, renew) are lifecycle actions,
-      // not evidence that the deploy plan has local work to review.
       summary.status === "pending-retire"
     ) {
       names.edit.push(summary.name);
@@ -184,8 +182,6 @@ function allRunnableStagesApplied(listing: BatchListingState): boolean {
 type ResultBucket =
   "succeeded" | "clean" | "failed" | "stale" | "blocked" | "attention" | "pending";
 
-/** The result lists one listing belongs in, before failed, stale and blocked
- * listings are also counted as needing attention. */
 function resultBuckets(listing: BatchListingState, terminal: boolean): ResultBucket[] {
   if (listing.stale) return ["stale"];
   if (listing.plan === null || listing.planFailure !== null) return ["attention"];

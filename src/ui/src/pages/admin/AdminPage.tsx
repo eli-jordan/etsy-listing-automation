@@ -14,7 +14,14 @@ import { CurrencyDialog } from "./CurrencyDialog";
 import type { InfoState } from "./Info";
 import { ListingDefaults } from "./ListingDefaults";
 import { SettingsPanel } from "./SettingsPanel";
-import { address, BACKUP_PAGES, isSettings, type Section, SECTIONS } from "./adminSections";
+import {
+  address,
+  BACKUP_PAGES,
+  isSettings,
+  type Section,
+  SECTION_LABELS,
+  SECTIONS,
+} from "./adminSections";
 import { PhoneSections } from "./PhoneSections";
 import { usePager } from "../../phone/usePager";
 import { useIsPhone } from "../../phone/usePhone";
@@ -22,14 +29,6 @@ import { useShopLookups } from "./useShopLookups";
 import { type SaveStatus, useShopSettings } from "./useShopSettings";
 import "./admin.css";
 
-/**
- * `/admin` (Admin plan, PR 3): the Shop tab's Connected shops and Listing
- * defaults, from the approved `admin-shop` prototype. Both panels stay
- * mounted so switching never discards a pending edit. Settings owns a
- * separate file/save queue; its AI, Template rendering (template positions
- * PR 5) and Backup (workspace-backup PR 6) subsections share it, and opening
- * Settings selects AI. The section is in the address (`address`).
- */
 export function AdminPage() {
   const [params, setParams] = useSearchParams();
   const named = params.get("section") as Section | null;
@@ -46,8 +45,6 @@ export function AdminPage() {
   const lookups = useShopLookups();
   const isPhone = useIsPhone();
   const content = useRef<HTMLDivElement>(null);
-  // A sideways swipe on the content moves to the section beside it, which
-  // starts at its top, under the chips (PhoneSections).
   usePager(content, {
     items: SECTIONS,
     current: section,
@@ -78,27 +75,24 @@ export function AdminPage() {
     toggle: (field) => setOpenInfo((current) => (current === field ? null : field)),
   };
 
-  // Clicking anywhere but an info button or card closes the open card.
   const onRootClick = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
     if (!target.closest(".s-info-btn") && !target.closest(".s-info")) setOpenInfo(null);
   };
 
-  const closeCurrency = useCallback(() => {
-    setCurrencyOpen(false);
-    // The trigger is re-rendered enabled by then; focus it after the commit.
-    queueMicrotask(() => currencyButton.current?.focus());
-  }, [setCurrencyOpen]);
+  const closeCurrency = useCallback(() => setCurrencyOpen(false), [setCurrencyOpen]);
+  const currencyWasOpen = useRef(false);
+  useEffect(() => {
+    if (currencyWasOpen.current && !currencyOpen) currencyButton.current?.focus();
+    currencyWasOpen.current = currencyOpen;
+  }, [currencyOpen]);
 
   const { shop, save } = settings;
   const changeCurrency = async (code: string) => {
-    // The dialog shows its own failure and retries only through its
-    // acknowledged Change, so a cancelled change is never resent by Retry.
     const outcome = await save({ currency: code }, { retain: false });
-    if (outcome?.kind === "saved") closeCurrency();
-    else if (outcome?.kind === "refused")
-      throw new Error(outcome.fieldErrors.currency ?? outcome.message);
-    else if (outcome?.kind === "stale") closeCurrency();
+    if (outcome?.kind === "refused") return outcome.fieldErrors.currency ?? outcome.message;
+    if (outcome?.kind === "saved" || outcome?.kind === "stale") closeCurrency();
+    return null;
   };
 
   return (
@@ -195,7 +189,7 @@ export function AdminPage() {
         <CurrencyDialog
           current={shop.currency}
           currencies={shop.supported_currencies}
-          shopCurrency={connections?.etsy.shop_currency ?? null}
+          etsyShopCurrency={connections?.etsy.shop_currency ?? null}
           onCancel={closeCurrency}
           onConfirm={changeCurrency}
         />
@@ -231,16 +225,8 @@ function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () =>
   return <span role="status" />;
 }
 
-/** How long "Saved" stays on a phone before the toast goes. */
 const SAVED_TOAST_MS = 2500;
 
-/**
- * The phone's save indicator: the page head scrolls away under the sticky
- * section chips, so what a field's save did shows in a toast above the tab
- * bar instead, Retry and Reload with it. Saving and a failure stay until
- * they change; Saved goes after a moment. The toast's live region is always
- * there, so a screen reader hears each change.
- */
 function PhoneSaveToast({
   status,
   onRetry,
@@ -275,6 +261,10 @@ function PhoneSaveToast({
   );
 }
 
+const SHOP_SECTIONS = SECTIONS.filter((id) => !isSettings(id));
+/** Backup has its own entry below these. */
+const SETTINGS_SECTIONS = SECTIONS.filter((id) => isSettings(id) && id !== "backup");
+
 function Nav({
   section,
   backupPage,
@@ -288,10 +278,6 @@ function Nav({
   const on = view.state === "on";
   const warn = view.banner !== null;
   const inBackup = section === "backup";
-  const sub: { id: Section; label: string }[] = [
-    { id: "connected", label: "Connected shops" },
-    { id: "defaults", label: "Listing defaults" },
-  ];
   return (
     <nav className="adm-sections adm-sections--described" aria-label="Admin sections">
       <a
@@ -310,7 +296,7 @@ function Nav({
           <span className="adm-sections__hint">shop.yaml</span>
         </span>
       </a>
-      <SubNav items={sub} section={section} onPick={onPick} />
+      <SubNav items={SHOP_SECTIONS} section={section} onPick={onPick} />
       <a
         href={address("ai")}
         className={`adm-sections__item${isSettings(section) ? " adm-sections__item--active" : ""}`}
@@ -327,16 +313,7 @@ function Nav({
           <span className="adm-sections__hint">settings.yaml</span>
         </span>
       </a>
-      <SubNav
-        items={[
-          { id: "ai", label: "AI" },
-          { id: "rendering", label: "Template rendering" },
-        ]}
-        section={section}
-        onPick={onPick}
-      >
-        {/* Backup (workspace-backup interactions, *Where Backup lives*): off
-            before set-up, then two pages nested beneath it. */}
+      <SubNav items={SETTINGS_SECTIONS} section={section} onPick={onPick}>
         <a
           href={address("backup")}
           className={`s-subnav__item bk-subnav-backup${inBackup && !on ? " is-active" : ""}`}
@@ -386,25 +363,25 @@ function SubNav({
   onPick,
   children,
 }: {
-  items: { id: Section; label: string }[];
+  items: readonly Section[];
   section: Section;
   onPick: (s: Section) => void;
   children?: ReactNode;
 }) {
   return (
     <div className="s-subnav">
-      {items.map((s) => (
+      {items.map((id) => (
         <a
-          key={s.id}
-          href={address(s.id)}
-          className={s.id === section ? "s-subnav__item is-active" : "s-subnav__item"}
-          aria-current={s.id === section ? "page" : undefined}
+          key={id}
+          href={address(id)}
+          className={id === section ? "s-subnav__item is-active" : "s-subnav__item"}
+          aria-current={id === section ? "page" : undefined}
           onClick={(e) => {
             e.preventDefault();
-            onPick(s.id);
+            onPick(id);
           }}
         >
-          {s.label}
+          {SECTION_LABELS[id]}
         </a>
       ))}
       {children}

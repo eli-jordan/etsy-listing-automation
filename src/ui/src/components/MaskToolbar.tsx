@@ -12,8 +12,6 @@ export interface MaskControls {
   undo: () => void;
   reset: () => void;
 }
-/** The dock under the photo. Only "Edit mask" until editing starts; then the
- * brushes, Undo, Reset and Done. */
 export function MaskBrushDock({ controls: c }: { controls: MaskControls }) {
   if (!c.editing) {
     return (

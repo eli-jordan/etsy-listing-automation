@@ -2,12 +2,6 @@ import { api } from "./client";
 import { refusalOf } from "./refusal";
 import type { components } from "./schema";
 
-/**
- * The Admin page's Shop tab over HTTP (`server/api/shop.py`). A save is
- * revision-checked: it names the revision it was made against and answers
- * with the next one, a conflict, or field errors keyed by change name.
- */
-
 export type ShopSettings = components["schemas"]["ShopSettingsResponse"];
 export type ShopChanges = components["schemas"]["ShopChanges"];
 export type ShopConnections = components["schemas"]["ShopConnectionsResponse"];

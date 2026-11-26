@@ -1,27 +1,3 @@
-"""The real :class:`~etsy_listings.core.backup.repository.Repository`: restic
-itself, run as a subprocess (workspace-backup plan, P6; ADR-0060).
-
-Each operation becomes one ``restic --repo <folder> --json <subcommand>``,
-and its ``--json`` lines become the interface's figures and summaries. The
-subcommands, flags, exit codes and line shapes are known here and nowhere
-else. Reached only through ``core/application/backup_repository.py``; an
-Import Linter contract enforces it.
-
-Not ``core/ai/process.py``'s ``run_managed``: that takes no environment,
-buffers stdout until exit and needs input text. restic needs the password in
-its environment, reports progress as ``--json`` lines while it runs, and
-reads nothing from stdin. So this launches restic with ``subprocess.Popen``
-and line-buffered stdout, as ``preparation/worker_client.py`` does, and
-reads each line as it arrives.
-
-The password goes only into the child's environment as ``RESTIC_PASSWORD``,
-never onto the command line or into a log (spec, *Configuration*). restic's
-exit codes become typed errors: 10 for a missing repository or a folder that
-is not one, 11 for a lock held elsewhere, 12 for a wrong password. Their
-message is restic's own, from the ``exit_error`` line ``--json`` writes to
-stderr.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -91,8 +67,6 @@ _ERRORS: Mapping[int, type[ResticError]] = {
 
 
 class ResticProcess(Protocol):
-    """A running restic: its stdout lines, then its exit code and stderr."""
-
     @property
     def stdout(self) -> Iterable[str]: ...
     def wait(self) -> int: ...
@@ -105,8 +79,6 @@ Launch = Callable[[Sequence[str], Mapping[str, str]], ResticProcess]
 
 
 class Restic:
-    """The repository in ``repository``, run with the restic at ``binary``."""
-
     def __init__(
         self, binary: Path, repository: Path, password: str, *, launch: Launch | None = None
     ) -> None:
@@ -121,8 +93,6 @@ class Restic:
     @property
     def path(self) -> Path:
         return self.repository
-
-    # ------------------------------------------------------ the operations
 
     def init(self) -> str:
         for message in self.run("init"):
@@ -197,19 +167,9 @@ class Restic:
         return figures
 
     def verify_password(self) -> None:
-        """``cat config`` reads the one file every key opens, and no more."""
         self.run("--no-lock", "cat", "config")
 
-    # -------------------------------------------------------- the commands
-
     def stream(self, *args: str, cancel: threading.Event | None = None) -> Iterator[Any]:
-        """Run ``restic <args> --json`` and yield each JSON line as it comes:
-        the operations' runner, and for tests that drive restic itself.
-
-        Raises a :class:`ResticError` once restic exits unsuccessfully, and
-        :class:`ResticCancelledError` when ``cancel`` was set before it
-        started or while it ran. Closing the iterator early stops restic.
-        """
         if cancel is not None and cancel.is_set():
             raise ResticCancelledError(f"restic {args[0] if args else ''} was stopped")
         argv = [str(self.binary), "--repo", str(self.repository), "--json", *args]
@@ -225,7 +185,7 @@ class Restic:
             code = process.wait()
         finally:
             watch.done.set()
-            if code is None:  # abandoned or failed part way: restic must not outlive us
+            if code is None:
                 process.stop()
         if watch.cancelled.is_set():
             raise ResticCancelledError(f"restic {args[0] if args else ''} was stopped")
@@ -233,7 +193,6 @@ class Restic:
             raise self._failure(code, process.stderr())
 
     def run(self, *args: str, cancel: threading.Event | None = None) -> list[Any]:
-        """:meth:`stream`, collected."""
         return list(self.stream(*args, cancel=cancel))
 
     def _environment(self) -> dict[str, str]:
@@ -248,18 +207,8 @@ class Restic:
         return error(f"restic: {message}", exit_code=code)
 
 
-# ----------------------------------------------------- arguments and lines
-
-
 def forget_arguments(retention: RetentionSettings, workspace_id: str) -> tuple[str, ...]:
-    """restic counts the current week and month as one of each, so N past
-    weeks and months are N + 1 (spec, *Backup run* step 5).
-
-    Only the workspace's tagged snapshots are considered, grouped by that
-    tag rather than restic's default host and paths (ADR-0061): a renamed PC
-    or a moved workspace then shares the old snapshots' schedule, and they
-    age out. Other workspaces' snapshots and untagged ones, such as a backup
-    made by hand, are never forgotten here."""
+    # restic counts the current week and month, so N past ones keep N + 1.
     return (
         "forget",
         "--tag",
@@ -279,8 +228,6 @@ _DRIVE = re.compile(r"^([A-Za-z]):[\\/]?(.*)$")
 
 
 def tree_path(path: str) -> str:
-    """Where restic keeps a backed-up folder inside the snapshot: ``C:\\x``
-    becomes ``/C/x`` on Windows; a POSIX path stays as it is."""
     drive = _DRIVE.match(path)
     if drive is None:
         return path
@@ -288,10 +235,6 @@ def tree_path(path: str) -> str:
 
 
 def restore_arguments(snapshot: Snapshot, target: Path) -> tuple[str, ...]:
-    """A snapshot of one folder restores that folder's contents; one made by
-    hand of several folders restores them all as restic lays them out.
-    ``--overwrite never`` keeps any file that reached the target after it
-    was checked."""
     ref = (
         snapshot.id if len(snapshot.paths) != 1 else f"{snapshot.id}:{tree_path(snapshot.paths[0])}"
     )
@@ -300,7 +243,7 @@ def restore_arguments(snapshot: Snapshot, target: Path) -> tuple[str, ...]:
         ref,
         "--target",
         str(target),
-        "--overwrite",
+        "--overwrite",  # never: a file that reached the target after its check stays
         "never",
         "--retry-lock",
         RETRY_LOCK,
@@ -308,7 +251,6 @@ def restore_arguments(snapshot: Snapshot, target: Path) -> tuple[str, ...]:
 
 
 def _snapshot(raw: Mapping[str, Any]) -> Snapshot:
-    """One entry of ``restic snapshots --json``."""
     summary = raw.get("summary") or {}
     return Snapshot(
         id=raw["id"],
@@ -324,8 +266,6 @@ def _snapshot(raw: Mapping[str, Any]) -> Snapshot:
 
 @dataclass
 class _BackupLines:
-    """What ``restic backup --json`` reported."""
-
     progress: BackupListener
     snapshot_id: str | None = None
     data_added: int | None = None
@@ -346,8 +286,6 @@ class _BackupLines:
 
 
 def _restore_figures(figures: RestoreProgress, line: object) -> RestoreProgress | None:
-    """``figures`` updated by one ``restic restore --json`` line, or None
-    when the line carries none."""
     if not isinstance(line, dict) or line.get("message_type") not in ("status", "summary"):
         return None
     summary = line["message_type"] == "summary"
@@ -378,7 +316,6 @@ def _json_lines(lines: Iterable[str]) -> Iterator[Any]:
 
 
 def _exit_message(stderr: str) -> str | None:
-    """The message of restic's ``exit_error`` line, its last on stderr."""
     for line in reversed(stderr.splitlines()):
         with contextlib.suppress(ValueError):
             parsed = json.loads(line)
@@ -394,7 +331,6 @@ class _Watch:
 
 
 def _stop_on_cancel(process: ResticProcess, cancel: threading.Event | None) -> _Watch:
-    """Stop ``process`` when ``cancel`` is set before it finishes."""
     watch = _Watch(threading.Event(), threading.Event())
     if cancel is None:
         return watch
@@ -411,12 +347,8 @@ def _stop_on_cancel(process: ResticProcess, cancel: threading.Event | None) -> _
     return watch
 
 
-# ------------------------------------------------------------- the launcher
-
-
 class _PopenProcess:
-    """restic as a child process in its own process group, so stopping it
-    reaches anything it started too."""
+    """restic in its own process group, so stopping it reaches its children."""
 
     def __init__(self, argv: Sequence[str], env: Mapping[str, str]) -> None:
         options: dict[str, Any] = {}
@@ -460,7 +392,7 @@ class _PopenProcess:
         return "".join(self._stderr)
 
     def stop(self) -> None:
-        """Interrupt, so restic can remove its lock, then kill the group."""
+        # Interrupt first: restic removes its lock on SIGINT/CTRL_BREAK, not on a kill.
         if self._process.poll() is not None:
             return
         with contextlib.suppress(OSError):
@@ -491,5 +423,4 @@ class _PopenProcess:
 
 
 def launch_process(argv: Sequence[str], env: Mapping[str, str]) -> ResticProcess:
-    """Start ``argv`` as restic's real launcher does."""
     return _PopenProcess(argv, env)

@@ -1,12 +1,10 @@
-"""Explicit versioned native Windows inference installation (ADR-0054)."""
-
 from __future__ import annotations
 
 import threading
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, NoReturn, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -20,11 +18,10 @@ _LOCK = threading.Lock()
 
 
 class SetupError(RuntimeError):
-    """Installation failed without switching the last verified runtime."""
+    pass
 
 
-def _setup_failed(message: str) -> None:
-    """Raised from a helper so a caller's ``try`` can record it (S01 TRY301)."""
+def _setup_failed(message: str) -> NoReturn:
     raise SetupError(message)
 
 
@@ -60,9 +57,6 @@ class Capability:
 
 
 class InstallationPointer(BaseModel):
-    """``current.json``: the installation selected for an engine version, both
-    globally and per engine."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
     schema_version: Literal[1]
     engine_version: str
@@ -134,7 +128,6 @@ class Runtime:
     def selection(
         self, version: str, *, installation_id: str | None = None, verify: bool = False
     ) -> Capability:
-        """Persist both IDs per job. A repair never redirects its selected files."""
         _segment(version)
         if installation_id is None:
             installation_id = _read_pointer(
@@ -149,7 +142,6 @@ class Runtime:
         return replace(report, required_engine=self.engine_version, installation_id=installation_id)
 
     def worker(self, selected: Capability, *, cache_root: Path) -> WarmWorker:
-        """Construct a lazy warm adapter for a retained, verified engine selection."""
         from etsy_listings.core.preparation.installation import (  # noqa: PLC0415 -- cycle: installation imports this module's Capability
             worker_command,
         )
@@ -174,7 +166,6 @@ class Runtime:
         return self.update()
 
     def update(self) -> Capability:
-        """Stage, validate, then switch. Keep failed and in-use installations immutable."""
         with _LOCK:
             existing = self._reselect_current()
             if existing is not None:
@@ -188,8 +179,6 @@ class Runtime:
             return report
 
     def _reselect_current(self) -> Capability | None:
-        """Point back at a fully verified installation of the required engine,
-        if one exists; None when a new one must be installed."""
         try:
             existing = self.selection(self.engine_version, verify=True)
             if existing.available and existing.installation_id is not None:
@@ -203,8 +192,6 @@ class Runtime:
         return None
 
     def _install(self, engine: Path, installation_id: str) -> Capability:
-        """Install into staging, relocate it to its immutable directory and
-        verify it there. Staging is removed on any failure."""
         staging = engine / (".staging-" + installation_id)
         staging.mkdir(parents=True)
         try:
@@ -219,8 +206,7 @@ class Runtime:
                 _setup_failed(report.problem or "Relocated worker is unavailable")
         except BaseException as exc:
             _discard_staging(staging, exc)
-            # A failed relocated installation is unreferenced. Retain it for
-            # diagnostics; the next explicit retry gets a new immutable ID.
+            # A failed relocated installation stays for diagnostics; a retry gets a new ID.
             raise
         return report
 

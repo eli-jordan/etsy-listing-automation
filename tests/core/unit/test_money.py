@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
+from pydantic import BaseModel, ValidationError
 
 from etsy_listings.core.config.money import Money, MoneyFormatError, require_currency
 
@@ -62,3 +63,13 @@ def test_equality_and_hash() -> None:
 
 def test_str_round_trips_readably() -> None:
     assert str(Money.parse("349 NOK")) == "349 NOK"
+
+
+class _Priced(BaseModel):
+    price: Money
+
+
+def test_a_money_field_parses_through_money_parse() -> None:
+    assert _Priced.model_validate({"price": "349 NOK"}).price == Money.parse("349 NOK")
+    with pytest.raises(ValidationError, match="bare number"):
+        _Priced.model_validate({"price": 349})

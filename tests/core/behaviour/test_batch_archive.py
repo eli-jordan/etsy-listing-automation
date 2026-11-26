@@ -309,6 +309,15 @@ class TestUnsafeArchives:
 
         assert [row.sources for row in session.rows] == [["lake-loop.png"]]
 
+    def test_a_windows_entry_with_no_unix_mode_is_a_plain_file(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        plain = _info("lake-loop.png", create_system=0, external_attr=0)
+
+        session = _stage(workspace, store, ("kittl-export.zip", a_zip((plain, png(1)))))
+
+        assert [row.sources for row in session.rows] == [["lake-loop.png"]]
+
     def test_an_encrypted_entry_is_refused(self, workspace: Workspace, store: StagingStore) -> None:
         with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", _encrypted("secret.png", png(1))))
@@ -360,6 +369,15 @@ class TestUnsafeArchives:
             "bomb.png inside it unpacks to more than 100 times its packed size."
         )
         assert _staging_left(workspace) == []
+
+    def test_an_ignored_file_that_compresses_well_is_not_refused(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        archive = a_zip(("good.png", png(1)), (".DS_Store", bytes(8 * 2**20)))
+
+        session = _stage(workspace, store, ("kittl-export.zip", archive))
+
+        assert session.ignored == [".DS_Store"]
 
     def test_a_zip_that_unpacks_past_the_total_is_refused(
         self, workspace: Workspace, store: StagingStore, monkeypatch: pytest.MonkeyPatch

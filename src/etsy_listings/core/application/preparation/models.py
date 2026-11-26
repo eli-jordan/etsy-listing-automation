@@ -1,4 +1,4 @@
-"""Persisted job and event contract under ADR-0054."""
+"""ADR-0054."""
 
 from typing import Literal
 
@@ -29,8 +29,6 @@ class Event(Record):
 
 
 class Publication(Record):
-    """The generation a completed job published."""
-
     generation_id: str
     content_digest: str
 

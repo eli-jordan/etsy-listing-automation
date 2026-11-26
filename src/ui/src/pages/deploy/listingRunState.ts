@@ -16,16 +16,18 @@ export interface ListingRunState {
   stageRuntime: Record<string, StageRuntimeStatus>;
 }
 
-export type ListingPlanMode = "review" | "replace" | "runtime-only";
+export type ListingPlanMode =
+  /** A single listing's deploy: each fresh plan replaces the one shown. */
+  | "replace"
+  /** A batch review: each fresh plan is also the reviewed plan. */
+  | "review"
+  /** A batch apply: re-planning cannot overwrite what was reviewed. */
+  | "keep-reviewed";
 
 /** Stages an apply adds by the seller's choice, which its review was planned
  * without: `etsy_activate` (`Stage.chosen_at_apply` on the server). */
 const CHOSEN_AT_APPLY: ReadonlySet<string> = new Set(["etsy_activate"]);
 
-/** The reviewed plan, plus any stage the apply chose to add, so it has a row
- * to run in. The apply only started because its fresh plan matched the
- * review's fingerprint, which leaves exactly those stages out: they are the
- * one way the two can differ. */
 function withStagesChosenAtApply(reviewed: PlanDTO | null, fresh: PlanDTO): PlanDTO | null {
   if (reviewed === null) return null;
   const present = new Set(reviewed.stage_plans.map((stage) => stage.stage));
@@ -65,8 +67,6 @@ function eventTime(event: { occurred_at?: string }): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-/** When a finished stage started: when it began applying, or -- with no
- * applying event seen -- when it finished. */
 function startedAt(current: StageRuntimeStatus | undefined, finishedAt: number): number {
   return current?.kind === "applying" ? current.startedAt : finishedAt;
 }
@@ -76,7 +76,7 @@ function withListingPlanned(
   event: Extract<RunEvent, { type: "listing_planned" }>,
   planMode: ListingPlanMode,
 ): ListingRunState {
-  if (planMode === "runtime-only") {
+  if (planMode === "keep-reviewed") {
     return {
       ...state,
       plan: withStagesChosenAtApply(state.plan, event.plan),
@@ -109,9 +109,6 @@ function withListingFailed(
   };
 }
 
-/** One authoritative projection for a listing's plan and stage-runtime events.
- * Individual deploy uses `replace`; batch review uses `review`; batch apply
- * uses `runtime-only` so re-planning cannot overwrite what was reviewed. */
 export function applyListingRunEvent(
   state: ListingRunState,
   event: RunEvent,

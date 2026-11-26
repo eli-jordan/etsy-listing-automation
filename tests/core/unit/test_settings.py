@@ -287,6 +287,15 @@ class TestAiTimeLimits:
         assert str(path) in str(caught.value)
         assert key + ":" in str(caught.value)
 
+    def test_a_bad_step_limit_is_one_error_not_a_second_on_the_run_limit(
+        self, workspace: Workspace
+    ) -> None:
+        _write(workspace, "ai:\n  step_limit_minutes: 16\n  run_limit_minutes: 10\n")
+        with pytest.raises(ConfigLoadError) as caught:
+            workspace.capture_settings()
+        assert "ai.step_limit_minutes:" in str(caught.value)
+        assert "ai.run_limit_minutes" not in str(caught.value)
+
     def test_the_floor_refusal_says_what_the_run_limit_must_reach(
         self, workspace: Workspace
     ) -> None:

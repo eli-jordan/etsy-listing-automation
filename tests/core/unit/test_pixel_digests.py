@@ -57,3 +57,23 @@ def test_a_file_written_since_is_digested_again(tmp_path, digests) -> None:
 
     assert len(digests) == 2
     assert again != first
+
+
+def test_a_file_rewritten_while_it_decodes_keeps_no_digest_for_its_new_stamp(
+    tmp_path, digests
+) -> None:
+    path = tmp_path / "design.png"
+    _write(path, "red")
+    memo = PixelDigests()
+
+    def rewritten_mid_decode(target):
+        pixels = scene_cache.load_design(target)
+        _write(target, "blue")
+        stamp = target.stat().st_mtime_ns + 1_000_000_000
+        os.utime(target, ns=(stamp, stamp))
+        return pixels
+
+    memo.decode_design(path, rewritten_mid_decode)
+    pixels, digest = memo.decode_design(path)
+
+    assert digest == scene_cache.artwork_identity(pixels)

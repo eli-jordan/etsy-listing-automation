@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { BoundingBox, Point } from "../types";
+import { useLatest } from "../hooks/useLatest";
 import { useIsPhone } from "../phone/usePhone";
 import {
   cornerDragged,
@@ -23,26 +24,13 @@ interface Props {
   overlay?: ReactNode;
   interactive?: boolean;
   imageUrl: string;
-  /** The template photo's **true** `[width, height]`, from the API.
-   *
-   * Not measured off `imageUrl`. The editor renders at a downscale, so the
-   * image on screen is smaller than the photo -- but `template.yaml` stores
-   * boxes at the photo's true size, and so does everything in this component.
-   * Reading `naturalWidth` instead (which is what this used to do) would put
-   * the overlay in the *preview's* space and silently save every box a few
-   * times too small.
-   *
-   * Nothing breaks visually if it is a little wrong, which is exactly why it
-   * is a required prop rather than an optional override: the failure is in the
-   * saved file, not on the screen. */
+  /** The template photo's **true** `[width, height]`, from the API, not
+   * `naturalWidth`: the editor shows a downscale (docs/architecture.md). */
   space: [number, number];
   boxes: BoundingBox[];
   selectedIndex: number;
   onSelect: (index: number) => void;
   onChangeBox: (index: number, box: BoundingBox) => void;
-  /** `multiple`-kind only. Given these, the canvas grows the box-editing
-   * affordances 2a puts *on* it -- add, delete, and a right-click menu -- so
-   * you never have to leave the photo to change what you are looking at. */
   onAddBox?: () => void;
   onDeleteSelected?: () => void;
   onDuplicateSelected?: () => void;
@@ -53,57 +41,12 @@ interface Props {
    * colour set's "Show design box" hides everything so you can judge
    * the render clean ("none"). */
   outlines?: "all" | "selected" | "none";
-  /** Per-box caption drawn under the box and edited by clicking it.
-   *
-   * This is where a `multiple`-kind placement's colour lives now. It used to
-   * be a field in a side panel, which meant the one thing a box *cannot* show
-   * you -- which garment it is -- was the one thing you had to look away from
-   * the photo to read. A caption on the box says it in place.
-   *
-   * Drawn under exactly the boxes whose outline is drawn, so `outlines`
-   * governs both: hiding the chrome to judge a render hides the captions too. */
+  /** Per-box caption drawn under the box and edited by clicking it. */
   labels?: (string | undefined)[];
   onLabelChange?: (index: number, value: string) => void;
   labelPlaceholder?: string;
-  /** Offered in the label input's datalist. Suggestions, not a closed list. */
   labelSuggestions?: string[];
 }
-
-/**
- * Draggable four-corner box overlaid on the (already-rendered) preview
- * image -- one or more of them. The selected box gets live drag handles; the
- * rest render dimmed and click-to-select (`multiple`-kind templates only
- * ever have more than one; `colour-matrix`/`single` pass a single-element
- * array and never show the selection chrome). The SVG's viewBox is set to
- * the image's natural pixel size, so screen-to-image coordinate mapping goes
- * through the SVG's own CTM rather than a hand-rolled scale factor --
- * correct regardless of how the browser scales the displayed image.
- *
- * A box moves as a whole in two ways -- dragging its interior, or the arrow
- * keys -- and deforms only by its corner handles. Both apply to every kind:
- * getting a box to the right *place* is the common move, and before this the
- * only way to do it was to drag four corners the same distance by eye.
- *
- * A corner handle does three things, chosen by modifier:
- *
- * | gesture | effect |
- * |---|---|
- * | drag | moves that corner alone -- the quad deforms, which is what makes it a *perspective* placement and not a rectangle |
- * | shift-drag | scales the whole box about the opposite corner, shape preserved |
- * | alt-drag | scales it about its own centre |
- *
- * Nothing on the canvas announces that, and nothing labels the selected box
- * either. Both used to sit in a pill over the photo, and both were in the way
- * of the one thing this view exists for -- looking at the render. The selected
- * box is the one wearing handles, which is the answer already.
- *
- * Free-corner is the unmodified gesture because it is the one only this
- * control can do. But "same shape, bigger" is the far more common wish -- a
- * print that is placed right and simply too small -- and doing it by hand
- * means dragging four corners by four different amounts and re-checking the
- * skew after each. Scaling keeps the corners' offsets from the anchor exactly
- * proportional, so an already-skewed quad stays exactly as skewed.
- */
 
 interface Menu {
   /** Where the menu opens, in `.quad-editor` px. */
@@ -111,20 +54,11 @@ interface Menu {
   y: number;
 }
 
-/** What a pointer is currently doing: working one corner of the selected box,
- * or sliding a whole box (which need not be the selected one -- pressing on a
- * dimmed box selects and drags it in one gesture).
- *
- * Both carry the box as it was when the gesture started. A corner drag needs
- * it because scaling is defined against the *original* offsets: derived from
- * the live box instead, every mouse move would compound on the last one and
- * the box would race away from the pointer. */
 type Drag = { pointerId: number } & (
   | { kind: "corner"; pointIndex: number; start: BoundingBox }
   | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox }
 );
 
-/** What a finger lands on when it means to drag rather than scroll. */
 const DRAG_TARGETS = ".quad-editor__polygon, .quad-editor__handle, .quad-editor__grip";
 
 /** On a phone, a finger that lands on a box or a corner keeps the whole touch.
@@ -140,7 +74,7 @@ const DRAG_TARGETS = ".quad-editor__polygon, .quad-editor__handle, .quad-editor_
 function useTouchClaim(
   svg: SVGSVGElement | null,
   enabled: boolean,
-  dragging: { current: boolean },
+  dragging: { readonly current: boolean },
 ): void {
   useEffect(() => {
     if (!svg || !enabled) return;
@@ -153,20 +87,22 @@ function useTouchClaim(
   }, [svg, enabled, dragging]);
 }
 
-/** The phone grip's radius in image units, kept at a finger's width on screen
- * as the photo resizes. */
 function useGripRadius(svg: SVGSVGElement | null, imageWidth: number, dotRadius: number): number {
-  const [shownWidth, setShownWidth] = useState(0);
+  const [overlayWidth, setOverlayWidth] = useState(0);
   useLayoutEffect(() => {
     if (!svg) return;
-    const measure = () => setShownWidth(svg.getBoundingClientRect().width);
+    const measure = () => setOverlayWidth(svg.getBoundingClientRect().width);
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(svg);
     return () => observer.disconnect();
   }, [svg]);
-  return gripRadius(shownWidth, imageWidth, dotRadius);
+  return gripRadius(overlayWidth, imageWidth, dotRadius);
+}
+
+function isTypingInField(event: React.KeyboardEvent): boolean {
+  return (event.target as Element).closest("input, textarea") !== null;
 }
 
 function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
@@ -210,8 +146,7 @@ function positionMenu(el: HTMLElement, menu: Menu): void {
   Object.assign(el.style, { left: `${placed.x}px`, top: `${placed.y}px` });
 }
 
-/** The right-click menu's actions as a row under the photo, on a phone: a
- * finger has no right button, and a long press is the browser's own. */
+/** A phone has no right button, and a long press is the browser's own. */
 function BoxActions({
   onAdd,
   onDuplicate,
@@ -253,6 +188,8 @@ function BoxActions({
   );
 }
 
+/** The SVG's viewBox is the photo's true size, so screen-to-image mapping
+ * goes through the SVG's own CTM, whatever the browser's display scale. */
 export function QuadEditor({
   overlay,
   interactive = true,
@@ -281,27 +218,16 @@ export function QuadEditor({
     setSvgNode(node);
   }, []);
   const phone = useIsPhone();
-  // Purely a gate on drawing the overlay: the SVG is stretched over the image,
-  // so it has no size of its own until the image has laid out. Deliberately
-  // not a measurement -- `space` is where coordinates come from.
-  const [loaded, setLoaded] = useState(false);
+  const [imageLaidOut, setImageLaidOut] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [editingLabel, setEditingLabel] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const labelInputRef = useRef<HTMLInputElement>(null);
   const suggestionsId = useId();
 
   useLayoutEffect(() => {
     if (menu && menuRef.current) positionMenu(menuRef.current, menu);
   }, [menu]);
-
-  // A caption only becomes an input when it is clicked, so the caret has to be
-  // put there afterwards -- otherwise the click that opened the field leaves
-  // it unfocused and the next keystroke nudges the box instead.
-  useEffect(() => {
-    if (editingLabel !== null) labelInputRef.current?.focus();
-  }, [editingLabel]);
 
   function toImageSpace(clientX: number, clientY: number): Point | null {
     const svg = svgRef.current;
@@ -315,11 +241,7 @@ export function QuadEditor({
     return { x: transformed.x, y: transformed.y };
   }
 
-  // Mirrors `drag` for the phone's touchstart listener, which outlives renders.
-  const dragging = useRef(false);
-  useEffect(() => {
-    dragging.current = drag !== null;
-  }, [drag]);
+  const dragging = useLatest(drag !== null);
   useTouchClaim(svgNode, phone && interactive, dragging);
   const dotRadius = Math.max(space[0], space[1]) * 0.015;
   const gripR = useGripRadius(phone ? svgNode : null, space[0], dotRadius);
@@ -327,15 +249,12 @@ export function QuadEditor({
   function handleCornerPointerDown(pointIndex: number) {
     return (event: React.PointerEvent<SVGCircleElement>) => {
       const start = boxes[selectedIndex];
-      // One finger drags; a second one landing meanwhile is not a new drag.
       if (!start || !interactive || drag) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       setDrag({ kind: "corner", pointIndex, start, pointerId: event.pointerId });
     };
   }
 
-  /** Pressing inside a box selects it and starts sliding it. The whole box
-   * moves; the corners keep their offsets, so a skewed quad stays skewed. */
   function handleBoxPointerDown(boxIndex: number) {
     return (event: React.PointerEvent<SVGPolygonElement>) => {
       if (event.button !== 0 || !interactive || drag) return;
@@ -368,10 +287,6 @@ export function QuadEditor({
     );
   }
 
-  /** The drag ends when its own pointer lifts, or when the browser takes it
-   * away: a cancelled touch (the page rotating, a gesture the browser claims)
-   * sends no pointerup, and a drag left behind would move the box under the
-   * next touch anywhere on the photo. */
   function handlePointerEnd(event: React.PointerEvent<SVGSVGElement>) {
     if (drag && event.pointerId !== drag.pointerId) return;
     setDrag(null);
@@ -379,9 +294,7 @@ export function QuadEditor({
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (!interactive) return;
-    // The caption editor lives inside the canvas, so its arrows, Backspace and
-    // Delete would otherwise reach the box while you are typing a colour name.
-    if ((event.target as Element).closest("input, textarea")) return;
+    if (isTypingInField(event)) return;
     if ((event.key === "Delete" || event.key === "Backspace") && onDeleteSelected) {
       event.preventDefault();
       onDeleteSelected();
@@ -397,8 +310,6 @@ export function QuadEditor({
 
   const hasBoxMenu = Boolean(onDuplicateSelected || onBringSelectedToFront || onDeleteSelected);
 
-  /** One rule for both the outline and the caption: chrome is drawn for a box
-   * when all outlines are on, or when it is the selected one. */
   const chromeVisible = (index: number): boolean =>
     outlines === "all" || (outlines === "selected" && index === selectedIndex);
 
@@ -412,10 +323,10 @@ export function QuadEditor({
       <img
         src={imageUrl}
         alt="Rendered preview"
-        onLoad={() => setLoaded(true)}
+        onLoad={() => setImageLaidOut(true)}
         className="quad-editor__image"
       />
-      {loaded && (
+      {imageLaidOut && (
         <svg
           ref={attachSvg}
           className="quad-editor__overlay"
@@ -463,11 +374,6 @@ export function QuadEditor({
                       onPointerDown={handleCornerPointerDown(pointIndex)}
                     />
                   ))}
-                {/* A finger-sized grip over each drawn dot, phone only: an
-                    invisible filled circle 22 screen pixels in radius at
-                    the photo's current scale, so it stays ~44px across at
-                    any photo size while the dot keeps its look. Pulled in
-                    from the photo's edge so it is never clipped to half. */}
                 {active &&
                   phone &&
                   interactive &&
@@ -491,7 +397,7 @@ export function QuadEditor({
         </svg>
       )}
 
-      {loaded && labels && (
+      {imageLaidOut && labels && (
         <div className="quad-editor__labels">
           {boxes.map((box, boxIndex) => {
             if (!chromeVisible(boxIndex)) return null;
@@ -505,7 +411,7 @@ export function QuadEditor({
               return (
                 <input
                   key={boxIndex}
-                  ref={labelInputRef}
+                  autoFocus
                   className="quad-editor__label quad-editor__label--editing"
                   style={style}
                   value={text}
@@ -584,8 +490,7 @@ export function QuadEditor({
       )}
     </div>
   );
-  // On a phone the box actions sit under the photo, outside the canvas: the
-  // overlay stretches over everything inside it.
+  // Outside the canvas, which the phone overlay covers entirely.
   if (!phone || !interactive || !(onAddBox || hasBoxMenu)) return canvas;
   return (
     <>

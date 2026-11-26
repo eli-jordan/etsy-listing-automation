@@ -2,28 +2,14 @@ import { api } from "./client";
 import { type EventStreamHandle, type EventStreamOptions, openEventStream } from "./sse";
 import type { AiRunEvent, AiRunSummary } from "../types";
 
-/**
- * The AI runs resource (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's
- * Run contract): typed wrappers over `/api/ai/runs`, the only thing the
- * editor imports to start, find, follow and cancel one. Shaped like
- * `api/runs.ts`, the plan/apply runs' client, because the resource is shaped
- * like that one.
- */
-
 export class AiRunsApiError extends Error {}
 
-/** What the editor says when `POST` answers `batch_pending`. */
 export const BATCH_PENDING_MESSAGE =
   "This listing is drafting in a batch. AI Mode is back once that is done.";
 
-/** What the editor says when `POST` answers `deploying`: a plan or apply
- * holds the listing, and deploying takes precedence over AI. */
 export const DEPLOYING_MESSAGE =
   "This listing is deploying. AI Mode is back once the deploy finishes.";
 
-/** What `POST /api/ai/runs` can answer besides a failure: the run it
- * started, the run already active for the listing (reattach to it rather
- * than retry into the same refusal), or the readiness rule that refused it. */
 export type StartAiRunResult =
   | { kind: "started"; run: AiRunSummary }
   | { kind: "active"; runId: string }
@@ -48,8 +34,6 @@ export async function startAiRun(
   return { kind: "started", run: data };
 }
 
-/** The listing's running or most recent run -- what the editor reattaches
- * to on mount -- or `null` when this server process remembers none. */
 export async function findAiRun(listing: string): Promise<AiRunSummary | null> {
   const { data, error, response } = await api.GET("/api/ai/runs", {
     params: { query: { listing } },
@@ -73,9 +57,7 @@ export async function cancelAiRun(id: string): Promise<boolean> {
 
 export type AiRunStreamOptions = Omit<EventStreamOptions<AiRunEvent>, "lastEventId">;
 
-/** Every event the run has produced, then each new one until its last
- * (`phase`). Always from the start: the editor rebuilds its whole view of a
- * run from the events, so it never has a position to resume from. */
+/** Always from the first event: the editor rebuilds a run from all of them. */
 export function openAiRunStream(id: string, options: AiRunStreamOptions): EventStreamHandle {
   return openEventStream(`/api/ai/runs/${encodeURIComponent(id)}/events`, options);
 }

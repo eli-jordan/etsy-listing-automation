@@ -1,50 +1,31 @@
-"""Normalize a provider's raw JSON, then hard-validate it against the agreed
-proposal contract before any UI response ever sees it (AI SEO implementation
-plan, PR3, item 5; `docs/features/ai-seo-20260922/interactions.md` section 8).
+"""Normalize a provider's raw JSON, then hard-validate it against the proposal contract.
 
-Two passes, always in this order:
-
-1. **Normalize** ( :func:`normalize_raw_proposal`) -- fix harmless formatting a
-   model commonly produces (surrounding whitespace, a wrapping quote pair
-   around an otherwise-fine string, doubled interior spaces) so it is never
-   mistaken for a genuine content problem. Purely cosmetic: it never changes
-   how many entries a list has, never drops or reorders one, and never
-   touches ``intent``/``used_in`` enum values.
-2. **Hard-validate** ( :func:`validate_proposal`) -- exact counts, Etsy's
-   title/tag limits (imported from `config/listing.py` rather than
-   redeclared, per this codebase's "mirror rather than reinvent" rule for
-   anything the listing editor already enforces), tag uniqueness, rationale
-   shape, and the agreed affiliation/content checks. Every reason is
-   collected, never just the first: the one allowed same-provider repair
-   (PR4) is handed the whole list, and a repair prompt built from a single
-   reason would waste that one attempt discovering the rest one at a time.
-
-Trademark findings never raise :class:`ProposalValidationError`. They are
-appended to the built proposal's own ``warnings`` as
-:class:`~etsy_listings.core.ai.models.ProposalWarning` entries with
-``kind="trademark"`` -- the settled decision is that these are warnings, not
-a hard refusal, because accurate copy is allowed to name a real product,
-character, or brand (`seo_prompt.md`: "Do not exclude an accurate,
-buyer-relevant name merely because it may be a trademark"). The watchlist
-below is deliberately narrow and deliberately excludes ordinary garment/print
-brands (Comfort Colors, Gildan, Bella+Canvas, ...): those are expected,
-legitimate mentions supplied as listing fact, not third-party IP risk, and
-warning on every listing that correctly names its own garment would train
-sellers to ignore the warning.
+Trademark findings never raise: they become ``kind="trademark"`` warnings on
+the built proposal. The watchlist deliberately excludes ordinary garment/print
+brands (Comfort Colors, Gildan, Bella+Canvas, ...): those are legitimate
+listing facts, and warning on every listing that correctly names its own
+garment would train sellers to ignore the warning.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, get_args
 
-from etsy_listings.core.ai.models import PhraseRationale, ProposalWarning, SeoProposal
+from etsy_listings.core.ai.errors import OutputValidationError
+from etsy_listings.core.ai.models import (
+    RATIONALE_ENTRIES,
+    PhraseRationale,
+    ProposalWarning,
+    RationaleField,
+    RationaleIntent,
+    SeoProposal,
+)
 from etsy_listings.core.config.listing import MAX_TAG_LENGTH, MAX_TITLE_LENGTH
 
-ALLOWED_INTENTS = frozenset({"core_product", "bottom_of_funnel", "style"})
-ALLOWED_USED_IN = frozenset({"title", "tags", "description_lead"})
-RATIONALE_ENTRIES = 7  # the seven priority phrases the SEO prompt asks for
+ALLOWED_INTENTS = frozenset(get_args(RationaleIntent))
+ALLOWED_USED_IN = frozenset(get_args(RationaleField))
 
 AFFILIATION_TERMS = frozenset(
     {
@@ -101,30 +82,15 @@ _WRAPPING_QUOTE_PAIRS: dict[str, str] = {
     "“": "”",
     "‘": "’",
 }
-_QUOTE_PAIR_LENGTH = 2  # an opening and a closing quote
+_QUOTE_PAIR_LENGTH = 2
 
 
-class ProposalValidationError(ValueError):
-    """Every reason a raw proposal failed hard validation, collected rather
-    than reported one at a time. ``reasons`` is what a repair prompt
-    (`ai/prompt.py.build_repair_prompt`) is built from; ``str(error)`` joins
-    them for a log line or a generic caller that only wants one message."""
-
-    def __init__(self, reasons: Sequence[str]) -> None:
-        self.reasons: tuple[str, ...] = tuple(reasons)
-        super().__init__("; ".join(self.reasons))
-
-
-# ----------------------------------------------------------------- normalize
+class ProposalValidationError(OutputValidationError): ...
 
 
 def _normalize_text(value: str) -> str:
-    """Trim, drop one wrapping pair of matching quote characters, and
-    collapse interior whitespace runs (including newlines a model sometimes
-    inserts mid-sentence) to a single space. Applied only to the short,
-    single-line fields (titles, tags, leads, rationale phrase/reason,
-    warnings) -- never to ``observed_text``, whose own line breaks are part
-    of what it is disclosing."""
+    """Trim, drop one wrapping pair of matching quotes, and collapse
+    whitespace runs, newlines included, to one space."""
     trimmed = value.strip()
     if len(trimmed) >= _QUOTE_PAIR_LENGTH and _WRAPPING_QUOTE_PAIRS.get(trimmed[0]) == trimmed[-1]:
         trimmed = trimmed[1:-1].strip()
@@ -150,11 +116,7 @@ def _normalize_rationale_item(item: Any) -> Any:
 
 def normalize_raw_proposal(raw: Mapping[str, Any]) -> dict[str, Any]:
     """A new dict with harmless formatting fixed; ``raw`` itself is untouched.
-
-    Never raises, and never changes list lengths or enum-like values --
-    anything that needs a structural decision is hard validation's job, not
-    this pass's.
-    """
+    Never raises, and leaves list lengths and enum-like values to validation."""
     normalized: dict[str, Any] = dict(raw)
     for field_name in ("titles", "tags", "description_leads", "warnings"):
         normalized[field_name] = _normalize_string_list(normalized.get(field_name))
@@ -165,9 +127,6 @@ def normalize_raw_proposal(raw: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(observed_text, str):
         normalized["observed_text"] = observed_text.strip()
     return normalized
-
-
-# ------------------------------------------------------------- hard validate
 
 
 def _check_string_list(
@@ -201,8 +160,6 @@ def _too_long(where: str, item: str, max_length: int | None) -> list[str]:
 
 
 def _repeat(name: str, item: str, seen: dict[str, str]) -> list[str]:
-    """``item`` against the entries ``seen`` so far, ignoring case; a first
-    sighting is added to ``seen``."""
     key = item.casefold()
     if key in seen:
         return [f"{name}: entries must be unique ignoring case ({item!r} repeats {seen[key]!r})"]
@@ -261,10 +218,6 @@ def _words(text: str) -> set[str]:
 
 
 def _check_affiliation(normalized: Mapping[str, Any]) -> list[str]:
-    """The agreed hard affiliation/content check (implementation plan,
-    "Validation"). Every hit across a field is named in one reason rather
-    than one reason per word, since a repair prompt only needs to know which
-    words to remove."""
     reasons: list[str] = []
     for field_name in ("titles", "description_leads"):
         values = normalized.get(field_name)
@@ -277,7 +230,6 @@ def _check_affiliation(normalized: Mapping[str, Any]) -> list[str]:
 
 
 def _entry_affiliations(field_name: str, values: list[Any]) -> list[str]:
-    """One reason per entry of a prose field that claims affiliation."""
     reasons: list[str] = []
     for i, item in enumerate(values):
         if not isinstance(item, str):
@@ -292,7 +244,6 @@ def _entry_affiliations(field_name: str, values: list[Any]) -> list[str]:
 
 
 def _tag_affiliations(tags: list[Any]) -> list[str]:
-    """One reason for every tag hit together: tags are words already."""
     tag_hits: set[str] = set()
     for item in tags:
         if isinstance(item, str):
@@ -325,9 +276,6 @@ def _hard_validation_reasons(normalized: Mapping[str, Any]) -> list[str]:
     reasons += _check_observed_text(normalized.get("observed_text"))
     reasons += _check_affiliation(normalized)
     return reasons
-
-
-# --------------------------------------------------------------- trademark
 
 
 _TRADEMARK_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -364,9 +312,6 @@ def _trademark_warnings(
     )
 
 
-# ------------------------------------------------------------------- build
-
-
 def _build_proposal(normalized: Mapping[str, Any]) -> SeoProposal:
     titles = tuple(normalized["titles"])
     tags = tuple(normalized["tags"])
@@ -395,18 +340,8 @@ def _build_proposal(normalized: Mapping[str, Any]) -> SeoProposal:
 
 
 def validate_proposal(raw: Mapping[str, Any]) -> SeoProposal:
-    """Normalize, then hard-validate ``raw`` -- a provider's already-JSON-
-    decoded output -- into a complete :class:`SeoProposal`, or raise
-    :class:`ProposalValidationError` naming every reason it cannot.
-
-    Never partially builds a proposal: a caller either gets the full,
-    contract-complete shape or an exception, so nothing downstream can
-    mistake a still-invalid response for one that is safe to show
-    (`docs/features/ai-seo-20260922/interactions.md` section 8: "Do not reveal a
-    partial proposal as though it were safe to use").
-    """
     normalized = normalize_raw_proposal(raw)
     reasons = _hard_validation_reasons(normalized)
     if reasons:
-        raise ProposalValidationError(reasons)
+        raise ProposalValidationError(*reasons)
     return _build_proposal(normalized)

@@ -13,6 +13,7 @@ from etsy_listings.core.render.config import (
     SingleTemplate,
     dump_template_config,
     load_template_config,
+    scene_layers,
 )
 
 SQUARE_BOX = (
@@ -96,6 +97,32 @@ def test_multiple_template_dispatches_by_kind() -> None:
     assert template.colour_coverage == "exact"
     assert [p.colour for p in template.placements] == ["black", "ivory"]
     assert template.render_config_for(template.placements[0]).bounding_box == SQUARE_BOX
+
+
+def test_scene_layers_give_each_placement_its_colour_and_a_listing_box_only_its_own() -> None:
+    moved = (
+        Point(x=10.0, y=0.0),
+        Point(x=90.0, y=0.0),
+        Point(x=90.0, y=80.0),
+        Point(x=10.0, y=80.0),
+    )
+    template = load_template_config(
+        {
+            "kind": "multiple",
+            "renderer": {"type": "photo-warp", "config": {}},
+            "placements": [
+                {"id": "left", "colour": "black", "bounding_box": _box_dicts(SQUARE_BOX)},
+                {"id": "right", "colour": "ivory", "bounding_box": _box_dicts(SQUARE_BOX)},
+            ],
+        }
+    )
+
+    layers = scene_layers(template, "moss", {"right": moved})
+
+    assert [(colour, config.bounding_box) for colour, config in layers] == [
+        ("black", SQUARE_BOX),
+        ("ivory", moved),
+    ]
 
 
 @pytest.mark.parametrize(

@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 
 from etsy_listings.core.config.settings import TemplatePositionLimits
 from etsy_listings.core.render.config import BoundingBox
-from etsy_listings.core.render.positions import Pose, compose, decompose, nearest_allowed_pose
+from etsy_listings.core.render.positions import Pose, compose, decompose
 
 BOX = TypeAdapter(BoundingBox).validate_python(
     [
@@ -83,7 +83,7 @@ def test_residual_is_measured_in_photo_pixels() -> None:
     assert decompose(FLAT, stretched).residual_pixels > 1
 
 
-def test_nearest_allowed_pose_repairs_nonuniform_stretch_by_fitting_first() -> None:
+def test_decompose_fits_a_nonuniform_stretch_to_a_uniform_scale() -> None:
     stretched = TypeAdapter(BoundingBox).validate_python(
         [
             {"x": 0, "y": 20},
@@ -94,7 +94,7 @@ def test_nearest_allowed_pose_repairs_nonuniform_stretch_by_fitting_first() -> N
     )
     # In the rectified 100 x 200 frame, x scale 1.2 and y scale 1 fit to uniform
     # scale (50·60 + 100·100) / (50² + 100²) = 1.04: the long side dominates.
-    repaired = compose(FLAT, nearest_allowed_pose(FLAT, stretched, TemplatePositionLimits()))
+    repaired = compose(FLAT, decompose(FLAT, stretched).pose)
     np.testing.assert_allclose(pixels(repaired), [(8, 16), (112, 16), (112, 224), (8, 224)])
 
 
@@ -109,24 +109,6 @@ def test_singular_template_is_a_geometry_error() -> None:
     )
     with pytest.raises(ValueError, match="homography"):
         decompose(singular, FLAT)
-
-
-@pytest.mark.parametrize("box", [BOX, FLAT])
-def test_nearest_allowed_pose_fits_then_clamps_every_component(box: BoundingBox) -> None:
-    outside = compose(box, Pose(scale=1.4, offset_x=0.2, offset_y=-0.3, rotation=25))
-    nearest = nearest_allowed_pose(box, outside, TemplatePositionLimits())
-    assert nearest == Pose(scale=1.1, offset_x=0.1, offset_y=-0.1, rotation=15)
-    assert decompose(box, compose(box, nearest)).residual_pixels < 1e-7
-
-
-@pytest.mark.parametrize(
-    "pose",
-    [Pose(scale=0.8, offset_x=-0.1, rotation=-15), Pose(scale=1.1, offset_y=0.1, rotation=15)],
-)
-def test_nearest_pose_leaves_allowed_boundary_unchanged(pose: Pose) -> None:
-    box = compose(BOX, pose)
-    nearest = nearest_allowed_pose(BOX, box, TemplatePositionLimits())
-    np.testing.assert_allclose(pixels(compose(BOX, nearest)), pixels(box), atol=1e-7)
 
 
 @pytest.mark.parametrize("rotation", [15, -7.5, 30])

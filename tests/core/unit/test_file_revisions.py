@@ -86,6 +86,36 @@ def test_a_refused_change_writes_nothing(tmp_path: Path) -> None:
     assert path.read_bytes() == b"a: 1\n"
 
 
+def test_adopt_runs_once_the_file_holds_the_result(tmp_path: Path) -> None:
+    path = tmp_path / "shop.yaml"
+    path.write_bytes(b"a: 1\n")
+    _, revision = read_revisioned(path)
+    seen: list[bytes] = []
+
+    replace_if_unchanged(
+        path, revision, lambda _: b"a: 2\n", adopt=lambda: seen.append(path.read_bytes())
+    )
+
+    assert seen == [b"a: 2\n"]
+
+
+def test_a_refused_or_stale_save_adopts_nothing(tmp_path: Path) -> None:
+    path = tmp_path / "shop.yaml"
+    path.write_bytes(b"a: 1\n")
+    _, revision = read_revisioned(path)
+    adopted: list[None] = []
+
+    def refuse(_: bytes) -> bytes:
+        raise ValueError("invalid")
+
+    with pytest.raises(ValueError, match="invalid"):
+        replace_if_unchanged(path, revision, refuse, adopt=lambda: adopted.append(None))
+    with pytest.raises(RevisionConflictError):
+        replace_if_unchanged(path, "stale", lambda _: b"a: 2\n", adopt=lambda: adopted.append(None))
+
+    assert adopted == []
+
+
 def test_two_saves_from_one_revision_cannot_both_win(tmp_path: Path) -> None:
     """The check and the replace hold one lock: the second save sees the
     first one's file, not the one both started from."""

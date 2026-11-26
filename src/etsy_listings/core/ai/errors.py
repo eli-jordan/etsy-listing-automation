@@ -1,22 +1,3 @@
-"""The exception hierarchy `ai/orchestrator.py`'s Codex-to-Claude chain and
-both CLI adapters (`ai/codex.py`, `ai/claude.py`) share, plus
-:func:`classify_process_failure` -- the one place a nonzero-exit CLI process
-is sorted into "provider unavailable" versus everything else (AI SEO
-implementation plan, "Timeout and retries": "Only recognised
-provider-unavailable, authentication-quota, or rate-limit failures fall
-through to Claude. Other failures show **Try again**.").
-
-Every exception here is a :class:`SeoGenerationError`. `ai/orchestrator.py`
-only ever special-cases two of its subclasses -- :class:`ProviderUnavailableError`
-(catch it, fall through to the next provider) and :class:`ProviderCancelledError`
-(let it propagate untouched, since a cancelled request retains no result and
-is not a failure to report as "Try again"). Every other subclass, including
-ones an adapter raises directly, already reads as "Try again" simply by being
-a :class:`SeoTryAgainError` -- the orchestrator does not need to know about
-:class:`ProviderTimeoutError` or :class:`ProviderGenerationError` by name for
-that to be true.
-"""
-
 from __future__ import annotations
 
 import json
@@ -30,11 +11,6 @@ class SeoGenerationError(RuntimeError):
 
 
 class ProviderUnavailableError(SeoGenerationError):
-    """A recognised provider-unavailable, authentication, quota, or
-    rate-limit failure -- the one category the settled plan permits to fall
-    through to the next captured provider (ADR-0056). Rejected saved model
-    or effort choices belong to this same category."""
-
     def __init__(self, provider: str, reason: str) -> None:
         self.provider = provider
         self.reason = reason
@@ -42,20 +18,21 @@ class ProviderUnavailableError(SeoGenerationError):
 
 
 class ProviderCancelledError(SeoGenerationError):
-    """The request was aborted -- the editor was left, or the browser
-    connection closed -- before a result was produced (implementation plan,
-    "Cancellation"). No proposal is retained; this is not shown as a
-    failure, so it is deliberately not a :class:`SeoTryAgainError`."""
-
     def __init__(self, provider: str) -> None:
         self.provider = provider
         super().__init__(f"{provider}: request was cancelled")
 
 
-class SeoTryAgainError(SeoGenerationError):
-    """Every failure the settled plan says surfaces as **Try again**: a
-    validation failure that survived the one same-provider repair, an
-    unrecognised process error, or a step or run limit running out."""
+class SeoTryAgainError(SeoGenerationError): ...
+
+
+class OutputValidationError(ValueError):
+    """A provider's output could not become its task's result. Carries every
+    reason, because the one repair call resends them all."""
+
+    def __init__(self, *reasons: str) -> None:
+        self.reasons: tuple[str, ...] = reasons
+        super().__init__("; ".join(reasons))
 
 
 class SeoDeadlineExceededError(SeoTryAgainError):
@@ -64,9 +41,6 @@ class SeoDeadlineExceededError(SeoTryAgainError):
 
 
 class SeoAllProvidersUnavailableError(SeoTryAgainError):
-    """Every configured provider answered with a recognised
-    provider-unavailable failure; there was no next provider left to try."""
-
     def __init__(self, reasons: Sequence[str]) -> None:
         self.reasons = tuple(reasons)
         detail = "; ".join(self.reasons) if self.reasons else "no provider was configured"
@@ -84,9 +58,6 @@ class ProviderTimeoutError(SeoTryAgainError):
 
 
 class ProviderGenerationError(SeoTryAgainError):
-    """A provider's CLI exited abnormally for a reason that
-    :func:`classify_process_failure` does not recognise as availability."""
-
     def __init__(self, provider: str, returncode: int | None, detail: str) -> None:
         self.provider = provider
         self.returncode = returncode
@@ -97,8 +68,7 @@ class ProviderGenerationError(SeoTryAgainError):
         )
 
 
-_AVAILABILITY_MARKERS: tuple[str, ...] = (
-    # authentication
+_AUTH_MARKERS: tuple[str, ...] = (
     "not logged in",
     "not authenticated",
     "authentication failed",
@@ -108,27 +78,28 @@ _AVAILABILITY_MARKERS: tuple[str, ...] = (
     "login required",
     "run `codex login`",
     "run 'codex login'",
-    # quota / billing
+)
+_QUOTA_MARKERS: tuple[str, ...] = (
     "quota",
     "insufficient_quota",
     "billing",
     "usage limit",
     "credit balance",
-    # Claude Code's subscription-window sentences. They do not say "usage
-    # limit" or "rate limit" -- "You've hit your weekly limit" is the one a
-    # spent Claude subscription actually prints.
+    # Claude Code's subscription limits ("You've hit your weekly limit").
     "weekly limit",
     "session limit",
     "spend limit",
     "usage credits",
     "opus limit",
     "sonnet limit",
-    # rate limiting
+)
+_RATE_LIMIT_MARKERS: tuple[str, ...] = (
     "rate limit",
     "rate-limited",
     "rate_limit",
     "too many requests",
 )
+_AVAILABILITY_MARKERS = _AUTH_MARKERS + _QUOTA_MARKERS + _RATE_LIMIT_MARKERS
 """Substrings (matched case-insensitively) that a CLI's own stdout/stderr is
 checked against. Deliberately conservative and stdlib-only: the classifier
 never guesses at an internal error message it does not recognise, per the
@@ -146,6 +117,10 @@ structured ``api_error_status`` on a CLI envelope is the other place a bare
 status is trusted -- it is a field, not a number floating in prose."""
 
 _HTTP_STATUS_PATTERN = re.compile(r"\bhttp\D{0,5}(401|403|429)\b", re.IGNORECASE)
+"""An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
+line. A bare status number in prose is not trusted; this pattern is, because
+it is anchored to the word "http". A structured ``api_error_status`` is
+trusted separately, in :func:`_api_status`."""
 _PREFERENCE_REJECTION = re.compile(
     r"\b(?:unknown|unsupported|invalid) (?:reasoning )?effort\b"
     r"|\b(?:unknown|unsupported|invalid) model\b(?!\s+(?:output|response)\b)"
@@ -162,13 +137,8 @@ _CLAUDE_SELECTED_MODEL_REJECTION = re.compile(
 )
 """Claude's observed refusal of a saved model, fallback-eligible like the above."""
 _ERROR_PREFIX = re.compile(r"^error:\s*", re.IGNORECASE)
-"""An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
-line. A bare status number in prose is not trusted; this pattern is, because
-it is anchored to the word "http". A structured ``api_error_status`` is
-trusted separately, in :func:`_api_status`."""
 
 _AUTH_OR_LIMIT_STATUS = frozenset({401, 403, 429})
-_MIN_JSONL_LINES = 2  # one line is a single object, which _parse_object already tried
 """HTTP statuses that mean sign-in, permission, or a rate/usage limit when a
 CLI reports them as ``api_error_status``. 500 and 529 stay "Try again": they
 are the service failing, not this account being blocked."""
@@ -183,20 +153,9 @@ width of that one unbreakable string and paints over the brief."""
 def classify_process_failure(
     provider: str, *, returncode: int | None, stdout: str, stderr: str
 ) -> ProviderUnavailableError | ProviderGenerationError:
-    """Sort one nonzero-exit CLI invocation into the two failure categories
-    the settled plan distinguishes: a recognised availability failure (falls
-    through to the next provider), or anything else (surfaces as "Try
-    again"). Never raises; the caller decides whether/when to raise the
-    result.
-
-    The text classified -- and the text the seller is shown -- is the CLI's
-    own sentence, not its raw stdout. Claude's ``--output-format json``
-    exits 1 with a result envelope whose ``result`` is that sentence
-    ("You've hit your weekly limit · resets …") and whose other fields are
-    telemetry. Codex prints a transcript (banner, session id, the echoed
-    prompt) and then the failure as an ``ERROR:`` line; that line is the
-    sentence, and a word in the prompt is not.
-    """
+    """Sort one failed CLI invocation into a recognised availability failure
+    (the next provider is tried) or anything else ("Try again"), judged on the
+    CLI's own sentence rather than its raw output. Returns, never raises."""
     shown, status, model_missing = _seller_text(stdout, stderr)
     shown = _clip(shown)
     if (
@@ -210,17 +169,8 @@ def classify_process_failure(
 
 def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None, bool]:
     """The text a seller should read, and a structured HTTP status if that
-    same stream carried one.
-
-    stderr wins when it is prose: that is the CLI's own words, and a JSON
-    envelope on the other stream must not hide them. When the stream we
-    would have shown *is* an envelope (Claude's one JSON object, or Codex's
-    JSONL), the sentence is ``result`` / ``message`` / ``error.message``
-    and the rest -- session ids, token counters -- is dropped. A Codex
-    transcript is the same kind of thing in prose: the ``ERROR:`` line is
-    the sentence, and the banner and the echoed prompt are dropped. The
-    prompt is allowed to say "quota"; that must not read as the account
-    being out of quota.
+    same stream carried one. stderr wins: that is the CLI's own words, and a
+    JSON envelope on the other stream must not hide them.
     """
     err = stderr.strip()
     out = stdout.strip()
@@ -237,13 +187,10 @@ def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None, bool]:
 
 
 def _envelope_text(envelope: dict[str, Any], primary: str) -> tuple[str, int | None, bool]:
-    """`_seller_text` for a CLI's JSON envelope: its sentence, else a
-    missing-model or HTTP status line, else the envelope as written."""
     sentence = _sentence(envelope)
     status = _api_status(envelope)
     error = envelope.get("error")
-    # Only the vendor's error object is trusted. Generated text and
-    # unrelated telemetry may legitimately mention this code.
+    # Only the vendor's error object: generated text may mention this code.
     model_missing = isinstance(error, dict) and any(
         error.get(key) == "model_not_found" for key in ("type", "code")
     )
@@ -258,12 +205,7 @@ def _envelope_text(envelope: dict[str, Any], primary: str) -> tuple[str, int | N
 
 def _failure_lines(text: str) -> str | None:
     """The ``ERROR:`` lines in a CLI transcript, in order, duplicates dropped.
-
-    Codex exits 1 with the whole turn on stderr: a banner, the session id,
-    the prompt it was given, then ``ERROR: You've hit your usage limit. …``
-    twice. The line is the failure. Anything above it, including a prompt
-    that happens to contain the word "quota", is not.
-    """
+    Codex exits 1 with its whole turn, echoed prompt included, on stderr."""
     seen: list[str] = []
     for raw in text.splitlines():
         line = raw.strip()
@@ -277,13 +219,12 @@ def _failure_lines(text: str) -> str | None:
     return " ".join(seen)
 
 
-def _envelope(text: str) -> dict[str, Any] | None:
-    """One JSON object, or the last JSONL object that carries a sentence.
+_MIN_JSONL_LINES = 2  # one line is a single object, which _parse_object already tried
 
-    Mixed prose is not an envelope: one log line beside a JSON object must
-    stay the log line. A JSONL stream is an envelope only when every
-    non-empty line is itself an object.
-    """
+
+def _envelope(text: str) -> dict[str, Any] | None:
+    """One JSON object, or the last JSONL object that carries a sentence;
+    ``None`` when any line is not an object."""
     whole = _parse_object(text)
     if whole is not None:
         return whole

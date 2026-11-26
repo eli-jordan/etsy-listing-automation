@@ -1,10 +1,3 @@
-"""API request/response shapes. Template CRUD (list/get/put config) reuses
-:mod:`etsy_listings.core.render.config`'s models directly -- ``template.yaml`` *is*
-what the calibrator edits, so there is no meaningful wire-schema divergence to
-keep separate here, unlike the preview endpoint's request shapes below (which
-add a ``design`` selector nothing in the engine's config needs).
-"""
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -48,12 +41,6 @@ from etsy_listings.core.config.settings import (
     RetentionSettings,
     TemplatePositionLimits,
 )
-
-# ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
-# the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
-# command have to agree on it), and a second `Literal` here would be a second
-# place a state could be added to. Derived on every read, never persisted --
-# the same principle `TemplateSummary.status` states below.
 from etsy_listings.core.engine.status import ListingGesture, ListingStatus
 from etsy_listings.core.render.config import BoundingBox, Placement, Renderer, TemplateConfig
 from etsy_listings.core.workspace.calibration import MaskEdit, Stroke
@@ -95,9 +82,7 @@ class TemplatePhoto(BaseModel):
     ``Workspace.scene_photo`` -- the same rule the renderer uses, including the
     trailing-segment fallback for a vendor pack delivered as
     ``{template}-{colour}.png``. The listings editor shows it under its preview
-    so the user knows which file to go and edit, and it used to *derive* that
-    caption from ADR-0004's convention in TypeScript, which named a file that was
-    not there for exactly the pack the fallback exists for.
+    so the user knows which file to go and edit.
 
     ``colour`` is ``None`` for a ``multiple``/``single`` template's fixed
     ``scene.png``: there is no per-colour name to derive one from.
@@ -181,13 +166,9 @@ class ColourReportRow(BaseModel):
 
 
 class ColourMatrixPreviewRequest(BaseModel):
-    """Disambiguated from the other two preview shapes by required fields
-    alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
-    neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
-    than forbidden, since a natural client pattern is spreading a whole
-    ``GET.../config`` response (which includes ``kind``) into the body. All
-    three take ``labels`` because an editor preview names with them the labels
-    of its ``calibration_revision``. None draws them."""
+    """A colour-matrix template's preview body. All three preview shapes take
+    ``labels``: an editor preview names the labels of its
+    ``calibration_revision`` with them. None draws them."""
 
     model_config = ConfigDict(extra="forbid")
     kind: Literal["colour-matrix"] = "colour-matrix"
@@ -230,12 +211,6 @@ PreviewRequest = ColourMatrixPreviewRequest | MultiplePreviewRequest | SinglePre
 is -- the endpoint validates the body against that one kind's model, rather
 than relying on shape-sniffing across all three."""
 
-
-# ──────────────────────────────────────────────────────────────────────────
-# Listings UI (phase 5). ListingDetail reuses `Listing` directly for the
-# read/write body -- the wire shape *is* listing.yaml -- the same rule
-# TemplateSummary above follows for template.yaml.
-# ──────────────────────────────────────────────────────────────────────────
 
 IssueSeverity = Literal["block", "warn", "info"]
 """`listing_validation.Severity` on the wire. ``info`` (ADR-0045's stripped
@@ -288,7 +263,34 @@ class ResolvedPrice(BaseModel):
     """Formatted as `Money` prints itself, e.g. ``"249 NOK"``."""
 
 
-class ListingDetail(Listing):
+def always_sent_list() -> Any:
+    """An empty-list default the server always sends. ``default_factory``
+    keeps the mutable default off the class (S01), and the explicit schema
+    default keeps OpenAPI, and so the generated client, from marking the field
+    optional."""
+    return Field(default_factory=list, json_schema_extra={"default": []})
+
+
+def always_sent_dict() -> Any:
+    """:func:`always_sent_list` for a mapping."""
+    return Field(default_factory=dict, json_schema_extra={"default": {}})
+
+
+class EditorTabFields(BaseModel):
+    """What the listing editor's tabs read, computed the same way for a
+    listing and a listing template, whose editor mounts those tabs unchanged."""
+
+    resolved_prices: list[ResolvedPrice] = always_sent_list()
+    garment_materials: list[str] | None = None
+    """Read-only fibre materials from the selected garment profile. A listing
+    never writes or owns them; the editor shows what Etsy will use."""
+    garment_product_type: str | None = None
+    garment_brand: str | None = None
+    garment_model: str | None = None
+    description_composed: str = ""
+
+
+class ListingDetail(EditorTabFields, Listing):
     """The full `Listing`, plus what the editor needs and nothing a listing
     itself would ever store: computed status, computed issues, and (only
     meaningful right after a PATCH) which fields a rejected candidate failed
@@ -300,38 +302,21 @@ class ListingDetail(Listing):
     draft, which has no file yet."""
     status: ListingStatus
     issues: list[Issue]
-    # S01: default_factory keeps the mutable default off the class, and the
-    # explicit schema default keeps OpenAPI (and the generated client) from
-    # treating a field the server always sends as optional.
-    field_errors: dict[str, str] = Field(default_factory=dict, json_schema_extra={"default": {}})
-    gestures: list[ListingGesture] = Field(default_factory=list, json_schema_extra={"default": []})
-    """The lifecycle actions the editor's action row offers: the listings
-    table's row gestures, from the same rule. Empty for the unsaved
-    draft, which has no lifecycle yet."""
+    field_errors: dict[str, str] = always_sent_dict()
     """Populated only when a PATCH's candidate failed `Listing.model_validate`
     -- the write was skipped and every other field here still describes the
     listing as it was before the PATCH. Empty on every GET and every
     successful PATCH; the frontend never re-implements this validation; it
     only renders what the server returns."""
+    gestures: list[ListingGesture] = always_sent_list()
+    """The lifecycle actions the editor's action row offers: the listings
+    table's row gestures, from the same rule. Empty for the unsaved
+    draft, which has no lifecycle yet."""
     etsy_listing_id: int | None = None
     printify_product_id: str | None = None
     pricing_plan_name: str | None = None
     """The resolved plan's filename stem, for display -- selecting a
     different plan from the UI is deferred (features/listings-ui-20260915/spec.md)."""
-    resolved_prices: list[ResolvedPrice] = Field(
-        default_factory=list, json_schema_extra={"default": []}
-    )
-    garment_materials: list[str] | None = None
-    """Read-only fibre materials from the selected garment profile.
-
-    They remain outside ``Listing`` because a listing never writes or owns
-    them; this derived field merely lets the editor show what Etsy will use.
-    """
-    # Profile context sent to AI SEO generation, including edits that leave
-    # the profile name and materials unchanged.
-    garment_product_type: str | None = None
-    garment_brand: str | None = None
-    garment_model: str | None = None
     description_composed: str = ""
     """The final `etsy.description` text, exactly as
     `Workspace.compose_description` joins it -- the one value the Details
@@ -342,26 +327,6 @@ class ListingDetail(Listing):
     design_content_hash: str | None = None
     """Hash of selected design refs and bytes, for AI proposal staleness.
     Unreadable files contribute a stable marker; absent only with no design."""
-
-    @model_validator(mode="after")
-    def _require_a_price_source(self) -> ListingDetail:
-        """Describing a listing never re-decides whether it may be *written*.
-
-        A listing with neither ``pricing_plan`` nor ``prices`` is exactly the
-        state the editor exists to get a user out of -- it is what
-        ``GET /api/listing-draft`` hands back and what a refused create comes
-        back as -- so a description of it that refuses to render is a page that
-        cannot show the problem it is reporting. The write paths
-        (``Listing.load``, the PATCH, the POST) all validate a ``Listing``, not
-        this, and are unaffected.
-
-        Shadowing works because pydantic v2 collects validators by attribute
-        name across the MRO, so this replaces the parent's. That is a hazard in
-        general -- it is why `Listing` keeps its other five rules in a
-        differently-named validator this cannot touch -- and the whole reason
-        the price-source rule stands alone there.
-        """
-        return self
 
 
 class GarmentProfileSummary(BaseModel):
@@ -419,9 +384,8 @@ class MediaFileSummary(BaseModel):
 
 class CommonCopySummary(BaseModel):
     """One `common-copy/*.md` file, for the Description tab's body-source
-    selector (AI SEO implementation plan, PR6). A common-copy ref is
-    workspace-relative, like every other ref, so it is exactly what
-    `description.ref` stores, already usable as-is."""
+    selector. ``ref`` is workspace-relative, exactly what `description.ref`
+    stores."""
 
     ref: str
     """Workspace-relative, e.g. ``common-copy/comfort-colors.md`` -- what
@@ -488,19 +452,15 @@ class DraftListingRequest(BaseModel):
 
     ``dict`` rather than ``Listing``, deliberately: an incomplete candidate is
     the *normal* case on this endpoint, and rejecting it at the FastAPI boundary
-    would answer with a 422 the editor cannot render. The point is to get it as
-    far as ``Listing.draft`` and report what is missing."""
+    would answer with a 422 the editor cannot render. The point is to describe
+    it as it stands and report what is missing."""
 
     document: dict[str, Any] = Field(default_factory=dict)
 
 
 class CreateListingRequest(BaseModel):
-    """The whole document, not a handful of fields to build one from.
-
-    The editor is the create form, so by the time a name is typed the user may
-    have chosen a design, colours and images -- and the shape they edited is the
-    shape that should be written. A server-built stub here would be a second
-    opinion about what a new listing starts as."""
+    """The whole document the editor built, written as edited -- not a
+    handful of fields to build one from."""
 
     name: str
     document: dict[str, Any]
@@ -518,12 +478,6 @@ class TemplateRenameResponse(BaseModel):
     name: str
     updated: list[str]
     unresolved: list[str]
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Listing templates (ADR-0047, template completeness). The detail reuses `ListingTemplate` directly,
-# as `ListingDetail` reuses `Listing`: the wire shape *is* template.yaml.
-# ──────────────────────────────────────────────────────────────────────────
 
 
 class PixelSize(BaseModel):
@@ -565,7 +519,7 @@ class ListingTemplateAsset(BaseModel):
     source_ref: str
 
 
-class ListingTemplateDetail(ListingTemplate):
+class ListingTemplateDetail(EditorTabFields, ListingTemplate):
     """A listing template as its pages read it, saved or not -- one shape for
     both, as `ListingDetail` is one shape for a listing and the unnamed draft.
 
@@ -579,19 +533,7 @@ class ListingTemplateDetail(ListingTemplate):
     garment: str | None = None
     pricing_plan_name: str | None = None
     source: ListingTemplateSource | None = None
-    assets: list[ListingTemplateAsset] = Field(
-        default_factory=list, json_schema_extra={"default": []}
-    )
-    # What the listing editor's tabs read off a `ListingDetail`, computed the
-    # same way, because the listing-template editor mounts those tabs
-    # unchanged (UI doc §3, *Existing components the template editor needs*).
-    resolved_prices: list[ResolvedPrice] = Field(
-        default_factory=list, json_schema_extra={"default": []}
-    )
-    garment_materials: list[str] | None = None
-    garment_product_type: str | None = None
-    garment_brand: str | None = None
-    garment_model: str | None = None
+    assets: list[ListingTemplateAsset] = always_sent_list()
     description_composed: str = ""
     """The body alone: a template has no lead, and each listing's own is
     placed above it."""
@@ -626,11 +568,6 @@ class CreateListingTemplateRequest(BaseModel):
         if (self.from_listing is None) == (self.from_template is None):
             raise ValueError("give exactly one of from_listing and from_template")
         return self
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Staging and batches (cache-record persistence; batch plan PR 2).
-# ──────────────────────────────────────────────────────────────────────────
 
 
 class StagingRowDetail(BaseModel):
@@ -781,14 +718,6 @@ class ListingBatch(BaseModel):
     reviewable: bool
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Runs. ``RunEvent`` itself, and the ``Plan``/``StagePlan`` DTOs it
-# carries, live in ``core/application/deploy/events.py`` beside the engine types they mirror --
-# only the request/response envelope belongs here, next to every other
-# endpoint's shapes.
-# ──────────────────────────────────────────────────────────────────────────
-
-
 class _CreateRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -852,9 +781,6 @@ CreateRunRequest = (
 
 
 class _RunSummary(BaseModel):
-    """Enough to show a page-head control (decision 8's table) or a row in a
-    future batch view -- everything except the event log itself."""
-
     id: str
     scope: RunScope
     batch_id: str | None = None
@@ -898,18 +824,6 @@ class ApplyRunDetail(ApplyRunSummary):
 RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind")]
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# AI SEO (AI SEO implementation plan, PR5; ADR-0049). A proposal is cached on the
-# server (`ai/proposals.py`) and reaches the browser two ways: as an AI
-# run's `proposal` event (`core/application/ai/events.py`) the moment it is written,
-# and from `GET /api/listings/{name}/proposal` after that. Both are
-# :class:`ListingProposal`. The choices' field shapes mirror
-# `ai/models.py.SeoProposal` field for field, the same "wire shape *is* the
-# domain shape" rule `ListingDetail` follows for `Listing` above; they live
-# in `ai/proposals.py` because the cache record is made of them.
-# ──────────────────────────────────────────────────────────────────────────
-
-
 class SeoReadinessResponse(BaseModel):
     """Whether AI Mode can be enabled for one saved listing right now
     (implementation plan, "Entry point"). The frontend leaves the control
@@ -936,13 +850,6 @@ class ProposalResolutionPatch(BaseModel):
     title: Resolution | None = None
     tags: Resolution | None = None
     lead: Resolution | None = None
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# AI runs (features/market-seo-20260924/spec.md, *AI runs*): what
-# `server/api/airuns.py` takes and answers besides the events themselves,
-# which are core's (`core/application/ai/events.py`) and travel unchanged.
-# ──────────────────────────────────────────────────────────────────────────
 
 
 class CreateAiRunRequest(BaseModel):
@@ -1077,12 +984,6 @@ class MarigoldRuntimeResponse(BaseModel):
 
 class PreparationResyncResponse(BaseModel):
     resync: Literal[True] = True
-
-
-# ------------------------------------------------------------- Admin: Shop
-#
-# Admin plan, PR 3. The editable shop.yaml values and the revision every save
-# names; core/application/shop_settings.py owns the rules.
 
 
 class ReturnPolicyTermsBody(BaseModel):

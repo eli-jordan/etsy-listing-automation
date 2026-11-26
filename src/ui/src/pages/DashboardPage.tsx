@@ -5,22 +5,6 @@ import { STATUS_LABELS } from "../components/StatusTag";
 import { useIsPhone } from "../phone/usePhone";
 import type { ListingStatus, ListingSummary } from "../types";
 
-/**
- * The counts the workspace already knows, from the mockup's Dashboard.
- *
- * One card per lifecycle state (`engine/status.py`), because the three that
- * are not "live" are three different pieces of news: `draft` is work not yet
- * pushed anywhere, `deployed` is work waiting on a human to press publish in
- * Shop Manager, and `dirty` is a live listing whose copy has moved on. A
- * single "not published" number would hide the only one of those that is
- * about something buyers can see.
- *
- * Deliberately not a second listings table: `GET /api/listings` derives
- * `status` per row on every read, so the counts cost nothing beyond the
- * request the Listings page makes anyway -- and anything richer (last run,
- * what a `plan` would do) needs the Runner, which is a later pass.
- */
-
 export function DashboardPage() {
   const navigate = useNavigate();
   const [listings, setListings] = useState<ListingSummary[] | null>(null);
@@ -58,8 +42,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Nothing until the counts are real: a dashboard showing 0/0 while the
-          request is still in flight states something false. */}
       {listings !== null && (
         <div className="stat-row">
           {CARDS.map((card) => {
@@ -70,7 +52,6 @@ export function DashboardPage() {
                 <span className="stat-card__caption">{card.caption}</span>
               </>
             );
-            // On a phone each count is a shortcut to the listings it counts.
             return isPhone ? (
               <Link
                 key={card.status}

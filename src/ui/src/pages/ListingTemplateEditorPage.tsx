@@ -20,25 +20,6 @@ import { listingTemplateTransport, templateAsListing } from "./editor/listingTem
 import { metaFor } from "./editor/saveMeta";
 import { TEMPLATE_DELETE_DETAILS, templateDeleteTitle } from "./listingTemplateDelete";
 
-/**
- * The listing-template editor (UI doc §3; batch plan PR 6): the listing
- * editor's own shell with `kind="listing-template"`, at two routes.
- *
- * `/listing-templates/new?from_listing=` (Create listing template) and
- * `?from_template=` (Clone) open it unsaved, on the draft the server would
- * write, with the name field focused (UI doc §1). Nothing is written until
- * the seller commits a unique name; edits made before that ride along in the
- * create, and leaving without naming discards the draft.
- * `/listing-templates/:name` opens a saved one.
- *
- * Autosave writes only complete templates: an edit that makes one
- * incomplete is held here, explained by the banner and the head, retried by
- * the next edit, and guarded against navigating away (`useUnsavedWarning`).
- *
- * A saved template's action row holds Clone and Delete, as its card does
- * (UI doc §3); an unsaved one has nothing to clone or delete yet.
- */
-
 const HOW_TO =
   "To make a listing template, open a finished listing and choose Create listing template.";
 
@@ -50,8 +31,6 @@ function sourceFrom(params: URLSearchParams): ListingTemplateSource | null {
   return null;
 }
 
-/** Whose `./` files the Images tab draws. A saved template's are its own;
- * an unsaved one's are only planned copies, still at the source. */
 function ownerOf(template: ListingTemplateDetail): MediaOwner | null {
   if (template.name !== "") return { kind: "listing-template", name: template.name };
   if (template.source === null || template.source === undefined) return null;
@@ -161,17 +140,13 @@ function ListingTemplateEditor({
     },
   });
 
-  // UI doc §3: navigating away with unsaved values warns first.
   const blocker = useUnsavedWarning(save.kind === "unsaved");
   const navigate = useNavigate();
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
-  /** The template's name on disk, once it has one. */
-  const saved = detail.name || name;
+  const savedName = detail.name || name;
 
   function clone(template: string) {
-    // The clone is of the file, so an edit not in it would be left behind. The
-    // page head says why it stayed.
     void flush().then((settled) => {
       if (settled.written) {
         navigate(`/listing-templates/new?from_template=${encodeURIComponent(template)}`);
@@ -220,11 +195,11 @@ function ListingTemplateEditor({
             }
             meta={metaFor(save, detail.name || name, "listing-template")}
             actions={
-              saved && (
+              savedName && (
                 <>
                   <ActionLink
                     icon={<CopySimpleIcon aria-hidden="true" />}
-                    onClick={() => clone(saved)}
+                    onClick={() => clone(savedName)}
                   >
                     Clone
                   </ActionLink>
@@ -242,12 +217,12 @@ function ListingTemplateEditor({
           />
         }
       />
-      {deleting && saved && (
+      {deleting && savedName && (
         <ConfirmDialog
-          title={templateDeleteTitle(saved)}
+          title={templateDeleteTitle(savedName)}
           confirmLabel="Delete"
           details={TEMPLATE_DELETE_DETAILS}
-          onConfirm={() => confirmDelete(saved)}
+          onConfirm={() => confirmDelete(savedName)}
           onCancel={() => setDeleting(false)}
         />
       )}

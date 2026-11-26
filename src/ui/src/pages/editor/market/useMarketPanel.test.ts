@@ -1,7 +1,8 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, type MockInstance, vi } from "vitest";
 import * as marketApi from "../../../api/market";
 import { MARKET_QUERIES, marketSnapshot } from "../../../test/market";
+import { deferred } from "../../../test/helpers";
 import type { MarketSnapshot, WorkflowStep } from "../../../types";
 import { type MarketRun, useMarketPanel } from "./useMarketPanel";
 
@@ -89,6 +90,19 @@ it("shows what the run found once its market event arrives", async () => {
   rerender({ name: "take-a-hike", run: run("done", { busy: true, market: found }) });
 
   expect(result.current).toEqual({ kind: "ready", snapshot: found });
+});
+
+it("keeps the run's snapshot over a GET that answers after it", async () => {
+  const saved = deferred<MarketSnapshot | null>();
+  get.mockReturnValue(saved.promise);
+  const newer = marketSnapshot({ found: 2 });
+  const { result, rerender } = panel("take-a-hike", run(null));
+  rerender({ name: "take-a-hike", run: run("done", { market: newer }) });
+  rerender({ name: "take-a-hike", run: run("pending", { busy: true }) });
+
+  await act(async () => saved.resolve(marketSnapshot({ found: 1 })));
+
+  expect(result.current).toEqual({ kind: "ready", snapshot: newer });
 });
 
 it("keeps showing the newest search when the next run starts", async () => {

@@ -1,16 +1,3 @@
-"""Adding artwork to ``designs/`` from the editor's design strip.
-
-A file dropped on the strip becomes a listing design: a PNG in ``designs/``
-that any listing can then point at. That directory holds artwork listings
-actually ship and that other listings may already print, so an upload never
-overwrites a different file -- a name that is taken by other bytes gets the
-next free ``-2``, ``-3`` suffix instead, and the same bytes under the same name
-are simply the file that is already there.
-
-Decoding the multipart request is the route's; uploaded bytes and the
-filename enter here (module-structure plan, PR 7).
-"""
-
 from __future__ import annotations
 
 from io import BytesIO
@@ -24,17 +11,12 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 def save_listing_design(workspace: Workspace, filename: str, payload: bytes) -> str:
-    """Add an upload to ``designs/`` and answer the design name it landed
-    under. Refuses with :class:`ListingDesignUploadRefusedError`, writing nothing,
-    unless ``filename`` is a plain filename and ``payload`` decodes as a PNG
-    -- ``designs/`` holds PNGs only, and a design is resolved by name to
-    ``<name>.png``."""
     if not filename:
         raise ListingDesignUploadRefusedError("the upload needs a filename")
     if filename != Path(filename).name:
         raise ListingDesignUploadRefusedError(f"{filename!r} is not a plain filename")
     stem = Path(filename).stem
-    # `Path(".png").stem` is ".png": a dotfile, not a name.
+    # `Path(".png").stem` is ".png".
     if not stem or stem.startswith("."):
         raise ListingDesignUploadRefusedError(f"{filename!r} has no name to save it under")
 
@@ -49,7 +31,7 @@ def save_listing_design(workspace: Workspace, filename: str, payload: bytes) -> 
             f"designs must be PNG files, and {filename} is a {kind or 'different'} image"
         )
 
-    name = _free_name(workspace, stem, payload)
+    name = _name_free_or_holding(workspace, stem, payload)
     destination = workspace.design_file(name)
     if not destination.is_file():
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -57,9 +39,7 @@ def save_listing_design(workspace: Workspace, filename: str, payload: bytes) -> 
     return name
 
 
-def _free_name(workspace: Workspace, stem: str, payload: bytes) -> str:
-    """``stem``, or the first ``stem-N`` that is free or already holds these
-    exact bytes."""
+def _name_free_or_holding(workspace: Workspace, stem: str, payload: bytes) -> str:
     candidate, n = stem, 1
     while True:
         path = workspace.design_file(candidate)

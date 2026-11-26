@@ -1,64 +1,12 @@
-"""Local AI Mode: request/task contracts, the three packaged default prompts,
-delimited-context prompt assembly, hard validation, and the local
-Codex/Claude/Grok CLI adapters behind `AiProvider` (AI SEO implementation plan,
-PR3 and PR4; ADR-0003 for brief drafting).
+"""Local AI Mode: SEO proposals, brief drafting and market-query extraction
+run through the local Codex, Claude and Grok CLIs behind one `AiProvider`
+contract, with the workspace-ordered fallback (ADR-0056), one same-provider
+repair and the step and run budgets (ADR-0057) shared by every task.
 
-Two features, one machine. **SEO generation** produces a proposal a seller
-reviews suggestion by suggestion; **brief drafting** produces the one input
-that generation needs, from the design image alone. They differ only in the
-prompt, the schema and the validation -- the provider adapters, the
-workspace-configured fallback (ADR-0056), the one same-provider repair and the run's
-step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists to make possible.
-
-- ``models`` -- ``ProviderTask``, ``SeoRequest``, ``SeoProposal``,
-  ``PhraseRationale``, ``ProposalWarning``, ``ProviderReadiness``,
-  ``RawProviderResult``, ``RepairContext``, ``Deadline``, ``AiLimits``,
-  ``RunBudget``.
-- ``prompt`` -- the packaged default ``seo.md``, ``seed_prompt`` and
-  ``sync_prompt`` (setup's seed, check and ``--replace-prompts`` operations,
-  for any prompt file), ``build_task_prompt`` (the shared
-  delimited-context wrapper) and ``build_seo_task``.
-- ``brief`` -- everything drafting-specific in one small module:
-  ``BriefRequest``, ``DesignBrief``, the packaged default ``brief.md``,
-  ``build_brief_task`` and ``validate_brief``.
-- ``market_queries`` -- query extraction for market-informed SEO,
-  shaped like ``brief``: ``MarketQueriesRequest``, ``MarketQueries``, the
-  packaged default ``market-queries.md``, ``build_market_queries_task`` and
-  ``validate_market_queries`` (three unique, non-empty queries).
-- ``validation`` -- ``validate_proposal``: normalize harmless formatting, then
-  hard-validate exact counts, Etsy limits, uniqueness, and the agreed
-  affiliation/content checks; trademark findings become warnings, never a
-  refusal.
-- ``providers`` -- the ``AiProvider`` protocol and ``FakeAiProvider``.
-- ``grok``/``codex``/``claude`` -- the real CLI adapters: a non-interactive,
-  read-only invocation each, behind the same `AiProvider` protocol. None
-  reads a prompt file or knows which feature it is serving. The chain tries
-  the workspace order, defaulting to Codex, Claude, Grok (ADR-0056).
-- ``discovery`` -- ``ModelDiscovery`` and its advisory ``ModelCatalogs``,
-  ``ProviderCatalog`` and ``ModelChoice``. Construction starts nothing;
-  ``start``/``stop`` own startup discovery, and ``read(refresh=True)`` retries
-  within one shared probe budget. Imported directly, not re-exported.
-- ``orchestrator`` -- `run_task`, and the three entry points over it,
-  `generate_proposal`, `generate_brief` and `generate_market_queries`.
-- ``listing_inputs`` -- saved-listing AI facts, paired request/snapshot
-  preparation and proposal judgment.
-- ``proposals`` -- ``ProposalStore``, the durable latest proposal per listing.
-- ``errors`` -- the exception hierarchy `orchestrator` and all adapters
-  raise, and `classify_process_failure`, the availability classifier.
-- ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
-  cleanup for completion, timeouts, cancellation, and request disconnects.
-  Private ``_windows_process``/``_posix_process`` implement ownership; callers
-  never select a platform mechanism or manage child identities.
-- ``cli_support`` -- the shared local CLI provider contract, readiness probes and outcome decoding.
-- ``host`` -- ``CliHost``/``CommandHost``, how adapters, discovery and the CLI's
-  prompt backends find and run commands, and ``LOCAL_CLI_HOST``, this machine.
-  Imported directly, not re-exported.
-
-`core/application/ai/` coordinates this package into runs, readiness and
-proposal operations; `server/api/airuns.py` and `server/api/seo.py` serve
-those over HTTP. CI never invokes a
-real provider binary: every adapter test builds its provider on a scripted
-``CliHost``, and every orchestrator test runs against `FakeAiProvider`.
+Withheld: ``discovery`` (``ModelDiscovery``) and ``host`` (``CliHost``,
+``CommandHost``, ``LOCAL_CLI_HOST``) are imported directly, and the private
+``_windows_process``/``_posix_process`` stay behind `run_managed`.
+`core/application/ai/` coordinates this package into runs.
 """
 
 from __future__ import annotations

@@ -30,8 +30,8 @@ function stubSvgGeometry(): () => void {
   };
 }
 
-function renderBrush(onStroke = vi.fn()) {
-  render(
+function brush(onStroke: ReturnType<typeof vi.fn>, editing: boolean) {
+  return (
     <svg>
       <PlacementOverlay
         box={BOX}
@@ -41,14 +41,22 @@ function renderBrush(onStroke = vi.fn()) {
         undoBases={[]}
         operations={[]}
         space={[100, 100]}
-        editing
+        editing={editing}
         mode="mask"
         diameter={8}
         onStroke={onStroke}
       />
-    </svg>,
+    </svg>
   );
-  return { onStroke, area: screen.getByLabelText("Mask drawing area") };
+}
+
+function renderBrush(onStroke = vi.fn()) {
+  const { rerender } = render(brush(onStroke, true));
+  return {
+    onStroke,
+    area: screen.getByLabelText("Mask drawing area"),
+    stopEditing: () => rerender(brush(onStroke, false)),
+  };
 }
 
 describe("PlacementOverlay's mask brush", () => {
@@ -93,6 +101,20 @@ describe("PlacementOverlay's mask brush", () => {
     down(area, 3, 20, 20);
     fireEvent.pointerUp(area, { pointerId: 3 });
     expect(onStroke).toHaveBeenCalledOnce();
+  });
+
+  it("commits a stroke under way once when mask mode ends mid-press", () => {
+    const { onStroke, area, stopEditing } = renderBrush();
+    down(area, 1, 20, 20);
+    move(area, 1, 30, 30);
+    stopEditing();
+    expect(onStroke).toHaveBeenCalledOnce();
+    expect(onStroke.mock.lastCall?.[0]).toMatchObject({
+      points: [
+        [20, 20],
+        [30, 30],
+      ],
+    });
   });
 
   it("ignores another pointer's release while a stroke is under way", () => {

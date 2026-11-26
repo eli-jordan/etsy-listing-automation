@@ -24,8 +24,8 @@ Three things make asking cheap enough to do on every read:
   editor -- leave it off and keep the strict TTL.
 
 Failure is silence, deliberately. A workspace with no Etsy key pair, no
-sign-in, or a shop the token cannot read is an ordinary state well short of
-Phase 3 -- the listings page must still open, with every listing reported as
+sign-in, or a shop the token cannot read is an ordinary state -- the
+listings page must still open, with every listing reported as
 not-live, which is what :func:`~etsy_listings.core.engine.status.is_live_etsy_state`
 already reads a missing state as. A *background* refresh that fails keeps the
 answers it was refreshing instead: they are still the best known, and the next
@@ -92,13 +92,9 @@ def etsy_states(  # noqa: PLR0913 -- every argument after client_for is a test s
 ) -> dict[int, str | None]:
     """Each of ``listing_ids``' Etsy ``state``, or ``None`` when unknown.
 
-    Ids still inside the memo are answered from it; the rest are fetched in
-    one batch. An id Etsy does not answer for is cached as ``None`` like any
-    other, so a listing deleted on Etsy does not re-ask every time the table
-    is drawn. With ``stale_ok`` an answer older than the TTL but younger
-    than :data:`STALE_SECONDS` is returned as it stands and refreshed by
-    ``background`` -- unless an id has no usable answer at all, when the one
-    round trip that must happen anyway refreshes the old ones too.
+    Unmemoised ids are fetched in one batch. With ``stale_ok``, an answer past
+    the TTL but within :data:`STALE_SECONDS` is returned and refreshed by
+    ``background``.
     """
     wanted = set(listing_ids)
     if not wanted:
@@ -125,7 +121,6 @@ def live_listing_ids(
     client_for: ClientFor,
     now: Clock = time.monotonic,
 ) -> set[int]:
-    """Which of ``listing_ids`` Etsy reports as published."""
     return {
         i
         for i, state in etsy_states(root, listing_ids, client_for=client_for, now=now).items()
@@ -140,8 +135,6 @@ def _remembered(ids: set[int], moment: float, max_age: float) -> dict[int, str |
 def _ask_and_keep(
     client: EtsyListingClient, listing_ids: set[int], moment: float
 ) -> dict[int, str | None]:
-    """Ask in the foreground, where a failure is remembered as "not live"
-    like any other answer -- see the module docstring."""
     asked = sorted(listing_ids)
     states = _ask(client, asked)
     answers: dict[int, str | None] = dict.fromkeys(asked)
@@ -183,7 +176,6 @@ def _refresh_behind(
 
 
 def _ask(client: EtsyListingClient, listing_ids: list[int]) -> dict[int, str] | None:
-    """Etsy's answer, or ``None`` when it could not be asked."""
     try:
         return client.listing_states(listing_ids)
     except (EtsyApiError, EtsyAuthError, EtsyRefreshBusyError, MissingCredentialError):

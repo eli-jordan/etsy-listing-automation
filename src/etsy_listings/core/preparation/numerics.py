@@ -23,6 +23,14 @@ from etsy_listings.core.render.config import PreparationRequiredError
 from etsy_listings.core.render.material import MaterialMaps
 from etsy_listings.core.render.types import RGB, FloatMap
 
+_CROP_MARGIN = 0.4
+"""Evidence crop margin per side, as a fraction of the placement's extent."""
+_LIGHTING_HALO = 16
+"""Pixels beyond the quad the lighting fit reads, more than the lighting blur's
+4-sigma radius, so every visible pixel's photographic gain is identical to the
+full-photo computation."""
+assert _LIGHTING_HALO > 4 * geometry.LIGHTING_BLUR_SIGMA
+
 
 class PlacementRefusedError(RefusedError):
     """A placement quad no preparation can fit: degenerate, crossed, or
@@ -74,13 +82,13 @@ class Crop:
 
 
 def plan_crop(box: FloatMap, photo_size: tuple[int, int]) -> Crop:
-    """40% per side, outward rounding, clipped half-open photo rectangle."""
+    """Outward rounding, clipped half-open photo rectangle."""
     if box.shape != (4, 2) or not np.isfinite(box).all() or min(photo_size) < 1:
         raise PlacementRefusedError("Invalid placement or photo dimensions")
     lo, hi = box.min(axis=0).astype(float), box.max(axis=0).astype(float)
     if np.any(hi <= lo):
         raise PlacementRefusedError("Placement must have positive width and height")
-    margin = (hi - lo) * 0.4
+    margin = (hi - lo) * _CROP_MARGIN
     left, top = max(0, math.floor(lo[0] - margin[0])), max(0, math.floor(lo[1] - margin[1]))
     right, bottom = (
         min(photo_size[0], math.ceil(hi[0] + margin[0])),
@@ -221,7 +229,6 @@ def prepare(
     max_edge: int | None = None,
     cooperation: Cooperation = Cooperation(),
 ) -> Preparation:
-    """Fit one placement from explicit evidence, with cancellation between phases."""
     box, mask = placement.box, placement.mask
     checkpoint, cooperate = cooperation.checkpoint, cooperation.cooperate
     height, width = base.shape[:2]
@@ -263,11 +270,8 @@ def prepare(
         offset = (factor - 1) * np.float32(0.5)
         box = box * factor + offset
         width, height = size
-    # Lighting normalization only selects confident pixels inside the quad.
-    # Include more than GaussianBlur(sigma=3)'s 12-pixel radius so photographic
-    # gains on every visible pixel are identical to the full-photo computation.
-    lo = np.maximum(np.floor(box.min(axis=0)).astype(int) - 16, 0)
-    hi = np.minimum(np.ceil(box.max(axis=0)).astype(int) + 17, [width, height])
+    lo = np.maximum(np.floor(box.min(axis=0)).astype(int) - _LIGHTING_HALO, 0)
+    hi = np.minimum(np.ceil(box.max(axis=0)).astype(int) + _LIGHTING_HALO + 1, [width, height])
     left, top = int(lo[0]), int(lo[1])
     right, bottom = int(hi[0]), int(hi[1])
     region = (slice(top, bottom), slice(left, right))
@@ -292,9 +296,8 @@ def prepare(
         ),
         mask[region] * geometry.polygon_mask((right - left, bottom - top), local_box.tolist()),
         confidence,
-        # Interactive samples represent a larger original-photo area. Keep the
-        # durable 100-pixel refusal unchanged while allowing small valid prints.
-        minimum_samples=max(1, math.ceil(100 * float(np.prod(factor)))),
+        # An editor-resolution sample stands for a larger area of the photo.
+        minimum_samples=max(1, math.ceil(geometry.MIN_LIGHTING_SAMPLES * float(np.prod(factor)))),
     )
     fields = local_fields
     return Preparation(
@@ -321,7 +324,6 @@ class MaskProposal:
 
 
 _MASK_PROPOSAL_LOCK = threading.Lock()
-# Fewer seed or sure-garment pixels than this fall back to manual visibility.
 _MIN_SEED_PIXELS = 20
 # Chroma distance from the seed median, in robust deviations, that GrabCut
 # starts from: sure garment, probable garment, and sure background.

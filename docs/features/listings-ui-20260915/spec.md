@@ -352,6 +352,14 @@ A picture that has gone since leaves the stage empty. An unnamed draft keeps
 nothing, because refreshing one starts a new draft. Position mode and the
 listing template's preview design also start over.
 
+### Amendment: New listing on a phone
+
+On a phone held upright, New listing is a floating button over the list. It
+hides while the list scrolls down, toward the rows it would cover, and comes
+back on the way up, as native lists do; near the top it always shows. Held
+sideways, it stays in the head instead: the head has room for it, and so few
+rows show that a floating button would sit on one.
+
 ## Architecture decisions
 
 - **Router**: introduce `react-router` (the only new frontend dependency this

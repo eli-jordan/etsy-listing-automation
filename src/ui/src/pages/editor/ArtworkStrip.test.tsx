@@ -5,6 +5,7 @@ import * as listingsApi from "../../api/listings";
 import type { DesignMap } from "../../types";
 import { ArtworkStrip } from "./ArtworkStrip";
 import type { SlotTarget } from "./artwork";
+import { deferred, must } from "../../test/helpers";
 
 const HIKE = "designs/take-a-hike.png";
 const DARK_INK = "designs/take-a-hike-dark-ink.png";
@@ -402,6 +403,71 @@ describe("ArtworkStrip taking a dropped file", () => {
       expect(onChange).toHaveBeenCalledWith({
         "on-light": "designs/sunset.png",
         "on-dark": LIGHT_INK,
+      }),
+    );
+  });
+});
+
+describe("ArtworkStrip's drag handling", () => {
+  const files = { files: [], types: ["Files"] };
+
+  it("keeps the targets lit while a drag passes over a child of the card", async () => {
+    renderStrip({ default: HIKE });
+    await screen.findByText("Prints on every colour you sell");
+    const all = card("For all shirts");
+    const child = must(all.querySelector("button"));
+
+    fireEvent.dragEnter(all, { dataTransfer: files });
+    fireEvent.dragEnter(child, { dataTransfer: files });
+    fireEvent.dragLeave(child, { dataTransfer: files });
+
+    expect(document.querySelectorAll(".design-row--target")).toHaveLength(1);
+    fireEvent.dragLeave(all, { dataTransfer: files });
+    expect(document.querySelectorAll(".design-row--target")).toHaveLength(0);
+  });
+
+  it("takes a file dropped between the targets, so the browser does not open it", async () => {
+    renderStrip({ default: HIKE });
+    await screen.findByText("Prints on every colour you sell");
+    const foot = must(document.querySelector<HTMLElement>(".design-strip__foot"));
+
+    expect(fireEvent.dragOver(foot, { dataTransfer: files })).toBe(false);
+    expect(fireEvent.drop(foot, { dataTransfer: files })).toBe(false);
+  });
+
+  it("lets go of the card's holding state once a slot takes the drop", async () => {
+    vi.spyOn(listingsApi, "uploadListingDesign").mockReturnValue(new Promise(() => undefined));
+    renderStrip({ default: HIKE });
+    await screen.findByText("Prints on every colour you sell");
+
+    drop(card("For all shirts"), png("sunset.png"));
+
+    expect(document.querySelector(".design-strip__card--holding")).toBeNull();
+  });
+
+  it("picks an upload into the design as it is when the file lands", async () => {
+    const landed = deferred<{ name: string; file: string }>();
+    vi.spyOn(listingsApi, "uploadListingDesign").mockReturnValue(landed.promise);
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Harness design={{ default: HIKE }} colours={ALL} onChange={onChange} />,
+    );
+    await screen.findByText("Prints on every colour you sell");
+    drop(card("For all shirts"), png("sunset.png"));
+
+    rerender(
+      <Harness
+        design={{ default: HIKE, moss: "designs/moss.png" }}
+        colours={ALL}
+        onChange={onChange}
+      />,
+    );
+    landed.resolve({ name: "sunset", file: "designs/sunset.png" });
+
+    await vi.waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({
+        default: "designs/sunset.png",
+        moss: "designs/moss.png",
       }),
     );
   });

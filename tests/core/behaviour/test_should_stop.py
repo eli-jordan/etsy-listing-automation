@@ -24,7 +24,7 @@ from etsy_listings.core.engine.events import EngineListingPlanned, EngineRunEven
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, StageState
 from etsy_listings.core.engine.run import apply_listings, plan_listings
-from etsy_listings.core.engine.stage import StageApplyResult
+from etsy_listings.core.engine.stage import Stage, StageApplyResult
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -38,7 +38,7 @@ class _AppliedDoc(BaseModel):
 
 
 @dataclass
-class _Stage:
+class _Stage(Stage[Any, _AppliedDoc, Any]):
     name: str
     local: bool = True
     group: str | None = None
@@ -68,7 +68,7 @@ def _planned(*stages: _Stage) -> PlannedRun:
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(
             StageState(
-                stage=s,  # type: ignore[arg-type]
+                stage=s,
                 desired={"stage": s.name},
                 applied=None,
                 live=None,
@@ -170,7 +170,7 @@ def test_apply_listings_should_stop_before_any_listing_applies_nothing(
 
     report = apply_listings(
         ctx, [LISTING], [_Stage("render")], hooks=RunHooks(should_stop=lambda: True)
-    )  # type: ignore[list-item]  # -- a minimal stand-in, not a full Stage
+    )
 
     assert report.outcomes == ()
     assert not (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
@@ -224,7 +224,7 @@ def test_a_stop_before_retract_keeps_the_listing(workspace_root: Path) -> None:
 
     apply_listings(
         a_context(workspace_root), [LISTING], [_Stage("render")], hooks=RunHooks(should_stop=stop)
-    )  # type: ignore[list-item]  # -- a minimal stand-in, not a full Stage
+    )
 
     workspace = Workspace.discover(root_override=workspace_root)
     assert workspace.listing_file(LISTING).is_file()

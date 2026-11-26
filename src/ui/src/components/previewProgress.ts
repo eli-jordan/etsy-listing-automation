@@ -1,5 +1,3 @@
-/** What has come back for a preview request. Stamped with the request's key
- * so a count from this run can never appear beside tiles from the last one. */
 export interface PreviewResult {
   key: string;
   rendered: Record<string, string>;
@@ -7,8 +5,6 @@ export interface PreviewResult {
   failed: number;
 }
 
-/** Where a preview run stands against the config the editor holds now
- * (`key`). */
 export function previewProgress(
   request: { key: string; jobs: readonly unknown[] } | null,
   result: PreviewResult | null,
@@ -22,8 +18,6 @@ export function previewProgress(
   // editor is holding, and saying so is the stale banner's whole job.
   const stale = request !== null && request.key !== key;
   const complete = request !== null && done + failed >= request.jobs.length;
-  // Everything asked for has come back, and it is a picture of what the editor
-  // currently holds -- the only state in which approving means anything.
   const approvable = complete && !stale && failed === 0;
   return { rendered, done, failed, stale, complete, approvable };
 }

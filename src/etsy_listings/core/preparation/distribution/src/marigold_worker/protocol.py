@@ -35,6 +35,15 @@ Role = Literal["normals", "lighting", "depth"]
 ROLES: Final[tuple[Role, ...]] = ("normals", "lighting", "depth")
 RequestId = Annotated[str, Field(min_length=1, max_length=128)]
 
+CHECKPOINT_REVISIONS: Final[dict[Role, str]] = {
+    "normals": "09cfdd258cb281fa006cf1afcd2284376d16687d",
+    "lighting": "08c3930bb641abf786ba44ce92547507ebefbc16",
+    "depth": "9571e7123e258cf052b4e54241f17971c290e9a8",
+}
+"""The pinned Hugging Face revision of each role's checkpoint."""
+PROCESSING_RESOLUTION: Final = 768
+SEED: Final = 2026
+
 
 def _cache_file(suffix: str) -> AfterValidator:
     """A ``/``-separated path under the cache root. Containment in the actual
@@ -63,14 +72,8 @@ class _Message(_Model):
 
 
 class InferenceSettings(_Model):
-    """The only caller-controlled sampling settings, bounded by this engine and
-    always explicit."""
-
     num_inference_steps: Annotated[StrictInt, Field(ge=1, le=10)]
     ensemble_size: Annotated[StrictInt, Field(ge=1, le=3)]
-
-
-# Requests: application to worker.
 
 
 class HelloRequest(_Message):
@@ -119,9 +122,6 @@ class Envelope(BaseModel):
 
     protocol: Literal[1]
     request_id: RequestId
-
-
-# Replies: worker to application.
 
 
 class Capabilities(_Model):
@@ -230,12 +230,10 @@ REPLY: Final[TypeAdapter[Reply]] = TypeAdapter(Reply)
 
 
 def encode(message: _Message) -> str:
-    """One protocol line, newline included."""
     return message.model_dump_json() + chr(10)
 
 
 def describe(error: ValidationError) -> str:
-    """A short, single-line account of why a message was refused."""
     return "; ".join(
         ".".join(str(part) for part in issue["loc"]) + ": " + issue["msg"]
         if issue["loc"]

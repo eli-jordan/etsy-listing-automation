@@ -1,13 +1,5 @@
-"""Credentials, read from the *workspace's* gitignored ``.env`` -- never from
-this repository (docs/guides/setup.md).
-
-Process environment wins over the file, which is what makes a one-off
-``PRINTIFY_API_TOKEN=... etsy-listings new...`` work without editing
-anything. Values are read lazily by whoever needs them, and a missing one is
-reported by :class:`MissingCredentialError` naming the exact file it should be
-in -- the alternative was a bare ``401 Unauthorized`` traceback out of httpx,
-which tells the user nothing about what to do next.
-"""
+"""Credentials from the workspace's gitignored ``.env`` (ADR-0025); the process
+environment wins over the file."""
 
 from __future__ import annotations
 
@@ -35,15 +27,14 @@ another in a password manager, because the ``.env`` inside a backup is
 encrypted with it."""
 
 
-class MissingCredentialError(UserFacingError, RuntimeError):
+class MissingCredentialError(UserFacingError):
     """A credential this run needs is not set anywhere.
 
     A :class:`~etsy_listings.core.errors.UserFacingError`, because the message
     below *is* the whole useful output -- it names the variable, the file and
     the way to get one. Typed as anything else it reaches ``--all`` as a
     traceback that ends the batch on its first unconfigured listing, which is
-    the outcome continue-on-error exists to prevent. ``RuntimeError`` is kept alongside
-    it so the type it has always been stays catchable.
+    the outcome continue-on-error exists to prevent.
     """
 
     def __init__(self, variable: str, env_file: Path, needed_for: str, how_to_get: str) -> None:
@@ -56,9 +47,6 @@ class MissingCredentialError(UserFacingError, RuntimeError):
 
 
 class _EnvValues(BaseSettings):
-    """The raw read. Separate from :class:`Secrets` so the public type stays a
-    plain frozen dataclass that also remembers *which* file it read."""
-
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     printify_api_token: str | None = None
@@ -71,7 +59,7 @@ def _backup_password(env_file: Path) -> str | None:
     override = os.environ.get(BACKUP_PASSWORD_VAR)
     if override or not env_file.is_file():
         return override or None
-    # Passwords may contain a literal ${...}. dotenv expansion would change the key.
+    # dotenv would expand a literal ${...} in the password.
     values = dotenv_values(env_file, interpolate=False, encoding="utf-8")
     folded = {key.upper(): value for key, value in values.items()}
     return folded.get(BACKUP_PASSWORD_VAR) or None
@@ -79,13 +67,6 @@ def _backup_password(env_file: Path) -> str | None:
 
 @dataclass(frozen=True)
 class EtsyAppKey:
-    """The two halves of Etsy's app key, and the one place they are joined.
-
-    A pair rather than a pre-joined string because they are stored, asked for
-    and verified separately; :meth:`header` is the only spelling of the colon,
-    so a request that omits the shared secret cannot be written by accident.
-    """
-
     keystring: str
     shared_secret: str
 
@@ -127,30 +108,21 @@ class Secrets:
         return self.printify_api_token
 
     def require_etsy_app_key(self) -> EtsyAppKey:
-        """Both halves, or a message naming the half that is missing.
+        keystring = self._require_etsy_half(ETSY_KEYSTRING_VAR, self.etsy_keystring)
+        shared_secret = self._require_etsy_half(ETSY_SHARED_SECRET_VAR, self.etsy_shared_secret)
+        return EtsyAppKey(keystring, shared_secret)
 
-        Reported one variable at a time on purpose: "the Etsy app key is
-        missing" sends a user who pasted the keystring back to a page where
-        the keystring is plainly present, and the shared secret sits behind a
-        visibility toggle they may never have clicked.
-        """
-        for variable, value in (
-            (ETSY_KEYSTRING_VAR, self.etsy_keystring),
-            (ETSY_SHARED_SECRET_VAR, self.etsy_shared_secret),
-        ):
-            if not value:
-                raise MissingCredentialError(
-                    variable,
-                    self.env_file,
-                    "identify this application to Etsy (every v3 request carries it)",
-                    "Both halves are on your app's page at "
-                    "etsy.com/developers/your-apps -- the shared secret behind the "
-                    "visibility icon. `etsy-listings auth` captures and verifies them.",
-                )
-        # Narrowing for mypy: the loop above proved both are non-empty.
-        assert self.etsy_keystring is not None
-        assert self.etsy_shared_secret is not None
-        return EtsyAppKey(self.etsy_keystring, self.etsy_shared_secret)
+    def _require_etsy_half(self, variable: str, value: str | None) -> str:
+        if not value:
+            raise MissingCredentialError(
+                variable,
+                self.env_file,
+                "identify this application to Etsy (every v3 request carries it)",
+                "Both halves are on your app's page at "
+                "etsy.com/developers/your-apps -- the shared secret behind the "
+                "visibility icon. `etsy-listings auth` captures and verifies them.",
+            )
+        return value
 
     def require_anthropic_api_key(self) -> str:
         if not self.anthropic_api_key:

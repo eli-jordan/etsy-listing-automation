@@ -128,6 +128,17 @@ describe("pictureFor", () => {
     );
   });
 
+  it("gives a template a new URL once a position save for it lands, and no other", () => {
+    const entry = { template: "flat-lay-01", colour: "black" };
+    const before = pictureFor(entry, sceneSource("take-a-hike", "abc123", { "flat-lay-01": "p1" }));
+    const after = pictureFor(entry, sceneSource("take-a-hike", "abc123", { "flat-lay-01": "p2" }));
+    expect(after).not.toBe(before);
+    const other = { template: "lifestyle-01", colour: null };
+    expect(pictureFor(other, sceneSource("take-a-hike", "abc123", { "flat-lay-01": "p2" }))).toBe(
+      pictureFor(other, SAVED),
+    );
+  });
+
   it("renders a multi-colour scene the same way, with no colour of its own", () => {
     expect(pictureFor({ template: "colour-chart-01", colour: null }, SAVED)).toBe(
       "/api/listings/take-a-hike/scene-preview?template=colour-chart-01&v=abc123",

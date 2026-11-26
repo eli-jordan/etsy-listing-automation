@@ -1,24 +1,10 @@
 import { useEffect } from "react";
 
-/** Pictures fetched at once. Each full-size scene the server has not cached
- * yet is composed on the request's own thread, so this is also how many
- * compositions a preload holds open; two leaves room for the one the seller
- * clicks. */
+/** The server composes an uncached scene on the request's thread: two leaves room for a click. */
 export const PRELOAD_CONCURRENCY = 2;
 
-/**
- * Fetch every picture in `urls` into the browser's HTTP cache, in list
- * order, {@link PRELOAD_CONCURRENCY} at a time, so showing one later is a
- * local decode rather than a full-size render and download.
- *
- * The bodies are read and dropped, not kept decoded: a full-size scene is
- * 15-20 MB decoded and a garment profile has dozens of colours. A picture
- * that fails is skipped -- its click is just as slow as it was without the
- * preload. A new list (by content, not array identity) abandons the old one.
- */
+/** Into the browser's HTTP cache only: a full-size scene is 15-20 MB decoded. */
 export function usePreloadedPictures(urls: readonly string[]): void {
-  // Joined, so an equal list in a new array (every render of a parent that
-  // derives it) does not restart the preload.
   const key = urls.join("\n");
   useEffect(() => {
     const controller = new AbortController();

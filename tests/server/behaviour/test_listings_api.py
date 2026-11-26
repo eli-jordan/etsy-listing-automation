@@ -177,7 +177,7 @@ class TestListListings:
             "etsy",
             "load",
             "status",
-            "videos",
+            "inputs",
             "checks",
             "total",
         }

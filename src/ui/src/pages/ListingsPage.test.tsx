@@ -6,7 +6,7 @@ import * as runsApi from "../api/runs";
 import type { ListingDetail, ListingSummary } from "../types";
 import { runSummary } from "../test/helpers";
 import { ListingsPage } from "./ListingsPage";
-import { forgetLoadedListings } from "./loadedListings";
+import { resetLoadedListingsForTests } from "./loadedListings";
 
 function EditorStub() {
   const { name } = useParams();
@@ -52,7 +52,7 @@ function renderPage() {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  forgetLoadedListings();
+  resetLoadedListingsForTests();
 });
 
 beforeEach(() => {

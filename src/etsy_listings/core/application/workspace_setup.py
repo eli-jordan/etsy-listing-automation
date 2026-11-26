@@ -1,18 +1,3 @@
-"""Configuring a workspace: what ``setup`` writes, and the rules it writes by.
-
-The directories a workspace needs, the packaged prompts it is seeded with,
-and ``shop.yaml`` -- read raw, merged with what ``setup`` asked, and saved
-after the token that goes with it: rendered with a comment per field when
-new, edited in place when the seller already has one (ADR-0055). Finding
-the shops those answers name is :mod:`shop_discovery`'s; asking the questions
-is the CLI's (``cli/setup.py``), the one part no test can drive cheaply.
-
-The one rule that shapes all of it: **`setup` fills gaps, it does not
-correct answers.** Re-running it on a configured workspace must be safe, so an
-existing value always wins over a freshly collected one, and the ids Phase 3
-fills in are never dropped. Prompts are the one opt-in exception (ADR-0044).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -59,11 +44,6 @@ def missing_directories(root: Path) -> tuple[str, ...]:
 
 
 def create_directories(root: Path) -> tuple[str, ...]:
-    """Create what is missing; return what was actually created.
-
-    Returning the difference rather than the whole list is what lets a re-run
-    say "nothing to do" honestly instead of reporting work it did not do.
-    """
     created = missing_directories(root)
     for name in created:
         (root / name).mkdir(parents=True, exist_ok=True)
@@ -88,9 +68,6 @@ partner needs the shop's live list, which `setup` may not be able to reach.
 
 @dataclass(frozen=True)
 class SetupAnswers:
-    """Everything ``setup`` collects, in one value the renderer can be tested
-    against without a terminal."""
-
     printify_shop_id: int
     printify_shop_name: str
     preferred_print_provider: str | None
@@ -137,23 +114,6 @@ command becomes a destructive one.
 
 
 def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -> dict[str, Any]:
-    """The ``shop.yaml`` mapping to write, merged over whatever is there.
-
-    Two rules, and they are complements rather than a compromise:
-
-    - **What ``setup`` never asked about is kept**, verbatim. See
-    :data:`ASKED_ETSY_KEYS` and :data:`ASKED_LISTING_DEFAULT_KEYS`.
-    - **What it did ask about, the answer wins.** Asking a question and then
-      discarding the answer is worse than either overwriting or not asking:
-      it silently tells the user their input does not matter. The caller seeds
-      each prompt with the value already on disk, so pressing enter through a
-      re-run keeps everything -- which is what makes this safe.
-
-    ``None`` for an optional answer means "not known", never "delete it": a
-    prompt seeded with a value cannot come back blank, and a discovery that
-    found nothing must not erase what a previous run found. That rule now
-    applies one level deeper too -- ``listing_defaults``' own optional names.
-    """
     prior: dict[str, Any] = dict(existing or {})
     prior_etsy: dict[str, Any] = dict(prior.get("etsy") or {})
     prior_printify: dict[str, Any] = dict(prior.get("printify") or {})
@@ -181,9 +141,6 @@ def _etsy_section(answers: SetupAnswers, prior_etsy: dict[str, Any]) -> dict[str
         k: v for k, v in prior_etsy.items() if k not in (*ASKED_ETSY_KEYS, "listing_defaults")
     }
     for key, answer in (("shop_name", answers.etsy_shop_name), ("shop_id", answers.etsy_shop_id)):
-        # Omitted rather than defaulted when unknown: a placeholder id looks
-        # real enough to be published against, which is how `12345678` ended
-        # up in a workspace that had no Etsy shop at all.
         kept = answer if answer is not None else prior_etsy.get(key)
         if kept is not None:
             etsy[key] = kept
@@ -308,8 +265,7 @@ def render_shop_yaml(document: dict[str, Any]) -> str:
 
 
 def _dotted_path(line: str, indent: int, ancestors: list[tuple[int, str]]) -> str:
-    """The dotted path of the key ``line`` sets, or "" for a line that sets
-    none; ``ancestors`` is the ``(indent, key)`` stack, updated in place."""
+    """Updates ``ancestors``, the ``(indent, key)`` stack, in place."""
     stripped = line.strip()
     if ":" not in stripped or stripped.startswith("-"):
         return ""
@@ -323,8 +279,6 @@ def _dotted_path(line: str, indent: int, ancestors: list[tuple[int, str]]) -> st
     return path
 
 
-# ------------------------------------------------------------ packaged prompts
-
 PACKAGED_PROMPTS: tuple[tuple[str, Callable[[], str], str], ...] = (
     (layout.SEO_PROMPT_FILE, default_seo_prompt_text, "AI SEO"),
     (layout.BRIEF_PROMPT_FILE, default_brief_prompt_text, "design brief"),
@@ -337,8 +291,6 @@ here is the seller's own and `setup` never touches it."""
 
 @dataclass(frozen=True)
 class PackagedPrompt:
-    """What syncing one packaged prompt did, in workspace-relative terms."""
-
     where: str
     label: str
     backup: str
@@ -348,13 +300,6 @@ class PackagedPrompt:
 
 
 def sync_packaged_prompts(root: Path, *, replace: bool) -> tuple[PackagedPrompt, ...]:
-    """Seed, check or replace each packaged prompt.
-
-    `setup` fills gaps and does not correct answers; prompts are the one
-    opt-in exception, because a workspace would otherwise never receive new
-    instructions such as `seo.md`'s market-data rules. Without ``replace``, a
-    prompt that differs from its default is left byte for byte (ADR-0044).
-    """
     outcomes: list[PackagedPrompt] = []
     for filename, default_text, label in PACKAGED_PROMPTS:
         path = root / layout.PROMPTS_DIR / filename
@@ -369,16 +314,7 @@ def sync_packaged_prompts(root: Path, *, replace: bool) -> tuple[PackagedPrompt,
     return tuple(outcomes)
 
 
-# ----------------------------------------------------------- reading and saving
-
-
 def read_shop_document(root: Path) -> dict[str, Any] | None:
-    """The current ``shop.yaml`` as a raw mapping, or ``None``.
-
-    Raw rather than a parsed ``Defaults``: a workspace whose file does not
-    validate is exactly the one `setup` should be able to repair, and parsing
-    it first would refuse the job.
-    """
     path = root / layout.SHOP_FILE
     if not path.is_file():
         return None
@@ -393,19 +329,8 @@ def save_setup(
     answers: SetupAnswers,
     existing: dict[str, Any] | None,
 ) -> Path:
-    """Store the verified token, then write ``shop.yaml``; the file's path.
-
-    Called once every question is answered, never before: a token left
-    behind by a cancelled run is a workspace that looks configured and is not.
-    ``shop.yaml`` goes last because it is the file that makes a directory a
-    workspace, so writing it means "this worked".
-
-    An existing ``shop.yaml`` is edited in place: the answers that changed
-    are spliced into the seller's text and their comments, order and line
-    endings stay; with nothing changed it is not replaced (ADR-0055). Keys
-    it gains have no field comment, since only a new file is rendered.
-    """
     scaffold.write_env_value(root, PRINTIFY_TOKEN_VAR, printify_token)
+    # shop.yaml last: it is the file that makes the directory a workspace.
     path = root / layout.SHOP_FILE
     document = shop_yaml_document(answers, existing)
     write_yaml_atomic(path, document, new=lambda: render_shop_yaml(document))

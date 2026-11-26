@@ -1,13 +1,5 @@
-"""The per-colour swatch links (ADR-0030, decision 6), set by two stages.
-
-`etsy_media` sets them after it uploads and orders the images. `etsy_videos`
-sets them again after placing a second video, because placing one means
-cutting `image_ids` short for a moment, and detaching an image deletes its
-swatch link for good -- restoring the image restores nothing else (decision
-9's "What it costs", measured). One rule and two callers, so the rule lives
-in neither: a copy in the video stage would be a second answer to "which
-image is this colour's swatch", and the first to go stale.
-"""
+"""The per-colour swatch links, set by both `etsy_media` and `etsy_videos`, so
+the rule lives in neither stage."""
 
 from __future__ import annotations
 
@@ -22,20 +14,14 @@ from etsy_listings.core.engine.stages.etsy_target import EtsyListingTarget
 
 
 def manifest_ref(entry: MediaEntry) -> str:
-    """A `media:` entry's ref in ``lock.remote``'s id maps:
-    ``"{template}:{colour}"`` for a colour-matrix render, the bare template
-    name for a `single`/`multiple` one, and a file ref as written. Stable
-    across a re-render, since the render's own output path does not appear
-    in it. Both stages key their ids by it, and the video stage reads the
-    image stage's ids back through it to cut and restore `image_ids`."""
+    """The key of ``lock.remote``'s image and video id maps. It holds no
+    render output path, so it survives a re-render."""
     if isinstance(entry, str):
         return entry
     return f"{entry.template}:{entry.colour}" if entry.colour is not None else entry.template
 
 
 def swatch_refs(media: Sequence[MediaEntry], template: str | None) -> dict[str, str]:
-    """colour slug -> manifest ref, for every `media:` entry drawn from the
-    `variation_images:` template. Empty when the feature is off."""
     if template is None:
         return {}
     return {
@@ -54,10 +40,6 @@ def set_variation_images(
     colours: tuple[str, ...],
     image_id_by_colour: Mapping[str, int],
 ) -> None:
-    """Bind each colour's swatch to its image, through Etsy's own colour
-    property. Skipped, loudly, when the inventory has no single property
-    matching the listing's colours -- decision 6's "reports and does
-    nothing", not a failure."""
     client, shop_id, listing_id = target.client, target.shop_id, target.listing_id
     inventory = client.get_listing_inventory(listing_id)
     colour_property = resolve_colour_property(inventory, colours, ctx.workspace.load_exceptions())

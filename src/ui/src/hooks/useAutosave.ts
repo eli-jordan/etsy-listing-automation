@@ -32,18 +32,12 @@ interface UseAutosave extends Pick<ListingAutosave, "update" | "adopt" | "flush"
   save: SaveState;
 }
 
-/**
- * {@link ListingAutosave} for a React editor: one per mount, on the name,
- * document and transport it mounted with, flushed on unmount so a listing
- * switch (or navigating away) never drops the last few hundred milliseconds of
- * typing. A listing switch remounts the editor while the next one loads.
- */
+/** One per mount: a listing switch remounts the editor. */
 export function useAutosave(
   name: string | null,
   initial: ListingDetail,
   options: {
     onNamed?: (name: string, fresh: ListingDetail) => void;
-    /** The listing's by default. */
     transport?: AutosaveTransport;
   } = {},
 ): UseAutosave {

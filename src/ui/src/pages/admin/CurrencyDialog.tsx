@@ -3,30 +3,19 @@ import { useEffect, useRef, useState } from "react";
 import type { ShopSettings } from "../../api/shop";
 import { AlarmDialog } from "./AlarmDialog";
 
-/**
- * The currency danger zone's warning (interactions, *Connected shops and
- * currency*). Opening it writes nothing; Change stays disabled until the
- * acknowledgement is ticked, which starts unticked every time. Keep, the
- * close button, Escape and the backdrop all cancel. Focus stays inside.
- *
- * The copy is the production correction of the prototype's: a saved price
- * keeps the currency written beside it (ADR-0006, ADR-0019); it is never
- * reread in the new currency.
- */
 export function CurrencyDialog({
   current,
   currencies,
-  shopCurrency,
+  etsyShopCurrency,
   onCancel,
   onConfirm,
 }: {
   current: string;
   currencies: ShopSettings["supported_currencies"];
-  /** What the live Etsy shop sells in, when a lookup read it. */
-  shopCurrency: string | null;
+  etsyShopCurrency: string | null;
   onCancel: () => void;
-  /** Resolves once saved; rejects with the reason to show. */
-  onConfirm: (code: string) => Promise<void>;
+  /** The refusal to show, or null once saved. */
+  onConfirm: (code: string) => Promise<string | null>;
 }) {
   const offered = currencies.filter((c) => c.code !== current);
   const [next, setNext] = useState(offered[0]?.code ?? current);
@@ -40,10 +29,11 @@ export function CurrencyDialog({
   const confirm = async () => {
     setBusy(true);
     setError(null);
-    try {
-      await onConfirm(next);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "could not save shop.yaml");
+    const failure = await onConfirm(next).catch((reason: unknown) =>
+      reason instanceof Error ? reason.message : "could not save shop.yaml",
+    );
+    if (failure !== null) {
+      setError(failure);
       setBusy(false);
     }
   };
@@ -66,10 +56,10 @@ export function CurrencyDialog({
             <strong>Existing listings stay as they are.</strong> Listings already on Etsy keep their
             prices, and Etsy's own shop currency does not change.
           </li>
-          {shopCurrency !== null && next !== shopCurrency && (
+          {etsyShopCurrency !== null && next !== etsyShopCurrency && (
             <li>
-              <strong>Your Etsy shop sells in {shopCurrency}.</strong> A different currency here no
-              longer matches it.
+              <strong>Your Etsy shop sells in {etsyShopCurrency}.</strong> A different currency here
+              no longer matches it.
             </li>
           )}
         </ul>

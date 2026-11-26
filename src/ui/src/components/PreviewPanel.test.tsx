@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
+import { deferred } from "../test/helpers";
 import { PreviewPanel, type PreviewJob } from "./PreviewPanel";
 
 const BOX: PreviewJob["body"] = {
@@ -176,6 +177,19 @@ describe("PreviewPanel", () => {
 
     unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:one");
+  });
+
+  it("revokes a render that lands after the tab has gone, and renders nothing more", async () => {
+    const late = deferred<string>();
+    const spy = vi.spyOn(calibrator, "renderPreview").mockReturnValue(late.promise);
+    const { unmount } = setup();
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+
+    unmount();
+    await act(async () => late.resolve("blob:late"));
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:late");
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("clicking a tile opens it large, and Escape closes it", async () => {

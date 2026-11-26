@@ -1,19 +1,3 @@
-"""The ``new`` wizard: a design, garment, provider, template and pricing
-plan picked in turn, and a listing stub written from the answers.
-
-Thin by design. This module only sequences the questions and says what
-happened; *how* a question gets asked is :mod:`etsy_listings.cli.prompts`,
-which picks a backend that can actually drive the terminal it was given
-(questionary cannot, under cygwin), and the rows each picker offers are
-:mod:`etsy_listings.cli.pickers`'. Every decision and write is core's --
-:mod:`~etsy_listings.core.application.garment_profiles`,
-:mod:`~etsy_listings.core.application.pricing_plans` and
-:mod:`~etsy_listings.core.application.listing_creation` -- which the
-behaviour tests also drive through a fake catalog without prompting.
-
-:func:`run_new` is the interface.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,6 +9,7 @@ from etsy_listings.cli.pickers import (
     CREATE_NEW_PLAN_LABEL,
     LOCAL_MARKER,
     LOCAL_MARKER_FALLBACK,
+    Choice,
     build_blueprint_choices,
     build_design_choices,
     build_pricing_plan_choices,
@@ -57,19 +42,10 @@ from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
-MIN_SIZES_TO_COMPARE = 2  # one print area has nothing to be the largest of
+MIN_SIZES_TO_COMPARE = 2
 
 
 def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Blueprint:
-    """Pick from ``marker brand model title`` rows.
-
-    Even ``--category tshirt`` leaves dozens of blueprints, and Printify's
-    titles bury the useful word in the middle ("Unisex Garment-Dyed Heavy
-    Weight Tee"), so a scrolling list is the wrong instrument. Garments this
-    workspace already has a garment profile for sort to the top and carry a marker: a
-    shop reuses a handful of blueprints, and re-finding the one used yesterday
-    is this picker's most common job.
-    """
     marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
     choices = build_blueprint_choices(blueprints, local_blueprint_keys(workspace), marker=marker)
     return prompts.pick(
@@ -81,9 +57,8 @@ def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Bluepr
 
 
 def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> PrintProvider:
-    """The shop's ``preferred_print_provider`` sorts first when it is offered,
-    so the common case is the first row rather than a default the fuzzy
-    backends have no way to express."""
+    """The shop's ``preferred_print_provider`` sorts first: the fuzzy backends
+    have no way to express a default."""
     preferred = workspace.defaults.printify.preferred_print_provider
     ordered = sorted(providers, key=lambda p: (p.title != preferred, p.title.lower()))
     return prompts.pick("Print provider", ordered, label=lambda provider: provider.title)
@@ -92,10 +67,8 @@ def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> Prin
 def _report_print_area_choice(variant_set: VariantSet) -> None:
     """Say so when the garment profile's print area is one of several on offer.
 
-    Printify's print areas are per-variant and genuinely differ by garment
-    size. The garment profile carries exactly one, so `new` records the
-    largest -- a defensible default, but not one worth making silently, since
-    it decides how big the design file has to be.
+    Printify's print areas differ by garment size and the profile records
+    only the largest, which decides how big the design file has to be.
     """
     sizes = variant_set.placeholder_sizes(DEFAULT_PLACEHOLDER)
     if len(sizes) < MIN_SIZES_TO_COMPARE:
@@ -111,11 +84,8 @@ def _report_print_area_choice(variant_set: VariantSet) -> None:
 def _pick_design(workspace: Workspace) -> str:
     """Pick the design from what is in ``designs/``, newest first.
 
-    ``new`` is a wizard, and the design was the one answer it still demanded
-    up front on the command line -- which meant knowing the exact stem of a
-    file you had just exported. Everything the picker needs is on disk, so it
-    asks like it asks everything else. The argument still works, for scripting
-    and for naming artwork that does not exist yet.
+    The ``new`` argument still works, for scripting and for naming artwork
+    that does not exist yet.
     """
     choices = build_design_choices(workspace.design_files(), set(workspace.listing_names()))
     if not choices:
@@ -132,13 +102,6 @@ def _pick_design(workspace: Workspace) -> str:
 
 
 def _pick_template(workspace: Workspace) -> str:
-    """Pick from the templates that exist, rather than typing a name.
-
-    A typo used to be accepted silently and produce a listing that failed
-    much later at render time, with nothing pointing back at `new`. Reading
-    the template is not optional anyway -- its kind decides the shape of a
-    valid `media` entry -- so it may as well be picked from the list.
-    """
     names = workspace.template_names()
     if not names:
         typer.echo(
@@ -153,13 +116,7 @@ def _pick_template(workspace: Workspace) -> str:
 def _report_media_choice(
     template: str, kind: str, colours: list[str], media: list[dict[str, str]]
 ) -> None:
-    """Say what got a photo and what did not.
-
-    Both branches are surprising in silence: a `single`/`multiple` template
-    renders one image no matter how many colours sell, and a `colour-matrix`
-    one has to stop at Etsy's 20-image limit while the listing still sells
-    every colour.
-    """
+    """Say what got a photo and what did not."""
     if kind != "colour-matrix":
         typer.echo(
             f"{template} is a {kind}-kind template: one image for the listing, "
@@ -175,13 +132,7 @@ def _report_media_choice(
 
 
 def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
-    """A warning, not an error: writing the listing before the artwork exists
-    is a legitimate order to work in. But ``new`` derives the path from the
-    argument without ever looking, so a name that does not match the file on
-    disk -- ``duke-java-developer.png`` saved as ``duke-java-developer.png.png``
-    is the easy way to get there -- surfaces much later as a render failure
-    about a file the user believes they created.
-    """
+    """Warn, and name a near miss such as ``<name>.png.png``."""
     path = workspace.design_file(design_name)
     if path.is_file():
         return
@@ -193,21 +144,21 @@ def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
 def _pick_or_create_pricing_plan(
     workspace: Workspace, catalog: CatalogClient, offer: GarmentOffer
 ) -> Path:
-    """Returns the chosen/generated plan's absolute path -- turning that into
-    a ref is the caller's job (`pricing_plan_ref`, ADR-0046)."""
     candidates = load_candidate_pricing_plans(workspace)
-    choices = build_pricing_plan_choices(candidates, offer.garment_profile_slug)
-    rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]
-    by_label = {c.label: c for c in choices}
+    rows: list[Choice[Path | None]] = [
+        *build_pricing_plan_choices(candidates, offer.garment_profile_slug),
+        Choice(value=None, label=CREATE_NEW_PLAN_LABEL),
+    ]
 
     marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
-    # `ask_choice` rather than `pick`: one of the rows is a sentinel that is
-    # not a plan at all, so there is no option to map it back to.
-    answer = prompts.ask_choice(
-        "Pricing plan", rows, marker_hint=f"{marker.strip()} = sizes match this garment exactly"
-    )
+    answer = prompts.pick(
+        "Pricing plan",
+        rows,
+        label=lambda row: row.label,
+        marker_hint=f"{marker.strip()} = sizes match this garment exactly",
+    ).value
 
-    if answer == CREATE_NEW_PLAN_LABEL:
+    if answer is None:
         name = prompts.ask_text("Pricing plan name:")
         created = create_starting_pricing_plan(
             workspace, PriceSources(catalog), name=name, offer=offer
@@ -220,14 +171,11 @@ def _pick_or_create_pricing_plan(
             )
         return created.path
 
-    return by_label[answer].value
+    return answer
 
 
 def _reject_existing_listing(workspace: Workspace, design_name: str) -> None:
-    """Creating the listing refuses a taken name, but it is the *last* thing
-    ``new`` does, so without this check the whole wizard would run before
-    saying no. It is checked here rather than only on the picked row,
-    because a name given as the argument reaches the same dead end."""
+    """Refuse a taken name before the wizard asks anything."""
     if not ListingDocuments(workspace).is_free(design_name):
         typer.echo(f"a listing already exists at {workspace.listing_dir(design_name)}", err=True)
         raise typer.Exit(code=1)

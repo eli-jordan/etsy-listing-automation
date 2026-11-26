@@ -1,29 +1,4 @@
-"""The OAuth tokens on disk, and the only code that rotates them.
-
-Etsy issues a new **refresh** token on every refresh, so the file write is
-part of the protocol rather than a cache of it: lose the write and the next
-run has no way back to a working credential except the browser. Everything
-here follows from that.
-
-- The write is **atomic and lands before the new access token is used**, so a
-  crash mid-rotation leaves either the old pair or the new one, never a
-  half-file and never a rotated-but-unrecorded token.
-- Refresh is **serialised in-process per token file**, because `plan` fans
-  its read-only fetches across a thread pool, and the Admin page's
-  connection and lookup requests each build their own store: two refreshes
-  of the same token would each invalidate the other's. The lock belongs to
-  the resolved file, not to a store, so every store for one file shares it
-  and stores for other workspaces never wait on it.
-- An `invalid_grant` is **re-read before it is believed**: a second process
-  may have rotated the pair a moment ago, and the answer to that is to use
-  what it wrote, not to send the user to a browser. That re-read is the only
-  defence across processes: a process that refreshes between this one's
-  refresh and its save still races it, which no in-process lock can close.
-
-The store never builds a client. It is handed a `refresh` callable, because
-the token endpoint is the one Etsy endpoint that needs no bearer -- which is
-what keeps this module free of a cycle through:mod:`transport`.
-"""
+"""The OAuth tokens on disk, and the only code that rotates them."""
 
 from __future__ import annotations
 
@@ -54,18 +29,8 @@ RENEW_WARNING = timedelta(days=14)
 
 
 class EtsyAuthError(UserFacingError, RuntimeError):
-    """There is no usable Etsy credential, and no retry will produce one.
-
-    Raised where a token is *needed*, never where one is merely absent, so the
-    message can always name the command that fixes it. Also what
-    :mod:`transport` raises on a 401: from the caller's side, a rejected token
-    and a missing one call for the same next step.
-
-    Naming the command that fixes it is the definition of a
-    :class:`~etsy_listings.core.errors.UserFacingError`; being one is what keeps a
-    signed-out workspace reporting that fact per listing rather than aborting
-    the run on the first.
-    """
+    """There is no usable Etsy credential, and no retry will produce one:
+    missing where a token is needed, or rejected with a 401."""
 
     def __init__(self, detail: str) -> None:
         super().__init__(f"{detail}\n  Run `etsy-listings auth` to sign in to Etsy again.")
@@ -73,20 +38,13 @@ class EtsyAuthError(UserFacingError, RuntimeError):
 
 class EtsyRefreshBusyError(UserFacingError, RuntimeError):
     """Another store's refresh of the same token file outlasted
-    :data:`ROTATION_WAIT_SECONDS`. The sign-in is not known to be dead, so
-    this asks for a retry, never a new sign-in."""
+    :data:`ROTATION_WAIT_SECONDS`; a retry, not a new sign-in, is the fix."""
 
 
 @dataclass(frozen=True)
 class StoredTokens:
-    """What ``.auth/etsy-tokens.json`` holds.
-
-    Timestamps are absolute and stored as ISO-8601 UTC rather than the
-    `expires_in` seconds Etsy sends: a duration is only meaningful next to the
-    instant it was received, and this file outlives the process that wrote it.
-    Written in a form a human can read, because "when does this expire?" is a
-    question the file should be able to answer on its own.
-    """
+    """What ``.auth/etsy-tokens.json`` holds, with expiries as absolute
+    ISO-8601 instants rather than Etsy's ``expires_in`` seconds."""
 
     access_token: str
     refresh_token: str
@@ -113,13 +71,7 @@ class StoredTokens:
 
     @classmethod
     def parse(cls, document: Any) -> StoredTokens | None:
-        """The stored document, or ``None`` if it cannot be read.
-
-        ``None`` for both "not there" and "will not decode", the same answer
-        the lockfile gives for the same reason: a credential file we cannot
-        read is one we cannot prove anything about, and guessing at half of it
-        is worse than asking the user to sign in again.
-        """
+        """The stored document, or ``None`` if it is absent or will not decode."""
         if not isinstance(document, dict):
             return None
         try:
@@ -173,8 +125,6 @@ def _rotation_lock(path: Path) -> threading.Lock:
 
 
 class TokenStore:
-    """Reads, refreshes and writes the token file. The only writer of it."""
-
     def __init__(
         self,
         path: Path,
@@ -191,11 +141,6 @@ class TokenStore:
         return self._path
 
     def load(self) -> StoredTokens | None:
-        """What is on disk, without refreshing anything.
-
-        For `auth --check` and for the wizard's "you are already signed in" --
-        the questions that want the stored state rather than a usable token.
-        """
         try:
             raw = self._path.read_text(encoding="utf-8")
         except OSError:
@@ -207,15 +152,8 @@ class TokenStore:
         return StoredTokens.parse(document)
 
     def save(self, tokens: StoredTokens) -> None:
-        """Write atomically, then tighten the mode as far as the platform
-        allows.
-
-        `os.replace` over a temp file in the same directory is the write; the
-        `chmod` is best-effort and deliberately not checked. On Windows -- the
-        platform this is developed on -- it sets a read-only bit and is not an
-        access control at all, so failing the run over it would be enforcing a
-        guarantee we cannot make either way.
-        """
+        """Write atomically. The ``chmod`` is best-effort: on Windows it only
+        sets the read-only bit."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         temp = self._path.with_name(self._path.name + ".tmp")
         temp.write_text(json.dumps(tokens.to_document(), indent=2) + "\n", encoding="utf-8")
@@ -224,19 +162,11 @@ class TokenStore:
         temp.replace(self._path)
 
     def record(self, response: TokenResponse) -> StoredTokens:
-        """Store the result of a fresh authorization-code grant."""
         tokens = StoredTokens.from_response(response, now=self._now())
         self.save(tokens)
         return tokens
 
     def access_token(self) -> str:
-        """A token good for the next few minutes, refreshing if needed.
-
-        This is the callable the transport is built with, and it is resolved
-        lazily on every request rather than once at construction -- `plan`
-        builds clients it may never call, and a workspace that has not reached
-        Phase 3 must not be made to sign in to build one.
-        """
         lock = _rotation_lock(self._path)
         if not lock.acquire(timeout=ROTATION_WAIT_SECONDS):
             raise EtsyRefreshBusyError(
@@ -256,14 +186,6 @@ class TokenStore:
             lock.release()
 
     def _rotate(self, stored: StoredTokens) -> StoredTokens:
-        """Exchange the refresh token, tolerating a rotation we did not make.
-
-        The re-read is the whole point: two runs in parallel each hold a pair,
-        the first rotates, and the second's `invalid_grant` means "you are
-        holding yesterday's token", not "the user must sign in". Re-reading
-        answers which of the two it was, and only a genuinely dead grant
-        reaches the user.
-        """
         try:
             response = self._refresh(stored.refresh_token)
         except OAuthError as exc:
@@ -280,8 +202,6 @@ class TokenStore:
             ) from exc
 
         rotated = StoredTokens.from_response(response, now=self._now())
-        # Saved before it is returned, never after: a caller that used a token
-        # this process failed to record would leave the file naming a refresh
-        # token Etsy has already retired.
+        # Saved before it is returned (ADR-0027).
         self.save(rotated)
         return rotated

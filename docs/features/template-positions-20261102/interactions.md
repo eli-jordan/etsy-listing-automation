@@ -224,7 +224,10 @@ The confirmation lists:
 2. which saved listing positions fall outside the new limits, by listing name,
    with "they will block deploying until edited". When none do, the bullet
    reads "Nothing else changes. Saved positions stay as they are; none fall
-   outside the new limits."
+   outside the new limits." A position refused whatever the limits (not a
+   plain move, resize or tilt, or naming a template not in `media`, unavailable
+   or a placement that no longer exists) is not listed: that listing is
+   blocked already, and new limits change nothing about it.
 
 **Save** writes `settings.yaml` through the same validated,
 revision-checked save as the AI settings, closes on success and queues any

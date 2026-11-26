@@ -36,9 +36,6 @@ width would quietly fill that directory with one pair per window size.
 
 @dataclass(frozen=True)
 class PreviewQuery:
-    """The query parameters every saved-scene preview takes: the depicted
-    ``colour`` (colour-matrix scenes) and the raster ``scale``."""
-
     colour: str | None = None
     scale: PreviewScale = "full"
 
@@ -97,7 +94,6 @@ def _identity_headers(scene: RenderedScene) -> dict[str, str]:
 
 
 def scene_response(picture: ScenePicture, *, if_none_match: str | None = None) -> Response:
-    """``picture`` as a response; ``304`` when ``if_none_match`` names it."""
     if isinstance(picture, SceneFrame):
         return _frame_response(picture)
     headers = _identity_headers(picture)

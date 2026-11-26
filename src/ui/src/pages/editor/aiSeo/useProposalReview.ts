@@ -34,13 +34,6 @@ function settleResolution(current: ReviewSession, job: ResolutionJob): boolean {
   return true;
 }
 
-/**
- * One owner for proposal identity, live-event/cache precedence and
- * optimistic drawer resolutions. Resolution writes are serial; pending
- * choices overlay reads until acknowledged, so autosave cannot reopen a
- * drawer while its resolution is still in flight. Accepted content keeps
- * travelling through ordinary autosave, independently of these cache writes.
- */
 export function useProposalReview(
   detail: ListingDetail,
   onUpdate: (patch: Record<string, unknown>) => void,
@@ -114,7 +107,6 @@ export function useProposalReview(
   const onProposal = useCallback(
     (event: Extract<AiRunEvent, { type: "proposal" }>, source: AiRunSummary) => {
       const current = session.current;
-      // Finished-run replay is history. The server record owns resolutions.
       if (current === null || source.listing !== current.name || source.phase !== "running") return;
       ++current.version;
       const { proposal, resolution, snapshot, stale, generated_at, origin } = event;
@@ -125,7 +117,6 @@ export function useProposalReview(
 
   const drain = useCallback(
     function send(current: ReviewSession): void {
-      // Navigation stops observations, but already-chosen resolutions still persist.
       if (current.active) return;
       const job = current.queue.shift();
       if (job === undefined) return;
@@ -141,9 +132,6 @@ export function useProposalReview(
           ++current.version;
           if (next === null) read(current);
           else if (changedWhileSaving && current.record !== null) {
-            // A later read may have judged this proposal stale. Acknowledge
-            // the section without replacing that newer comparison, then
-            // reread in case a save's request was still in flight.
             commit(current, {
               ...current.record,
               resolution: { ...current.record.resolution, [job.section]: job.state },

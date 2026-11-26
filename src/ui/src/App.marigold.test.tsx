@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { CalibratorPage } from "./App";
 import * as calibrator from "./api/calibrator";
 import * as prep from "./api/preparation";
 import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/writeLoop";
@@ -73,7 +73,7 @@ afterEach(() => {
 describe("App Marigold workflow", () => {
   it("restores inactive renderer settings and never prepares on selection", async () => {
     const start = vi.spyOn(prep, "prepareTemplate");
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByLabelText("Renderer");
     fireEvent.change(screen.getByLabelText("Renderer"), { target: { value: "marigold" } });
     expect(screen.getByText("Advanced settings", { exact: false })).toBeInTheDocument();
@@ -126,7 +126,7 @@ describe("App Marigold workflow", () => {
         engine_version: null,
       };
     });
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByLabelText("Renderer");
     await waitFor(() => expect(prep.getPreparation).toHaveBeenCalled());
     fireEvent.change(screen.getByLabelText("Renderer"), { target: { value: "marigold" } });
@@ -147,7 +147,7 @@ describe("App Marigold workflow", () => {
       new calibrator.TemplateConflictError(),
     );
     const start = vi.spyOn(prep, "prepareTemplate");
-    render(<App />);
+    render(<CalibratorPage />);
     fireEvent.change(await screen.findByLabelText("Renderer"), { target: { value: "marigold" } });
     const button = screen.getByRole("button", { name: "Prepare template" });
     await waitFor(() => expect(button).toBeEnabled());
@@ -164,7 +164,7 @@ describe("App Marigold workflow", () => {
       modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
       revision: "sha256:revision",
     });
-    render(<App />);
+    render(<CalibratorPage />);
     fireEvent.click(await screen.findByText("Advanced settings", { exact: false }));
     fireEvent.click(screen.getByText("Save settings"));
     await act(async () => {});
@@ -207,7 +207,7 @@ it("authorizes changed-photo mask recovery explicitly and preserves calibration 
     waiting_for_backup: false,
     engine_version: null,
   });
-  render(<App />);
+  render(<CalibratorPage />);
   await screen.findByLabelText("Renderer");
   fireEvent.change(screen.getByLabelText("Fabric texture"), { target: { value: "51" } });
   const button = screen.getByRole("button", { name: "Reset masks and prepare" });
@@ -240,7 +240,7 @@ it("shows loading while a saved template config is pending instead of kind assig
     },
   );
   vi.mocked(calibrator.getTemplateConfig).mockReturnValue(pending);
-  render(<App />);
+  render(<CalibratorPage />);
   await screen.findByText("Loading template...");
   expect(screen.queryByText(/Choose a template kind/)).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Renderer")).not.toBeInTheDocument();
@@ -265,7 +265,7 @@ it("never treats retained Photo warp readiness as prepared Marigold maps", async
     active_job: null,
   });
   const submit = vi.spyOn(prep, "prepareTemplate");
-  render(<App />);
+  render(<CalibratorPage />);
   await screen.findByLabelText("Renderer");
   await waitFor(() => expect(prep.getPreparation).toHaveBeenCalled());
   fireEvent.change(screen.getByLabelText("Renderer"), { target: { value: "marigold" } });
@@ -293,7 +293,7 @@ it("shows Preparing while an explicit prepare request is pending", async () => {
     finishRuntime = resolve;
   });
   vi.mocked(prep.getRuntime).mockReturnValue(pendingRuntime);
-  render(<App />);
+  render(<CalibratorPage />);
   const button = await screen.findByRole("button", { name: "Prepare again" });
   expect(button).toBeDisabled();
   expect(prep.prepareTemplate).not.toHaveBeenCalled();
@@ -317,7 +317,7 @@ it("waits for the current composite before autosaving and refreshing readiness",
   vi.mocked(calibrator.renderPreview)
     .mockResolvedValueOnce("blob:initial")
     .mockReturnValue(edited.promise);
-  render(<App />);
+  render(<CalibratorPage />);
   const texture = await screen.findByLabelText("Fabric texture");
   await waitFor(() => expect(calibrator.renderPreview).toHaveBeenCalledTimes(1));
   fireEvent.change(texture, { target: { value: "62" } });
@@ -350,7 +350,7 @@ it("resumes fresh readiness when a pending Marigold preview is unmounted by rend
   vi.mocked(calibrator.renderPreview)
     .mockImplementationOnce(() => new Promise<string>((resolve) => (finish = resolve)))
     .mockResolvedValue("blob:photo-warp");
-  render(<App />);
+  render(<CalibratorPage />);
   await screen.findByLabelText("Fabric texture");
   await waitFor(() => expect(calibrator.renderPreview).toHaveBeenCalledTimes(1));
   const reads = vi.mocked(prep.getPreparation).mock.calls.length;

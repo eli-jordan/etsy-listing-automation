@@ -1,19 +1,8 @@
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { SheetGrabber } from "../phone/SheetGrabber";
 
-/**
- * An in-app confirm. `window.confirm` is browser chrome the rest of the
- * page is not, so a listing retract has to look like the rest of the shell.
- *
- * `details` is a collapsed disclosure, not always-on copy: the question is
- * the decision, the explanation is there for whoever wants it.
- *
- * `children` is a body for a question that needs an answer before it can be
- * confirmed -- which file to keep when a light/dark pair is linked again
- * (`ChooseBaseDialog`) -- and `confirmDisabled` holds the confirm back until
- * it has one. One dialog rather than a second copy of the backdrop, the
- * Escape handling and the action row (multi-artwork plan, *Link dialog*).
- */
+/** An in-app confirm: `window.confirm` is browser chrome that cannot be
+ * styled like the shell. */
 
 interface Props {
   title: string;
@@ -21,7 +10,6 @@ interface Props {
   details?: string;
   children?: ReactNode;
   confirmDisabled?: boolean;
-  /** Extra class on the dialog box, for a body that needs more room. */
   className?: string;
   onConfirm: () => void;
   onCancel: () => void;
