@@ -1109,6 +1109,17 @@ later. Each traces to a decision.
   normalised values the seller never wrote stay out. Only a new file is
   rendered whole, in its owner's layout. Garment profiles and pricing plans are
   create-if-absent and never touch an existing file (ADR-0055).
+  The mechanism: ruamel's composer gives each node's exact span, the smallest
+  node whose value changed is re-rendered with ruamel at that spot, and every
+  other byte is copied through, because even a ruamel round-trip dump would
+  normalise indentation, quoting and line endings the seller never touched.
+  Values are compared with PyYAML's `safe_load`, the reader every owner uses,
+  and ruamel is held to the same YAML 1.1 rules, so a rendered `'yes'` stays a
+  string. The result is read back and must equal the intended document; when it
+  cannot (an edit through an alias, say) the edit is refused and the owner
+  writes nothing. Ordered rows with a declared identity, such as the named AI
+  providers (ADR-0056), move with their source text when reordered, so a
+  comment stays with its provider rather than its index.
 - **A client is built through `core/connections.py`.** Which credential is
   resolved when, what a missing one means, and where the Etsy token file lives
   are one set of answers, not four (`cli`, `setup`, `auth` and the e2e layer

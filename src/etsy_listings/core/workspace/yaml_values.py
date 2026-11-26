@@ -18,8 +18,6 @@ def plain(value: object) -> Any:
 
 
 def same(a: object, b: object) -> bool:
-    """Equal as a reader sees them: key order ignored, but ``1``, ``1.0`` and
-    ``True`` are three different values in a file."""
     if type(a) is not type(b):
         return False
     if isinstance(a, dict):
@@ -46,8 +44,6 @@ def merge(source: Any, before: Any, after: Any) -> Any:
 def _merge_key(
     result: dict[Any, Any], before: dict[Any, Any], key: Any, value: Any, *, order: list[Any]
 ) -> dict[Any, Any]:
-    """``result`` with ``key`` changed to ``value``: merged where the source
-    still holds it, else placed by ``order``."""
     if key in before and key in result:
         result[key] = merge(result[key], before[key], value)
         return result
@@ -57,8 +53,6 @@ def _merge_key(
 def _insert_after_predecessor(
     mapping: dict[Any, Any], key: Any, value: Any, *, order: list[Any]
 ) -> dict[Any, Any]:
-    """``mapping`` with ``key`` placed after the nearest key that precedes it
-    in ``order`` and is already present, else last."""
     if key in mapping:
         mapping[key] = value
         return mapping

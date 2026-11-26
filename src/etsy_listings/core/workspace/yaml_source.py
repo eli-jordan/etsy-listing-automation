@@ -1,25 +1,4 @@
-"""Edit a YAML document's values without rewriting the rest of it. ADR-0055.
-
-Workspace YAML is seller-edited source: comments explain choices, key order
-follows the seller's thinking, and the file may have CRLF line endings because
-it was last saved on Windows. Dumping a changed mapping loses all of that, and
-even a ruamel round-trip dump normalises indentation, quoting and line endings
-the seller never touched. So an edit here is a set of splices into the original
-text: ruamel's composer gives each node's exact span, the smallest node whose
-value changed is re-rendered with ruamel at that spot, and every other byte is
-copied through. A document whose values did not change comes back as the very
-same string, so its owner writes nothing.
-
-Values are compared and checked with PyYAML's ``safe_load``, the reader every
-owner uses, and ruamel is held to the same YAML 1.1 rules so a rendered
-``'yes'`` stays a string for that reader. After splicing, the result is read
-back and must equal the intended document exactly. When it cannot -- an edit
-through an alias, say -- :class:`UneditableYamlError` is raised and the owner writes
-nothing, rather than writing a file that means something else.
-
-Owners do the reading, locking and atomic replacement; this module only turns
-old text into new text. It never decides a path or creates a file.
-"""
+"""Edit a YAML document's values without rewriting the rest of it (ADR-0055)."""
 
 from __future__ import annotations
 
@@ -55,9 +34,6 @@ _YAML_VERSION = (1, 1)
 
 
 class UneditableYamlError(UserFacingError, ValueError):
-    """The edit cannot be made in place without changing what the file means,
-    such as a value shared through a YAML alias. Nothing is written."""
-
     def __init__(self, detail: str) -> None:
         super().__init__(f"cannot edit this YAML file in place: {detail}")
 
@@ -69,8 +45,6 @@ def edit_yaml_bytes(
     before: object = UNSET,
     sequence_keys: Mapping[tuple[str, ...], str] | None = None,
 ) -> bytes:
-    """:func:`edit_yaml` over UTF-8 file bytes, keeping a byte-order mark.
-    Returns ``source`` itself when nothing changes."""
     bom = codecs.BOM_UTF8 if source.startswith(codecs.BOM_UTF8) else b""
     text = source[len(bom) :].decode("utf-8")
     edited = edit_yaml(text, after, before=before, sequence_keys=sequence_keys)
@@ -78,10 +52,8 @@ def edit_yaml_bytes(
 
 
 def without_top_level_key(source: bytes, key: str) -> bytes:
-    """``source`` with its top-level ``key`` taken out by the same text-preserving
-    edit that writes it, so removing what a save added gives back the bytes from
-    before. ``source`` itself when it has no such key, when it does not parse, or
-    when the key cannot be removed, such as a value shared through a YAML alias."""
+    """The same text-preserving edit, so taking out what a save added gives back
+    the bytes from before (the render hash relies on it)."""
     if key.encode("utf-8") not in source:
         return source
     try:
@@ -100,19 +72,9 @@ def edit_yaml(
     before: object = UNSET,
     sequence_keys: Mapping[tuple[str, ...], str] | None = None,
 ) -> str:
-    """``source`` changed so that it reads as ``after``, or ``source`` itself
-    when it already does (key order is not a change).
-
-    With ``before``, the edit is three-way: only the values that differ
-    between ``before`` and ``after`` are applied to what ``source`` holds.
-    An owner that writes a model dump passes the dump of the model it read, so
-    defaults the seller never wrote stay unwritten and a ``25`` the model
-    reads as ``"25.00"`` stays ``25``.
-
-    ``sequence_keys`` declares stable identities for ordered mapping rows,
-    or :data:`ITSELF` for rows of plain values. Reordering or removing those
-    rows moves their original source, including comments.
-    """
+    """``source`` itself when it already reads as ``after``. With ``before`` the
+    edit is three-way. ``sequence_keys`` names the identity of ordered rows
+    (:data:`ITSELF` for plain values), whose source moves with them."""
     try:
         return _edited(source, after, before=before, sequence_keys=sequence_keys)
     except (yaml.YAMLError, RoundTripYamlError) as exc:
@@ -145,8 +107,7 @@ def _is_flow(node: Node) -> bool:
     return bool(getattr(node, "flow_style", False))
 
 
-class _InPlaceRefusedError(Exception):
-    """A collection cannot be edited line by line; replace it whole."""
+class _InPlaceRefusedError(Exception): ...
 
 
 Replace = Callable[[Any], None]
@@ -154,8 +115,6 @@ Replace = Callable[[Any], None]
 
 @dataclass(frozen=True)
 class _Rows:
-    """A block sequence's items, where each one's dash is, and the dashes' column."""
-
     items: list[Node]
     dashes: list[int]
     column: int
@@ -173,8 +132,6 @@ def _common_ends(old: list[Any], new: list[Any]) -> tuple[int, int]:
 
 
 def _children(node: Node) -> list[Node]:
-    """What `_Editor._detect_indentation` looks inside next: every sequence
-    item, and a block mapping's values. A flow mapping is not entered."""
     if isinstance(node, SequenceNode):
         return list(node.value)
     if isinstance(node, MappingNode) and not _is_flow(node):
@@ -195,7 +152,6 @@ def _first(values: Iterable[int | None]) -> int | None:
 
 
 def _nested_blocks(node: Node) -> list[tuple[Node, Node]]:
-    """A block mapping's entries whose value is itself a non-empty block."""
     if not isinstance(node, MappingNode) or _is_flow(node):
         return []
     return [
@@ -264,13 +220,11 @@ class _Editor:
         except _InPlaceRefusedError:
             pass
         if _is_flow(node) and isinstance(new, (dict, list)) and new:
-            self._flow_replacer(node)(new)  # a flow collection stays one
+            self._flow_replacer(node)(new)
         else:
             replace(self._styled(node, new))
 
     def _edit_collection(self, node: Node, old: Any, new: Any) -> bool:
-        """Edit a mapping or sequence entry by entry; False when ``node`` and
-        the values are not the same kind of collection."""
         if isinstance(node, MappingNode) and isinstance(old, dict) and isinstance(new, dict):
             mapping = self._edit_flow_mapping if node.flow_style else self._edit_block_mapping
             mapping(node, old, new)
@@ -282,9 +236,8 @@ class _Editor:
         return False
 
     def _key(self, node: Node) -> Any:
-        """A key as the reader reads it. Read by PyYAML from its own text,
-        not constructed by ruamel, whose YAML 1.1 rules make a plain ``y``
-        -- a bounding-box point's -- the boolean ``True``."""
+        """Read by PyYAML: ruamel's YAML 1.1 makes a bounding-box point's plain
+        ``y`` the boolean ``True``."""
         if not isinstance(node, ScalarNode):
             raise UneditableYamlError("a mapping key that is not a scalar")
         return yaml.safe_load(self.source[node.start_mark.index : node.end_mark.index])
@@ -341,7 +294,6 @@ class _Editor:
         new: dict[Any, Any],
         column: int,
     ) -> None:
-        """Each key ``new`` adds, after the nearest kept key before it."""
         ends = {key: self._content_end(value_node) for key, _, value_node in entries}
         order = list(new)
         for position, key in enumerate(order):
@@ -355,9 +307,6 @@ class _Editor:
                 self._insert_lines_before(entries[0][1].start_mark.index, lines, column)
 
     def _remove_lines(self, first: int, last: Node) -> None:
-        """Remove the whole lines from ``first`` to the end of ``last``'s content.
-        A file with no final newline keeps having none, so removing what an
-        insert added gives back the same bytes."""
         start = self._line_start(first)
         end = self._line_after(self._content_end(last))
         if start > 0 and end == len(self.source) and not self.source.endswith("\n"):
@@ -397,10 +346,6 @@ class _Editor:
                 self._insert_lines_before(rows.dashes[0], lines, rows.column)
 
     def _edit_named_sequence(self, rows: _Rows, old: list[Any], new: list[Any], key: str) -> None:
-        """ADR-0056 providers have a stable name. An index is not their
-        identity: changing names in place would attach comments to another CLI.
-        Only owners declaring that identity opt into moving source rows.
-        """
         names = [_identity(row, key) for row in old]
         if len(set(names)) != len(names):
             raise UneditableYamlError("duplicate identities in an ordered sequence")
@@ -413,8 +358,7 @@ class _Editor:
         }
         replacement = ""
         for row in new:
-            # The old EOF row has no separator to carry when it moves before
-            # another row. Only insert that necessary line boundary.
+            # The old last row has no newline to carry when it moves up.
             if replacement and not replacement.endswith("\n"):
                 replacement += self.newline
             replacement += self._named_row(row, fragments.get(_identity(row, key)), rows.column)
@@ -424,7 +368,6 @@ class _Editor:
         self.edits.append((starts[0], end, len(self.edits), replacement))
 
     def _named_row(self, row: Any, fragment: tuple[Any, str] | None, column: int) -> str:
-        """``row``'s text: its old source edited when it had one, else rendered."""
         if fragment is not None:
             original, source = fragment
             return edit_yaml(source, [row], before=[original])
@@ -452,7 +395,6 @@ class _Editor:
         return replace
 
     def _map_value_span(self, colon: int, value_node: Node, remainder: str) -> tuple[int, int, str]:
-        """Where a mapping value's new text ``remainder`` goes, and what it is."""
         end = self._content_end(value_node)
         if isinstance(value_node, ScalarNode) and value_node.style is None and not value_node.value:
             return colon + 1, colon + 1, remainder  # an empty value: `key:` and nothing after it
@@ -465,7 +407,6 @@ class _Editor:
     def _later_value_span(
         self, colon: int, value_node: Node, end: int, remainder: str
     ) -> tuple[int, int, str]:
-        """`_map_value_span` for a value that starts on a line after its key."""
         if remainder.startswith("\n"):
             return self._line_start(value_node.start_mark.index), end, remainder[1:]
         # The old block's last line goes whole, comment and all.
@@ -492,9 +433,8 @@ class _Editor:
             self._splice(position, position, body + "\n")
 
     def _insert_lines_before(self, position: int, lines: list[str], column: int) -> None:
-        """Before the first entry: as whole lines when it starts its line, so
-        the insert sits outside that entry's span if it is being removed;
-        otherwise (``- key:``, never removed in place) right at it."""
+        """As whole lines when the entry starts its line, so the insert sits
+        outside that entry's span if it is being removed."""
         if self._starts_its_line(position):
             start = self._line_start(position)
             self._splice(start, start, "".join(" " * column + line + "\n" for line in lines))
@@ -503,7 +443,6 @@ class _Editor:
         self._splice(position, position, indent.join(lines) + indent)
 
     def _styled(self, node: Node, new: Any) -> Any:
-        """``new`` in the old scalar's style, where that style can hold it."""
         if not isinstance(node, ScalarNode) or not isinstance(new, str):
             return new
         if node.style in ("|", ">") and "\n" in new.rstrip("\n") and not new.endswith("\n\n"):
@@ -540,11 +479,9 @@ class _Editor:
         return text[1:] if text[:1] in (" ", "\n") else text
 
     def _render(self, value: Any) -> str:
-        """Block style, at column 0, without a final newline."""
         return self._dump(value, flow=False)
 
     def _render_item(self, value: Any) -> str:
-        """One block sequence item, its dash at column 0."""
         lines = self._render([value]).split("\n")
         return "\n".join(line[self.sequence_offset :] for line in lines)
 
@@ -558,8 +495,7 @@ class _Editor:
         return text.replace("\n", "\n" + " " * indent)
 
     def _content_end(self, node: Node) -> int:
-        """Where the node's own text ends: before trailing blank lines and
-        comments, which belong to whatever follows."""
+        """Before trailing blank lines and comments, which belong to whatever follows."""
         if isinstance(node, ScalarNode):
             if node.style in ("|", ">"):
                 text = self.source[node.start_mark.index : node.end_mark.index]
@@ -589,9 +525,6 @@ class _Editor:
         return index
 
     def _detect_indentation(self, root: Node) -> None:
-        """Match the file's own nesting for anything new: the first nested
-        mapping gives the mapping indent, the first sequence under a key
-        whether its dashes are indented."""
         indent = _first(self._mapping_indent(key, value) for key, value in _nested_blocks_in(root))
         if indent is not None:
             self.mapping_indent = indent
