@@ -158,12 +158,11 @@ class EtsyListingFacts(BaseModel):
 class EtsyListingSnapshot(BaseModel):
     """Both sides of the review, in full."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     desired: EtsyListingFacts
     live: EtsyListingFacts | None
-    """``None`` for a listing with no Etsy id at all -- the mock's single
-    "Not on Etsy yet" column (decision 3), not an empty one."""
+    """``None`` for a listing with no Etsy id at all, not an empty one."""
 
 
 class EtsyListingStage(Stage[EtsyListingDesired, AppliedEtsyListing, EtsyListing]):

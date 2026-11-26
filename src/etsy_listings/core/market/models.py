@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 class ScoredListing(BaseModel):
     """One scored comparable listing, as the top listings panel shows it."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     listing_id: int
     rank: int

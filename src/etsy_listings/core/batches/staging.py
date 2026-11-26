@@ -249,15 +249,10 @@ class RowReview:
     name: str
     typed: bool
     state: RowState
-    """``ready`` will be created; ``name`` blocks Create until the seller
-    fixes the name; ``invalid`` will not be created and does not block."""
     message: str | None = None
     note: str | None = None
     suggestion: str | None = None
     reuse: str | None = None
-    """The stem of the ``designs/`` file with this row's exact bytes, which
-    the listing will name instead of writing its own (spec, *Content
-    deduplication*)."""
 
 
 @dataclass(frozen=True)

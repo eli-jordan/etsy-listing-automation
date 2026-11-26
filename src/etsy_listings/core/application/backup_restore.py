@@ -27,7 +27,7 @@ RestoreOutcome = Literal["running", "succeeded", "failed", "stopped"]
 class RestoreStatus(BaseModel):
     """A restore, for the dialog and the status panel's strip."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     snapshot_id: str
     snapshot_time: datetime
@@ -42,7 +42,7 @@ class RestoreStatus(BaseModel):
     files_done: int | None = None
     files_total: int | None = None
     seconds_left: int | None = None
-    """Estimated from the rate so far; None until there is one."""
+    """Estimated from the rate so far; ``None`` until there is one."""
     message: str | None = None
     """Why it failed or stopped."""
 

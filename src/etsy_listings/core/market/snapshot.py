@@ -13,7 +13,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 class MarketSnapshot(BaseModel):
     """One listing's latest market research, as the top listings panel reads it back."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     queries: tuple[str, ...]
     found: int
@@ -24,8 +24,7 @@ class MarketSnapshot(BaseModel):
     relaxed: bool
     empty: bool
     block: str
-    """What :func:`~etsy_listings.core.market.block.market_block` gave the
-    proposal: ``""`` for an empty result."""
+    """The market block the proposal was given; ``""`` for an empty result."""
 
     @classmethod
     def of(cls, result: MarketResult, *, searched_at: datetime) -> MarketSnapshot:

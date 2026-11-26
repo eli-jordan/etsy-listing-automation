@@ -189,18 +189,15 @@ class Placement(BaseModel):
 
 
 class MultipleTemplate(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", use_attribute_docstrings=True)
 
     kind: Literal["multiple"] = "multiple"
     placements: list[Placement]
     colour_coverage: Literal["exact", "subset"] = "exact"
-    """Governs a mismatch between this photo's placement colours and a
-    listing's ``colors:``. ``exact`` (default): they must match exactly, or
-    ``plan`` fails naming the mismatch -- use when a chart is meant to
-    represent precisely what one listing sells. ``subset``: placements for
-    colours the listing doesn't sell are skipped and ``plan`` reports which --
-    use for one shop-wide chart reused across listings selling different
-    subsets of the garment's colour range."""
+    """How a mismatch between this photo's placement colours and a listing's
+    ``colors:`` is handled. ``exact``: ``plan`` fails naming the mismatch.
+    ``subset``: placements for colours the listing doesn't sell are skipped
+    and ``plan`` reports which, for one chart shared across listings."""
     renderer: Renderer
     labels: list[str] = []
 
@@ -218,14 +215,13 @@ class MultipleTemplate(BaseModel):
 class SingleTemplate(BaseModel):
     """One photo, one garment."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", use_attribute_docstrings=True)
 
     kind: Literal["single"] = "single"
     colour: str | None = None
-    """Which garment colour this photo depicts -- what a light/dark listing
-    resolves its artwork by (ADR-0053). There's only one photo, so nothing needs it
-    to disambiguate a filename; without it, the scene prints ``default`` and
-    cannot be used by a listing with light and dark designs."""
+    """Which garment colour this photo depicts, which a light/dark listing
+    resolves its artwork by. Without it the scene prints ``default`` and a
+    listing with light and dark designs cannot use it."""
     bounding_box: BoundingBox
     renderer: Renderer
     labels: list[str] = []

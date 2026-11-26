@@ -4,15 +4,13 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class DescriptionConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", use_attribute_docstrings=True)
 
     lead: str = ""
     text: str | None = None
     ref: str | None = None
-    """A portable POSIX workspace reference beneath `common-copy/`, e.g.
-    `common-copy/comfort-colors.md` -- resolved and loaded through
-    `Workspace.load_common_copy`, never here (this model does no I/O and
-    knows nothing about the workspace it will eventually be read from)."""
+    """A POSIX workspace reference beneath ``common-copy/``, e.g.
+    ``common-copy/comfort-colors.md``."""
 
     @model_validator(mode="after")
     def _at_most_one_body_source(self) -> DescriptionConfig:

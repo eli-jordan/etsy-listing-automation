@@ -190,26 +190,21 @@ def check_production_fields(
 
 
 class EtsyListingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", use_attribute_docstrings=True)
 
     title: str = ""
     description: DescriptionConfig = DescriptionConfig()
     tags: list[str] = []
     renewal: Literal["manual", "auto"] | None = None
     section: str | None = None
-    """Which shop section this listing files under, by name. Listing
-    only -- there is no shop-wide default, unlike `shipping_profile` below:
-    a section is a fact about this listing, and a shop-wide default would be
-    right for the first listing and wrong from the second onwards."""
+    """Which shop section this listing files under, by name. There is no
+    shop-wide default."""
     shipping_profile: str | None = None
-    """Overrides `shop.yaml`'s `etsy.listing_defaults.shipping_profile`, by
-    name."""
+    """Overrides ``shop.yaml``'s ``etsy.listing_defaults.shipping_profile``,
+    by name."""
     variation_images: str | None = None
-    """The `colour-matrix` template whose renders become this listing's
-    per-colour swatches. Names the template rather than a bare
-    `true`, because media order would otherwise silently decide which
-    template supplies them when a listing carries more than one. Absent
-    means the feature is off for this listing."""
+    """The ``colour-matrix`` template whose renders become this listing's
+    per-colour swatches; absent means none."""
 
     @model_validator(mode="before")
     @classmethod

@@ -374,6 +374,8 @@ def stage_plan_dto(
 
 
 class PlanDTO(BaseModel):
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
     listing: str
     is_live: bool
     etsy_listing_id: int | None

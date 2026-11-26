@@ -303,7 +303,7 @@ class RenderSceneSnapshot(BaseModel):
     anything left to do for this scene.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     scene: str
     template: str
@@ -311,9 +311,8 @@ class RenderSceneSnapshot(BaseModel):
     state: RenderSceneState
     preview: bool
     scene_hash: str
-    """:func:`scene_hash` as this plan computed it, without its ``sha256:``
-    prefix -- what names this plan's preview file, so the review can ask for
-    exactly that file rather than have the server plan the listing again."""
+    """The scene hash this plan computed, without its ``sha256:`` prefix: the
+    name of this plan's preview file."""
 
 
 class RenderSnapshot(BaseModel):

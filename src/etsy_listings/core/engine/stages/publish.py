@@ -123,20 +123,17 @@ class PublishDesired:
 
 class BelowCostRow(BaseModel):
     """One variant priced under what Printify charges to make it -- the
-    row `plan()` already refuses over ( :func:`_below_cost`), named for the
-    before/after review rather than left as a bare variant id."""
+    row `plan()` already refuses over, named for the before/after review
+    rather than left as a bare variant id."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     size: str
     colour: str
     price: Money
     cost: Money
-    """USD, as Printify reports it -- not necessarily the listing's own
-    currency (see :attr:`ProductVariant.cost`'s docstring). Shown as its own
-    ``Money`` rather than coerced into ``price``'s currency, since the two
-    can genuinely differ and a snapshot states facts, it does not convert
-    them."""
+    """USD, as Printify reports it: not necessarily ``price``'s currency, and
+    never converted."""
 
 
 class PublishSnapshot(BaseModel):

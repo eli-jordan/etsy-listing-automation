@@ -15,11 +15,9 @@ _UNDRAFTED: frozenset[AiState | None] = frozenset({"stopped", "cancelled"})
 class Standing:
     status: BatchStatus
     listings: int
-    """Rows with a listing: created and not deleted."""
     drafted: int
     reviewed: int
     undrafted: int
-    """Listings **Cancel batch** left for Resume."""
     failures: int
     """Rows needing Retry: creation or AI failed, the listing not deleted."""
 

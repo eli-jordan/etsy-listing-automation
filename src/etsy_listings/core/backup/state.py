@@ -21,7 +21,7 @@ RunOutcome = Literal["succeeded", "failed", "stopped"]
 
 
 class _Record(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    model_config = ConfigDict(frozen=True, extra="ignore", use_attribute_docstrings=True)
 
 
 class CheckResult(_Record):
@@ -81,7 +81,7 @@ class RunRecord(_Record):
     """Each destination's copy, in the configured order."""
     notice: str | None = None
     """Something the run decided that the seller should know, such as a
-    new workspace ID beside several others (ADR-0061)."""
+    new workspace ID beside several others."""
 
 
 class BackupStateStore:
