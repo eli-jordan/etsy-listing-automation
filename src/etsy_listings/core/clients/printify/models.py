@@ -1,20 +1,6 @@
-"""What Printify's endpoints return, on both sides of the client.
+"""What Printify's catalog and shop endpoints return and accept.
 
-Two families in one module, because they are one API's vocabulary and a stage
-routinely holds both: the product stage resolves a :class:`Variant` id out of
-the catalog and puts it in a :class:`ProductSpec` in the same breath.
-
-*Reference data* -- :class:`Blueprint`, :class:`PrintProvider`,
-:class:`Variant`, :class:`ShippingRates` -- is the read-only, shop-agnostic
-half. Read-only, but not unauthenticated: every catalog call needs a
-token with the ``catalog.read`` scope, same as the rest of the API.
-
-*Shop-scoped state* -- :class:`Shop`, :class:`Upload`, :class:`Product`,
-:class:`ProductSpec` -- is what a shop owns and this tool writes.
-
-Every model is deliberately lenient about extra keys and strict about the ones
-it names: Printify adds fields without warning, and a client that treats a new
-one as a validation error breaks on a day nobody deployed anything.
+Every model ignores keys it does not name: Printify adds fields without warning.
 """
 
 from __future__ import annotations
@@ -95,12 +81,7 @@ class VariantSet(BaseModel):
         return list(seen)
 
     def placeholder_sizes(self, position: str) -> list[PrintAreaPlaceholder]:
-        """Every distinct size offered at ``position``, largest first.
-
-        Distinct by dimensions rather than by variant: a 229-variant set
-        typically offers two or three sizes across all of them, and the same
-        size repeated under several decoration methods.
-        """
+        """Every distinct size (by dimensions) offered at ``position``, largest first."""
         distinct = {
             (p.width, p.height): p
             for variant in self.variants
@@ -110,14 +91,7 @@ class VariantSet(BaseModel):
         return sorted(distinct.values(), key=lambda p: (p.area, p.width, p.height), reverse=True)
 
     def placeholder(self, position: str) -> PrintAreaPlaceholder | None:
-        """The **largest** size offered at ``position``, or ``None``.
-
-        A profile carries one print area and the catalog offers
-        several, so one has to win. The largest does, because the print area
-        is a resolution target -- a design must come within 10% of it in each
-        axis -- and art sized for the 3XL panel still covers the S
-        panel, while the reverse prints soft on the sizes that need it most.
-        """
+        """The largest size offered at ``position`` (ADR-0018), or ``None``."""
         sizes = self.placeholder_sizes(position)
         return sizes[0] if sizes else None
 
@@ -260,12 +234,8 @@ class Product(BaseModel):
 
     def all_variant_ids(self) -> tuple[int, ...]:
         """Every variant the product carries, for the update coverage rule.
-
-        The print areas name them, not ``variants``: an older product listed
-        399 variants against 238 in its print areas, and naming the other 161
-        (unavailable, disabled) got 400 code 8251. The variant list is the
-        fallback for a product read without print areas.
-        """
+        The print areas say which, not ``variants``: naming a variant only
+        ``variants`` lists gets 400 code 8251 (measured)."""
         named = {vid for area in self.print_areas for vid in area.variant_ids}
         return tuple(v.id for v in self.variants if v.id in named) or tuple(
             v.id for v in self.variants
