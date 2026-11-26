@@ -120,18 +120,6 @@ class EtsyDefaults(BaseModel):
         return self.shop_id
 
 
-MOVED_KEYS = {
-    "currency": "etsy.currency",
-    "preferred_print_provider": "printify.preferred_print_provider",
-}
-"""Where two top-level keys went.
-
-`extra="forbid"` would report them as "extra inputs are not permitted", which
-is true and useless: the value is not extra, it is one line further down the
-file. A workspace written before the move is exactly the one whose owner needs
-to be told where to put it."""
-
-
 class Defaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -150,20 +138,5 @@ class Defaults(BaseModel):
 
     @classmethod
     def from_document(cls, path: Path, raw: object) -> Defaults:
-        if isinstance(raw, dict):
-            _refuse_moved_keys(path, raw)
+        del path
         return cls.model_validate(raw)
-
-
-def _refuse_moved_keys(path: Path, raw: dict[str, object]) -> None:
-    found = [(key, moved_to) for key, moved_to in MOVED_KEYS.items() if key in raw]
-    if not found:
-        return
-    moves = "\n".join(f"  {key}: -> {moved_to}:" for key, moved_to in found)
-    raise ConfigLoadError(
-        path,
-        "these keys moved under the service that owns them:\n"
-        f"{moves}\n"
-        "  Move them by hand, or re-run `etsy-listings setup`, which rewrites "
-        "the file in the current shape.",
-    )

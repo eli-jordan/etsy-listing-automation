@@ -61,9 +61,8 @@ class GarmentProfile(BaseModel):
 
     Not a ``media:`` default -- listing mockups still live in
     ``listing.media``, and a listing that never names this template still
-    renders whatever ``media:`` does. Optional so garment
-    profiles written before the field existed still load. ``new`` does not
-    prompt; it is hand-edited the same way ``colors:`` is classified.
+    renders whatever ``media:`` does. ``new`` does not prompt; it is
+    hand-edited the same way ``colors:`` is classified.
     """
 
     @field_validator("preview_template", mode="before")
