@@ -8,7 +8,7 @@ from functools import cache, partial
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import Response
 
 from etsy_listings.core.application import mockup_templates as calibration
@@ -24,8 +24,6 @@ from etsy_listings.core.application.mockup_templates import (
     template_photo,
     template_swatch,
 )
-from etsy_listings.core.application.position_coverage import cover_recalibrated
-from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.scene_previews import (
     SceneDraft,
     SceneLayers,
@@ -81,16 +79,6 @@ def target(request: Request, name: str) -> Target:
     workspace = app_state.workspace(request)
     require_template(workspace, name)
     return Target(workspace=workspace, name=name)
-
-
-@dataclass(frozen=True)
-class AfterSave:
-    preparations: Preparations
-    background: BackgroundTasks
-
-
-def after_save(request: Request, background: BackgroundTasks) -> AfterSave:
-    return AfterSave(request.app.state.preparations, background)
 
 
 def _not_found(exc: Exception) -> HTTPException:
@@ -200,12 +188,12 @@ def photo(template: Annotated[Target, Depends(target)], colour: str | None = Non
     )
 
 
-def _queue_preparation(name: str, after: AfterSave) -> None:
+def _queue_preparation(name: str, after: app_state.AfterResponse) -> None:
     # Incomplete multiple geometry or missing evidence needs explicit Prepare.
     # The committed Save succeeds; read-only readiness explains that refusal.
     with suppress(UserFacingError, ValueError, OSError):
         after.preparations.reconcile_saved(name)
-    after.background.add_task(cover_recalibrated, after.preparations, name)
+    after.cover_recalibrated(name)
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)
@@ -223,7 +211,7 @@ def put_config(
     body: CalibrationSaveRequest,
     response: Response,
     if_match: Annotated[str, Header()],
-    after: Annotated[AfterSave, Depends(after_save)],
+    after: Annotated[app_state.AfterResponse, Depends(app_state.after_response)],
 ) -> AnyTemplate:
     try:
         saved = save_calibration(

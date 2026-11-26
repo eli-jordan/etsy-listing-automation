@@ -7,15 +7,12 @@ from etsy_listings.core.application import (
     template_position_impact,
     workspace_settings,
 )
-from etsy_listings.core.application.position_coverage import cover_widened_limits
-from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.refusals import (
     InvalidSettingsEditError,
     SettingsRevisionConflictError,
 )
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.settings import PROVIDER_NAMES, AiProviderSettings, SettingsProblem
-from etsy_listings.core.render.positions import PositionLimits
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
     ListingOutsideBody,
@@ -91,7 +88,7 @@ def edit_settings(
     coordinators = settings_save.SettingsCoordinators(
         ai_queue=request.app.state.ai.queue,
         backups=app_state.backups(request),
-        coverage=_AfterResponse(request.app.state.preparations, background),
+        coverage=app_state.after_response(request, background),
     )
     try:
         view = settings_save.save_settings(
@@ -108,18 +105,6 @@ def edit_settings(
     except InvalidSettingsEditError as exc:
         return _invalid(exc)
     return _response(view)
-
-
-class _AfterResponse:
-    """Coverage queued once the save has answered, so a slow template scan
-    never holds the response."""
-
-    def __init__(self, preparations: Preparations, background: BackgroundTasks) -> None:
-        self._preparations = preparations
-        self._background = background
-
-    def cover_widened(self, saved: PositionLimits, limits: PositionLimits) -> None:
-        self._background.add_task(cover_widened_limits, self._preparations, saved, limits)
 
 
 @router.post(

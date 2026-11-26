@@ -6,12 +6,20 @@ share these instead of each declaring its own copy.
 
 from __future__ import annotations
 
-from fastapi import Request
+from dataclasses import dataclass
+
+from fastapi import BackgroundTasks, Request
 
 from etsy_listings.core.application.backup_coordinator import BackupCoordinator
 from etsy_listings.core.application.dependencies import ClientFactories
 from etsy_listings.core.application.job_gate import JobGate
+from etsy_listings.core.application.position_coverage import (
+    cover_recalibrated,
+    cover_widened_limits,
+)
+from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.render.positions import PositionLimits
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -43,3 +51,23 @@ def job_gate(request: Request) -> JobGate:
 def backups(request: Request) -> BackupCoordinator:
     value: BackupCoordinator = request.app.state.backups
     return value
+
+
+@dataclass(frozen=True)
+class AfterResponse:
+    """Preparation work a request starts. Coverage is queued to run once the
+    response has gone, so a slow template scan never holds it."""
+
+    preparations: Preparations
+    background: BackgroundTasks
+
+    def cover_recalibrated(self, template: str) -> None:
+        self.background.add_task(cover_recalibrated, self.preparations, template)
+
+    def cover_widened(self, saved: PositionLimits, limits: PositionLimits) -> None:
+        self.background.add_task(cover_widened_limits, self.preparations, saved, limits)
+
+
+def after_response(request: Request, background: BackgroundTasks) -> AfterResponse:
+    preparations: Preparations = request.app.state.preparations
+    return AfterResponse(preparations, background)
