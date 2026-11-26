@@ -18,12 +18,9 @@ tuned by eye in the calibrator, per template."""
 
 
 def warp(design: RGBA, bounding_box: BoundingBox, output_size: tuple[int, int]) -> RGBA:
-    """Homography from the design's own rectangle onto ``bounding_box``.
-
-    ``output_size`` is ``(width, height)`` of the template canvas the design is
-    being placed onto -- the warped result is canvas-sized so later passes never
-    need to know where on the canvas the print area sits.
-    """
+    """Homography from the design's own rectangle onto ``bounding_box``, on a canvas of
+    ``output_size`` (width, height), so later passes never need to know where the print area
+    sits."""
     h, w = design.shape[:2]
     src = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
     dst = np.array([[p.x, p.y] for p in bounding_box], dtype=np.float32)
@@ -103,16 +100,11 @@ def shade(img: RGBA, cfg: ShadeConfig, luminance: FloatMap) -> RGBA:
 
 
 def export_many(base: RGB, print_layers: Sequence[RGBA]) -> Image.Image:
-    """Alpha-composite canvas-sized RGBA layers over the opaque ``base`` in
-    list order: straight (non-premultiplied) alpha, folded in float32, then
-    rounded rather than truncated. The compositing order matters for
-    determinism.
+    """Alpha-composite canvas-sized RGBA layers over the opaque ``base`` in list order: straight
+    alpha, folded in float32, then rounded.
 
-    The fold runs only over the rectangle where some layer prints. Outside it
-    every alpha is zero, so the whole-canvas fold would be ``base * 1 +
-    rgb * 0`` then ``+ 0.5`` and truncate: ``base`` exactly. A print covers
-    about a third of a photo, and the float work over the rest was most of
-    this pass's time."""
+    Only the rectangle where some layer prints is folded: outside it every alpha is zero, and
+    the fold gives ``base`` exactly."""
     result = np.array(base[..., :3], dtype=np.uint8)
     region = _union(print_bounds(layer) for layer in print_layers)
     if region is not None:

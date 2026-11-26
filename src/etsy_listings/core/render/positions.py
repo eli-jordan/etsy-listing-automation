@@ -146,17 +146,14 @@ def decompose(template_box: BoundingBox, box: BoundingBox) -> PoseFit:
 
 
 def padded_box(template_box: BoundingBox, limits: PositionLimits) -> BoundingBox:
-    """The smallest rectified-frame rectangle holding every pose ``limits``
-    allow, mapped to photo corners: the *padded quad* a Marigold template's
-    evidence must cover before any listing position on it can be fitted (spec
-    *Rendering -> Marigold (option B)*, *Evidence coverage*).
+    """The smallest rectified-frame rectangle holding every pose ``limits`` allow, mapped to
+    photo corners: what a Marigold template's evidence must cover before any listing position
+    on it can be fitted.
 
-    A ``W`` by ``H`` box at the largest scale ``s`` and tilt ``t`` reaches
-    ``s * (W cos t + H sin t) / 2`` across and ``s * (W sin t + H cos t) / 2``
-    down from its centre, plus the offset limit on each axis. The settings cap
-    tilt at 30 degrees, where both sums still grow, so the largest tilt is the
-    worst.
-    """
+    A ``W`` by ``H`` box at the largest scale ``s`` and tilt ``t`` reaches ``s * (W cos t + H
+    sin t) / 2`` across and ``s * (W sin t + H cos t) / 2`` down from its centre, plus the
+    offset limit on each axis. The settings cap tilt at 30 degrees, where both sums still
+    grow, so the largest tilt is the worst."""
     width, height = _proportions(template_box)
     angle = radians(limits.rotation)
     scale, offset = limits.scale.max, limits.offset

@@ -196,16 +196,12 @@ PIXEL_DIGESTS = PixelDigests()
 
 
 class RememberedDigests:
-    """Pixel digests kept on disk under ``.cache/pixel-digests/``, each with
-    the file stamp it was computed for, so a scene viewed before a restart is
-    found again without decoding its photo and designs.
+    """Pixel digests kept on disk under ``.cache/pixel-digests/`` with the file stamp each was
+    computed for, so a scene viewed before a restart is found again without decoding.
 
-    Only the Listing Images preview reads them, and it checks each answer
-    afterwards (``GET /api/listings/{name}/scene-preview/verify``): a digest
-    read from here is a guess about a file, while :data:`PIXEL_DIGESTS` holds
-    what this process computed. The render stage and deploy never read it.
-    Writing is safe from anywhere, since an entry is only ever a digest just
-    computed from the file at that stamp."""
+    Only the Listing Images preview reads them, and it verifies each answer afterwards; the
+    render stage and deploy never do. Writing is safe from anywhere: an entry is only a digest
+    just computed at that stamp."""
 
     def __init__(self, workspace: Workspace) -> None:
         self._root = workspace.cache(layout.PIXEL_DIGESTS_DIR)
