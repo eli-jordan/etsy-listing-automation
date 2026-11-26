@@ -46,11 +46,9 @@ You can manage one credential independently:
 ```bash
 uv run etsy-listings auth printify --root ~/etsy-listings
 uv run etsy-listings auth etsy --root ~/etsy-listings
-uv run etsy-listings auth anthropic --root ~/etsy-listings
 ```
 
-Local AI Mode uses the signed-in provider CLIs. Capturing an Anthropic API key
-is a separate optional credential flow; it does not sign those CLIs in.
+Local AI Mode uses the signed-in provider CLIs, so it needs no API key here.
 
 ## Workspace files
 

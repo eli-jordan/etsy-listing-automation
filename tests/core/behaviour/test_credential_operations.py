@@ -25,7 +25,6 @@ from etsy_listings.core.clients.printify import PrintifyAuthError
 from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     BACKUP_PASSWORD_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
@@ -48,7 +47,6 @@ ALL_SCOPES = TokenResponse(
 def _no_credentials_in_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     for variable in (PRINTIFY_TOKEN_VAR, ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR):
         monkeypatch.delenv(variable, raising=False)
-    monkeypatch.delenv(ANTHROPIC_KEY_VAR, raising=False)
 
 
 def _env(root: Path) -> str:
@@ -128,12 +126,6 @@ def test_storing_a_pair_writes_both_halves_beside_what_is_there(tmp_path: Path) 
     assert f"{ETSY_SHARED_SECRET_VAR}=s" in env
 
 
-def test_a_blank_optional_credential_writes_nothing(tmp_path: Path) -> None:
-    credentials.store(tmp_path, credentials.ANTHROPIC, ("",))
-
-    assert not (tmp_path / layout.ENV_FILE).exists()
-
-
 def test_a_blank_required_credential_is_refused_rather_than_stored(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match=PRINTIFY_TOKEN_VAR):
         credentials.store(tmp_path, credentials.PRINTIFY, ("  ",))
@@ -188,7 +180,6 @@ def test_an_empty_workspace_reports_every_required_credential_missing(tmp_path: 
     status = credentials.credential_status(tmp_path, tokens=_token_store(tmp_path), now=T0)
 
     assert set(status.missing) == {PRINTIFY_TOKEN_VAR, ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR}
-    assert status.optional_missing == (ANTHROPIC_KEY_VAR,)
     assert not status.sign_in.present
     assert status.env_file == tmp_path / layout.ENV_FILE
 

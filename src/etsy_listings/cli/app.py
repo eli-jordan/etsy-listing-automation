@@ -28,7 +28,6 @@ from etsy_listings.core.clients.printify import (
 )
 from etsy_listings.core.config.defaults import MissingDefaultError
 from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     BACKUP_PASSWORD_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
@@ -55,7 +54,6 @@ EPILOG = f"""
 
   [cyan]{layout.ROOT_ENV_VAR}[/cyan]  workspace root, same as --root (--root wins).
   [cyan]{PRINTIFY_TOKEN_VAR}[/cyan]  Printify token, [cyan]catalog.read[/cyan] scope.
-  [cyan]{ANTHROPIC_KEY_VAR}[/cyan]   Anthropic key for copy generation (Phase 4).
   [cyan]{BACKUP_PASSWORD_VAR}[/cyan]  restic repository password.
   [cyan]{RESTIC_BINARY_ENV_VAR}[/cyan]  restic to run instead of the pinned download.
   [cyan]NO_COLOR[/cyan]            suppress the colour swatches [cyan]apply[/cyan] prints.
@@ -195,7 +193,7 @@ def setup(
 auth_app = typer.Typer(
     epilog=EPILOG,
     invoke_without_command=True,
-    help="Capture every credential: Printify, Etsy, and the Anthropic key.",
+    help="Capture every credential: Printify and Etsy.",
 )
 app.add_typer(auth_app, name="auth")
 
@@ -239,13 +237,13 @@ def auth(
     *,
     check: CheckOption = False,
 ) -> None:
-    """Capture every credential: Printify, Etsy, and the Anthropic key.
+    """Capture every credential: Printify and Etsy.
 
     Verifies each one against its own API before storing it, and signs in to
     Etsy through the browser. Keys go to the workspace's .env, OAuth tokens to
     .auth/, and both are gitignored before the first one is written.
 
-    Run one at a time with `auth printify`, `auth etsy` or `auth anthropic`.
+    Run one at a time with `auth printify` or `auth etsy`.
     Safe to re-run: it fills in what is missing, leaves what is present alone,
     and is how you renew the Etsy consent before its 90 days are up.
     """
@@ -272,16 +270,6 @@ def auth_etsy(
 ) -> None:
     """Capture just the Etsy app key pair and sign in through the browser."""
     _run_auth(root, ["etsy"], check=check)
-
-
-@auth_app.command("anthropic", epilog=EPILOG)
-def auth_anthropic(
-    root: AuthRootOption = None,
-    *,
-    check: CheckOption = False,
-) -> None:
-    """Capture just the optional Anthropic API key, which no command reads."""
-    _run_auth(root, ["anthropic"], check=check)
 
 
 PublishOption = Annotated[

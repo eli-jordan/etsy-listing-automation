@@ -23,7 +23,6 @@ from etsy_listings.core.clients.etsy.transport import Transport
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.clients.printify.protocol import PrintifyClient
 from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     BACKUP_PASSWORD_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
@@ -42,14 +41,10 @@ class Credential:
     """
 
     variables: tuple[str, ...]
-    optional: bool = False
-    """Whether a blank answer is a complete step rather than a missing value.
-    True only for a credential nothing needs yet."""
 
 
 PRINTIFY = Credential((PRINTIFY_TOKEN_VAR,))
 ETSY_APP_KEY = Credential((ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR))
-ANTHROPIC = Credential((ANTHROPIC_KEY_VAR,), optional=True)
 BACKUP_PASSWORD = Credential((BACKUP_PASSWORD_VAR,))
 
 
@@ -69,7 +64,6 @@ def stored(root: Path, variable: str) -> str | None:
         PRINTIFY_TOKEN_VAR: secrets.printify_api_token,
         ETSY_KEYSTRING_VAR: secrets.etsy_keystring,
         ETSY_SHARED_SECRET_VAR: secrets.etsy_shared_secret,
-        ANTHROPIC_KEY_VAR: secrets.anthropic_api_key,
         BACKUP_PASSWORD_VAR: secrets.backup_password,
     }[variable]
 
@@ -87,8 +81,6 @@ def store(root: Path, credential: Credential, values: tuple[str, ...]) -> None:
             f"{len(values)} value(s) for {len(credential.variables)} variable(s): "
             f"{', '.join(credential.variables)}"
         )
-    if credential.optional and not any(value.strip() for value in values):
-        return
     blank = [v for v, value in zip(credential.variables, values, strict=True) if not value.strip()]
     if blank:
         raise ValueError(f"refusing to store a blank {', '.join(blank)}")
@@ -130,9 +122,6 @@ REQUIRED_VARS: tuple[str, ...] = (
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
 )
-"""The credentials without which some command fails. The Anthropic key is not
-among them: only AI work asks for one, and treating it as required would make
-every `auth --check` report a workspace without AI as incomplete."""
 
 
 @dataclass(frozen=True)
@@ -179,15 +168,10 @@ def missing_credentials(secrets: Secrets) -> tuple[str, ...]:
     return tuple(name for name in REQUIRED_VARS if not have[name])
 
 
-def optional_credentials(secrets: Secrets) -> tuple[str, ...]:
-    return () if secrets.anthropic_api_key else (ANTHROPIC_KEY_VAR,)
-
-
 @dataclass(frozen=True)
 class CredentialStatus:
     sign_in: TokenSummary
     missing: tuple[str, ...]
-    optional_missing: tuple[str, ...]
     env_file: Path
 
 
@@ -198,7 +182,6 @@ def credential_status(root: Path, *, tokens: TokenStore, now: datetime) -> Crede
     return CredentialStatus(
         sign_in=summarise(tokens.load(), now=now),
         missing=missing_credentials(secrets),
-        optional_missing=optional_credentials(secrets),
         env_file=secrets.env_file,
     )
 

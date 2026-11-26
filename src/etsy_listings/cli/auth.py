@@ -50,15 +50,13 @@ class Backends:
     now: Callable[[], datetime] = utcnow
 
 
-Part = Literal["printify", "etsy", "anthropic"]
+Part = Literal["printify", "etsy"]
 
-ALL_PARTS: tuple[Part, ...] = ("printify", "etsy", "anthropic")
+ALL_PARTS: tuple[Part, ...] = ("printify", "etsy")
 """The credentials `auth` knows how to capture, in the order it asks for them.
 
-Printify first because it is the one every phase so far needs; Anthropic last
-because nothing needs it yet. A part can be run on its own (`auth etsy`) --
-one credential expiring is the ordinary case, and walking past two working
-ones to renew the third is what teaches people to avoid the command.
+Printify first because it is the one every phase so far needs. A part can be
+run on its own (`auth etsy`): one credential expiring is the ordinary case.
 """
 
 
@@ -89,8 +87,6 @@ def run_auth(
         # command exists to avoid.
         app_key = _etsy_app_key(root, back)
         _etsy_sign_in(app_key, store, back)
-    if "anthropic" in parts:
-        _anthropic_key(root)
 
     typer.echo("")
     _report(root, store, back)
@@ -161,15 +157,6 @@ def _etsy_sign_in(app_key: EtsyAppKey, store: TokenStore, back: Backends) -> Non
         typer.echo(f"  note: Etsy granted the scopes `{tokens.scope}`")
 
 
-def _anthropic_key(root: Path) -> None:
-    captured = credentials.capture(
-        root,
-        credentials.ANTHROPIC,
-        verify=credentials.nothing_to_prove,
-    )
-    credentials.store(root, credentials.ANTHROPIC, captured)
-
-
 def summary_line(summary: TokenSummary) -> str:
     if not summary.present:
         return "Etsy sign-in: none stored"
@@ -197,8 +184,6 @@ def _report(root: Path, store: TokenStore, back: Backends) -> None:
         typer.echo(f"Missing: {', '.join(status.missing)}")
     else:
         typer.echo(f"All required credentials present in {status.env_file}")
-    for name in status.optional_missing:
-        typer.echo(f"Optional, not set: {name}")
 
     warning = renewal_warning(status.sign_in)
     if warning:

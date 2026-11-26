@@ -83,7 +83,7 @@ CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock`
 ```
 setup initialise a workspace: skeleton, shop.yaml, ids
                    --replace-prompts: reset prompts/ to packaged defaults, keeping <name>.md.bak (ADR-0044)
-auth every credential: Printify, Etsy key pair + OAuth, Anthropic (auth printify|etsy|anthropic)
+auth every credential: Printify, Etsy key pair + OAuth (auth printify|etsy)
 new [<design>] interactive design/garment/provider picker; writes garment profile + listing
 plan <listing|--all> three-way diff against live state
 apply <listing|--all> execute every stage the plan identified
