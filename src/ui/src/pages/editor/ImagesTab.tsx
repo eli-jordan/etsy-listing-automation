@@ -148,11 +148,11 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   const view = useCheckedView(
     focus === null ? null : viewFocus(focus, detail, templates, scene, listing),
   );
-  const selectedIndex = view !== null && view.reelIndex >= 0 ? view.reelIndex : null;
+  const selectedIndex = view?.reelIndex ?? null;
 
   const target = positionTarget(
     focus,
-    view?.inListing === true,
+    selectedIndex !== null,
     artwork === undefined && owner === undefined && detail.name !== "",
   );
   const positioning = usePositioning({
@@ -441,12 +441,12 @@ function PreviewPane({
             type="button"
             className="preview-stage__open"
             title={
-              view.inListing
+              view.reelIndex !== null
                 ? "Open the listing's images at full size"
                 : "Add it to the listing to open it at full size"
             }
             onClick={() => {
-              if (view.reelIndex >= 0) onOpen(view.reelIndex);
+              if (view.reelIndex !== null) onOpen(view.reelIndex);
             }}
           >
             <StagePicture src={view.picture} alt={view.title} positioning={positioning} />
@@ -474,13 +474,13 @@ function PreviewPane({
               <button
                 type="button"
                 className={
-                  view.inListing
+                  view.reelIndex !== null
                     ? "btn-like btn-like--ghost btn-sm"
                     : "btn-like btn-like--primary btn-sm"
                 }
                 onClick={onToggle}
               >
-                {view.inListing ? "Remove from listing" : "+ Add to listing"}
+                {view.reelIndex !== null ? "Remove from listing" : "+ Add to listing"}
               </button>
             </FootActions>
           </>

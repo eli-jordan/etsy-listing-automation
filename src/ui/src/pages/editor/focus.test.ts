@@ -2,14 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { MediaFileSummary, ListingDetail, MediaEntry, TemplateSummary } from "../../types";
 import { type Focus, firstFocus, focusRef, isFocusRef, restoreFocus, viewFocus } from "./focus";
 
-/**
- * What the preview pane is pointing at.
- *
- * The question worth isolating is `inListing`: the locator can point the
- * preview at something the listing has *not* taken, and the Add/Remove button,
- * the lightbox and the pane's title each turned on that answer separately
- * before this module existed.
- */
+/** The locator can point the preview at something the listing has *not*
+ * taken: its `reelIndex` is null, and the Add/Remove button, the lightbox and
+ * the pane's title all turn on that. */
 
 const FLAT_LAY: TemplateSummary = {
   name: "flat-lay-01",
@@ -44,14 +39,12 @@ describe("viewFocus, for a template", () => {
       [FLAT_LAY],
       null,
     );
-    expect(view.inListing).toBe(true);
     expect(view.reelIndex).toBe(0);
   });
 
   it("reports -1 for something the locator is only offering", () => {
     const view = viewFocus(ON_TEMPLATE, listing([]), [FLAT_LAY], null);
-    expect(view.inListing).toBe(false);
-    expect(view.reelIndex).toBe(-1);
+    expect(view.reelIndex).toBeNull();
   });
 
   it("captions it with the file the server resolved", () => {
@@ -82,14 +75,12 @@ describe("viewFocus, for a template", () => {
 describe("viewFocus, for a shared asset", () => {
   it("finds its position in the reel", () => {
     const view = viewFocus(ON_SHARED, listing(["a.png", SIZING.ref]), [], null);
-    expect(view.inListing).toBe(true);
     expect(view.reelIndex).toBe(1);
   });
 
   it("reports -1 when the listing has not taken it", () => {
     const view = viewFocus(ON_SHARED, listing([]), [], null);
-    expect(view.inListing).toBe(false);
-    expect(view.reelIndex).toBe(-1);
+    expect(view.reelIndex).toBeNull();
   });
 
   it("captions it with the workspace path the server already gave", () => {

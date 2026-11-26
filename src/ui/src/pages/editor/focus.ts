@@ -1,7 +1,6 @@
 import {
   type Artwork,
   type MediaOwner,
-  isInMedia,
   mediaKind,
   mediaLabel,
   pictureFor,
@@ -89,9 +88,12 @@ export interface FocusView {
   picture: string;
   kind: "image" | "video";
   notes: Issue[];
-  inListing: boolean;
-  /** `-1` for something the locator offers that the reel does not hold. */
-  reelIndex: number;
+  /** Null for something the locator offers that the listing has not taken. */
+  reelIndex: number | null;
+}
+
+function found(index: number): number | null {
+  return index >= 0 ? index : null;
 }
 
 export function viewFocus(
@@ -110,8 +112,7 @@ export function viewFocus(
       kind: mediaKind(ref),
       // `check_videos` places each of its issues at the ref it is about.
       notes: detail.issues.filter((issue) => issue.where === `Listing Images › ${ref}`),
-      inListing: detail.media.includes(focus.asset.ref),
-      reelIndex: detail.media.indexOf(focus.asset.ref),
+      reelIndex: found(detail.media.indexOf(focus.asset.ref)),
     };
   }
   const summary = templates.find((t) => t.name === focus.template);
@@ -121,12 +122,13 @@ export function viewFocus(
     picture: templatePicture(focus.template, focus.colour, scene),
     kind: "image",
     notes: [],
-    inListing: isInMedia(detail.media, focus.template, focus.colour),
-    reelIndex: detail.media.findIndex(
-      (entry) =>
-        typeof entry !== "string" &&
-        entry.template === focus.template &&
-        (entry.colour ?? null) === focus.colour,
+    reelIndex: found(
+      detail.media.findIndex(
+        (entry) =>
+          typeof entry !== "string" &&
+          entry.template === focus.template &&
+          (entry.colour ?? null) === focus.colour,
+      ),
     ),
   };
 }
