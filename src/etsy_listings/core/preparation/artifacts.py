@@ -51,8 +51,6 @@ SCHEMA: Literal[2] = 2
 MAX_PIXELS = 32 * 1024 * 1024
 MAX_DIMENSION = 8192
 MAX_POINTER_BYTES = 64 * 1024
-_FULL_PHOTO_SCHEMA = 1
-_EXTENTS_SCHEMA = 2
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 SEMANTICS = {
     "array_axes": "row,column,channel",
@@ -198,13 +196,13 @@ class PlacementArtifact(Record):
 
 
 def _exact_schema(value: object) -> object:
-    # JSON ``true`` and ``1.0`` are not schema 1.
+    # JSON ``2.0`` is not schema 2.
     if type(value) is not int:
         raise ValueError("Map schema version must be an integer")
     return value
 
 
-MapSchema = Annotated[Literal[1, 2], BeforeValidator(_exact_schema)]
+MapSchema = Annotated[Literal[2], BeforeValidator(_exact_schema)]
 
 
 class MapPointer(Record):
@@ -237,7 +235,7 @@ class Manifest(Record):
     content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
-_UNSUPPORTED = "Unsupported map schema; migrate or prepare the template again"
+_UNSUPPORTED = "Unsupported map schema; prepare the template again"
 
 
 def _unsupported(exc: ValidationError) -> bool:
@@ -361,12 +359,12 @@ def numerical_digest(placements: Mapping[str | None, MaterialMaps]) -> str:
 def _descriptor_digest(
     placements: Mapping[str | None, Mapping[str, ArrayDescriptor]],
     *,
-    extents: Mapping[str | None, tuple[int, int, int, int]] | None = None,
+    extents: Mapping[str | None, tuple[int, int, int, int]],
 ) -> str:
     content = [
         {
             "id": key,
-            **({"extent": extents[key]} if extents is not None else {}),
+            "extent": extents[key],
             "arrays": {
                 name: descriptor.model_dump(mode="json")
                 for name, descriptor in placements[key].items()
@@ -378,13 +376,10 @@ def _descriptor_digest(
 
 
 def _manifest_digest(manifest: Manifest) -> str:
-    """The content digest ``manifest``'s descriptors imply; only schema 2
-    records extents."""
+    """The content digest ``manifest``'s descriptors imply."""
     return _descriptor_digest(
         {p.id: p.arrays for p in manifest.placements},
-        extents={p.id: p.extent for p in manifest.placements}
-        if manifest.schema_version == _EXTENTS_SCHEMA
-        else None,
+        extents={p.id: p.extent for p in manifest.placements},
     )
 
 
@@ -725,8 +720,6 @@ class Artifacts:
     ) -> MaterialMaps:
         photo = manifest.preparation_inputs.photo
         size = (photo.width, photo.height)
-        if manifest.schema_version == _FULL_PHOTO_SCHEMA and placement.extent != (0, 0, *size):
-            raise ArtifactError("Prepared map extent does not match main photo")
         return read_maps(
             self.workspace.template_map_file(
                 name, manifest.generation_id, placement.id, staging=staging
