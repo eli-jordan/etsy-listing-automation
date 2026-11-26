@@ -1,26 +1,7 @@
 """Credential operations: where one is, proving it, storing it, and what a
-workspace's credentials add up to.
-
-The terminal-free half of what ``auth`` and ``setup`` do with a credential
-(ADR-0025: credentials are ``auth``'s, ids ``setup``'s). Asking for one,
-saying what was proved and refusing with a command to re-run are the CLI's
-(``cli/credentials.py``); everything here takes its clients as arguments and
-answers with values or the client's own error, so it runs without a terminal
-or a socket.
-
-**Proving is not storing**, and they are separate on purpose. ``auth`` stores
-each credential as it is proved, because its parts are independent and a
-working Printify token should survive abandoning the Etsy sign-in. ``setup``
-stores at the very end, after every question is answered, because a token
-left behind by a cancelled run is a workspace that looks configured and is
-not. One order is right for each, and neither is right for both -- so no
-operation here combines them.
-
-The Etsy sign-in is split the same way (ADR-0026, ADR-0027): building the
-consent URL and completing the grant from a redirect are here; opening a
-browser and waiting on the loopback callback are the caller's, because the
-first is a human step and the second is the clients' own
-(:mod:`~etsy_listings.core.clients.etsy.callback`).
+workspace's credentials add up to; the terminal-free half of ``auth`` and
+``setup``. Proving and storing stay separate operations (architecture,
+*Workspace, credentials and prompts*).
 """
 
 from __future__ import annotations
@@ -55,10 +36,9 @@ from etsy_listings.core.workspace import layout, scaffold
 
 @dataclass(frozen=True)
 class Credential:
-    """One credential, as the environment variables that hold it.
-
-    A key *pair* is one credential of two variables, because both halves ride
-    on one header and a verification cannot say which of them was wrong.
+    """One credential, as the environment variables that hold it. Etsy's key
+    pair is one: both halves ride on one header, so a failed verification
+    cannot say which half was wrong.
     """
 
     variables: tuple[str, ...]
@@ -95,22 +75,13 @@ def stored(root: Path, variable: str) -> str | None:
 
 
 def stored_values(root: Path, credential: Credential) -> tuple[str | None, ...]:
-    """Each of ``credential``'s variables as :func:`stored` finds it.
-
-    Half a pair comes back half present, so a caller can keep the half it has
-    and ask only for the rest.
-    """
+    """Each of ``credential``'s variables as :func:`stored` finds it."""
     return tuple(stored(root, variable) for variable in credential.variables)
 
 
 def store(root: Path, credential: Credential, values: tuple[str, ...]) -> None:
     """Write ``values`` -- parallel to ``credential.variables`` -- into the
-    workspace's ``.env``, leaving every other line alone.
-
-    Writes nothing for a blank optional credential: there is nothing to keep.
-    A blank *required* value is refused with :class:`ValueError` rather than
-    written, because an empty line in ``.env`` reads as configured to nobody.
-    """
+    workspace's ``.env``, leaving every other line alone."""
     if len(values) != len(credential.variables):
         raise ValueError(
             f"{len(values)} value(s) for {len(credential.variables)} variable(s): "
@@ -138,13 +109,7 @@ def verify_printify_token(
     *,
     client_for: Callable[[str], PrintifyClient] = connections.printify_client_for,
 ) -> list[Shop]:
-    """The shops ``token`` reaches; raises ``PrintifyAuthError`` if it reaches none.
-
-    The proof *is* the shop list -- ``setup`` needs exactly that answer -- so
-    verification hands it back rather than a boolean, and nobody makes the
-    same call twice. The client is built from the token in hand, not from
-    ``.env``, because an unverified token is deliberately not stored yet.
-    """
+    """The shops ``token`` reaches; raises ``PrintifyAuthError`` if it reaches none."""
     return client_for(token).shops()
 
 
@@ -172,12 +137,9 @@ every `auth --check` report a workspace without AI as incomplete."""
 
 @dataclass(frozen=True)
 class TokenSummary:
-    """The stored Etsy consent, in the terms a user asks about it.
-
-    Two lifetimes, not one, because they fail differently. An expired *access*
-    token is invisible -- the next run refreshes it. An expired *refresh*
-    token is a browser trip, and the only warning a user can act on.
-    """
+    """The stored Etsy consent: whether the access token is fresh (an expired
+    one refreshes unseen) and the whole days left on the refresh token (an
+    expired one needs a browser sign-in)."""
 
     present: bool
     user_id: int | None = None
@@ -187,13 +149,7 @@ class TokenSummary:
 
     @property
     def renewal_due(self) -> bool:
-        """Whether the 90-day consent is close enough to its end to say so.
-
-        Only ever worth a warning, never a refusal: the credential still
-        works, and a command that stopped working two weeks early to protect
-        the user from something that has not happened would be worse than
-        the thing it prevents.
-        """
+        """Whether the 90-day consent is close enough to its end to warn."""
         return (
             self.present
             and self.refresh_days is not None
@@ -209,9 +165,6 @@ def summarise(stored: StoredTokens | None, *, now: datetime) -> TokenSummary:
         present=True,
         user_id=stored.user_id,
         access_valid=stored.is_fresh(now),
-        # Rounded down, and floored at zero: "0 days" is a truthful thing to
-        # say about a consent that expired last week, and a negative number
-        # invites a reader to work out what it means.
         refresh_days=max(0, remaining.days),
         scope=stored.scope,
     )
@@ -239,12 +192,8 @@ class CredentialStatus:
 
 
 def credential_status(root: Path, *, tokens: TokenStore, now: datetime) -> CredentialStatus:
-    """What this workspace holds -- including a workspace with no ``shop.yaml``
-    and no credentials at all, which is when the question is most often asked.
-
-    Reads the token file without refreshing it: "am I still signed in?" must
-    never be a question you risk rotating a refresh token to ask (ADR-0027).
-    """
+    """What this workspace holds, even one with no ``shop.yaml``. Reads the
+    token file without refreshing it: a refresh rotates the token (ADR-0027)."""
     secrets = Secrets.load(root / layout.ENV_FILE)
     return CredentialStatus(
         sign_in=summarise(tokens.load(), now=now),
