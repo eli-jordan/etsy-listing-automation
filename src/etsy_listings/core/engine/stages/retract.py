@@ -7,13 +7,8 @@ this stage to ``build_plan`` *instead* of the pipeline when
 destroy is never rendered, PUT, or PATCHed -- updating it first is wasted
 writes and a way to recreate a product ``read_live`` just said was missing.
 
-**The 404 confirmation is polled, not a single GET.** The cascade this checks
--- Printify DELETE on a still-connected product taking the Etsy draft with it
--- usually lands as an immediate 404 (docs/features/listing-lifecycle-20260916/spec.md,
-"The cascade"), but read-after-write on Etsy's side is not guaranteed instant.
-A short backoff tolerates that lag without changing the policy: a listing that
-never actually goes still fails the same way, files kept, after the same
-ceiling `publish`'s own poll uses.
+The Etsy 404 is polled, not one GET: Etsy's read-after-write lags the cascade
+(docs/features/listing-lifecycle-20260916/spec.md, *The cascade*).
 """
 
 from __future__ import annotations

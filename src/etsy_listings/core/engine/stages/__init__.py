@@ -1,23 +1,12 @@
 """Concrete stages, in pipeline order (ADR-0007: order encodes dependency, not a
 dependency graph).
 
-The pipeline renders mockups, configures the Printify product, publishes
-selectively, then patches Etsy listing fields, images and videos in that order,
-because each depends on what the one before it just did *this run*, via
-ADR-0034's threading of ``lock.remote`` rather than a second lockfile read:
-``Publish`` mints the Etsy listing id ``EtsyListing`` and ``EtsyMedia`` both
-PATCH, and ``EtsyMedia`` needs whatever images survive the first two to
-exist. ``EtsyVideos()`` follows ``EtsyMedia()`` because a second video is
-placed by the number of images on the listing when it is attached, so the
-images have to be there and in order first.
-AI proposals run separately from deployment; there is no Generate stage.
-
-**A stage in this list is not a stage that always runs.**
-``PrintifyProduct`` reports itself unconfigured, rather than failing, in a
-workspace with no ``printify.shop_id``: a listing with no title or
-description filled in yet is perfectly valid for rendering mockups.
-Running ``setup`` is what opts a workspace in. ``Publish``/``EtsyListing``/
-``EtsyMedia`` follow the same rule for ``etsy.shop_id``.
+Each stage uses what the one before it did this run (ADR-0034's
+``lock.remote`` threading): ``Publish`` mints the Etsy listing id
+``EtsyListing`` and ``EtsyMedia`` PATCH, and ``EtsyVideos`` follows
+``EtsyMedia`` because Etsy places a second video by the image count at attach
+time. A stage with no shop id configured reports itself unconfigured rather
+than failing.
 
 :data:`STAGES` is the interface. A stage's own types (``RenderDesired`` and
 friends) are its business; the engine only ever sees them through the

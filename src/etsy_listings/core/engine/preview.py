@@ -68,14 +68,8 @@ class PreviewLookup:
 def lookup_preview(
     ctx: RunContext, listing: str, template: str, colour: str | None
 ) -> PreviewLookup:
-    """The preview a plan run already rendered for this scene, at its
-    *current* hash -- never a path built from ``template``/``colour``
-    directly. Both arrive from a URL; ``Workspace.preview_file`` is what
-    turns them into a real path, and only once this recomputes the same
-    :func:`~etsy_listings.core.engine.stages.render.scene_hash` a plan run would
-    right now -- a stale preview from before the last edit must not be
-    served as if it still matched.
-    """
+    """``template`` and ``colour`` come from a URL: they only select one of
+    the plan's own scenes, never build a path."""
     lock = Lockfile.read(ctx.workspace.lock_file(listing))
     applied = lock.parse_applied_for("render", RenderApplied) if lock is not None else None
     desired = RenderStage().desired(ctx, listing, applied)

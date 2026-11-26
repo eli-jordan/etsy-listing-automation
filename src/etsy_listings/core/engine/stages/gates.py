@@ -32,18 +32,8 @@ def concrete_description(
 
 
 def _refuse(issues: Sequence[Issue]) -> Blocked | None:
-    """The first *blocking* issue, as a refusal.
-
-    A ``warn`` or ``info`` is something the banner shows and a deploy goes
-    ahead past -- a video's stripped sound is the case that made a
-    rule return both kinds from one call.
-
-    A stage refuses or it does not, so only the first message can be shown --
-    the banner is what wants the whole list. ``where`` and ``tab`` are dropped
-    here rather than folded into the text: a stage's refusal is already
-    attributed to the stage that returned it, and "Variants › Garment profile"
-    names a tab a CLI user is not looking at.
-    """
+    """The first blocking issue's message alone: the stage already attributes
+    it, and ``tab`` names a UI tab a CLI user is not looking at."""
     blocking = [issue for issue in issues if issue.severity == "block"]
     return Blocked(blocking[0].message) if blocking else None
 

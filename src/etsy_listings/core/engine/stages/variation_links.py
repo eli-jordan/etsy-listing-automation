@@ -14,12 +14,8 @@ from etsy_listings.core.engine.stages.etsy_target import EtsyListingTarget
 
 
 def manifest_ref(entry: MediaEntry) -> str:
-    """A `media:` entry's ref in ``lock.remote``'s id maps:
-    ``"{template}:{colour}"`` for a colour-matrix render, the bare template
-    name for a `single`/`multiple` one, and a file ref as written. Stable
-    across a re-render, since the render's own output path does not appear
-    in it. Both stages key their ids by it, and the video stage reads the
-    image stage's ids back through it to cut and restore `image_ids`."""
+    """The key of ``lock.remote``'s image and video id maps. It holds no
+    render output path, so it survives a re-render."""
     if isinstance(entry, str):
         return entry
     return f"{entry.template}:{entry.colour}" if entry.colour is not None else entry.template

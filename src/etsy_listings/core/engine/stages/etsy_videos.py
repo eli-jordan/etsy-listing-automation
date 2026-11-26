@@ -432,16 +432,8 @@ class _Placer:
 def _changes(
     wanted: AppliedEtsyVideos, applied: AppliedEtsyVideos | None
 ) -> tuple[FieldChange, ...]:
-    """What differs, per slot, with the ref itself as the value.
-
-    A slot whose video changed is ``videos.featured``/``videos.second``,
-    ref before and after, so a reader can tell a new video from one that only
-    moved slot by the refs alone -- the deploy review's New and Removed badges
-    come from here rather than from a comparison of its own. The
-    same ref with new bytes is ``.contents``, digest before and after; the
-    second video moved among the images is ``.after_images``, its anchor
-    before and after.
-    """
+    """The deploy review's badges read these paths: ``videos.<slot>`` (refs),
+    ``.contents`` (digests) and ``.after_images`` (anchors)."""
     before_videos = applied.videos if applied is not None else ()
     changes: list[FieldChange] = []
     for slot, path in enumerate(("videos.featured", "videos.second")):

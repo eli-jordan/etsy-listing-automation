@@ -10,12 +10,8 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 class MissingClientError(RuntimeError):
-    """A stage ran without the client it needs.
-
-    Deliberately not user-facing: every route that reaches a stage's ``apply``
-    goes through a ``plan`` that would have blocked an unconfigured workspace
-    first, so this can only be reached by wiring a run wrongly.
-    """
+    """Not user-facing: ``plan`` blocks an unconfigured workspace before any
+    ``apply``, so only a wrongly wired run gets here."""
 
     def __init__(self, service: str) -> None:
         super().__init__(
