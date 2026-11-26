@@ -2,11 +2,10 @@ import { useEffect } from "react";
 import { useBlocker } from "react-router-dom";
 
 /**
- * Values the server has not written (batch-creation spec, *Completeness and editing*).
- * Leaving the app gets the browser's `beforeunload` prompt, the only one it allows.
- *
- * A `replace` navigation is never blocked: naming a template swaps `/new` for `/:name`
- * in the same tick as the save that made the state safe, before this hook sees it.
+ * Blocks leaving while values are unwritten; leaving the app gets the
+ * browser's `beforeunload` prompt, the only one it allows. A `replace`
+ * navigation is never blocked: naming a template swaps `/new` for `/:name` in
+ * the same tick as the save that made it safe.
  */
 export function useUnsavedWarning(
   active: boolean,

@@ -20,12 +20,8 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
   return data;
 }
 
-/** A template.yaml as read, with the revision a save must name in `If-Match`.
- *
- * `revision` is the bare revision id -- the same string preparation reports as
- * `config_revision` and a preview takes as `calibration_revision` -- not the
- * quoted ETag. Quoting is HTTP's business and stays in this file. `""` when
- * the server sent no ETag. */
+/** `revision` is the bare id preparation reports as `config_revision` and a
+ * preview takes as `calibration_revision`, not the quoted ETag; `""` without one. */
 export interface TemplateConfigDocument {
   config: TemplateConfigState;
   modifiedAt: string;
@@ -42,8 +38,6 @@ function revisionOf(response: Response | undefined): string {
   return (response?.headers.get("ETag") ?? "").replace(/^"|"$/g, "");
 }
 
-/** Null when the template has no template.yaml yet -- a folder of photos
- * that has not been given a kind. */
 export async function getTemplateConfig(name: string): Promise<TemplateConfigDocument | null> {
   const { data, error, response } = await api.GET("/api/templates/{name}/config", {
     cache: "no-store",
@@ -132,16 +126,9 @@ export async function uploadDesign(file: File): Promise<DesignSummary> {
   return data;
 }
 
-/**
- * The rail's per-template photo. A plain URL rather than a fetch: the browser
- * loads, caches and evicts these itself, and there is no object URL for anyone
- * to leak by forgetting to revoke it.
- *
- * `colour` narrows a `colour-matrix` set to one of its photos. Omit it for the
- * calibrator's rail, which is standing in for the whole template; pass it
- * anywhere a *particular* variant is on screen (the listings editor's reel and
- * its previews), or every colour of a set draws the same picture.
- */
+/** A plain URL, so the browser caches it and there is no object URL to revoke.
+ * Omit `colour` only where the photo stands for the whole template (the
+ * calibrator's rail): without it every colour of a set draws the same picture. */
 export function templateThumbnailUrl(name: string, colour?: string | null): string {
   const base = `/api/templates/${encodeURIComponent(name)}/thumbnail`;
   return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
@@ -161,8 +148,6 @@ export function templateDesignPreviewUrl(
   design: string | { testDesign: string },
   colour?: string | null,
 ): string {
-  // A listing's design by name, or -- the listing-template editor's preview --
-  // a calibrator test design by its library id.
   const params = new URLSearchParams(
     typeof design === "string" ? { design } : { test_design: design.testDesign },
   );

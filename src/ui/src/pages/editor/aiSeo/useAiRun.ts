@@ -12,13 +12,6 @@ import type {
   WorkflowStep,
 } from "../../../types";
 
-/**
- * Everything the UI shows about a run is a function of its events: `steps` is
- * the latest `step` event for each node, `queries` and `market` the latest of
- * theirs. The stream replays every event from the start (`openAiRunStream`),
- * so a reload lands the same reduction in the same place.
- */
-
 export type AiRunViewPhase = "idle" | "starting" | AiRunPhase;
 
 export interface AiRun {

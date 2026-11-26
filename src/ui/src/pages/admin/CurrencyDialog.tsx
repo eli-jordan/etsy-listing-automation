@@ -2,6 +2,7 @@ import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { useEffect, useRef, useState } from "react";
 import type { ShopSettings } from "../../api/shop";
 import { AlarmDialog } from "./AlarmDialog";
+import type { SubmitFailure } from "./backup/backupText";
 
 export function CurrencyDialog({
   current,
@@ -14,8 +15,7 @@ export function CurrencyDialog({
   currencies: ShopSettings["supported_currencies"];
   etsyShopCurrency: string | null;
   onCancel: () => void;
-  /** The refusal to show, or null once saved. */
-  onConfirm: (code: string) => Promise<string | null>;
+  onConfirm: (code: string) => Promise<SubmitFailure>;
 }) {
   const offered = currencies.filter((c) => c.code !== current);
   const [next, setNext] = useState(offered[0]?.code ?? current);

@@ -5,6 +5,7 @@ import {
 } from "../../api/workspaceSettings";
 import { type LimitDraft, ROWS, toLimits } from "./templateLimits";
 import { AlarmDialog } from "./AlarmDialog";
+import type { SubmitFailure } from "./backup/backupText";
 
 type Impact =
   | { kind: "loading" }
@@ -20,8 +21,7 @@ export function TemplateLimitsDialog({
   saved: LimitDraft;
   draft: LimitDraft;
   onCancel: () => void;
-  /** The refusal to show, or null once saved. */
-  onSave: () => Promise<string | null>;
+  onSave: () => Promise<SubmitFailure>;
 }) {
   const [impact, setImpact] = useState<Impact>({ kind: "loading" });
   const [busy, setBusy] = useState(false);

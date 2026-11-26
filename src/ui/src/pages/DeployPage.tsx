@@ -217,10 +217,8 @@ export function DeployPage() {
 
   async function handleBack() {
     leavingRef.current = true;
-    // Applying begins with an async POST. A fast Back click can otherwise
-    // navigate before that POST has registered the apply run, letting the
-    // editor query the old (already-seen) plan and miss the new run forever.
-    // Wait only for registration, not for the apply itself to finish.
+    // Wait for the apply POST to register its run, not for the apply: a fast Back
+    // would otherwise query the old, already-seen plan and miss the new run.
     await applyStartRef.current;
     activeRunRef.current = null;
     streamRef.current?.close();

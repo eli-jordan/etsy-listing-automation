@@ -23,11 +23,9 @@ type RetainedFailure = { value: unknown; message: string; refusal: number | null
 const ignore = () => undefined;
 
 /**
- * `save` resolves with the outcome, `null` when a conflict skipped it, and
- * rejects when the request itself failed. A caller that reports its own
- * failure and retries through its own acknowledged action, like the currency
- * dialog, saves with `retain: false`: its failure is neither kept for Retry
- * nor allowed to hold Saved back once the seller abandons it.
+ * `save` resolves `null` when a conflict skipped it and rejects when the
+ * request failed. A caller that reports and retries its own failure saves
+ * with `retain: false`.
  */
 export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   send,

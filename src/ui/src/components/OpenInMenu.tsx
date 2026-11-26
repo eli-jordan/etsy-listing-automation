@@ -4,34 +4,6 @@ import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { useRef, useState } from "react";
 import { etsyListingUrl, printifyProductUrl } from "./openOn";
 
-/**
- * The "Open in Etsy / Printify" menu.
- *
- * One component because two screens show the same menu with the same rules --
- * the listings table's rows and the editor's action row. They were always
- * going to carry the same two links, and two copies is two chances for a URL
- * shape to drift. Only the trigger differs: the table's row has room for a
- * caret, the editor's action row names the action (`variant="action"`), and
- * there the entries need only say where they go.
- *
- * An id that is absent hides its own entry rather than rendering a dead link:
- * a listing can be published to Etsy without this workspace having ever
- * recorded a Printify product (the lockfile is per-stage), and the caller
- * decides whether a menu with no entries at all is worth showing.
- *
- * Both links go to the *thing*, not to the list it is in. A menu that lands
- * you on "all products" has told you nothing you did not already know, and
- * the ids needed to address each one are already on the row (see
- * `ListingSummary.printify_product_id`).
- *
- * The Etsy one is Shop Manager's listing **editor**, not the public
- * `etsy.com/listing/{id}` storefront URL: this tool never activates a listing
- * it creates (`state` is never sent), so a listing it has
- * just applied is still an Etsy-side draft and the public URL 404s for it.
- * The editor URL works while signed in for every state a listing can be in,
- * draft and live alike, which is why it is not conditional on status.
- */
-
 interface Props {
   etsyListingId: number | null | undefined;
   printifyProductId: string | null | undefined;

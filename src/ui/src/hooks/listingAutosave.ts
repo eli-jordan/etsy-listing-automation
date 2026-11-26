@@ -3,8 +3,6 @@ import { type Clock, type Settled, WRITTEN, WriteLoop } from "./writeLoop";
 
 export type Patch = Record<string, unknown>;
 
-/** A new object each time a save lands, so an observer can tell two saves
- * apart even when `modified_at` does not move. */
 export type SaveState =
   | { kind: "unnamed" }
   | { kind: "saving" }
@@ -13,7 +11,6 @@ export type SaveState =
   | { kind: "name-taken"; name: string }
   | { kind: "save-failed" };
 
-/** `saved: false`: the server wrote nothing, and says why. */
 export type SaveOutcome =
   | { saved: true; detail: ListingDetail }
   | { saved: false; issues: Issue[] | null; field_errors: Record<string, string> };
@@ -65,7 +62,6 @@ function mergePatch(base: Patch, patch: Patch): Patch {
 /** The field error no single field owns. */
 export const ROOT_FIELD_ERROR = "__root__";
 
-/** A write that carries nothing but the create itself. */
 const CREATE_ONLY: Patch = {};
 
 function refusalMessage(fieldErrors: Record<string, string>): string {
@@ -120,7 +116,6 @@ export class ListingAutosave {
     this.loop.edit(patch);
   };
 
-  /** Shows a value the server has already written, without saving it again. */
   adopt = (patch: Patch) => {
     this.adoptedSinceLastSend = mergePatch(this.adoptedSinceLastSend ?? {}, patch);
     this.show({ detail: this.merged(patch) });
@@ -211,9 +206,6 @@ export class ListingAutosave {
     adoptedWhenSent: Patch | null,
     unwrittenPatch: Patch = {},
   ): ListingDetail {
-    // A response carrying field errors describes the *empty* draft alongside
-    // them (there is no listing to describe), so only the errors are news --
-    // taking the rest would wipe the document being edited.
     if (Object.keys(fresh.field_errors ?? {}).length > 0) {
       return { ...this.view.detail, field_errors: fresh.field_errors };
     }
@@ -227,8 +219,6 @@ export class ListingAutosave {
   }
 
   private refused(outcome: SaveOutcome & { saved: false }): Settled {
-    // With no field to highlight, the page head is the only place left to
-    // say what it is.
     const reason = outcome.field_errors[ROOT_FIELD_ERROR];
     this.show({
       detail: {

@@ -48,7 +48,6 @@ const STEPS: Readonly<Record<string, [number, number]>> = {
 const NUDGE_STEP = 0.01;
 const SHIFT_NUDGE_STEP = 0.05;
 
-/** `null` for a key that is not an arrow. */
 export function nudged(from: Pose, key: string, shift: boolean, limits: Limits): Pose | null {
   const step = STEPS[key];
   if (step === undefined) return null;

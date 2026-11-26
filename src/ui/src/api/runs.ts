@@ -48,8 +48,6 @@ export async function getRun(id: string): Promise<RunDetail> {
   return withTuples<RunDetail>(data);
 }
 
-/** `false` rather than a throw when the server refuses: a race with the run
- * finishing on its own is not a defect. */
 export async function cancelRun(id: string): Promise<boolean> {
   const { error, response } = await api.DELETE("/api/runs/{run_id}", {
     params: { path: { run_id: id } },

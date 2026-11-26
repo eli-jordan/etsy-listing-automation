@@ -7,12 +7,8 @@ export const DISTANCE_PX = 64;
 export const FLICK_PX = 28;
 export const FLICK_PX_PER_MS = 0.45;
 
-/** How much more along one axis than the other a move must be, so a slightly
- * slanted scroll never turns into a swipe. */
 const AXIS_DOMINANCE = 1.2;
 
-/** The axis a move has committed to, or null while it is still too small,
- * or too diagonal, to say. */
 export function lockAxis(dx: number, dy: number): "x" | "y" | null {
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);

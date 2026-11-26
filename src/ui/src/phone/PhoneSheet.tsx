@@ -4,25 +4,12 @@ import { SheetGrabber } from "./SheetGrabber";
 
 /**
  * The phone layout's bottom sheet, for what a desktop shows as a popover, a
- * side panel or an inline row of actions: the editor's overflow actions and
- * Add media, a listing row's actions, the template switcher.
+ * side panel or an inline row of actions: `ConfirmDialog`'s sheet, with a grab
+ * bar and title row that drag it away, and Done unless `done` is false.
  *
- * It is the same sheet as `ConfirmDialog` (`.modal-root` / `.modal-dialog`,
- * drawn as a sheet by `phone/base.css`) with a grab bar that swipes it away,
- * a title (the grab bar and the title row both drag it), and Done unless `done` is false (an action sheet ends in its own
- * Cancel instead).
- *
- * On `document.body`, never inside the page: the editor's tab content swipes
- * sideways between tabs, and a sheet's own grab bar must not be read as a
- * swipe of the tab under it; the calibrator's narrow-width rules must not
- * reach a copy of the rail inside one.
- *
- * `open` hides it rather than unmounting it, so what is inside keeps its
- * state while it is closed -- a delete confirmation started from the
- * overflow sheet outlives the sheet closing under it. A caller that mounts
- * it only while open leaves `open` at its default.
- *
- * Only the phone layout opens one, so its markup has no desktop styles.
+ * On `document.body`: the editor's tab content swipes sideways, and a sheet's
+ * drag must not read as a swipe of the tab under it. `open` hides it rather
+ * than unmounting it, so what is inside keeps its state while it is closed.
  */
 export function PhoneSheet({
   open = true,

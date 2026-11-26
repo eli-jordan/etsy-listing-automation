@@ -56,9 +56,8 @@ function mediaOwner(owner: MediaOwner | null | undefined, name: string): MediaOw
   return name ? { kind: "listing", name } : null;
 }
 
-/** The directory to list the owner's own files from. A draft has no
- * directory, and neither does an unsaved listing template (one with
- * `copies`), so neither has anything of its own to list. */
+/** A draft and an unsaved listing template (one with `copies`) have no
+ * directory, so no files of their own to list. */
 function ownDirectory(owner: MediaOwner | null): MediaOwner | null {
   return owner === null || owner.copies !== undefined ? null : owner;
 }

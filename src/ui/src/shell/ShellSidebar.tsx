@@ -1,12 +1,9 @@
 import type { ReactNode } from "react";
 
 /**
- * Presentational half of the app shell. The routed shell supplies its real
- * navigation; design fixtures can supply inert navigation without mounting a
- * router or touching the workspace API.
- *
- * `footer` is the bottom entry: the app passes its Admin link. Without one,
- * the placeholder Setup entry the design frames were drawn around stays.
+ * The app shell's presentational half: design fixtures pass inert navigation
+ * without a router or the workspace API. Without `footer` (the app passes its
+ * Admin link), the placeholder Setup entry stays.
  */
 export function ShellSidebar({
   shopName,

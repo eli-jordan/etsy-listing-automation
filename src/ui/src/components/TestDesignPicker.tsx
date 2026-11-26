@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import { listDesigns, uploadDesign } from "../api/calibrator";
 import type { DesignSummary } from "../types";
 
-/** Which artwork the live preview is rendered with: a way of looking at the
- * template, sent only as the preview request's `design`. */
-
 interface Props {
   compact?: boolean;
   value: string;
@@ -29,8 +26,7 @@ export function TestDesignPicker({ value, onChange, compact = false }: Props) {
     setStatus("uploading…");
     uploadDesign(file)
       .then((added) => {
-        // Spliced in rather than re-fetched: the response already says what
-        // was added, and a round trip would leave the new design briefly
+        // Spliced in, not re-fetched: a round trip would leave the new design briefly
         // unselectable in the list that just gained it.
         setDesigns((current) =>
           current.some((d) => d.id === added.id) ? current : [...current, added],

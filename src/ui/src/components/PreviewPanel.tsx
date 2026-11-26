@@ -4,12 +4,6 @@ import { useIsPhone } from "../phone/usePhone";
 import { Lightbox } from "./Lightbox";
 import { previewProgress, type PreviewResult } from "./previewProgress";
 
-/**
- * Renders **sequentially**. Firing every colour at once does not make the set
- * arrive sooner -- the server runs the real pipeline for each -- it only makes
- * the *first* one arrive later, and buries the progress count.
- */
-
 type PreviewBody = Parameters<typeof renderPreview>[1];
 
 export interface PreviewJob {
@@ -151,8 +145,7 @@ function PreviewTile({
   );
 }
 
-/** `.btn` alone is transparent in this design system, so the quiet button is
- * `btn-secondary`, never bare. */
+/** `.btn` alone is transparent in this design system, so the quiet button is `btn-secondary`. */
 function renderButtonClass(stale: boolean, approvable: boolean): string {
   if (stale) return "btn btn-danger";
   return approvable ? "btn btn-secondary" : "btn btn-primary";
@@ -193,13 +186,9 @@ export function PreviewPanel({
     setRequest({ key, templateName, design, jobs });
   }, [key, templateName, design, jobs, revokeAll]);
 
-  // Adjusted during render rather than from an effect. React re-renders
-  // immediately and throws the intermediate output away, so the panel never
-  // paints a "nothing yet" state it is about to replace -- where an effect
-  // would both paint it and cost the cascading render that
-  // `react-hooks/set-state-in-effect` exists to prevent. Nothing to revoke
-  // here either: `request` only ever goes from null to set, so there cannot
-  // be an earlier run's blobs to clean up. That is why this is not `start()`.
+  // Adjusted during render, not in an effect, so the panel never paints the
+  // empty state it is about to replace. `request` only goes from null to set,
+  // so there are no earlier blobs to revoke.
   if (active && request === null && !blocked) {
     setRequest({ key, templateName, design, jobs });
     setResult({ key, rendered: {}, done: 0, failed: 0 });

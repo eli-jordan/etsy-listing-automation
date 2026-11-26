@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { getPositionedListings, type PositionedListing } from "../api/calibrator";
 import { useIsPhone } from "../phone/usePhone";
 
-/** A failed read shows nothing: the note is advice, and the plan still
- * refuses an out-of-limits position. */
 export function PositionedListingsNote({
   templateName,
   savedAt,
@@ -39,8 +37,6 @@ export function PositionedListingsNote({
     .join(", ");
   const them = count === 1 ? "it" : "them";
   const lead = count === 1 ? "1 listing holds its" : `${count} listings hold their`;
-  // On a phone the full list pushed the photo a screen down; the count says
-  // what matters, and the names are a tap away.
   if (phone) {
     return (
       <details className="app__warn app__positions-note app__positions-note--phone" role="note">

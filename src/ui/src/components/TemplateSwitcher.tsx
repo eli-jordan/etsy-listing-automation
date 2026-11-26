@@ -162,9 +162,8 @@ interface SheetProps {
   children: ReactNode;
 }
 
-/** Every template, as a bottom sheet over the page. A `PhoneSheet`, so it
- * sits on the body, where the calibrator's own narrow-width rules (which
- * fold the rail away) do not reach the copy of the rail inside it. */
+/** A `PhoneSheet`, on the body, where the calibrator's narrow-width rules
+ * (which fold the rail away) do not reach its copy of the rail. */
 export function TemplateSheet({ selected, rename, onClose, children }: SheetProps) {
   return (
     <PhoneSheet title="Templates" onClose={onClose} className="tsheet__dialog">
