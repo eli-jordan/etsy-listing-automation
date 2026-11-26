@@ -37,7 +37,6 @@ class Revised:
     revision: str
     """The file's revision after the save, which the next save must name."""
     written: bool
-    """Whether the file was replaced: an unchanged result is not."""
 
 
 def content_revision(data: bytes) -> str:
