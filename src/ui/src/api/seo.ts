@@ -20,9 +20,7 @@ export async function getListingProposal(name: string): Promise<ListingProposal 
   return data;
 }
 
-/** Records accepted or dismissed sections of the proposal generated at
- * `patch.generated_at`. `null` when that proposal is gone (404) or was
- * replaced by a newer one (412): the caller reads the current one again. */
+/** `null` when the proposal is gone or replaced: the caller reads the current one again. */
 export async function resolveListingProposal(
   name: string,
   patch: ProposalResolutionPatch,

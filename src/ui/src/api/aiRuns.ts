@@ -57,9 +57,7 @@ export async function cancelAiRun(id: string): Promise<boolean> {
 
 export type AiRunStreamOptions = Omit<EventStreamOptions<AiRunEvent>, "lastEventId">;
 
-/** Every event the run has produced, then each new one until its last
- * (`phase`). Always from the start: the editor rebuilds its whole view of a
- * run from the events, so it never has a position to resume from. */
+/** Always from the first event: the editor rebuilds a run from all of them. */
 export function openAiRunStream(id: string, options: AiRunStreamOptions): EventStreamHandle {
   return openEventStream(`/api/ai/runs/${encodeURIComponent(id)}/events`, options);
 }

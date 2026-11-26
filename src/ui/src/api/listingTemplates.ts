@@ -9,9 +9,7 @@ import type {
 
 export class ListingTemplatesApiError extends Error {}
 
-/** A name the server will not take: already a listing template's (409), or
- * not a usable directory name (400). Its own class because the *name it*
- * page shows it beside the name field rather than as a page error. */
+/** Its own class: the *name it* page shows it beside the name field, not as a page error. */
 export class ListingTemplateNameRefused extends ListingTemplatesApiError {
   constructor(
     readonly name: string,

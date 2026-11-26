@@ -124,20 +124,18 @@ export async function listListingMediaFiles(listing: string): Promise<MediaFileS
   return data;
 }
 
-/** A file's path under its directory, escaped a segment at a time so the
- * slashes of a subdirectory stay slashes. */
-function mediaPath(name: string): string {
+function escapedEachSegment(name: string): string {
   return name.split("/").map(encodeURIComponent).join("/");
 }
 
 /** One of the listing's own files, downscaled for a list. Images only: a
  * video answers `415`, since a `<video>` element draws its own poster. */
 export function listingMediaThumbnailUrl(listing: string, name: string): string {
-  return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/thumbnail`;
+  return `/api/listings/${encodeURIComponent(listing)}/media-files/${escapedEachSegment(name)}/thumbnail`;
 }
 
 export function listingMediaFileUrl(listing: string, name: string): string {
-  return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/file`;
+  return `/api/listings/${encodeURIComponent(listing)}/media-files/${escapedEachSegment(name)}/file`;
 }
 
 export function listingScenePreviewUrl(
@@ -185,11 +183,11 @@ export function listingSceneArtworkUrl(
 }
 
 export function commonMediaThumbnailUrl(name: string): string {
-  return `/api/common-media/${mediaPath(name)}/thumbnail`;
+  return `/api/common-media/${escapedEachSegment(name)}/thumbnail`;
 }
 
 export function commonMediaFileUrl(name: string): string {
-  return `/api/common-media/${mediaPath(name)}/file`;
+  return `/api/common-media/${escapedEachSegment(name)}/file`;
 }
 
 /** The Description tab's common-copy selector (AI SEO implementation plan,
