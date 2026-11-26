@@ -146,10 +146,7 @@ def create_staging(
     listing_template: Annotated[str, Form()],
     files: list[UploadFile] | None = None,
 ) -> StagingDetail:
-    """Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
-    already spooled the parts to temporary files; each is handed on as a
-    stream, which staging reads a PNG or a ZIP's entries out of with a
-    running count."""
+    """Stage one ZIP or loose PNGs (spec, *Accepted input*)."""
     received = [Upload(filename=f.filename or "unnamed.png", stream=f.file) for f in files or []]
     try:
         session = batch_staging.stage_upload(

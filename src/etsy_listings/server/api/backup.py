@@ -1,10 +1,9 @@
 """The backup status, history, Back up now, set-up, repair, restore, and the
-missing-repository actions (workspace-backup plan, PRs 5, 7 and 8).
+missing-repository actions.
 
-``GET /api/backup`` is the one status source for the Backup page, the
-banner on every other page and both nav icons (interactions, *What the
-production implementation must finish*). Setup's edits are not here: they
-save through ``PATCH /api/admin/settings`` and its revision check.
+``GET /api/backup`` is the one status source for the Backup page, the banner
+on every other page and both nav icons. Setup's edits are not here: they save
+through ``PATCH /api/admin/settings`` and its revision check.
 """
 
 from __future__ import annotations

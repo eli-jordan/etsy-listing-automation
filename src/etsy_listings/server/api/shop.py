@@ -1,11 +1,9 @@
 """The Admin page's Shop tab over HTTP: ``/api/admin/shop``.
 
-Thin by design (ADR-0052): ``core/application/shop_settings.py`` owns the
-revision check, validation and lookups; this module builds the clients through
-``app_state.clients``. A refused save is a :class:`ShopSaveRefusal` body rather
-than ``{"detail": ...}`` so the page can tell a conflict from field errors
-without parsing text, at the status the app's refusal table gives each
-category (``refusal_status.py``'s ``REFUSAL_STATUS``): ``412`` stale, ``422`` refused.
+``core/application/shop_settings.py`` owns the revision check, validation and
+lookups; this module builds the clients through ``app_state.clients``. A refused
+save is a :class:`ShopSaveRefusal` body at ``REFUSAL_STATUS``'s status
+(docs/architecture.md, *Shop administration*).
 """
 
 from __future__ import annotations

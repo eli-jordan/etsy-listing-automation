@@ -406,6 +406,12 @@ reads the list again after each save: `positioned_listings()` in
 `GET /api/templates/{name}/positioned-listings`. It reads raw listing documents
 and writes none.
 
+The design a preview prints comes from an open library: the three bundled
+targets in `server/api/static/` plus PNGs the user uploads into the workspace's
+`test-designs/` (`core/application/calibration_designs.py`). A fixed set would
+not do, because calibration is judged by eye: the grid target shows whether the
+warp is right and says nothing about how a real ink weight sits on a garment.
+
 ### Renderer configuration and calibration recovery
 
 Templates require `renderer.type` and put active settings in `renderer.config`.
@@ -683,7 +689,9 @@ build their clients through the app's `ClientFactories` (`app_state.clients`).
 configured-identity retention and the editable key set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
 revision refuses with 412 and `kind: "stale"`; invalid values refuse with field
-errors and 422.
+errors and 422. Both are a typed `ShopSaveRefusal` body rather than
+`{"detail": ...}`, so the page tells a conflict from field errors without
+parsing text.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
 
 A successful save replaces the server workspace's defaults inside the same
