@@ -81,13 +81,8 @@ peak memory by the size of a typical Etsy gallery.
 
 
 def _copy_preview(source: Path, target: Path) -> None:
-    """Copy ``source`` over ``target`` atomically while retaining ``source``.
-
-    A direct ``copyfile`` can leave a partial render if the process stops
-    mid-copy. The temporary file lives beside the render so ``os.replace`` is
-    an atomic same-filesystem operation, preserving the crash safety promotion
-    had when it consumed previews directly.
-    """
+    """Keeps ``source``. The temporary file sits beside ``target`` so
+    ``os.replace`` stays atomic: a stop mid-copy never leaves a partial render."""
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         dir=target.parent, prefix=f".{target.name}.", suffix=".tmp"
@@ -185,8 +180,8 @@ class SceneWork:
         content and appearance here; their canonical pixel identity also
         contains ordered artwork and the target photo (ADR-0054).
 
-        Every lockfile records this as ``scene_config``, so its shape and key
-        order are fixed: a changed byte re-renders every listing.
+        Every lockfile records this as ``scene_config``: changing its shape
+        re-renders every listing.
         """
         match self.render:
             case PreparedRender(appearance=appearance, map_content=map_content):
@@ -538,8 +533,6 @@ def _load_templates(
 def _check_template_inputs(
     workspace: Workspace, listing: str, listing_cfg: Listing, templates: _Templates
 ) -> Blocked | None:
-    # ADR-0058: name refused positions before map readiness, which a fix to
-    # the listing would not change.
     if listing_cfg.template_positions:
         settings = workspace.settings_or_problem()
         if isinstance(settings, SettingsProblem):
@@ -788,13 +781,8 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: RenderApplied | None
     ) -> RenderLive | None:
-        """Does what the lockfile claims was rendered still exist?
-
-        A stat per scene, deliberately not a re-hash of every PNG: a
-        ``plan --all`` over a real catalogue would otherwise read every
-        rendered megabyte on every invocation, to answer a question the
-        separate ``outputs`` axis already exists to answer at upload time.
-        """
+        """A stat per scene, not a re-hash: ``plan --all`` must not read every
+        rendered PNG. The ``outputs`` axis compares bytes at upload time."""
         del lock
         if applied is None:
             return None
@@ -985,8 +973,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             if preview is not None and preview.is_file():
                 _copy_preview(preview, target)
                 return
-            # Keyed by the identity just checked against the plan, which
-            # lease_scene computed from the decoded pixels.
+            # Keyed by the identity lease_scene computed from the decoded pixels.
             write_atomic(target, scene.encoded(SceneCache(workspace)))
 
     def _prune_previews(self, workspace: Workspace, desired: RenderDesired) -> None:
