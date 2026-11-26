@@ -14,7 +14,6 @@ export function rememberLoadedListings(listings: ListingSummary[]): void {
   loaded = listings;
 }
 
-/** For tests: each one starts from a tab that has never loaded the table. */
-export function forgetLoadedListings(): void {
+export function resetLoadedListingsForTests(): void {
   loaded = null;
 }

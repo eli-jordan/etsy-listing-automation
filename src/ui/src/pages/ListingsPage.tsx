@@ -142,12 +142,7 @@ function ListingsTable({
   );
 }
 
-export function ListingsPage() {
-  const [listings, setListings] = useState<ListingSummary[] | null>(lastLoadedListings);
-  const [workspaceRun, setWorkspaceRun] =
-    useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
-  const [status, setStatus] = useState("");
-  const isPhone = useIsPhone();
+function useListFilters(isPhone: boolean) {
   // On a phone the filter and the search live in the address (`?status=`,
   // `?q=`, both replaced rather than pushed), so Back from a listing comes
   // back to the same list, and a Dashboard count or the Listings tab (which
@@ -178,13 +173,24 @@ export function ListingsPage() {
     (next: Filter) => replaceParam("status", next === "all" ? "" : next),
     [replaceParam],
   );
-  // The search box stays local state, since the address answers a step
-  // behind each keystroke, and is copied there whenever the two differ.
   const addressQuery = params.get("q") ?? "";
-  useEffect(() => {
-    if (!isPhone || addressQuery === query) return;
-    replaceParam("q", query);
-  }, [isPhone, addressQuery, query, replaceParam]);
+  useEffect(
+    function copySearchToAddress() {
+      if (!isPhone || addressQuery === query) return;
+      replaceParam("q", query);
+    },
+    [isPhone, addressQuery, query, replaceParam],
+  );
+  return { filter, setPhoneFilter, setDesktopFilter, query, setQuery };
+}
+
+export function ListingsPage() {
+  const [listings, setListings] = useState<ListingSummary[] | null>(lastLoadedListings);
+  const [workspaceRun, setWorkspaceRun] =
+    useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
+  const [status, setStatus] = useState("");
+  const isPhone = useIsPhone();
+  const { filter, setPhoneFilter, setDesktopFilter, query, setQuery } = useListFilters(isPhone);
   // New listing floats over the list on a phone held upright. Held sideways
   // the head has room for it, and so few rows show that a floating button
   // would sit on one.

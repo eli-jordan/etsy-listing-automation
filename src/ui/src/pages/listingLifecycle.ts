@@ -21,24 +21,22 @@ interface RemoteIds {
   printify_product_id?: string | null;
 }
 
-/** Whether deleting only *marks* the listing: anything on Printify or Etsy
- * has to be retracted by the next apply first. */
-export function hasRemotes(listing: RemoteIds): boolean {
+export function deleteOnlyMarks(listing: RemoteIds): boolean {
   return listing.etsy_listing_id != null || listing.printify_product_id != null;
 }
 
 export function deleteLabel(listing: RemoteIds): string {
-  return hasRemotes(listing) ? "Mark for deletion" : "Delete";
+  return deleteOnlyMarks(listing) ? "Mark for deletion" : "Delete";
 }
 
 export function deleteTitle(listing: RemoteIds & { name: string }): string {
-  return hasRemotes(listing)
+  return deleteOnlyMarks(listing)
     ? `Are you sure you want to mark ${listing.name} for deletion?`
     : `Are you sure you want to delete ${listing.name}?`;
 }
 
 export function deleteDetails(listing: RemoteIds): string {
-  return hasRemotes(listing) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS;
+  return deleteOnlyMarks(listing) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS;
 }
 
 /** What each non-delete gesture writes to `lifecycle`: `null`

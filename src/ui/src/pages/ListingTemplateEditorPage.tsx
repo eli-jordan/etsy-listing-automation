@@ -146,8 +146,7 @@ function ListingTemplateEditor({
   const navigate = useNavigate();
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
-  /** The template's name on disk, once it has one. */
-  const saved = detail.name || name;
+  const savedName = detail.name || name;
 
   function clone(template: string) {
     // The clone is of the file, so an edit not in it would be left behind. The
@@ -200,11 +199,11 @@ function ListingTemplateEditor({
             }
             meta={metaFor(save, detail.name || name, "listing-template")}
             actions={
-              saved && (
+              savedName && (
                 <>
                   <ActionLink
                     icon={<CopySimpleIcon aria-hidden="true" />}
-                    onClick={() => clone(saved)}
+                    onClick={() => clone(savedName)}
                   >
                     Clone
                   </ActionLink>
@@ -222,12 +221,12 @@ function ListingTemplateEditor({
           />
         }
       />
-      {deleting && saved && (
+      {deleting && savedName && (
         <ConfirmDialog
-          title={templateDeleteTitle(saved)}
+          title={templateDeleteTitle(savedName)}
           confirmLabel="Delete"
           details={TEMPLATE_DELETE_DETAILS}
-          onConfirm={() => confirmDelete(saved)}
+          onConfirm={() => confirmDelete(savedName)}
           onCancel={() => setDeleting(false)}
         />
       )}

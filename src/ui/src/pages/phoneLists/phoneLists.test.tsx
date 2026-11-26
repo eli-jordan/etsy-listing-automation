@@ -6,7 +6,7 @@ import * as runsApi from "../../api/runs";
 import { EditableName } from "../../components/EditableName";
 import { DashboardPage } from "../DashboardPage";
 import { ListingsPage } from "../ListingsPage";
-import { forgetLoadedListings } from "../loadedListings";
+import { resetLoadedListingsForTests } from "../loadedListings";
 import { PHONE_QUERY } from "../../phone/usePhone";
 import type { ListingSummary } from "../../types";
 import { PhoneStatusChips } from "./PhoneListingList";
@@ -79,7 +79,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  forgetLoadedListings();
+  resetLoadedListingsForTests();
 });
 
 describe("rowActions", () => {
@@ -92,9 +92,10 @@ describe("rowActions", () => {
       "Retire",
       "Mark for deletion",
     ]);
-    expect(actions[0]?.href).toContain("123");
-    expect(actions[3]?.danger).toBe(true);
-    actions[2]?.onSelect?.();
+    const [etsy, , retire, remove] = actions;
+    expect(etsy?.kind === "link" && etsy.href).toContain("123");
+    expect(remove?.kind === "action" && remove.danger).toBe(true);
+    if (retire?.kind === "action") retire.onSelect();
     expect(onGesture).toHaveBeenCalledWith(LIVE, "retire");
 
     expect(rowActions(MARKED, onGesture).map((a) => a.label)).toEqual(["Undo mark for delete"]);

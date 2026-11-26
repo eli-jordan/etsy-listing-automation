@@ -47,6 +47,9 @@ function createdAt(iso: string): string {
 type Kind =
   "drafted" | "drafting" | "queued" | "retry" | "stopped" | "deployed" | "deleted" | "none";
 
+/** A row a deploy cancelled offers its own Retry, though Resume skips it (ADR-0050). */
+const isRetryable = (kind: Kind | undefined) => kind === "retry" || kind === "deployed";
+
 function kindOf(row: BatchRow): Kind {
   if (row.deleted) return "deleted";
   if (row.creation === "failed") return "retry";
@@ -522,7 +525,7 @@ export function BatchSummaryPage() {
                   key={row.id}
                   batch={id}
                   row={row}
-                  retryable={kinds[index] === "retry" || kinds[index] === "deployed"}
+                  retryable={isRetryable(kinds[index])}
                   onReview={(next) => act(setReviewed(id, row.id, next))}
                   onRetry={() => act(retryBatchRow(id, row.id))}
                 />
@@ -542,9 +545,7 @@ export function BatchSummaryPage() {
               <tbody>
                 {rows.map((row, index) => {
                   const open = row.creation === "created" && !row.deleted;
-                  // A deploy's cancelled row has only its own Retry: Resume
-                  // skips it, and it is not a failure for Retry N failed (ADR-0050).
-                  const retryable = kinds[index] === "retry" || kinds[index] === "deployed";
+                  const retryable = isRetryable(kinds[index]);
                   return (
                     <tr key={row.id} className={open ? undefined : "bc-tr--muted"}>
                       <td>

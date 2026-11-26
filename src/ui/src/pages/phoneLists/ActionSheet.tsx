@@ -1,12 +1,8 @@
 import { PhoneSheet } from "../../phone/PhoneSheet";
 
-export interface SheetAction {
-  label: string;
-  /** A link out (Open in Etsy) rather than something this app does. */
-  href?: string;
-  onSelect?: () => void;
-  danger?: boolean;
-}
+export type SheetAction =
+  | { kind: "link"; label: string; href: string }
+  | { kind: "action"; label: string; onSelect: () => void; danger?: boolean };
 
 export function ActionSheet({
   title,
@@ -21,7 +17,7 @@ export function ActionSheet({
     <PhoneSheet title={title} onClose={onClose} done={false} className="m-sheet">
       <div className="m-sheet__actions">
         {actions.map((action) =>
-          action.href !== undefined ? (
+          action.kind === "link" ? (
             <a
               key={action.label}
               className="m-sheet__action"
@@ -41,7 +37,7 @@ export function ActionSheet({
               }
               onClick={() => {
                 onClose();
-                action.onSelect?.();
+                action.onSelect();
               }}
             >
               {action.label}
