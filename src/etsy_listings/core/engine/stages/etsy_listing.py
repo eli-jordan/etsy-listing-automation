@@ -430,7 +430,7 @@ def _drift(
 
 
 def _field_drifts(was: AppliedEtsyListing, live: EtsyListing) -> list[Drift | None]:
-    fields = [
+    return [
         drift(path, ours, theirs)
         for path, ours, theirs in (
             ("title", was.title, live.title),
@@ -438,9 +438,9 @@ def _field_drifts(was: AppliedEtsyListing, live: EtsyListing) -> list[Drift | No
             ("when_made", was.when_made, live.when_made),
             ("is_supply", was.is_supply, live.is_supply),
             ("should_auto_renew", was.should_auto_renew, live.should_auto_renew),
+            ("description", was.description, live.description),
         )
     ]
-    return [*fields, drift("description", was.description, live.description)]
 
 
 def _id_drifts(
