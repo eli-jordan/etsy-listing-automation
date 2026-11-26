@@ -12,27 +12,25 @@ from etsy_listings.core.errors import UserFacingError
 
 
 class ResticError(UserFacingError):
-    """A restic command failed; the message is restic's own."""
-
     def __init__(self, message: str, *, exit_code: int | None = None) -> None:
         super().__init__(message)
         self.exit_code = exit_code
 
 
 class RepositoryNotFoundError(ResticError):
-    """The repository folder is missing or is not a restic repository."""
+    pass
 
 
 class RepositoryLockedError(ResticError):
-    """Another restic holds a lock that this operation cannot share."""
+    pass
 
 
 class WrongPasswordError(ResticError):
-    """No key in the repository opens with the password."""
+    pass
 
 
 class ResticCancelledError(ResticError):
-    """The operation was stopped before it finished, or before it started."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -50,8 +48,6 @@ class Snapshot:
 
     @property
     def workspace_id(self) -> str | None:
-        """The workspace ID its ``workspace:<id>`` tag names; None for an
-        untagged snapshot, such as one made by hand (ADR-0061)."""
         for tag in self.tags:
             if tag.startswith(WORKSPACE_TAG):
                 return tag.removeprefix(WORKSPACE_TAG)
@@ -77,9 +73,6 @@ BackupListener = Callable[[BackupFigures], None]
 
 @dataclass(frozen=True)
 class BackupSummary:
-    """A finished backup. ``warnings`` name the files it could not read:
-    the snapshot was made without them, and the backup still counts."""
-
     snapshot_id: str | None
     data_added: int | None = None
     warnings: tuple[str, ...] = ()
@@ -87,8 +80,6 @@ class BackupSummary:
 
 @dataclass(frozen=True)
 class RestoreProgress:
-    """How far a restore has got; the last one a restore reports is whole."""
-
     percent: float = 0.0
     """0 to 1."""
     bytes_done: int | None = None
@@ -101,31 +92,17 @@ class RestoreProgress:
 
 @dataclass(frozen=True)
 class RepositoryCheck:
-    """``check``'s verdict: whether the repository's structure is sound,
-    with restic's message when it is not or could not be checked."""
-
     ok: bool
     message: str | None = None
 
 
 class Repository(Protocol):
-    """One restic repository, opened with its password.
-
-    Every operation that takes ``cancel`` checks it before it starts and
-    raises :class:`ResticCancelledError` when it was set, then or part way.
-    """
-
     @property
     def path(self) -> Path: ...
 
-    def init(self) -> str:
-        """Create the repository in its empty folder; its id."""
-        ...
+    def init(self) -> str: ...
 
-    def snapshots(self, *, lock: bool = True) -> tuple[Snapshot, ...]:
-        """Every snapshot, oldest first. ``lock=False`` reads without the
-        shared lock, for a status that must answer while a backup runs."""
-        ...
+    def snapshots(self, *, lock: bool = True) -> tuple[Snapshot, ...]: ...
 
     def back_up(
         self,
@@ -135,10 +112,7 @@ class Repository(Protocol):
         excludes: Sequence[str] = (),
         progress: BackupListener | None = None,
         cancel: threading.Event | None = None,
-    ) -> BackupSummary:
-        """Snapshot ``folder``, leaving out what matches ``excludes``,
-        marked as the workspace ``workspace_id``'s."""
-        ...
+    ) -> BackupSummary: ...
 
     def forget(
         self,
@@ -146,21 +120,11 @@ class Repository(Protocol):
         *,
         workspace_id: str,
         cancel: threading.Event | None = None,
-    ) -> None:
-        """Forget the workspace ``workspace_id``'s snapshots ``retention``
-        does not keep, as one schedule whatever host or folder made them
-        (spec, *Backup run* step 5). Other snapshots are left alone; their
-        data stays until a prune."""
-        ...
+    ) -> None: ...
 
-    def prune(self, *, cancel: threading.Event | None = None) -> None:
-        """Delete the data no snapshot needs any more."""
-        ...
+    def prune(self, *, cancel: threading.Event | None = None) -> None: ...
 
-    def check(self, *, cancel: threading.Event | None = None) -> RepositoryCheck:
-        """Check the repository's structure. Any failure but a cancel is a
-        failed check."""
-        ...
+    def check(self, *, cancel: threading.Event | None = None) -> RepositoryCheck: ...
 
     def restore(
         self,
@@ -169,16 +133,9 @@ class Repository(Protocol):
         *,
         progress: Callable[[RestoreProgress], None] | None = None,
         cancel: threading.Event | None = None,
-    ) -> RestoreProgress:
-        """Write ``snapshot`` into ``target`` without overwriting anything
-        there; its last figures. A snapshot of one folder restores that
-        folder's contents. A stop leaves the files restored so far."""
-        ...
+    ) -> RestoreProgress: ...
 
-    def verify_password(self) -> None:
-        """Raise :class:`WrongPasswordError` unless the password opens the
-        repository."""
-        ...
+    def verify_password(self) -> None: ...
 
 
 OpenRepository = Callable[[Path, Path, str], Repository]

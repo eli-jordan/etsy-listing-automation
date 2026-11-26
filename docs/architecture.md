@@ -1383,9 +1383,13 @@ the repository passes a check. `EXCLUDES` leaves out the temporary names the app
 writers use, and `tests/core/behaviour/test_backup_excludes.py` fails when a
 writer renames its temporaries. A backup that skipped unreadable files (restic's
 exit code 3) still counts, with those files as warnings. `core/backup/state.py` keeps the last prune and check in
-`~/.etsy-listings/backup-state.json`, keyed to the repository path. Every run,
-including a failed one, is appended to `backup-history.jsonl` as one JSON
-line. The last successful backup is read from `restic snapshots`.
+`~/.etsy-listings/backup-state.json`, with each destination's last copy, last
+check and the changed and unexpected files found there. The state names its
+repository, so pointing the app at another one starts afresh instead of
+reusing a prune time that belongs elsewhere. Every run, including a failed
+one, is appended to `backup-history.jsonl` as one JSON line: a run only ever
+adds an entry, so an append rewrites nothing, and a line a crash cut short
+loses only itself. The last successful backup is read from `restic snapshots`.
 
 After a successful run, `BackupRunner` copies the repository to each
 destination with `core/backup/destinations.py`, which is plain file operations
