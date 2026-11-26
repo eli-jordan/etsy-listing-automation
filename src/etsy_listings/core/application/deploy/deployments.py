@@ -86,15 +86,17 @@ class Deployments:
         superseded; with neither, every run.
         """
         if scope == "workspace":
-            return self._registry.for_workspace()
+            return _listed(self._registry.for_workspace())
         if scope == "batch":
-            return (
-                self._registry.for_batch(batch)
-                if batch is not None
-                else self._registry.for_scope("batch")
-            )
+            if batch is None:
+                return self._registry.for_scope("batch")
+            return _listed(self._registry.for_batch(batch))
         if scope == "listings":
             return self._registry.for_scope("listings")
         if listing is not None:
-            return self._registry.for_listing(listing)
+            return _listed(self._registry.for_listing(listing))
         return self._registry.all_runs()
+
+
+def _listed(run: Run | None) -> list[Run]:
+    return [run] if run is not None else []

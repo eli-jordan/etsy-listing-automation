@@ -23,49 +23,48 @@ _WAKE = ""
 so :meth:`RunRegistry.drain_and_cancel` finds no run for it and skips it."""
 
 
-@dataclass(frozen=True)
-class ListingPlan:
-    listings: tuple[str, ...]
+@dataclass(frozen=True, kw_only=True)
+class _Publishes:
     publish: bool = False
     """Publish new and still-draft listings rather than leave drafts
     (``publishing_pipeline``). Opt-in; a plan and the apply it reviews agree."""
 
 
 @dataclass(frozen=True)
-class WorkspacePlan:
+class ListingPlan(_Publishes):
     listings: tuple[str, ...]
-    publish: bool = False  # as ListingPlan.publish
 
 
 @dataclass(frozen=True)
-class ListingApply:
+class WorkspacePlan(_Publishes):
     listings: tuple[str, ...]
-    expect: Mapping[str, str]
-    publish: bool = False  # as ListingPlan.publish
 
 
 @dataclass(frozen=True)
-class WorkspaceApply:
+class ListingApply(_Publishes):
     listings: tuple[str, ...]
     expect: Mapping[str, str]
-    reviewed_run_id: str
-    publish: bool = False  # as ListingPlan.publish
 
 
 @dataclass(frozen=True)
-class BatchPlan:
-    batch_id: str
-    listings: tuple[str, ...]
-    publish: bool = False  # as ListingPlan.publish
-
-
-@dataclass(frozen=True)
-class BatchApply:
-    batch_id: str
+class WorkspaceApply(_Publishes):
     listings: tuple[str, ...]
     expect: Mapping[str, str]
     reviewed_run_id: str
-    publish: bool = False  # as ListingPlan.publish
+
+
+@dataclass(frozen=True)
+class BatchPlan(_Publishes):
+    batch_id: str
+    listings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BatchApply(_Publishes):
+    batch_id: str
+    listings: tuple[str, ...]
+    expect: Mapping[str, str]
+    reviewed_run_id: str
 
 
 RunCommand = ListingPlan | WorkspacePlan | BatchPlan | ListingApply | WorkspaceApply | BatchApply
@@ -317,24 +316,17 @@ class RunRegistry:
         with self._lock:
             return list(self._runs.values())
 
-    def for_listing(self, name: str) -> list[Run]:
-        """The current run holding ``name``, active or finished -- a list of
-        at most one, in the shape the endpoint contract promises (decision
-        7): this registry keeps exactly one holder per listing, superseded
-        wholesale by the next ``create`` for it, never several to merge."""
+    def for_listing(self, name: str) -> Run | None:
         with self._lock:
-            run = self._runs.get(self._holder.get(name, ""))
-            return [run] if run is not None else []
+            return self._runs.get(self._holder.get(name, ""))
 
-    def for_workspace(self) -> list[Run]:
+    def for_workspace(self) -> Run | None:
         with self._lock:
-            run = self._runs.get(self._workspace_holder or "")
-            return [run] if run is not None else []
+            return self._runs.get(self._workspace_holder or "")
 
-    def for_batch(self, batch_id: str) -> list[Run]:
+    def for_batch(self, batch_id: str) -> Run | None:
         with self._lock:
-            run = self._runs.get(self._batch_holder.get(batch_id, ""))
-            return [run] if run is not None else []
+            return self._runs.get(self._batch_holder.get(batch_id, ""))
 
     def for_scope(self, scope: RunScope) -> list[Run]:
         with self._lock:

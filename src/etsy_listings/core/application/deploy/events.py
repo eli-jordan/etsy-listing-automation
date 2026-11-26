@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
 from functools import singledispatch
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, assert_never
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -134,26 +135,29 @@ ChangeDTO = Annotated[
 
 
 def _change_dto(change: Change) -> FieldChangeDTO | ListChangeDTO | PriceChangeDTO | MediaChangeDTO:
-    if isinstance(change, FieldChange):
-        return FieldChangeDTO(
-            path=change.path, before=_jsonable(change.before), after=_jsonable(change.after)
-        )
-    if isinstance(change, ListChange):
-        return ListChangeDTO(
-            path=change.path,
-            added=tuple(_jsonable(item) for item in change.added),
-            removed=tuple(_jsonable(item) for item in change.removed),
-            reordered=change.reordered,
-        )
-    if isinstance(change, PriceChange):
-        return PriceChangeDTO(
-            size=change.size,
-            before=str(change.before),
-            after=str(change.after),
-            color=change.color,
-        )
-    assert isinstance(change, MediaChange)  # `Change` has exactly four members
-    return MediaChangeDTO(rank=change.rank, before=change.before, after=change.after)
+    match change:
+        case FieldChange():
+            return FieldChangeDTO(
+                path=change.path, before=_jsonable(change.before), after=_jsonable(change.after)
+            )
+        case ListChange():
+            return ListChangeDTO(
+                path=change.path,
+                added=tuple(_jsonable(item) for item in change.added),
+                removed=tuple(_jsonable(item) for item in change.removed),
+                reordered=change.reordered,
+            )
+        case PriceChange():
+            return PriceChangeDTO(
+                size=change.size,
+                before=str(change.before),
+                after=str(change.after),
+                color=change.color,
+            )
+        case MediaChange():
+            return MediaChangeDTO(rank=change.rank, before=change.before, after=change.after)
+        case _:
+            assert_never(change)
 
 
 class DriftDTO(BaseModel):
@@ -323,15 +327,26 @@ _SnapshotStagePlanDTO = (
     | EtsyMediaStagePlanDTO
     | EtsyVideosStagePlanDTO
 )
-_SNAPSHOT_STAGES: dict[str, tuple[type[_SnapshotStagePlanDTO], type[BaseModel]]] = {
-    "render": (RenderStagePlanDTO, RenderSnapshot),
-    "printify_product": (ProductStagePlanDTO, ProductSnapshot),
-    "publish": (PublishStagePlanDTO, PublishSnapshot),
-    "etsy_listing": (EtsyListingStagePlanDTO, EtsyListingSnapshot),
-    "etsy_media": (EtsyMediaStagePlanDTO, EtsyMediaSnapshot),
-    "etsy_videos": (EtsyVideosStagePlanDTO, EtsyVideosSnapshot),
+_SNAPSHOT_STAGES: dict[str, Callable[[StagePlan, dict[str, Any]], _SnapshotStagePlanDTO]] = {
+    "render": lambda sp, values: RenderStagePlanDTO(
+        **values, snapshot=_snapshot(sp, RenderSnapshot)
+    ),
+    "printify_product": lambda sp, values: ProductStagePlanDTO(
+        **values, snapshot=_snapshot(sp, ProductSnapshot)
+    ),
+    "publish": lambda sp, values: PublishStagePlanDTO(
+        **values, snapshot=_snapshot(sp, PublishSnapshot)
+    ),
+    "etsy_listing": lambda sp, values: EtsyListingStagePlanDTO(
+        **values, snapshot=_snapshot(sp, EtsyListingSnapshot)
+    ),
+    "etsy_media": lambda sp, values: EtsyMediaStagePlanDTO(
+        **values, snapshot=_snapshot(sp, EtsyMediaSnapshot)
+    ),
+    "etsy_videos": lambda sp, values: EtsyVideosStagePlanDTO(
+        **values, snapshot=_snapshot(sp, EtsyVideosSnapshot)
+    ),
 }
-"""Each stage that carries a snapshot: its plan DTO and the snapshot type it holds."""
 
 
 def stage_plan_dto(
@@ -355,10 +370,7 @@ def stage_plan_dto(
         return EtsyActivateStagePlanDTO(**fields)
     if stage_plan.stage not in _SNAPSHOT_STAGES:
         raise ValueError(f"unknown stage {stage_plan.stage!r}")
-    dto, expected = _SNAPSHOT_STAGES[stage_plan.stage]
-    # _snapshot has checked it is ``expected``, the type the table pairs with ``dto``.
-    snapshot: Any = _snapshot(stage_plan, expected)
-    return dto(**fields, snapshot=snapshot)
+    return _SNAPSHOT_STAGES[stage_plan.stage](stage_plan, fields)
 
 
 class PlanDTO(BaseModel):

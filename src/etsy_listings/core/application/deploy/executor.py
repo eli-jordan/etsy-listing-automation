@@ -109,11 +109,6 @@ class RunExecutor:
                 self._execute(run)
 
     def _should_stop(self, run: Run) -> bool:
-        """A plan run stops for its own cancel *or* a shutdown; an apply run
-        never honours ``cancel_requested`` (decision 8 -- the registry never
-        sets it for one), only a shutdown."""
-        if run.kind == "apply":
-            return self._stop.is_set()
         return run.cancel_requested or self._stop.is_set()
 
     def _pipeline(self, run: Run) -> list[AnyStage]:
@@ -227,7 +222,11 @@ _EventFactory = Callable[[int], AnyRunEvent]
 
 @singledispatch
 def _public_event(event: EngineRunEvent) -> _EventFactory:
-    assert isinstance(event, EngineStageFailed)  # closed union
+    raise TypeError(f"no public event for {type(event).__name__}")
+
+
+@_public_event.register(EngineStageFailed)
+def _stage_failed(event: EngineStageFailed) -> _EventFactory:
     return lambda i: StageFailedEvent(
         id=i,
         listing=event.listing,
