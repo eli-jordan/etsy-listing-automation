@@ -4,34 +4,9 @@ import { useState } from "react";
 import { useIsPhone } from "../../phone/usePhone";
 
 /**
- * The validation banner above the tab strip (phase 5), from the mockup's
- * `issues` markup.
- *
- * Two things it must not do, both learned the hard way:
- *
- * * **Summarise only the blocks.** A one-item summary sitting above three
- * rows, two of which it never mentioned, reads as a bug in the count. Both
- * severities are counted and joined.
- * * **Offer an action that does nothing.** An issue already on the open tab
- * gets the word "Below", not a "Fix →" button that would re-select the tab
- * it is already on.
- *
- * The list itself is whatever the server returned -- `config/listing_validation.py`
- * owns which rules exist and what they say; nothing here re-derives an issue.
- *
- * **Every row is a warning, never an error.** Nothing in this list
- * stops the listing being saved -- naming it writes it -- so an error's red
- * circle, and a summary saying the problems "block this listing", told a
- * seller their work was being refused when it was on disk. What a `block`
- * issue actually stops is the *deploy*, and it says so in words on its own
- * row rather than through colour alone: the tag is what separates "fix this
- * before deploying" from a `warn` that is only advice (no tags, say), now
- * that both wear the same icon.
- *
- * Informational notes are not global editor issues. For example, ADR-0045's
- * stripped-audio note remains available beside the focused clip (and may be
- * reported by a plan), but putting it over every editor tab reads as a
- * warning about something the seller cannot fix.
+ * Every row wears the warning icon, since nothing here stops the save; a
+ * `block` row says in words that it prevents deploying. Info notes stay beside
+ * what they are about rather than over every tab.
  */
 
 interface Props {
@@ -58,11 +33,7 @@ function summarise(issues: Issue[], subject: Props["subject"]): string {
   return parts.join(" · ");
 }
 
-/** A filled amber triangle with a dark mark, rather than an outline in the
- * text colour. The outline took `--color-accent-2-700`, which in this palette
- * is an olive that reads as grey -- a warning nobody recognises as one. The
- * colours live on the shapes themselves so the icon cannot drift back into
- * the surrounding text colour. */
+/** The colours live on the shapes so the icon never inherits the text colour. */
 function WarnIcon() {
   return (
     <svg viewBox="0 0 24 24">

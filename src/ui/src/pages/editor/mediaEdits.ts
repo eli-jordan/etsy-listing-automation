@@ -2,25 +2,10 @@ import { isInMedia, mediaKind, missingColours } from "../../media";
 import type { MediaEntry, TemplateMediaEntry } from "../../types";
 
 /**
- * Every rule about *changing* a listing's images, as a patch.
- *
- * Each function takes the listing and returns the patch to send, or `null` when
- * there is nothing to change. No component state, no DOM, no fetch -- so the
- * rules can be tested by calling them, which is the whole reason they are not
- * closures inside `ImagesTab` any more. The one that matters most was the
- * hardest to reach that way: `toggleSwatchSource` is ADR-0030's gate, and it was
- * a callback three levels inside a 733-line component.
+ * Pure patch builders for a listing's images: each returns the patch to send,
+ * or `null` when there is nothing to change.
  */
 
-/**
- * The three fields of a listing these rules read.
- *
- * Structural, so a `ListingDetail` is one without being converted -- but a
- * *test* is three fields rather than the twenty-eight the wire response
- * carries. That was the tell that these rules were in the wrong place: to
- * check that the twenty-first image is refused, a test had to invent a
- * garment profile, a price table and an Etsy section first.
- */
 export interface MediaState {
   media: readonly MediaEntry[];
   colors: readonly string[];

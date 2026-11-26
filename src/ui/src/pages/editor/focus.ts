@@ -18,15 +18,9 @@ import type {
 } from "../../types";
 
 /**
- * What the Listing Images tab's preview pane is pointing at, and everything
- * that follows from it.
- *
- * A focus is one of the two things `media:` can hold -- but it is *not* a
- * `MediaEntry`, because the locator can point the preview at something the
- * listing has not taken yet. That distinction is the whole reason this is its
- * own module: "is what I am looking at actually in the listing?" is the
- * question the Add/Remove button, the lightbox and the reel's highlight all
- * turn on, and it was answered three separate times inline.
+ * What the Listing Images tab's preview pane is pointing at. Not a
+ * `MediaEntry`: the locator can point the preview at something the listing has
+ * not taken yet.
  */
 
 /** For a template, a `null` colour means its fixed scene, which is also what a

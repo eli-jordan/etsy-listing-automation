@@ -2,27 +2,9 @@ import type { ListingDetail, MediaEntry } from "../../types";
 import { settleGallery } from "./mediaEdits";
 
 /**
- * Changing which colours a listing sells, and everything that has to move
- * with it.
- *
- * `colors:` is not a field on its own -- three others are keyed by it, and
- * `config/listing.py`'s validator refuses a document where any of them names
- * a colour the listing no longer sells:
- *
- * * `media[]` -- a `{template, colour}` entry pointing at a dropped colour
- * * `design{}` -- a colour's own design, `design.<colour>` (A35)
- * * `price_overrides{}` -- a per-colour price
- *
- * Sending `colors` alone is what made the Variants tab's switch appear to
- * re-enable itself the instant it was turned off: the PATCH failed validation
- * server-side, which is answered with a **200** carrying `field_errors` and
- * the listing *unchanged* (so inline validation never needs a status branch)
- * -- and the editor then rendered that unchanged listing, switch back on, with
- * the reason buried in a field the Variants tab does not show.
- *
- * So dropping a colour drops what depended on it, in the same patch. That is
- * a real edit, not a workaround: a mockup of a colour the listing does not
- * sell is an image Etsy would be sent for a variant that does not exist.
+ * `core/config/listing.py`'s validator refuses a document whose `media[]`,
+ * `design{}` or `price_overrides{}` names a colour the listing no longer
+ * sells, so dropping a colour drops what depended on it, in the same patch.
  */
 export function selectColours(detail: ListingDetail, next: string[]): Record<string, unknown> {
   const kept = new Set(next);

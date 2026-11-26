@@ -22,13 +22,6 @@ import { PositionGlyph } from "./positions/PositionControls";
  * rules allow is `mediaEdits`' answer, asked while a tile is carried so a
  * refused target looks refused; a drop there changes nothing and the tile
  * snaps back.
- *
- * The order is a product decision, not a display detail -- the first tile is
- * the Etsy thumbnail -- so the drag is what this module is *for*, and the
- * drag's own state (which tile is being carried, which one it is over) lives
- * here and nowhere else. It used to sit in the tab alongside eleven other
- * pieces of state, which is how "remove a tile" and "open the carousel" came
- * to share one click handler.
  */
 
 interface Props {
@@ -374,9 +367,8 @@ function ReelTile({
     >
       <div
         className="rtile__face"
-        // A click, not a hover, points the preview here: the pointer crosses
-        // the reel on its way to anything below it, and every tile it passed
-        // used to swap the stage's picture and start another full render.
+        // A click, not a hover: the pointer crosses the reel on its way below,
+        // and each tile it passed would start another full render.
         onClick={onFocus}
         onMouseEnter={isVideo ? play : undefined}
         onMouseLeave={isVideo ? rest : undefined}
