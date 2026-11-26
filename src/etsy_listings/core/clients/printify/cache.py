@@ -56,7 +56,7 @@ class CachedCatalogClient(CatalogClient):
         cache_dir: Path,
         *,
         ttl: timedelta = DEFAULT_TTL,
-        clock: Any = time.time,  # injected for deterministic tests
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self._inner = inner
         self._cache_dir = cache_dir
@@ -81,15 +81,7 @@ class CachedCatalogClient(CatalogClient):
         path.write_text(json.dumps(payload), encoding="utf-8")
 
     def _cached[T](self, name: str, adapter: TypeAdapter[T], fetch: Callable[[], T]) -> T:
-        """``fetch()``, unless ``name`` already holds a live answer.
-
-        The four methods below differed only in a filename and in how their
-        payload was decoded and encoded -- and two of them needed a
-        comprehension in each direction purely because they return a ``list``
-        of models rather than a model. A ``TypeAdapter`` does not care which:
-        it is the same tool ``render.config`` already uses to parse a union
-        the plain model API cannot express.
-        """
+        """``fetch()``, unless ``name`` already holds a live answer."""
         cached = self._read(name)
         if cached is not None:
             return adapter.validate_python(cached)

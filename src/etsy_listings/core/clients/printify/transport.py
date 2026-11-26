@@ -57,20 +57,7 @@ and the default 5s timeout turns a slow link into an inscrutable failure."""
 
 class PrintifyAuthError(UserFacingError, RuntimeError):
     """Printify rejected the credentials. Distinct from every other failure,
-    because the fix is a specific human action rather than a retry.
-
-    A specific human action is exactly what a
-    :class:`~etsy_listings.core.errors.UserFacingError` is for, and the message
-    below has always been written as one. Until it *was* one, a revoked token
-    on the third listing of ``--all`` ended the batch with a stack trace
-    instead of a line, against continue-on-error.
-
-    One error for both halves. They were two, with two messages naming two
-    scopes -- and a user whose token was missing ``catalog.read`` got the
-    catalog's advice while a user missing the product scopes got the writer's,
-    with no way for either to learn that the other scope exists. The token is
-    one token; the message names everything it needs.
-    """
+    because the fix is a specific human action rather than a retry."""
 
     def __init__(self, status_code: int) -> None:
         self.status_code = status_code

@@ -46,39 +46,34 @@ from etsy_listings.core.clients.printify.transport import (
     Transport,
 )
 
-__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
-    # The shared connection.
-    "Transport",
+__all__ = [
     "BASE_URL",
-    "PrintifyAuthError",
-    "PrintifyApiError",
-    # The two boundaries, and what satisfies each.
-    "CatalogClient",
-    "HttpCatalogClient",
-    "CachedCatalogClient",
-    "FakeCatalogClient",
     "DEFAULT_TTL",
-    "PrintifyClient",
-    "HttpPrintifyClient",
-    "FakePrintifyClient",
-    # What Printify returns.
+    "AmbiguousBlueprintError",
     "Blueprint",
-    "PrintProvider",
-    "Variant",
-    "VariantOptions",
-    "VariantSet",
+    "CachedCatalogClient",
+    "CatalogClient",
+    "CatalogResolutionError",
+    "FakeCatalogClient",
+    "FakePrintifyClient",
+    "HttpCatalogClient",
+    "HttpPrintifyClient",
     "PrintAreaPlaceholder",
+    "PrintProvider",
+    "PrintifyApiError",
+    "PrintifyAuthError",
+    "PrintifyClient",
+    "ResolvedVariant",
     "ShippingProfile",
     "ShippingRates",
     "Shop",
-    # Name -> id resolution, with an error that lists the near misses.
-    "AmbiguousBlueprintError",
-    "CatalogResolutionError",
+    "Transport",
     "UnknownSizeError",
+    "Variant",
+    "VariantOptions",
+    "VariantResolution",
+    "VariantSet",
     "resolve_blueprint",
     "resolve_print_provider",
-    # Colour slug x size -> the integer ids Printify sells by.
     "resolve_variants",
-    "ResolvedVariant",
-    "VariantResolution",
 ]

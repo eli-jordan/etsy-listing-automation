@@ -1,21 +1,6 @@
 """Printify's read-only reference data over HTTP: blueprints, print providers,
-variants, shipping.
-
-Exercised by the contract layer through ``httpx``'s mock transport (payload
-shape, auth headers, error decoding); the env-gated ``-m e2e`` layer is what
-ever touches the real API.
-
-**These endpoints are authenticated.** They were documented as "public,
-unauthenticated" and they are not: every ``/v1/catalog/*.json`` call needs a
-personal access token with the ``catalog.read`` scope, and without one
-Printify answers ``401 Unauthorized``. That mistake is why ``new`` died on a
-raw httpx traceback.
-
-Everything between a path and a decoded response -- the token, the retries,
-the error shapes -- is :mod:`~etsy_listings.core.clients.printify.transport`,
-shared with the write side. What is not shared is the surface: this class
-satisfies :class:`CatalogClient` and nothing else, so a caller holding one
-cannot reach a call that creates a product.
+variants, shipping. Every ``/v1/catalog/*.json`` call needs a token with the
+``catalog.read`` scope; without one Printify answers ``401``.
 """
 
 from __future__ import annotations

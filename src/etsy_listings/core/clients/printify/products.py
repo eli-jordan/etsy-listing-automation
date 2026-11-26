@@ -44,24 +44,14 @@ class HttpPrintifyClient(PrintifyClient):
         return Upload.model_validate(response.json())
 
     def get_product(self, shop_id: int, product_id: str) -> Product | None:
-        """The product, or ``None`` if this shop does not have it.
-
-        Deleted in Printify's web app between runs is an ordinary thing to
-        happen, and it means "create one", not "crash".
-
-        Two answers mean the same thing here. `404` is the id nothing knows,
-        and `400`/ :data:`~etsy_listings.core.clients.printify.transport.WRONG_SHOP_CODE`
-        is the id another shop holds -- which, from this shop's side, is the
-        same absence. Catching only the first turns reconnecting a store into
-        a hard failure on the next `plan`, because the lockfile still names
-        the product the old shop had.
-        """
+        """The product, or ``None`` if this shop does not have it: deleted in
+        Printify's web app between runs means "create one", not "crash"."""
         try:
             response = self._transport.request(
                 "GET", f"/v1/shops/{shop_id}/products/{product_id}.json"
             )
         except PrintifyApiError as exc:
-            if exc.status_code == HTTP_NOT_FOUND or exc.code == WRONG_SHOP_CODE:
+            if _is_absent(exc):
                 return None
             raise
         return Product.model_validate(response.json())
@@ -99,19 +89,10 @@ class HttpPrintifyClient(PrintifyClient):
         return Product.model_validate(response.json())
 
     def delete_product(self, shop_id: int, product_id: str) -> None:
-        """Remove the product, or do nothing if it is already gone.
-
-        A retract that deleted the product, then failed because the Etsy draft
-        survived, re-applies after the user removed the draft. The
-        product is gone; treating that 404 as a crash leaves the local files
-        stuck. Same two absences as :meth:`get_product`: `404` is unknown to
-        every shop, `400`/ :data:`~etsy_listings.core.clients.printify.transport.WRONG_SHOP_CODE`
-        is a product another shop holds.
-        """
         try:
             self._transport.request("DELETE", f"/v1/shops/{shop_id}/products/{product_id}.json")
         except PrintifyApiError as exc:
-            if exc.status_code == HTTP_NOT_FOUND or exc.code == WRONG_SHOP_CODE:
+            if _is_absent(exc):
                 return
             raise
 
@@ -147,6 +128,10 @@ class HttpPrintifyClient(PrintifyClient):
             if page >= int(body.get("last_page", page)):
                 return None
             page += 1
+
+
+def _is_absent(exc: PrintifyApiError) -> bool:
+    return exc.status_code == HTTP_NOT_FOUND or exc.code == WRONG_SHOP_CODE
 
 
 def _product_with_copy(
