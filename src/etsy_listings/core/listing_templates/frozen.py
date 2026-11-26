@@ -25,12 +25,8 @@ class FrozenListingTemplate:
 
     @classmethod
     def capture(cls, workspace: Workspace, name: str, directory: Path) -> FrozenListingTemplate:
-        """Capture under the same lock as template edits, rename and delete.
-
-        The lock covers only content capture, never the design upload.
-        No record or listing is created here; the caller owns cleanup if
-        receiving or saving its staging session fails.
-        """
+        """Holds the template's lock for the capture only, never the design
+        upload; the caller cleans ``directory`` up if staging then fails."""
         with locks.hold(workspace, "listing-template", name):
             template = workspace.load_listing_template(name)
             saved_at = datetime.fromtimestamp(
@@ -64,7 +60,6 @@ class FrozenListingTemplate:
         )
 
     def copy_to(self, directory: Path) -> FrozenListingTemplate:
-        """Keep frozen assets in a batch after staging goes."""
         directory.mkdir(parents=True, exist_ok=True)
         for asset in self.assets():
             target = self.workspace.resolve_frozen_template_ref(asset.ref, frozen_dir=directory)
@@ -73,7 +68,6 @@ class FrozenListingTemplate:
         return replace(self, directory=directory)
 
     def issues(self, *, facts: WorkspaceFacts) -> list[Issue]:
-        """Recheck current shared refs against the frozen document."""
         return check_listing_template_files(
             self.workspace,
             self.template,
