@@ -8,6 +8,7 @@ import "../pages/admin/backup/backup.css";
 import { useIsPhone } from "../phone/usePhone";
 import { useBackupStatus } from "./backupStatus";
 import { BackupStatusProvider } from "./BackupStatusProvider";
+import { pageTitle } from "./pageTitle";
 import { ShellSidebar } from "./ShellSidebar";
 
 /**
@@ -51,6 +52,10 @@ function Shell() {
   const isPhone = useIsPhone();
   const listingTemplates = navLabel(isPhone, "Listing Templates", "Templates");
   const mockupTemplates = navLabel(isPhone, "Mockup Templates", "Mockups");
+
+  useEffect(() => {
+    document.title = pageTitle(pathname);
+  }, [pathname]);
 
   useEffect(() => {
     getWorkspace()
