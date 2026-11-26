@@ -17,9 +17,6 @@ interface Props {
   onChange: (config: MultipleTemplate) => void;
   design: string;
   onDesignChange: (design: string) => void;
-  /** Colours already used across the workspace, offered as suggestions when
-   * assigning one to a box. Suggestions only: a chart's colours are whatever
-   * the listing sells, which the calibrator does not know. */
   knownColours: string[];
 }
 
@@ -30,8 +27,7 @@ const CENTRED_BOX: BoundingBox = [
   { x: 200, y: 350 },
 ];
 
-/** The same rule the server uses for `TemplateSummary.status_reason`, so the
- * canvas and the rail can never disagree about whether this is finished. */
+/** Mirrors the server's `TemplateSummary.status_reason`, so canvas and rail agree. */
 function uncolouredWarning(placements: Placement[]): string | null {
   const count = placements.filter((p) => !p.colour.trim()).length;
   if (count === 0) return null;

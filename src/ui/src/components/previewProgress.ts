@@ -1,5 +1,3 @@
-/** What has come back for a preview request. Stamped with the request's key
- * so a count from this run can never appear beside tiles from the last one. */
 export interface PreviewResult {
   key: string;
   rendered: Record<string, string>;
