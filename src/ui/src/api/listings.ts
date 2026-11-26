@@ -152,6 +152,25 @@ export function listingScenePreviewUrl(
   return `/api/listings/${encodeURIComponent(listing)}/scene-preview?${params.toString()}`;
 }
 
+/** Whether the scene a `listingScenePreviewUrl` showed was drawn from stale
+ * remembered pixel digests. Any other URL, and any failure, is "unchanged". */
+export async function scenePreviewChanged(url: string): Promise<boolean> {
+  const match = /^\/api\/listings\/([^/?]+)\/scene-preview\?(.*)$/.exec(url);
+  const [, name, query] = match ?? [];
+  if (name === undefined || query === undefined) return false;
+  const params = new URLSearchParams(query);
+  const template = params.get("template");
+  if (template === null) return false;
+  const colour = params.get("colour");
+  const { data, error } = await api.GET("/api/listings/{name}/scene-preview/check", {
+    params: {
+      path: { name: decodeURIComponent(name) },
+      query: colour === null ? { template } : { template, colour },
+    },
+  });
+  return !error && data?.changed === true;
+}
+
 export function listingSceneArtworkUrl(
   listing: string,
   template: string,
