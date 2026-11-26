@@ -3,16 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import type { ShopSettings } from "../../api/shop";
 import { AlarmDialog } from "./AlarmDialog";
 
-/**
- * The currency danger zone's warning (interactions, *Connected shops and
- * currency*). Opening it writes nothing; Change stays disabled until the
- * acknowledgement is ticked, which starts unticked every time. Keep, the
- * close button, Escape and the backdrop all cancel. Focus stays inside.
- *
- * The copy is the production correction of the prototype's: a saved price
- * keeps the currency written beside it (ADR-0006, ADR-0019); it is never
- * reread in the new currency.
- */
 export function CurrencyDialog({
   current,
   currencies,

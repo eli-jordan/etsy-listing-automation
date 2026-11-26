@@ -1,7 +1,3 @@
-// The missing-repository banner and its two actions (workspace-backup spec,
-// *Missing repository*; plan, PR 8). Never mocked: the interactions doc's
-// *Warnings* table names the actions, and the dialog follows the repair and
-// restore dialogs' layout.
 import { BackupDialog } from "./BackupDialog";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
@@ -62,9 +58,6 @@ const TEXT = {
   },
 } as const;
 
-/** Create or connect. `onSubmit` answers with a refusal, or null once the
- * repository is there. A Create refused over a destination's copy offers to
- * switch to Connect with that copy as the source (plan, PR 8). */
 export function RepositoryDialog({
   mode: initialMode,
   repository,

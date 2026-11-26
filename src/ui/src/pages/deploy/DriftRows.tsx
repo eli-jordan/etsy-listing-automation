@@ -5,11 +5,6 @@ import type { DriftedField } from "./comparison";
 import { driftRowId } from "./driftRowAnchor";
 import { diffSegments, driftVerdict, paragraphGroups, type DiffSide } from "./driftText";
 
-/**
- * A drifted field's row in the comparison. Long copy opens in place to show
- * only what differs; a short value already fits in its row.
- */
-
 function Mark({ field }: { field: DriftedField }) {
   return (
     <span className="dv-drift-mark">

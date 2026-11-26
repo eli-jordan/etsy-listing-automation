@@ -9,22 +9,6 @@ import { ownedTile } from "../media";
 import { useIsPhone } from "../phone/usePhone";
 import type { ListingTemplateSummary } from "../types";
 
-/**
- * New batch (UI doc §4; the `new-batch` and `staging-refused` frames): pick
- * one listing template, then drop designs. A drop is posted straight to
- * staging and lands on the staging review; a refused one stays here with the
- * reason and the remedy, and nothing was kept. `?template=` preselects, as
- * Start batch on a card does.
- *
- * One ZIP or loose PNGs (spec, *Accepted input*). What may be dropped
- * together is the server's to judge: two ZIPs, a ZIP with loose files and
- * an unsafe archive come back as refusals, shown like any other.
- *
- * A drop on a listing-template card that the server refuses lands here too,
- * the refusal in the navigation's state (UI doc §2, closed question 2), so
- * a card has no refusal state of its own.
- */
-
 /** A refusal, and the names of the files it was about. Names rather than
  * the files: it may arrive in history state from a card drop. */
 export interface Refused extends StagingRefusal {
@@ -36,7 +20,6 @@ function refusedHeading(files: string[]): string {
   return files.length === 1 && only ? `${only} was not staged.` : "These files were not staged.";
 }
 
-/** A phone has no files to drag, so there the zone asks you to pick them. */
 function dropTitle(busy: boolean, refused: boolean, phone = false): string {
   if (busy) return "Staging…";
   if (phone) return refused ? "Choose a different ZIP or PNGs" : "Choose a ZIP or PNGs";

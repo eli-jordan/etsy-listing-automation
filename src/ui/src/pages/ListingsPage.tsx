@@ -25,19 +25,12 @@ import {
 import { useFabHiddenOnScroll } from "./phoneLists/fabScroll";
 import { PhoneListingList, PhoneStatusChips } from "./phoneLists/PhoneListingList";
 
-/** The listings list (phase 5): table + search + status filter, from
- * the design mockup's listings section, backed by `GET /api/listings`. */
-
 type Filter = "all" | ListingStatus;
 
-/** One option per state the server can report, plus All -- derived from
- * `STATUS_LABELS` rather than listed again, so a fifth state cannot arrive
- * with a badge and no way to filter for it. */
 const FILTERS: Filter[] = ["all", ...(Object.keys(STATUS_LABELS) as ListingStatus[])];
 
 const FILTER_LABELS: Record<Filter, string> = { all: "All statuses", ...STATUS_LABELS };
 
-/** `?status=`, which the phone Dashboard's counts link to; anything else is All. */
 function filterFrom(param: string | null): Filter {
   return FILTERS.find((f) => f === param) ?? "all";
 }
@@ -61,7 +54,6 @@ function UndoMarkIcon() {
   );
 }
 
-/** The desktop layout's listings table. */
 function ListingsTable({
   rows,
   onGesture,
@@ -151,8 +143,6 @@ function ListingsTable({
 }
 
 export function ListingsPage() {
-  /** `null` until the first load answers, so the empty-table message cannot
-   * flash before there is anything to say it about. */
   const [listings, setListings] = useState<ListingSummary[] | null>(lastLoadedListings);
   const [workspaceRun, setWorkspaceRun] =
     useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
@@ -200,7 +190,6 @@ export function ListingsPage() {
   // would sit on one.
   const isPhoneSideways = useIsPhoneLandscape();
   const floatingNew = isPhone && !isPhoneSideways;
-  // It steps aside while the list scrolls down, off the rows' ⋯ buttons.
   const fabHidden = useFabHiddenOnScroll(floatingNew);
   const [pendingDelete, setPendingDelete] = useState<ListingSummary | null>(null);
   const navigate = useNavigate();

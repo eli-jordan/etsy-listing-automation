@@ -21,14 +21,11 @@ export const SECTION_LABELS: Record<Section, string> = {
 export const isSettings = (section: Section): section is SettingsSection =>
   section === "ai" || section === "rendering" || section === "backup";
 
-/** `/admin?section=backup&page=setup`: the address of a section, so a link
- * (the backup banner's Open Backup) can open it. Connected shops is bare. */
 export function address(section: Section, page?: BackupPage): string {
   if (section === "connected") return "?";
   return page === "setup" ? `?section=${section}&page=setup` : `?section=${section}`;
 }
 
-/** Backup's two pages once it is set up, nested under it. */
 export const BACKUP_PAGES = [
   ["status", "Status and history"],
   ["setup", "Setup"],

@@ -25,7 +25,6 @@ export function fabAfterScroll(
   return { hidden: moved > 0, anchor: scrollY };
 }
 
-/** `fabAfterScroll` over the window's scroll, while `enabled`. */
 export function useFabHiddenOnScroll(enabled: boolean): boolean {
   const [hidden, setHidden] = useState(false);
   const state = useRef({ hidden: false, anchor: 0 });

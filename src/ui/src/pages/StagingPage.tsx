@@ -19,27 +19,6 @@ import {
 import { clock, dayMonth } from "../dates";
 import { useIsPhone } from "../phone/usePhone";
 
-/**
- * Staging review (UI doc §5; the `staging` and `staging-blocked` frames): one
- * row per unique design with its source file, an editable listing name and
- * its check. The server works every name out afresh on each answer, so
- * this page only ever sends what the seller typed and draws what comes back.
- *
- * A name problem blocks Create; a design that will not print does not -- it
- * is shown as *Not created* and Create counts only the ready rows. The
- * session lives on the server, so a reload lands here again.
- *
- * A ZIP's files that are not PNGs are only counted, with their names behind
- * the count (spec, *Accepted input*), and a row whose bytes are already in
- * `designs/` says it reuses that file in its note (spec, *Content
- * deduplication*) -- both as the server says them.
- *
- * AI readiness is said only when it fails (`staging.note.md`): a missing
- * brief prompt or provider replaces the count strip's right
- * side with a blocking callout, and Create is disabled -- the server refuses
- * the confirm anyway (spec, *Design validation*).
- */
-
 function time(iso: string): string {
   return clock(new Date(iso));
 }
@@ -133,8 +112,6 @@ function NameInput({ row, onCommit }: { row: StagingRow; onCommit: (name: string
   );
 }
 
-/** A row's listing name: the field that edits it, or, for a design that
- * cannot become a listing, why not. The table and the phone cards share it. */
 function RowName({ row, onRename }: { row: StagingRow; onRename: (name: string) => void }) {
   return row.state === "invalid" ? (
     <span className="bc-muted bc-small">{row.name}</span>
@@ -143,8 +120,6 @@ function RowName({ row, onRename }: { row: StagingRow; onRename: (name: string) 
   );
 }
 
-/** One staged design as a phone card: the file and Remove on top, the
- * name field full width, then its check. */
 function PhoneStagingCard({
   session,
   row,

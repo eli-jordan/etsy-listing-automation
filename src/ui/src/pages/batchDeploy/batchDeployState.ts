@@ -87,9 +87,6 @@ function project(
   };
 }
 
-/** Fold one recorded event. `source` distinguishes the reviewed plan from the
- * apply overlay; apply re-planning is deliberately not allowed to replace a
- * reviewed plan unless it is the explicit fresh plan on a stale failure. */
 export function applyBatchRunEvent(
   state: BatchDeployState,
   event: RunEvent,

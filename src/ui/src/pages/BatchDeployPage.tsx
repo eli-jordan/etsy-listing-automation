@@ -89,14 +89,10 @@ function isTerminalApply(state: BatchDeployState): boolean {
   return state.applyStarted && TERMINAL_PHASES.has(state.phase);
 }
 
-/** Whether applying would do something for `plan`'s listing: a stage that
- * would run, or -- with the seller's opt-in -- making a draft live. */
 function hasWork(plan: PlanDTO, publish: boolean): boolean {
   return plan.stage_plans.some(stageWillRun) || (publish && plan.publishable);
 }
 
-/** A plan with nothing left to do: ready, nothing failed, and nothing that
- * would run. */
 function nothingToApply(
   state: BatchDeployState,
   plans: readonly PlanDTO[],
@@ -116,9 +112,6 @@ const DRAWER_MODES: Record<BatchStage, "applying" | "applied" | "review"> = {
   review: "review",
 };
 
-/** A workspace or batch run and the review it applies (the run itself, for a
- * plan), or `null` when the run is a single listing's. Throws when an apply
- * has no ready review of its own scope. */
 async function loadReviewedRun(
   id: string,
 ): Promise<{ loaded: RunDetail; reviewed: RunDetail } | null> {
@@ -138,14 +131,11 @@ async function loadReviewedRun(
   return { loaded, reviewed };
 }
 
-/** The listing batch the page's run deploys, or `null` for a workspace run
- * (or before this URL's run has loaded). */
 function runBatchId(run: RunDetail | null, runId: string): string | null {
   if (run === null || run.id !== runId) return null;
   return run.batch_id ?? null;
 }
 
-/** Planned without the publish step: the apply adds it when chosen. */
 function freshPlanRequest(batchId: string | null): CreateRunRequest {
   return batchId === null
     ? { kind: "plan", scope: "workspace", publish: false }
@@ -170,9 +160,6 @@ function exitPath(batchId: string | null): string {
   return batchId === null ? "/listings" : `/batches/${encodeURIComponent(batchId)}`;
 }
 
-/** The batch's label, for a batch run, beside when the plan was made. */
-/** The way back to the Listings page or the batch: the desktop's button
- * and separator, or the phone's crumb over the title. */
 function BatchDeployBack({
   copy,
   batchLabel,
@@ -205,12 +192,7 @@ function pageMeta(batchId: string | null, batchLabel: string | null, planTimesta
   return [label, planTimestamp].filter((part) => part !== "").join(" · ");
 }
 
-/** The stable workspace and batch route (ADR-0042, ADR-0059): one page for
- * every listing or for a listing batch's reviewed rows, told apart only by
- * the run's scope. It owns only run attachment and page composition;
- * event meaning remains in batchDeployState and all change meaning remains in
- * the engine-provided plans. A workspace apply keeps its linked review as the
- * approval surface and contributes only a live runtime overlay. */
+/** ADR-0042, ADR-0059. */
 export function BatchDeployPage() {
   const { runId = "" } = useParams<{ runId: string }>();
   const navigate = useNavigate();
@@ -227,9 +209,6 @@ export function BatchDeployPage() {
   const leavingRef = useRef(false);
   const [applyPending, setApplyPending] = useState(false);
   const [batchLabel, setBatchLabel] = useState<string | null>(null);
-  /** Publish new and draft listings on Etsy (opt-in), chosen at apply for
-   * the review on this URL: the review is planned without the step, and the
-   * apply adds it, so changing it plans nothing. */
   const [publishChoice, setPublishChoice] = useState<{ run: string; publish: boolean } | null>(
     null,
   );

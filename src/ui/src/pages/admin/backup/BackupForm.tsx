@@ -1,5 +1,3 @@
-// Set up and Setup, one form (workspace-backup interactions, *Set up and
-// Setup*), from the mockup's `SettingsForm` in `_prototype.tsx`.
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
 import { CloudArrowUpIcon } from "@phosphor-icons/react/dist/csr/CloudArrowUp";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
@@ -42,8 +40,6 @@ export function BackupForm({
 }: {
   mode: "create" | "edit";
   initial: BackupAnswers;
-  /** The server's status: its names for saved destinations and the
-   * shortest password it accepts. */
   status: BackupStatus;
   onCancel?: () => void;
   onCreate?: (answers: BackupAnswers, password: string) => Answer;
@@ -181,7 +177,6 @@ export function BackupForm({
   );
 }
 
-/** While set-up runs: connecting, once the server says so. */
 function settingUpLine(status: BackupStatus): string {
   const running = status.running;
   if (running?.operation === "connect") return connectingLine(status, running.destination);

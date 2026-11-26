@@ -11,14 +11,6 @@ import { ROWS, toDraft, toLimits } from "./templateLimits";
 
 type Confirmed = Promise<(SettingsOutcome & { revision?: string }) | null>;
 
-/**
- * Settings > Template rendering (template positions PR 5; ADR-0058). Unlike
- * the rest of Admin these limits never save on blur: a change can block saved
- * listing positions and, for Marigold templates, may need preparation to run
- * again (option B), so edits stay a draft until the confirmation's Save. The
- * draft lives while the page stays mounted and drops on reload, when
- * `SettingsPanel` remounts this with the reloaded file.
- */
 export function TemplatePositions({
   limits,
   active,

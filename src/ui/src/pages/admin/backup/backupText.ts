@@ -100,7 +100,6 @@ const STEPS: Record<string, string> = {
   checking: "Checking the backup storage folder…",
 };
 
-/** What the operation in progress is doing, for the line under the detail. */
 export function runningLine(status: BackupStatus, running: RunningBackup): string {
   const name = running.destination ? nameOf(status, running.destination) : "the destination";
   const counted = filesCounted(running);
@@ -115,13 +114,11 @@ export function runningLine(status: BackupStatus, running: RunningBackup): strin
   return STEPS[running.step] ?? "Backing up…";
 }
 
-/** Set-up or Connect copying an existing backup to this computer. */
 export function connectingLine(status: BackupStatus, source?: string | null): string {
   if (!source) return "Copying the existing backup to this computer…";
   return `Connecting to the backup in ${nameOf(status, source)}… Copying it to this computer can take a while.`;
 }
 
-/** What set-up says once it connected a destination's backup. */
 export function connectedNote(status: BackupStatus, connected: BackupConnected): string {
   const count = `${connected.snapshots} ${connected.snapshots === 1 ? "snapshot" : "snapshots"}`;
   const note = `Connected to the backup in ${nameOf(status, connected.destination)}: ${count}.`;
@@ -133,7 +130,6 @@ function filesCounted({ files_done: done, files_total: total }: RunningBackup): 
   return ` ${done.toLocaleString("en-GB")} of ${total.toLocaleString("en-GB")} files`;
 }
 
-/** The status panel's headline and detail. */
 export function summary(
   { status, warnings }: BackupsOn,
   now: number,
@@ -182,7 +178,6 @@ function nextLine(due: string | null | undefined, now: number): string {
 
 export type RowResult = "ok" | "partial" | "failed" | "stopped";
 
-/** A history row's result and the one line under it. */
 export function rowResult(entry: HistoryEntry): { result: RowResult; detail: string } {
   const { result, detail } = runResult(entry);
   return { result, detail: entry.run.notice ? `${detail}. ${entry.run.notice}` : detail };
@@ -214,7 +209,6 @@ function runResult(entry: HistoryEntry): { result: RowResult; detail: string } {
   };
 }
 
-/** The note a finished repair leaves in the status panel. */
 export function repairNote(destination: DestinationStatus, result: RepairResult): string {
   const moved = result.moved.length;
   const files = moved === 1 ? "1 file was" : `${moved} files were`;
@@ -226,7 +220,6 @@ export function repairNote(destination: DestinationStatus, result: RepairResult)
   return `Repaired the ${destination.name} copy.${aside}${after}`;
 }
 
-/** A restore's progress, worded as the prototype's `restoreFigures`. */
 export function restoreFigures(restore: RestoreStatus) {
   const { bytes_total: total, files_total: files, seconds_left: left } = restore;
   const count = (n: number) => n.toLocaleString("en-GB");
@@ -248,7 +241,6 @@ function bytesOf(done: number, total: number): string {
   return part.endsWith(unit) ? `${part.slice(0, -unit.length)} of ${whole}` : `${part} of ${whole}`;
 }
 
-/** The parts that are known, joined as the prototype joins figures. */
 export const joined = (...parts: string[]) => parts.filter(Boolean).join(" · ");
 
 /** Without trailing separators; a loop, as a regex here would backtrack. */
@@ -258,14 +250,11 @@ function trimmed(path: string): string {
   return path.slice(0, end);
 }
 
-/** Whether two paths name one folder, as Windows compares them: the instant
- * pre-check under the restore field. The server refuses it either way. */
 export function samePath(a: string, b: string): boolean {
   const normal = (path: string) => trimmed(path.trim()).replaceAll("\\", "/").toLowerCase();
   return normal(a) === normal(b);
 }
 
-/** The status panel's note once a restore has ended. */
 export function restoreNote(restore: RestoreStatus): string {
   const left =
     "The folder holds the files restored so far; delete it before restoring there again.";
@@ -283,9 +272,6 @@ export interface Password {
   stored: boolean;
 }
 
-/** A new repository's password: at least the server's `password_min_length`
- * (plan, PR 5), typed alike twice. An instant pre-check; the server refuses
- * a short one either way. */
 export function passwordProblem({ pw, pw2 }: Password, minLength: number): string | null {
   if (pw.length < minLength) return `Use at least ${minLength} characters.`;
   if (pw !== pw2) return "The two passwords don't match.";

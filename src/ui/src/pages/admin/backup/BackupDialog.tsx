@@ -1,13 +1,7 @@
 import { type ReactNode, useRef } from "react";
 import { SheetGrabber } from "../../../phone/SheetGrabber";
 
-/**
- * The backup pages' modal frame: the scrim and the dialog box every repair,
- * restore and repository dialog shares. On a phone it is a bottom sheet
- * (phone/admin.css), modal like every sheet (`SheetGrabber`), and one with
- * `onDismiss` gets a grab bar that swipes it away; off the phone the grab
- * bar renders nothing.
- */
+/** On a phone, a bottom sheet (phone/admin.css). */
 export function BackupDialog({
   labelledBy,
   onDismiss,

@@ -8,28 +8,6 @@ import {
   type StagePlanDTO,
 } from "../../types";
 
-/**
- * Pure: `Plan` snapshots + `Change`s -> before/after blocks, impact tags,
- * price rows, image badges (docs/features/deploy-20260917/spec.md decisions 3/4, spec's
- * "Comparison"/"Price table" elements).
- *
- * This is the frontend half of ADR-0038: each stage exposed a snapshot of its own
- * domain facts so the comparison could be composed here instead of on the
- * server, and ADR-0008 still holds one level up -- every `changed` flag below
- * traces to a `Change` object the engine already emitted, never to this
- * module comparing two snapshot values itself. A block's *content* (the
- * unchanged context alongside a change) comes from the snapshot; whether it
- * is *tinted* comes only from the work outcome's changes.
- *
- * Follows the mock and the spec's own reading order -- gallery first, down
- * through tags and materials -- because that is a buyer's reading order on
- * an Etsy listing page, and matching it is what makes the comparison quick
- * to check by eye (decision 3's "the blocks follow a buyer's reading order").
- * Description and materials were not in the original five (the mock never
- * had a block for either); added once their absence let a pending edit reach
- * Apply with no before/after shown for it at all.
- */
-
 export type ImpactTag =
   "Images" | "Videos" | "Title" | "Description" | "Prices" | "Colours" | "Tags" | "Materials";
 
@@ -111,8 +89,6 @@ export interface ImagesBlock {
   changed: boolean;
 }
 
-/** One video as this run will place it. `featured` is position 2; the
- * second sits after `afterImages` images (decision 9). */
 export interface AfterVideoTile {
   ref: string;
   slot: "featured" | "second";
@@ -144,7 +120,6 @@ export interface PriceRow {
   belowCost: boolean;
 }
 
-/** One field that differs from the last apply, ready to show. */
 export interface DriftedField {
   /** `etsy:title`: stable across renders, and names the page anchor. */
   key: string;
@@ -153,20 +128,12 @@ export interface DriftedField {
   source: "etsy" | "printify";
   live: string;
   after: string;
-  /** Long copy opens a comparison; anything else fits in its row. */
   expandable: boolean;
 }
 
 export interface Comparison {
-  /** Which of the parts of the listing the plan touches, for the headline's
-   * tags -- in reading order, not the order `Change`s happened to be emitted
-   * in. */
   impacts: ImpactTag[];
-  /** Every field that changed outside this tool since the last apply. */
   drifted: DriftedField[];
-  /** Whether `plan.etsy_listing_id` names a real listing -- `false` gets a
-   * single "After apply" column with a *Not on Etsy yet* note (decision 3),
-   * never an empty "On Etsy now" one. */
   hasEtsyListing: boolean;
   title: TitleBlock | null;
   description: DescriptionBlock | null;
@@ -179,9 +146,6 @@ export interface Comparison {
    * side has a video. */
   videos: VideosBlock | null;
   priceRows: PriceRow[];
-  /** `publish`'s own below-cost rows, verbatim -- never re-derived by
-   * comparing a row's price against its cost here, which is exactly the
-   * second copy of the rule ADR-0038 exists to prevent. */
   belowCost: BelowCostRow[];
 }
 
@@ -433,8 +397,6 @@ function displayValue(value: unknown): string {
   return Array.isArray(value) ? value.join(", ") : String(value);
 }
 
-/** What apply leaves in this field: the plan's named setting, its own change
- * to the field, or, with neither, the last-applied value it re-asserts. */
 function driftAfter(drift: DriftDTO, stagePlan: StagePlanDTO): string {
   const desired = stagePlan.stage === "etsy_listing" ? stagePlan.snapshot?.desired : undefined;
   const setting = NAMED_SETTINGS[drift.path];
@@ -493,7 +455,6 @@ function impactsFor(
   images: ImagesBlock | null,
   videos: VideosBlock | null,
 ): ImpactTag[] {
-  // Reading order (decision 3's gallery-first order), not emission order.
   const impacts: ImpactTag[] = [];
   if (images?.changed) impacts.push("Images");
   if (videos?.changed) impacts.push("Videos");

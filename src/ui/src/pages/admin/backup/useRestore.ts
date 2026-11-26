@@ -44,11 +44,8 @@ export function useRestore(view: BackupsOn, refresh: () => Promise<unknown>) {
     restore,
     shown,
     error,
-    /** Only one restore runs at a time, so every Restore… waits for it. */
     busy: view.restoring,
-    /** The dialog's choices, once read, while it is open. */
     picking: picking && choices ? { ...picking, choices } : null,
-    /** Open the restore dialog on `snapshot`, or the newest. */
     begin(snapshot?: string) {
       setChoices(null);
       setError(null);

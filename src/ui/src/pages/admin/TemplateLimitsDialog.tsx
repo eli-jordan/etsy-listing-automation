@@ -11,14 +11,6 @@ type Impact =
   | { kind: "read"; impact: TemplatePositionImpact }
   | { kind: "failed"; message: string };
 
-/**
- * The template limits confirmation (interactions, *Settings: Template
- * rendering*; option B). Opening it reads the candidate limits' impact and
- * writes nothing. It reuses the currency dialog's alarm header and keyboard
- * rules: Keep current limits, the close button, Escape and the backdrop
- * cancel and keep the draft; focus stays inside. A failed save stays open
- * with its reason.
- */
 export function TemplateLimitsDialog({
   saved,
   draft,

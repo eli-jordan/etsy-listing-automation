@@ -1,7 +1,3 @@
-// Restore (workspace-backup plan, PR 7; interactions, *Restore*): the
-// restore dialog, the progress dialog, the strip and note in the status
-// panel, and the Restored dialog. The markup is the prototype's
-// (`_prototype.tsx`) without its timers: progress comes from the status poll.
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
@@ -307,7 +303,6 @@ export function RestoreStrip({ flow }: { flow: RestoreFlow }) {
   );
 }
 
-/** Whichever restore dialog is open. */
 export function RestoreDialogs({ flow, now }: { flow: RestoreFlow; now: number }) {
   const { restore, picking } = flow;
   return (

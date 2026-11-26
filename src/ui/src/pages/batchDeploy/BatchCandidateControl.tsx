@@ -91,9 +91,6 @@ function PhoneBatchCandidateControl({
   );
 }
 
-/** The Listings-page entry point. It is intentionally unaware of navigation or
- * run creation; PR4 supplies that callback while this module owns the compact
- * accessible orientation aid. */
 export function BatchCandidateControl({
   names,
   onDeploy,

@@ -20,25 +20,6 @@ import { listingTemplateTransport, templateAsListing } from "./editor/listingTem
 import { metaFor } from "./editor/saveMeta";
 import { TEMPLATE_DELETE_DETAILS, templateDeleteTitle } from "./listingTemplateDelete";
 
-/**
- * The listing-template editor (UI doc §3; batch plan PR 6): the listing
- * editor's own shell with `kind="listing-template"`, at two routes.
- *
- * `/listing-templates/new?from_listing=` (Create listing template) and
- * `?from_template=` (Clone) open it unsaved, on the draft the server would
- * write, with the name field focused (UI doc §1). Nothing is written until
- * the seller commits a unique name; edits made before that ride along in the
- * create, and leaving without naming discards the draft.
- * `/listing-templates/:name` opens a saved one.
- *
- * Autosave writes only complete templates: an edit that makes one
- * incomplete is held here, explained by the banner and the head, retried by
- * the next edit, and guarded against navigating away (`useUnsavedWarning`).
- *
- * A saved template's action row holds Clone and Delete, as its card does
- * (UI doc §3); an unsaved one has nothing to clone or delete yet.
- */
-
 const HOW_TO =
   "To make a listing template, open a finished listing and choose Create listing template.";
 
@@ -161,7 +142,6 @@ function ListingTemplateEditor({
     },
   });
 
-  // UI doc §3: navigating away with unsaved values warns first.
   const blocker = useUnsavedWarning(save.kind === "unsaved");
   const navigate = useNavigate();
   const [deleting, setDeleting] = useState(false);

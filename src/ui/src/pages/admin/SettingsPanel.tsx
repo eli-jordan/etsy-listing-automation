@@ -11,9 +11,6 @@ import "./settings.css";
 
 export type SettingsSection = "ai" | "rendering" | "backup";
 
-/** settings.yaml's two subsections (template positions PR 5): AI, the
- * original panels in their order, and Template rendering. Both stay mounted
- * so switching keeps drafts; they share one file, status and save queue. */
 export function SettingsPanel({
   section = "ai",
   backupPage = "status",

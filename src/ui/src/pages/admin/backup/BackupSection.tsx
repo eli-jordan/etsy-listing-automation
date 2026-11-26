@@ -1,8 +1,3 @@
-// Admin › Settings › Backup (workspace-backup plan, PR 6): Backups off, the
-// set-up form, Status and history, and Setup. Status comes from the shell's
-// one poll (`useBackupStatus`); Setup saves through settings.yaml's revision
-// check, like the AI section. Restore is in Restore.tsx; the missing-repository
-// actions are in MissingRepository.tsx (PR 8).
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
@@ -57,8 +52,6 @@ export type SaveAnswer = { kind: "saved" } | Refusal | null;
 
 const RELOAD = "settings.yaml changed on disk. Nothing was overwritten. Reload, then try again.";
 
-/** Every refusal, worded one way: a stale file means reload; otherwise the
- * server's reason and the fields it names. */
 function refusal(outcome: Refusal): string {
   if (outcome.kind === "stale") return RELOAD;
   const fields = Object.values(outcome.fieldErrors).filter(
@@ -83,7 +76,6 @@ export function BackupSection({
 }: {
   page: BackupPage;
   onPage: (page: BackupPage) => void;
-  /** settings.yaml's `backup:` block; null while off, undefined while loading. */
   saved: BackupSettings | null | undefined;
   setUp: (answers: BackupAnswers & { password: string }) => Promise<SetUpOutcome>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
@@ -206,7 +198,6 @@ function StatusPage({
   refresh: () => Promise<unknown>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   onSetup: () => void;
-  /** What set-up said, such as the backup it connected. */
   setUpNote: string | null;
   onSetUpNoteSeen: () => void;
 }) {

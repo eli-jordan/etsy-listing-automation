@@ -3,7 +3,6 @@ import type { ListingSummary } from "../../types";
 import { deleteLabel, GESTURE_LABELS, type Gesture } from "../listingLifecycle";
 import type { SheetAction } from "./ActionSheet";
 
-/** What the ⋯ sheet offers for a row, in the table's own words. */
 export function rowActions(
   row: ListingSummary,
   onGesture: (row: ListingSummary, gesture: Gesture) => void,

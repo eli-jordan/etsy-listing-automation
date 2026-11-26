@@ -1,20 +1,3 @@
-/**
- * Word-level formatting of one `FieldChange`'s before/after (docs/features/deploy-20260917/spec.md
- * decision 4, spec's "Change highlighting" element).
- *
- * This is presentation over a decision the engine already made: a title only
- * reaches here because a `FieldChange(path="title",...)` already says it
- * changed (ADR-0008 -- the page never decides *whether* something changed, only how
- * to show it). Word-level marking formats that one field's own before and
- * after and compares nothing else, exactly as the spec says.
- *
- * A longest-common-subsequence over whitespace-split words, the same
- * algorithm the design mock used -- diffing text is a solved, symmetric
- * problem, and multiplying it into `Comparison.tsx` (which merely renders the
- * tokens) would be the second copy the mock warns against with `path`-keyed
- * `Change` lookups elsewhere in this module set.
- */
-
 export interface WordDiffToken {
   type: "same" | "ins" | "del";
   text: string;
@@ -24,8 +7,6 @@ export function wordDiff(before: string, after: string): WordDiffToken[] {
   return sequenceDiff(before.length ? before.split(" ") : [], after.length ? after.split(" ") : []);
 }
 
-/** The diff itself, over any sequence of whole strings: words here,
- * paragraphs in `driftText.ts`. */
 export function sequenceDiff(from: string[], to: string[]): WordDiffToken[] {
   const n = from.length;
   const m = to.length;
@@ -34,9 +15,6 @@ export function sequenceDiff(from: string[], to: string[]): WordDiffToken[] {
   // and `to[j:]`, cached by key rather than a nested array -- a `Map` needs
   // no indexed assignment, so every lookup here stays a plain function call
   // instead of a non-null assertion at each of the table's four corners.
-  // Built lazily, outside-in from `(n, m)`, so `cell(0, 0)` -- read at the
-  // start of the walk below -- recurses through exactly the cells the walk
-  // itself will also visit.
   const table = new Map<string, number>();
   const word = (words: string[], i: number): string => words[i] ?? "";
   function cell(i: number, j: number): number {

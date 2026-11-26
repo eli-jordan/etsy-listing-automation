@@ -1,14 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 
-/**
- * One revisioned file's loading, shared by `shop.yaml` and `settings.yaml`.
- * It loads once on mount; `reload` waits for queued saves first. A load
- * resets the save queue to the file's revision and bumps `loadedVersion`,
- * the signal for controls to drop local drafts.
- *
- * `onLoaded` and `onRefused` must be stable (a state setter, or a
- * `useCallback`).
- */
 export function useQueuedFile<T extends { revision: string }>({
   load,
   queue,

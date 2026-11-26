@@ -1,16 +1,6 @@
 import type { ListingSummary } from "../types";
 
-/** A listing's lifecycle gesture, as the server offers it on both
- * the Listings table's row and the editor's `ListingDetail`. */
 export type Gesture = ListingSummary["gestures"][number];
-
-/**
- * The words for a listing's lifecycle actions, shared by the two places that
- * offer them: the Listings table's row and the editor's action row. Which
- * gestures a listing has is the server's (`listing_gestures`); only the
- * labels and the delete confirmation's copy live here, so the two surfaces
- * cannot drift apart in what they call the same action.
- */
 
 export const GESTURE_LABELS: Record<Gesture, string> = {
   delete: "Delete",

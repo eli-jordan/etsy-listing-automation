@@ -18,39 +18,6 @@ import type {
 import { DriftTextRow, DriftValueRow } from "./DriftRows";
 import { wordDiff } from "./wordDiff";
 
-/**
- * The centre of the page: "On Etsy now" / "After apply", or a single column
- * once there is nothing to compare or the run has applied (spec's
- * "Comparison" element, decision 3).
- *
- * Named `ComparisonView`, not `Comparison` -- the frontend module table
- * names this file `Comparison.tsx` beside the pure `comparison.ts` it
- * consumes, differing only in case. That collides on Windows and macOS's
- * default case-insensitive filesystems (this repo's own toolchain, per
- * CLAUDE.md's Environment section) and `tsc` refuses to build it even on a
- * case-sensitive one, having seen both spellings resolve to one path. One
- * of the two names had to move; the pure module keeps the plain noun.
- *
- * **Where a gallery tile's picture comes from** is the one place this
- * component adds a rule `comparison.ts` does not carry, because it needs
- * the DOM-facing side of `media.ts` `comparison.ts` is pure and must not
- * import:
- *
- * - "On Etsy now" prefers the live `url` (Etsy's own CDN image). A `ref`
- * with no `url` yet (freshly uploaded, or a hand-added Shop Manager image
- * this tool never uploaded) falls back to the local render the same way
- * the spec says to.
- * - "After apply" for a scene the render stage will re-render shows a
- * spinner until `previewsRendered` names it, then the preview endpoint's
- * own file. A scene whose render is already current (`state: "cached"`)
- * shows today's picture directly -- there is nothing new to wait for.
- * Neither of those endpoints exists for a bare shared-media ref, which
- * renders through `pictureFor` like the editor's own reel does.
- * - A video is drawn "after" from its own file, as a muted clip the
- * browser gives a poster frame, and "now" from Etsy's `thumbnail_url` --
- * the one picture of it the API offers.
- */
-
 export interface ListingMediaContext {
   name: string;
   /** Where a cached scene's picture resolves its artwork from (A35), or
@@ -81,13 +48,9 @@ function sceneState(
 
 interface TileImage {
   src: string | null;
-  /** The plan's preview of this scene is still rendering. */
   pending: boolean;
 }
 
-/** Where an after-apply tile's image comes from: the caller's own lookup,
- * the listing's picture for a plain file, or the scene -- its cached render,
- * or this plan's preview once that has rendered. */
 function afterTileImage(
   ref: string,
   listing: ListingMediaContext,
@@ -281,8 +244,6 @@ function StringList({
   );
 }
 
-/** A text field on one side: the word diff after a change, the plain
- * value otherwise, and a dash for nothing on Etsy yet. */
 function TextDiff({
   field,
   isAfter,
@@ -306,7 +267,6 @@ type Side = "before" | "after";
 interface FieldRow {
   key: string;
   cell: (side: Side) => React.ReactNode;
-  /** Set when this field drifted, which replaces the plain row. */
   drift?: DriftedField | null;
 }
 
@@ -483,8 +443,6 @@ export function ComparisonView({
   listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
-  /** Collapse to one "On Etsy now" column -- once applied, or when the plan
-   * found nothing to compare. */
   collapsed: boolean;
   etsyListingId: number | null;
   /** Optional fixture resolver for canvases and component galleries. The app

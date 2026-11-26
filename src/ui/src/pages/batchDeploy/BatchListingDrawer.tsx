@@ -114,7 +114,6 @@ const STEP_HEADINGS: Record<BatchDrawerMode, string> = {
   review: "What apply will do",
 };
 
-/** The listing's plan: its stages, then what changes and at what price. */
 function DrawerPlan({
   name,
   plan,
@@ -158,8 +157,6 @@ function DrawerPlan({
   );
 }
 
-/** A real modal drawer, kept independent from the eventual review page so PR4
- * can compose it without taking ownership of its focus or diff semantics. */
 export function BatchListingDrawer({
   open,
   listing,

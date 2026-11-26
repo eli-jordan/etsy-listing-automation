@@ -1,13 +1,5 @@
 import type { PriceRow } from "./comparison";
 
-/**
- * Per-size price table, shown only when a price changed (spec's "Price
- * table" element). Rows come straight from `comparison.ts`'s `priceRows` --
- * built from the engine's own `PriceChange`s, grouped by size -- so a red
- * "below cost" mark here is never a second copy of `publish`'s own rule
- *.
- */
-
 function difference(before: string | null, after: string | null): string {
   if (before === null || after === null) return "no change";
   const currency = after.split(" ").pop() ?? "";
@@ -17,7 +9,6 @@ function difference(before: string | null, after: string | null): string {
   return `${sign}${Math.abs(delta)} ${currency}`;
 }
 
-/** The after-apply cell's tone: below cost outranks a plain change. */
 function afterTone(row: PriceRow): string {
   if (row.belowCost) return " dv-bad";
   return row.changed ? " dv-up" : "";

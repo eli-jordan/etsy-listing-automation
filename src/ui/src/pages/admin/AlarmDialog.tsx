@@ -4,12 +4,7 @@ import { type ReactNode, useRef } from "react";
 import { SheetGrabber } from "../../phone/SheetGrabber";
 import { useModalKeys } from "./useModalKeys";
 
-/**
- * Admin's alarm-header modal, shared by the currency and template-limits
- * confirmations: the backdrop, the close button and Escape cancel, and Tab
- * stays inside; on a phone it is a bottom sheet a swipe down cancels. The
- * caller moves focus in and renders the body and foot.
- */
+/** The caller moves focus in. */
 export function AlarmDialog({
   titleId,
   title,

@@ -14,20 +14,6 @@ import { mediaKind, mediaLabel, ownedTile, pictureFor } from "../media";
 import type { ListingTemplateSummary } from "../types";
 import { RecentBatches } from "./RecentBatches";
 
-/**
- * The Listing templates page (UI doc §2), from the `templates` mockup frame:
- * one card per listing template, with its gallery, garment, colour count,
- * pricing and how many batches used it.
- *
- * A card's footer holds Start batch, Edit, Clone and Delete; the
- * listing-template editor's action row offers Clone and Delete too, but
- * Start batch lives only here (UI doc §2, §3). Clone opens the same unsaved
- * *name it* state Create listing template does. Every card is also a drop target: a drop goes straight to staging
- * with that template, and a refused one lands on New batch with the template
- * chosen and the refusal shown (UI doc, closed question 2). Recent batches
- * sits below the cards (PR 5).
- */
-
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
@@ -45,7 +31,6 @@ function dragged(transfer: DataTransfer): { count: number; allPngs: boolean; zip
   };
 }
 
-/** How the drop overlay names what a drag carries. */
 function carryingLabel(carrying: ReturnType<typeof dragged>): string {
   if (carrying.zip) return "a ZIP";
   if (carrying.allPngs) return plural(carrying.count, "PNG", "PNGs");
@@ -101,10 +86,6 @@ function TemplateCard({
       onDragLeave={leave}
       onDrop={drop}
     >
-      {/* The first three gallery entries as a fanned stack of prints (the
-          `template-cards` design frame): the first whole in front, the next
-          two fanned behind it. Mockups are square, and a strip of cells cut
-          each to a slice; a print shows the whole picture. */}
       <div className="bc-card__gallery">
         {template.media.length === 0 ? (
           <span className="bc-card__no-gallery">No gallery images</span>
@@ -217,9 +198,6 @@ export function ListingTemplatesPage() {
       .catch(() => setError(`Could not delete ${name}`));
   }
 
-  /** A drop on a card: straight to staging, never past it (UI doc §2).
-   * Refused, it shows New batch's refusal state with the template chosen,
-   * the files named (closed question 2). */
   function stageOn(name: string, files: File[]) {
     setError("");
     stageDesigns(name, files)

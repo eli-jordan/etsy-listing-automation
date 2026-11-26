@@ -69,7 +69,6 @@ export function useDrawerSwipe(
         const panel = panelRef.current;
         startHeight.current = null;
         onDragging(false);
-        // Released short of a swipe up, the sheet stays as tall as it grew.
         if (!swiped || !panel) return;
         onHeight(bounds(panel).expanded);
         onExpanded(true);

@@ -29,9 +29,6 @@ const complete = (initial: ProviderPreference[]): ProviderPreference[] => [
     .map((name) => ({ name, enabled: false })),
 ];
 
-/** A whole ordered-list edit shares settings.yaml's existing save queue.
- * AiSettingsSections couples an enable with its run floor (ADR-0057).
- */
 export function AiProviders({
   initial,
   onSave,
@@ -119,7 +116,6 @@ export function AiProviders({
   };
   const count = rows.filter((p) => p.enabled !== false).length;
   const failed = problem || Object.values(catalogs?.providers ?? {}).some((p) => p?.problem);
-  // One notice when nothing could be read; per-row problems only when some CLIs answered.
   const allFailed = problem || (!!catalogs && names.every((n) => catalogs.providers?.[n]?.problem));
   let number = 0;
   return (
@@ -221,7 +217,6 @@ type Choices = {
   staleEffort: boolean;
 };
 
-/** What a row offers, and whether its saved choices are still among them. */
 function choicesFor(
   p: ProviderPreference,
   catalog: ProviderCatalog | undefined,
@@ -248,13 +243,10 @@ type RowDrag = {
   drop: () => void;
   active: () => boolean;
   move: (by: number) => void;
-  /** At the top or bottom of the chain, where a move that way does nothing. */
   first: boolean;
   last: boolean;
 };
 
-/** How the chain is worked: a finger cannot hover, drag a native handle or
- * press arrow keys, so on a phone it taps and uses arrow buttons. */
 function ProvidersLede() {
   const isPhone = useIsPhone();
   if (isPhone) {
@@ -454,7 +446,6 @@ function ProviderRow({
   );
 }
 
-/** One model or reasoning picker. A saved value the list no longer offers stays selectable. */
 function ChoiceSelect({
   id,
   label,

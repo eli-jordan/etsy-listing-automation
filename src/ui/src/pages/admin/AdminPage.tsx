@@ -22,14 +22,6 @@ import { useShopLookups } from "./useShopLookups";
 import { type SaveStatus, useShopSettings } from "./useShopSettings";
 import "./admin.css";
 
-/**
- * `/admin` (Admin plan, PR 3): the Shop tab's Connected shops and Listing
- * defaults, from the approved `admin-shop` prototype. Both panels stay
- * mounted so switching never discards a pending edit. Settings owns a
- * separate file/save queue; its AI, Template rendering (template positions
- * PR 5) and Backup (workspace-backup PR 6) subsections share it, and opening
- * Settings selects AI. The section is in the address (`address`).
- */
 export function AdminPage() {
   const [params, setParams] = useSearchParams();
   const named = params.get("section") as Section | null;
@@ -46,8 +38,6 @@ export function AdminPage() {
   const lookups = useShopLookups();
   const isPhone = useIsPhone();
   const content = useRef<HTMLDivElement>(null);
-  // A sideways swipe on the content moves to the section beside it, which
-  // starts at its top, under the chips (PhoneSections).
   usePager(content, {
     items: SECTIONS,
     current: section,
@@ -78,7 +68,6 @@ export function AdminPage() {
     toggle: (field) => setOpenInfo((current) => (current === field ? null : field)),
   };
 
-  // Clicking anywhere but an info button or card closes the open card.
   const onRootClick = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
     if (!target.closest(".s-info-btn") && !target.closest(".s-info")) setOpenInfo(null);
@@ -92,8 +81,6 @@ export function AdminPage() {
 
   const { shop, save } = settings;
   const changeCurrency = async (code: string) => {
-    // The dialog shows its own failure and retries only through its
-    // acknowledged Change, so a cancelled change is never resent by Retry.
     const outcome = await save({ currency: code }, { retain: false });
     if (outcome?.kind === "saved") closeCurrency();
     else if (outcome?.kind === "refused")
@@ -231,7 +218,6 @@ function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () =>
   return <span role="status" />;
 }
 
-/** How long "Saved" stays on a phone before the toast goes. */
 const SAVED_TOAST_MS = 2500;
 
 /**
@@ -335,8 +321,6 @@ function Nav({
         section={section}
         onPick={onPick}
       >
-        {/* Backup (workspace-backup interactions, *Where Backup lives*): off
-            before set-up, then two pages nested beneath it. */}
         <a
           href={address("backup")}
           className={`s-subnav__item bk-subnav-backup${inBackup && !on ? " is-active" : ""}`}

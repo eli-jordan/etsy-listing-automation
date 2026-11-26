@@ -58,8 +58,6 @@ export const RENEWAL: Option[] = [
   { value: "auto", label: "Automatic" },
 ];
 
-/** What Print on demand writes, together, in one save. There is no stored
- * preset: these three values *are* Print on demand (Admin plan, *Shop*). */
 export const PRINT_ON_DEMAND = {
   who_made: "someone_else",
   when_made: "made_to_order",
@@ -78,14 +76,11 @@ export function labelOf(options: Option[], value: string): string {
   return options.find((o) => o.value === value)?.label ?? value;
 }
 
-/** A return policy's identity as a select value: Etsy gives it no title. */
 export function policyKey(terms: ReturnPolicyTerms | null | undefined): string {
   if (!terms) return "";
   return `${terms.accepts_returns}/${terms.accepts_exchanges}/${terms.within_days ?? ""}`;
 }
 
-/** Decode a select value produced by policyKey. Its terms survive a lookup
- * refresh, so retrying an earlier choice cannot turn it into an empty policy. */
 export function policyTerms(key: string): ReturnPolicyTerms | null {
   if (!key) return null;
   const [returns, exchanges, days] = key.split("/");
@@ -148,7 +143,6 @@ export interface InfoCopy {
   title: string;
   what: string;
   effect: string;
-  /** Where the value lives: a shop.yaml key, or "Read from …". */
   source: string;
 }
 
