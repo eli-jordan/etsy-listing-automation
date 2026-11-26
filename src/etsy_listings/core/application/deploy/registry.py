@@ -366,7 +366,7 @@ class RunRegistry:
         """Cancel a queued or running **plan**.
 
         ``None``: no such run. ``False``: it exists but cannot be cancelled --
-        it is an ``apply`` (refused unconditionally, decision 8: Back leaves,
+        it is an ``apply`` (refused unconditionally: Back leaves,
         it never cancels one), or it has already reached a terminal phase.
         ``True``: cancelled outright (it was only ``queued``, so this
         transitions it immediately) or asked to stop (``planning``/
