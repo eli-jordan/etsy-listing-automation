@@ -1,22 +1,5 @@
-"""Save as listing template and Clone: a plan of a template, then one write
-(ADR-0047, template completeness; spec *Creation and cloning*).
-
-:func:`from_listing` and :func:`from_template` read and answer; they write
-nothing. What they answer is a :class:`ListingTemplateDraft` -- the document
-the template would hold and the files it would copy -- which is also exactly
-what the *name it* page shows before anything exists. Only :func:`save`
-touches the disk, and it refuses an incomplete draft and a name already
-taken, never suffixing one: the seller chooses the name (spec, *Storage and
-identity*).
-
-A ``./`` ref is a listing's own file, and a template made from the listing
-cannot point into the listing's directory -- the listing may be renamed or
-deleted the next minute. So each one is planned as a copy beneath the
-template's ``assets/`` and its ref rewritten to say so: ``./shots/back.png``
-becomes ``./assets/shots/back.png``. The prefix rather than a flat
-``assets/<file>`` keeps two refs that share a filename in different
-directories apart. A bare ref is a shared workspace file and stays shared.
-"""
+"""Save as listing template and Clone: a draft that writes nothing, then one
+:func:`save` (ADR-0047; spec *Creation and cloning*)."""
 
 from __future__ import annotations
 
@@ -37,10 +20,6 @@ _ASSETS_REF = f"./{layout.LISTING_TEMPLATE_ASSETS_DIR}/"
 
 
 class UnreadableAssetError(UserFacingError, ValueError):
-    """A ``./`` file the template would copy that cannot be read. It prevents
-    the save outright (spec, *Creation and cloning*) rather than becoming a
-    template with a hole in its gallery."""
-
     def __init__(self, ref: str, detail: str) -> None:
         self.ref = ref
         super().__init__(f"{ref} cannot be copied into the listing template: {detail}")
@@ -54,10 +33,6 @@ class ListingTemplateExistsError(ConflictError, ValueError):
 
 @dataclass(frozen=True)
 class AssetCopy:
-    """One file the template will own: the ref it will name it by, the file
-    on disk it is copied from, and the ref its source names that file by --
-    what a picture of it has to be asked for until the copy exists."""
-
     ref: str
     source: Path
     source_ref: str
@@ -69,17 +44,10 @@ class ListingTemplateDraft:
     assets: tuple[AssetCopy, ...]
 
     def source(self, ref: str) -> Path | None:
-        """Where a ref the template names lives *before* the save -- what
-        the draft's checks and pictures read, since the copy does not exist
-        yet."""
         return next((asset.source for asset in self.assets if asset.ref == ref), None)
 
 
 def owned_refs(template: ListingTemplate) -> list[str]:
-    """Every ``./`` ref a template names, once each, in order: its gallery
-    files and a pricing plan kept beside the listing. The files a template
-    owns -- what Save as copies in, and what staging freezes and batch
-    creation copies out into each listing."""
     refs = [entry for entry in template.media if isinstance(entry, str)]
     if template.pricing_plan is not None:
         refs.append(template.pricing_plan)
@@ -109,8 +77,6 @@ def from_listing(workspace: Workspace, listing: str) -> ListingTemplateDraft:
             "price_overrides": source.price_overrides,
             "media": source.media,
             "etsy": {
-                # Inline text is copied deliberately: the seller chose it as
-                # reusable content, and the name-it page shows it (spec).
                 "description": {"text": etsy.description.text, "ref": etsy.description.ref},
                 "renewal": etsy.renewal,
                 "section": etsy.section,
@@ -152,10 +118,6 @@ def _resolve_listing_ref(workspace: Workspace, ref: str, listing_dir: Path) -> P
 
 
 def from_template(workspace: Workspace, template: str) -> ListingTemplateDraft:
-    """Clone: the same document, with every template-owned file planned as a
-    copy into the clone's own directory, so the two share nothing and either
-    can be deleted (spec, *Creation and cloning*). The refs need no rewrite --
-    they already name the template's own directory."""
     document = workspace.load_listing_template(template)
     assets: list[AssetCopy] = []
     for ref in owned_refs(document):
@@ -170,9 +132,6 @@ def from_template(workspace: Workspace, template: str) -> ListingTemplateDraft:
 def draft_issues(
     workspace: Workspace, draft: ListingTemplateDraft, *, facts: WorkspaceFacts
 ) -> list[Issue]:
-    """The draft's completeness, judged against the files it will copy
-    -- they are the same bytes the saved template will hold."""
-
     def resolve(ref: str) -> Path:
         return draft.source(ref) or workspace.resolve_ref(
             ref, listing_dir=workspace.draft_listing_dir()
@@ -184,20 +143,6 @@ def draft_issues(
 def save(
     workspace: Workspace, name: str, draft: ListingTemplateDraft, *, facts: WorkspaceFacts
 ) -> list[Issue]:
-    """Write ``draft`` as listing template ``name``, or refuse and write
-    nothing.
-
-    A taken name raises :class:`ListingTemplateExistsError` -- the
-    *directory* is what is tested, so a half-written one left by a crash is
-    taken too, and never written into. An incomplete draft answers its
-    issues, with a ``block`` among them, and writes nothing; otherwise
-    the answer is the draft's remaining warnings and the template exists.
-
-    The directory is made first, the assets copied into it, and
-    ``template.yaml`` written last and atomically: until that file lands,
-    `Workspace.listing_template_names` does not count the directory, and a
-    failure part-way removes it.
-    """
     directory = workspace.listing_template_dir(name)
     if directory.exists():
         raise ListingTemplateExistsError(name)
@@ -213,6 +158,7 @@ def save(
             target = workspace.resolve_template_ref(asset.ref, template=name)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(asset.source, target)
+        # Last: until template.yaml lands, listing_template_names skips the directory.
         workspace.write_listing_template(name, draft.template)
     except BaseException:
         remove_tree(directory)

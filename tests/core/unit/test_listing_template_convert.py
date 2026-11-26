@@ -225,6 +225,19 @@ class TestSaving:
         assert workspace.listing_template_names() == ["heavyweight-tee"]
         assert workspace.listing_template_file("heavyweight-tee").read_bytes() == before
 
+    def test_a_directory_a_crash_left_without_its_yaml_is_taken_and_left_alone(
+        self, workspace: Workspace
+    ) -> None:
+        leftover = workspace.listing_template_assets_dir("heavyweight-tee") / "half.png"
+        leftover.parent.mkdir(parents=True)
+        leftover.write_bytes(b"half")
+
+        with pytest.raises(ListingTemplateExistsError):
+            _save(workspace, "heavyweight-tee")
+
+        assert workspace.listing_template_names() == []
+        assert leftover.read_bytes() == b"half"
+
     def test_an_incomplete_template_is_refused_with_its_issues(self, workspace: Workspace) -> None:
         edit_listing(workspace.root, colors=[], media=["common-media/size-guide.png"])
 

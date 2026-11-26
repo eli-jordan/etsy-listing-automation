@@ -129,7 +129,10 @@ It deliberately excludes or resets these fields:
 
 A bare media ref rooted in the workspace remains a shared workspace ref. For
 each `./` listing-local image or video, **Create listing template** copies the
-file into template-owned assets and rewrites the ref. Instantiation copies that
+file into template-owned assets and rewrites the ref under `./assets/`, keeping
+its path: `./shots/back.png` becomes `./assets/shots/back.png`, so two files
+that share a name in different directories stay apart. A local pricing plan
+travels the same way. Instantiation copies that
 asset into the new listing so the resulting `./` ref remains listing-local. A
 missing or unreadable source asset prevents the listing template from being
 saved. Inline `etsy.description.text` is copied deliberately because the seller
