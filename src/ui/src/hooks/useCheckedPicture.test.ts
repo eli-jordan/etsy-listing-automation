@@ -42,6 +42,16 @@ describe("scenePreviewChanged", () => {
     });
   });
 
+  it("reads a check that fails as unchanged", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue({
+      data: undefined,
+      error: { detail: "boom" },
+      response: new Response(null, { status: 500 }),
+    } as never);
+
+    await expect(scenePreviewChanged(SCENE)).resolves.toBe(false);
+  });
+
   it("asks nothing about a picture that is not a listing scene", async () => {
     const get = vi.spyOn(api, "GET");
 
