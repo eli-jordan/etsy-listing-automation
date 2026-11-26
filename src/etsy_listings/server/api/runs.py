@@ -1,13 +1,4 @@
-"""The runs resource's six endpoints (ADR-0041, decision 7).
-
-```
-POST /api/runs {kind, scope, listings?, batch_id?, expect?} -> 202 RunSummary | 409 {active_run}
-GET /api/runs?listing=|scope=[&batch=] active and recent runs for a listing or scope
-GET /api/runs/{id} RunDetail: phase, listings, events so far
-GET /api/runs/{id}/events text/event-stream; replays after Last-Event-ID
-DELETE /api/runs/{id} cancel a queued or running plan; 409 for apply
-POST /api/runs/{id}/seen the result of a finished run has been looked at
-```
+"""The runs resource (ADR-0041).
 
 Every write here is a call into
 :class:`~etsy_listings.core.application.deploy.deployments.Deployments` --
@@ -18,24 +9,10 @@ here computes a diff or runs a run either (AGENTS.md's invariants): the FIFO
 worker thread in ``core/application/deploy/executor.py`` does both, on its
 own time, and these endpoints only ever read or nudge the
 :class:`~etsy_listings.core.application.deploy.registry.Run` it is working on.
-
-**The SSE bridge.** :meth:`~etsy_listings.core.application.deploy.registry.Run.wait_for_events`
-is a plain, blocking method -- it has to be, since the executor thread that
-appends events is a plain thread, not a coroutine. The route awaits it
-through ``loop.run_in_executor``, which is the stdlib's own way to run a
-blocking call without stalling the event loop, so no new dependency
-(``sse-starlette`` or similar) is needed: a short, bounded ``timeout`` on
-each wait is what turns "block until notified" into something an
-``async def`` generator can yield control back from periodically, both to
-check the client is still there and to let the surrounding ASGI server keep
-serving other requests meanwhile. A client going away ends only its stream;
-the run carries on and a later connection replays it from ``Last-Event-ID``.
 """
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated, assert_never
 
@@ -44,7 +21,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from etsy_listings.core.application import batch_workflow
 from etsy_listings.core.application.deploy.deployments import Deployments
-from etsy_listings.core.application.deploy.events import AnyRunEvent, RunScope
+from etsy_listings.core.application.deploy.events import RunScope
 from etsy_listings.core.application.deploy.registry import (
     BatchApply,
     BatchPlan,
@@ -73,10 +50,10 @@ from etsy_listings.server.api.schemas import (
     WorkspaceApplyRequest,
     WorkspacePlanRequest,
 )
+from etsy_listings.server.api.sse import event_stream
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
-_EVENT_WAIT_TIMEOUT = 1.0
 """How long one SSE poll blocks the executor thread pool before yielding
 control back to the event loop -- short enough that a client disconnecting,
 or the surrounding server shutting down, is noticed promptly; long enough that
@@ -222,41 +199,6 @@ def mark_seen(target: Annotated[Target, Depends(target)]) -> RunSummary:
     return _summary(target.run, target.deployments)
 
 
-def last_event_id(request: Request) -> int:
-    """``Last-Event-ID``, the header ``EventSource`` sends on reconnect --
-    ``0`` for a fresh connection or a header that is not a plain integer, both
-    of which mean "replay everything"."""
-    raw = request.headers.get("last-event-id")
-    if raw is None:
-        return 0
-    try:
-        return int(raw)
-    except ValueError:
-        return 0
-
-
-def _sse_frame(event: AnyRunEvent) -> bytes:
-    return f"id: {event.id}\nevent: {event.type}\ndata: {event.model_dump_json()}\n\n".encode()
-
-
-async def _sse_events(request: Request, run: Run, after_id: int) -> AsyncIterator[bytes]:
-    loop = asyncio.get_event_loop()
-    next_id = after_id
-    while True:
-        if await request.is_disconnected():
-            return
-
-        def wait(after: int = next_id) -> tuple[list[AnyRunEvent], bool]:
-            return run.wait_for_events(after, timeout=_EVENT_WAIT_TIMEOUT)
-
-        pending, done = await loop.run_in_executor(None, wait)
-        for event in pending:
-            next_id = event.id
-            yield _sse_frame(event)
-        if done:
-            return
-
-
 @router.get("/{run_id}/events")
 def stream_events(
     target: Annotated[Target, Depends(target)], request: Request
@@ -264,9 +206,4 @@ def stream_events(
     """``text/event-stream`` over this run's own event buffer -- every event
     already recorded past ``Last-Event-ID``, then whatever the worker thread
     appends next, until the run reaches a terminal phase."""
-    after_id = last_event_id(request)
-    return StreamingResponse(
-        _sse_events(request, target.run, after_id),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return event_stream(request, target.run, lambda event: event.id)
