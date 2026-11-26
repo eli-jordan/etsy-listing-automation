@@ -120,21 +120,15 @@ class Deadline:
     ``deadline_at``, and a run may inject one ``clock`` for every reader."""
 
     deadline_at: float = field(default=0.0)
-    clock: Callable[[], float] | None = field(default=None, compare=False, repr=False)
+    clock: Callable[[], float] = field(default=time.monotonic, compare=False, repr=False)
 
     @classmethod
     def starting_now(cls, *, seconds: float, clock: Callable[[], float] | None = None) -> Deadline:
-        return cls(deadline_at=(clock or time.monotonic)() + seconds, clock=clock)
-
-    def _now(self) -> float:
-        # Looked up per call, not bound at import, so a test can pin time.monotonic.
-        return (self.clock or time.monotonic)()
+        clock = clock or time.monotonic
+        return cls(deadline_at=clock() + seconds, clock=clock)
 
     def remaining_seconds(self) -> float:
-        """Never negative -- callers pass this straight to a subprocess
-        timeout, and a negative timeout is not "expire immediately" to every
-        API, it is undefined behaviour."""
-        return max(0.0, self.deadline_at - self._now())
+        return max(0.0, self.deadline_at - self.clock())
 
     @property
     def expired(self) -> bool:
@@ -142,7 +136,7 @@ class Deadline:
 
     def within(self, seconds: float) -> Deadline:
         """A deadline ``seconds`` from now, but never later than this one."""
-        return Deadline(deadline_at=min(self._now() + seconds, self.deadline_at), clock=self.clock)
+        return Deadline(deadline_at=min(self.clock() + seconds, self.deadline_at), clock=self.clock)
 
 
 @dataclass(frozen=True)
