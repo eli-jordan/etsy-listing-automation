@@ -189,13 +189,6 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedProduct | None
     ) -> Product | None:
-        """The product, or ``None``.
-
-        ``None`` **without a request** when the lockfile has no product id:
-        there is nothing to read before the first apply, and asking would make
-        every `plan` in a fresh workspace demand a token for a command that
-        changes nothing.
-        """
         del applied
         product_id = lock.remote.get(PRODUCT_ID_KEY)
         if not product_id:
@@ -213,16 +206,8 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
 
     @override
     def snapshot(self, desired: PrintifyProductDesired, live: Product | None) -> ProductSnapshot:
-        """Every variant, both sides, named.
-
-        The id -> (colour, size) lookup a live variant needs is
-        ``desired.variants``, this run's own resolved matrix -- the same one
-        ``apply`` sends -- since :class:`~etsy_listings.core.clients.printify.models.ProductVariant`
-        carries no colour or size of its own. A live variant whose id has
-        fallen out of that resolution (a garment change would have already
-        been blocked; a discontinued cell, missing variant cells) has nothing to be named by
-        and is left off the live side rather than guessed at.
-        """
+        """Printify's ``ProductVariant`` has no colour or size, so live rows are
+        named through this run's resolved ``desired.variants``."""
         lookup = {variant.id: variant for variant in desired.variants}
         desired_rows = tuple(
             _variant_row(variant.colour_slug, variant.size, variant.price, desired.currency)
