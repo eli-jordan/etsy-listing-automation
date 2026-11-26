@@ -615,7 +615,12 @@ configuration and media references, while mockup templates define render
 geometry. Upload staging freezes the selected listing-template document and
 owned assets under its write lock. The server decodes multipart uploads into
 byte streams; bounded loose-PNG/ZIP inspection in `core/batches` precedes
-review. Confirm and retry revalidate shared references and allocate names
+review. Staging is the one write: each PNG is streamed to
+`uploads/<sha256>.png`, identical bytes merge into one row, and `session.json`
+is written last; any refusal removes the session's folder. Review writes
+nothing. A row's name and the `designs/` file its bytes already are depend on
+the workspace, which changes between reads, so both are worked out on every
+read from the stored base names. Confirm and retry revalidate shared references and allocate names
 under the listing's document lock. They create ordinary listings and retained batch records,
 idempotently, without deploying (ADR-0047, ADR-0051). A staging session
 (`.cache/staging/<id>/session.json`) and a batch (`.cache/batches/<id>.json`)
