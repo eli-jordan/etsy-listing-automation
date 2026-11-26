@@ -17,12 +17,6 @@ import type { MediaEntry, TemplateSummary } from "./types";
 
 export type PictureSize = "tile" | "full";
 
-/** A shared asset's name, from the bare ref a listing stores.
- *
- * Filename-derived rather than looked up, so a reel tile still labels itself
- * when the file has been deleted from `common-media/` since the listing named
- * it. One implementation: the design strip and the reel each had their own.
- */
 export function refName(ref: string): string {
   const file = ref.split("/").pop() ?? ref;
   return file.replace(/\.[^.]+$/, "");
@@ -53,8 +47,7 @@ export function mediaKind(entry: MediaEntry): "image" | "video" {
 export interface SceneSource {
   listing: string;
   version: string;
-  /** A signature of each template's *saved* position (ADR-0058), added to
-   * that template's version so a landed position save is a new URL too. */
+  /** Each template's saved-position signature (ADR-0058). */
   positions?: Readonly<Record<string, string>>;
 }
 
@@ -90,12 +83,6 @@ export function isInMedia(
   );
 }
 
-/** Colours this listing sells that `template` has no entry for.
- *
- * Driven by `colors:`, not by the template's own photo set -- a swatch is owed
- * for every colour on sale, and one the template cannot supply is exactly what
- * the coverage warning is for.
- */
 export function missingColours(
   media: readonly MediaEntry[],
   colors: readonly string[],
@@ -123,12 +110,8 @@ export function pictureFor(
  * different directories. */
 export type Artwork = SceneSource | string | { testDesign: string };
 
-/** Whose directory a `./` ref is resolved against: a listing's, or a listing
- * template's (ADR-0047) -- the one other thing that owns files of its own.
- *
- * `copies` is for a listing template not saved yet (the *name it* state, UI
- * doc §1): its `./assets/…` refs are only a plan until the save copies them,
- * so each is drawn from the ref its source (`name`) still keeps it under. */
+/** Whose directory a `./` ref is resolved against (ADR-0047). `copies`: an unsaved
+ * listing template's planned `./assets/` refs, each mapped to the ref `name` keeps it under. */
 export interface MediaOwner {
   kind: "listing" | "listing-template";
   name: string;
@@ -182,21 +165,7 @@ export function templatePicture(
   return listingScenePreviewUrl(artwork.listing, template, colour, version);
 }
 
-/**
- * The file on disk an entry renders from, for the caption under a preview.
- *
- * Served by `GET /api/templates` (`TemplateSummary.photos`) rather than
- * composed here from ADR-0004's convention. That matters for the one layout the
- * convention does not describe: a vendor pack delivered as
- * `{template}-{colour}.png` is resolved by `Workspace.template_base_image`'s
- * trailing-segment fallback, and a caption derived from the convention alone
- * named a file that is not there.
- *
- * The plain convention is still the fallback, for a colour the server did not
- * list -- a colour the listing sells that this template has no photo for. That
- * path does not exist either, but naming the file the template *would* need is
- * the useful thing to say about a missing one.
- */
+/** The server's photo path wins: it knows vendor packs' `{template}-{colour}.png`. */
 export function scenePath(
   template: TemplateSummary | undefined,
   templateName: string,
