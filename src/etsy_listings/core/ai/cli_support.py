@@ -125,6 +125,8 @@ def check_capability(
     required: tuple[str, ...],
     description: str,
 ) -> ProviderReadiness | None:
+    """Check ``binary``'s help text for ``required`` flags: a local probe
+    that costs no generation call."""
     result = probe(host, binary, args)
     if isinstance(result, ProviderReadiness):
         return result

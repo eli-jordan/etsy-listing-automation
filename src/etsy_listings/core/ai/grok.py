@@ -101,7 +101,6 @@ class GrokProvider(cli_support.LocalCliProvider):
 
     @override
     def _check_capability(self) -> ProviderReadiness | None:
-        # A local help probe checks advertised flags without spending a generation call.
         return cli_support.check_capability(
             self.host, self.binary, ("--help",), _REQUIRED_HELP_FLAGS, "headless"
         )
