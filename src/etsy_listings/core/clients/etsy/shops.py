@@ -48,14 +48,8 @@ class HttpEtsyShopClient(ShopMetadataReads):
         return [Shop.model_validate(row) for row in results_of(response.json())]
 
     def shop_by_owner(self, user_id: int) -> Shop | None:
-        """The shop belonging to a user, or ``None`` if they have none.
-
-        An Etsy account has at most one shop, and the user id is the prefix of
-        the access token itself -- so this answers "which shop is the person
-        who signed in selling from?" without asking them anything. A seller
-        account with no shop yet is a real state, not an error: `404` there
-        means "no shop", which is a question `setup` can ask about.
-        """
+        """The user's one shop, or ``None``: Etsy answers 404 for a seller
+        with no shop yet."""
         try:
             response = self._transport.get(f"/v3/application/users/{user_id}/shops")
         except EtsyApiError as exc:

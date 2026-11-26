@@ -84,16 +84,8 @@ class EtsyShopCatalog:
         )
 
     def shop_section_title(self, section_id: int | None) -> str | None:
-        """A section id read back as its name, for drift labelling.
-
-        Never fetches: unlike :meth:`shop_section`, a name miss here is not
-        a config mistake to report, it is "this run's catalog never had a
-        reason to ask" -- ``desired()`` only calls :meth:`shop_section` when
-        the listing itself names a section, so a live id from a *different*
-        section than the one configured (drift) may name a section this
-        catalog instance never fetched. Labelling that drift is a nicety, not
-        a rule ``plan()`` needs to enforce, so it costs no request of its own.
-        """
+        """A section id read back as its name for drift labelling, from the
+        sections already fetched (``None`` if they were not)."""
         if section_id is None or self._sections is None:
             return None
         return next((s.title for s in self._sections if s.shop_section_id == section_id), None)
@@ -171,8 +163,7 @@ def _partner_labels(partners: list[ProductionPartner]) -> list[str]:
 
 
 def _options(names: Iterable[str], *, empty: str = SHOP_MANAGER_HINT) -> str:
-    """``Valid names: a, b`` -- or a hint naming the Shop Manager step when
-    there is nothing to offer, since typing a name into config cannot create
-    a section, profile, policy or partner the shop does not have."""
+    """``Valid names: a, b``, or the Shop Manager hint when there are none
+    (the API cannot create them)."""
     listed = sorted(names)
     return f"Valid names: {', '.join(listed)}" if listed else empty

@@ -29,18 +29,8 @@ RENEW_WARNING = timedelta(days=14)
 
 
 class EtsyAuthError(UserFacingError, RuntimeError):
-    """There is no usable Etsy credential, and no retry will produce one.
-
-    Raised where a token is *needed*, never where one is merely absent, so the
-    message can always name the command that fixes it. Also what
-    :mod:`transport` raises on a 401: from the caller's side, a rejected token
-    and a missing one call for the same next step.
-
-    Naming the command that fixes it is the definition of a
-    :class:`~etsy_listings.core.errors.UserFacingError`; being one is what keeps a
-    signed-out workspace reporting that fact per listing rather than aborting
-    the run on the first.
-    """
+    """There is no usable Etsy credential, and no retry will produce one:
+    missing where a token is needed, or rejected with a 401."""
 
     def __init__(self, detail: str) -> None:
         super().__init__(f"{detail}\n  Run `etsy-listings auth` to sign in to Etsy again.")
@@ -48,20 +38,13 @@ class EtsyAuthError(UserFacingError, RuntimeError):
 
 class EtsyRefreshBusyError(UserFacingError, RuntimeError):
     """Another store's refresh of the same token file outlasted
-    :data:`ROTATION_WAIT_SECONDS`. The sign-in is not known to be dead, so
-    this asks for a retry, never a new sign-in."""
+    :data:`ROTATION_WAIT_SECONDS`; a retry, not a new sign-in, is the fix."""
 
 
 @dataclass(frozen=True)
 class StoredTokens:
-    """What ``.auth/etsy-tokens.json`` holds.
-
-    Timestamps are absolute and stored as ISO-8601 UTC rather than the
-    `expires_in` seconds Etsy sends: a duration is only meaningful next to the
-    instant it was received, and this file outlives the process that wrote it.
-    Written in a form a human can read, because "when does this expire?" is a
-    question the file should be able to answer on its own.
-    """
+    """What ``.auth/etsy-tokens.json`` holds, with expiries as absolute
+    ISO-8601 instants rather than Etsy's ``expires_in`` seconds."""
 
     access_token: str
     refresh_token: str
@@ -88,13 +71,7 @@ class StoredTokens:
 
     @classmethod
     def parse(cls, document: Any) -> StoredTokens | None:
-        """The stored document, or ``None`` if it cannot be read.
-
-        ``None`` for both "not there" and "will not decode", the same answer
-        the lockfile gives for the same reason: a credential file we cannot
-        read is one we cannot prove anything about, and guessing at half of it
-        is worse than asking the user to sign in again.
-        """
+        """The stored document, or ``None`` if it is absent or will not decode."""
         if not isinstance(document, dict):
             return None
         try:
@@ -175,15 +152,8 @@ class TokenStore:
         return StoredTokens.parse(document)
 
     def save(self, tokens: StoredTokens) -> None:
-        """Write atomically, then tighten the mode as far as the platform
-        allows.
-
-        `os.replace` over a temp file in the same directory is the write; the
-        `chmod` is best-effort and deliberately not checked. On Windows -- the
-        platform this is developed on -- it sets a read-only bit and is not an
-        access control at all, so failing the run over it would be enforcing a
-        guarantee we cannot make either way.
-        """
+        """Write atomically. The ``chmod`` is best-effort: on Windows it only
+        sets the read-only bit."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         temp = self._path.with_name(self._path.name + ".tmp")
         temp.write_text(json.dumps(tokens.to_document(), indent=2) + "\n", encoding="utf-8")

@@ -1,22 +1,9 @@
 """One authenticated connection to Etsy, and the token endpoint beside it.
 
-Two classes, because Etsy's requests come in two shapes that share almost
-nothing:
-
-:class:`Transport` carries **both** credentials -- the app key pair in
-``x-api-key`` and the shop owner's bearer -- and is what every listing, image
-and shop call goes through. :class:`OAuthClient` talks to the token endpoint,
-which takes **neither**: it authenticates by `client_id` in the form body, and
-is the only Etsy endpoint that can be called before a token exists. Giving the
-token endpoint its own client is what keeps:mod:`tokens` free of a cycle back
-through here.
-
-The retry policy, the backoff and the "return the last response rather than
-raising" rule are all shared with Printify -- one `retry.py`, because a
-429 means the same thing to both. Etsy adds one thing Printify does not: every
-response says how many calls are left this second, which :class:`RateGate`
-reads so the next call waits instead of spending a 429 (features/market-seo-20260924/spec.md,
-*Quota*).
+:class:`Transport` sends the app key pair and the shop owner's bearer.
+Etsy's token endpoint takes neither (it authenticates by `client_id` in the
+form body), so :class:`OAuthClient` is separate, which also keeps
+:mod:`tokens` free of an import cycle.
 """
 
 from __future__ import annotations
@@ -81,12 +68,8 @@ class EtsyApiError(UserFacingError, RuntimeError):
 
 
 def _error_detail(response: httpx.Response) -> str:
-    """Pull ``error`` out of the envelope, tolerating its absence.
-
-    A 502 from a proxy is HTML. Failing while decoding the thing that explains
-    a failure is the worst moment to fail, so every step degrades to the raw
-    body rather than raising.
-    """
+    """Pull ``error`` out of the envelope, degrading to the body text for a
+    proxy's HTML error page rather than raising."""
     detail = response.text.strip() or "no response body"
     try:
         body: Any = response.json()
@@ -101,27 +84,13 @@ def decode_error(response: httpx.Response) -> EtsyApiError:
 
 
 class RateGate:
-    """Hold the next call back once Etsy says this second's calls are spent.
+    """Hold the next call back for a second once a response's
+    ``x-remaining-this-second`` is 0; Etsy does not say whether its window is
+    fixed or sliding, and a full second is right under either.
 
-    Etsy's limits are per app, set in the developer portal, and change
-    without the tool knowing -- so nothing is stored or configured here. Each
-    response's ``x-remaining-this-second`` is the whole input: at 0, no call
-    is sent until a second has passed since that response (features/market-seo-20260924/spec.md,
-    *Quota*). A second from the response rather than the next wall-clock
-    second, because Etsy does not say whether its window is fixed or sliding,
-    and a full second is right under either.
-
-    **Shared and thread-safe**, because market research keeps five calls in
-    flight on one transport and the budget is theirs jointly. A waiter sleeps
-    once for exactly what is owed while holding ``_waiting``; the others block
-    on that lock -- they do not poll -- and find the second already over when
-    they get it. A deadline only ever moves later: responses from concurrent
-    calls arrive in any order, and one that left the server before the budget
-    ran out must not lift a wait another has just established.
-
-    A missing or unreadable header means "no information", never "stop".
-    This is an optimisation over the 429 retry, not a gate that may wedge a
-    run on a proxy that strips headers.
+    Shared by concurrent calls. One waiter sleeps while holding ``_waiting``
+    and the rest block on it, and the deadline only moves later, since
+    responses from concurrent calls arrive in any order.
     """
 
     def __init__(
@@ -224,13 +193,7 @@ class Transport:
         return self.request("DELETE", path, **kwargs)
 
     def ping(self) -> int:
-        """Verify the app key pair alone, and return the application id.
-
-        It needs no bearer, which makes it exactly the
-        check `auth` wants before it opens a browser: a bad keystring or a
-        mistyped shared secret is caught at the question that asked for it,
-        not three steps later in a redirect nobody can read.
-        """
+        """Verify the app key pair alone, and return the application id."""
         body: Any = self.get(PING_PATH).json()
         if not isinstance(body, dict) or not isinstance(body.get("application_id"), int):
             raise EtsyApiError(200, error="ping did not return an application_id")
@@ -238,11 +201,8 @@ class Transport:
 
 
 def _rejected_message(status_code: int, *, bearer: BearerSource | None, detail: str) -> str:
-    """Name the credential that was actually rejected, and say what Etsy said.
-
-    Etsy answers 401 for a bad app key pair, a bad bearer, *and* a missing
-    scope alike; carrying the server's own text is what tells them apart.
-    """
+    """Name the credential that was rejected, with Etsy's own text: Etsy
+    answers 401 for a bad key pair, bearer and missing scope alike."""
     if bearer is None:
         return (
             f"Etsy rejected the app key pair ({status_code}): {detail}. Check "
@@ -257,11 +217,7 @@ def _rejected_message(status_code: int, *, bearer: BearerSource | None, detail: 
 
 class OAuthClient:
     """The token endpoint: exchange an authorization code, refresh a pair.
-
-    Form-encoded rather than JSON. Etsy's authentication guide documents
-    ``application/x-www-form-urlencoded`` and its quick-start tutorial posts
-    JSON; the guide is the specification and the tutorial is an example, so
-    the guide wins.
+    Form-encoded, as Etsy's authentication guide documents (its tutorial posts JSON).
     """
 
     def __init__(
@@ -310,9 +266,7 @@ class OAuthClient:
                 f"http_{response.status_code}",
                 response.text.strip() or "the token endpoint returned no readable body",
             ) from None
-        # `parse` raises on an `error` key whatever the status was, which is
-        # the shape that matters: Etsy reports `invalid_grant` with a 400, and
-        # the caller needs the reason rather than the number.
+        # Not status-checked: Etsy reports `invalid_grant` as a 400 with a body.
         return oauth.TokenResponse.parse(body)
 
 

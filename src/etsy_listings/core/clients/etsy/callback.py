@@ -107,30 +107,14 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, *_args: object) -> None:
-        """Silence. The default writes a request line to stderr, which in
-        the middle of a wizard reads like an error."""
+        """Silenced: the default request line on stderr reads like an error."""
 
 
 def _serve(port: int, handler: type[BaseHTTPRequestHandler]) -> HTTPServer:
-    """A server on `127.0.0.1`, and nothing wider.
-
-    Two reasons for the specific address rather than a wildcard or a
-    dual-stack `[::]`, and the second is the one that decided it.
-
-    A wildcard would accept connections from the network for a server whose
-    entire job is a redirect from this machine's own browser. And on Windows,
-    binding is only refused for an *exact* address match: a second bind to
-    `0.0.0.0` succeeds while another process listens on `127.0.0.1`, and the
-    reverse succeeds too. Bound to a wildcard, a second `auth` run would come
-    up cleanly beside the first and the authorization code would arrive at
-    whichever of the two the browser reached -- a failure with no error
-    anywhere. Bound to the exact address, a held port raises, and the user is
-    told which port and why it cannot move.
-
-    `localhost` also resolves to `::1`, which this does not answer. Browsers
-    fall back to `127.0.0.1` when a connection there is refused, and the
-    alternative -- two sockets and a select loop -- is a lot of machinery for
-    a case the browser already handles.
+    """A server on `127.0.0.1` exactly, never a wildcard: Windows refuses a
+    bind only on an exact address match, so a wildcard would let a second
+    `auth` run listen beside the first and silently split the redirect.
+    `::1` is not answered; browsers fall back to `127.0.0.1`.
     """
     try:
         return _LoopbackServer(("127.0.0.1", port), handler)
@@ -144,11 +128,8 @@ def _serve(port: int, handler: type[BaseHTTPRequestHandler]) -> HTTPServer:
 
 class _LoopbackServer(HTTPServer):
     allow_reuse_address = False
-    """`HTTPServer` turns this **on**, and on Windows that is not the
-    politeness it is on Unix: `SO_REUSEADDR` there lets a second socket bind an
-    address another process is actively listening on, and which of the two
-    receives a given connection is undefined. Inherited as-is, this server
-    would come up on a port something else already held."""
+    """`HTTPServer` turns this on; on Windows `SO_REUSEADDR` lets a second
+    socket bind a port another process is listening on."""
 
 
 def _first(params: dict[str, list[str]], key: str) -> str | None:
