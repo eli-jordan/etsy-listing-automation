@@ -15,12 +15,7 @@ def normalise(tag: str) -> str:
 def rank_phrases(
     listings: Sequence[ScoredListing], *, limit: int = PHRASE_LIMIT
 ) -> tuple[PhraseScore, ...]:
-    """The top ``limit`` phrases, best first.
-
-    Ordered by score, then by how many listings use the phrase, then
-    alphabetically -- so the list is the same however the listings arrived.
-    A listing using a tag twice (in two spellings) counts once.
-    """
+    """The top ``limit`` phrases: by score, then listing count, then name."""
     counts: dict[str, int] = {}
     sums: dict[str, float] = {}
     for listing in listings:

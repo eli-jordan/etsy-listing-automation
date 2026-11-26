@@ -14,18 +14,8 @@ def _last_tied(keys: list[float], order: list[int], start: int) -> int:
 
 
 def percentiles(values: Sequence[float | None]) -> list[float]:
-    """Each value's position in the set, 0 for the worst and 1 for the best,
-    in the order given.
-
-    Ties share the average of the positions they occupy, so two equal
-    listings never differ by the accident of which came first. A single
-    value, or a set that is all one value, is therefore 0.5 -- the middle,
-    not a claim to be the best.
-
-    ``None`` is a signal that is missing -- a shop with no rating in the past
-    year, a listing whose age Etsy did not say -- and ranks below every real
-    value, zero included (the spec's "counts as lowest").
-    """
+    """Each value's percentile in the given order: 0 worst, 1 best, ties
+    share their average position, and ``None`` ranks below every value."""
     count = len(values)
     if count == 0:
         return []
@@ -45,13 +35,8 @@ def percentiles(values: Sequence[float | None]) -> list[float]:
 
 
 def rescaled(weights: MarketWeights, *, exclude: Collection[Metric] = ()) -> dict[Metric, float]:
-    """The weights left after ``exclude``, rescaled to sum to 1.
-
-    The preliminary ranking excludes reviews -- the one signal that costs a
-    call per listing -- and ranks on the rest (features/market-seo-20260924/spec.md, *Stats*). When
-    nothing is left to weigh, every weight is 0 and the caller's tie-break
-    (search position) decides alone.
-    """
+    """The weights left after ``exclude``, rescaled to sum to 1, or all 0
+    when nothing is left to weigh."""
     kept = [metric for metric in METRICS if metric not in exclude]
     total = sum(weights.of(metric) for metric in kept)
     if total == 0:
@@ -71,6 +56,5 @@ def weighted(
 
 
 def display_score(raw: float) -> int:
-    """A 0-1 score as the panel's whole number out of 100, halves rounded
-    up -- Python's own ``round`` would show 87.5 as 88 but 12.5 as 12."""
+    """A 0-1 score out of 100, halves up (``round`` rounds half to even)."""
     return math.floor(raw * 100 + 0.5)

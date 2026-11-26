@@ -36,9 +36,7 @@ _DAY = 86_400
 
 
 class MarketResearchError(UserFacingError):
-    """An Etsy call failed after the transport's retries. The message is the
-    spec's, *Etsy market search failed: <reason>*, so a seller can tell an
-    Etsy problem from a model one."""
+    """An Etsy call failed after the transport's retries."""
 
     def __init__(self, reason: str) -> None:
         self.reason = reason
@@ -46,8 +44,7 @@ class MarketResearchError(UserFacingError):
 
 
 class ResearchCancelledError(Exception):
-    """The run's cancel event was set. Raised at the next boundary between
-    calls; calls already in flight finish, and nothing new starts."""
+    """The run's cancel event was set; calls in flight finish, none start."""
 
 
 class _AbortedError(Exception):
@@ -113,13 +110,8 @@ def research(
 
 
 class _Calls:
-    """Every Etsy call research makes goes through here: at most
-    :data:`MAX_IN_FLIGHT` at once, the cancel event checked before each, and
-    the failures turned into the one error research raises.
-
-    One failed call stops the rest from *starting* -- the run has failed, so
-    anything more is quota spent on an answer nobody reads.
-    """
+    """Every Etsy call research makes: bounded, cancellable, and stopped from
+    starting once one has failed, since each call spends quota."""
 
     def __init__(self, cancel: threading.Event) -> None:
         self._cancel = cancel
@@ -159,9 +151,7 @@ class _Calls:
 
 
 def _merge(searches: Sequence[Sequence[MarketCandidate]]) -> list[tuple[MarketCandidate, int]]:
-    """Every candidate once, with its best (lowest) 1-based position across
-    the queries, best first -- ties by id, so the order is the same whichever
-    query answered first."""
+    """Every candidate once, at its best 1-based position across the queries."""
     best: dict[int, tuple[MarketCandidate, int]] = {}
     for results in searches:
         for position, candidate in enumerate(results, start=1):
@@ -177,10 +167,7 @@ def _age_days(listing: MarketCandidate, now: float) -> float | None:
 
 
 def _per_day(count: int, listing: MarketCandidate, now: float) -> float | None:
-    """A count over the listing's age. Under a day old (only reachable once
-    the age filter is relaxed) counts as one day, rather than turning a
-    handful of favourites into a rate that tops the set. An unknown age has
-    no rate, which scores lowest."""
+    """A count over the listing's age in days, at least one day."""
     age = _age_days(listing, now)
     return None if age is None else count / max(age, 1.0)
 
@@ -214,9 +201,7 @@ def _order(
     *,
     reviews: Sequence[int] | None,
 ) -> list[tuple[_Candidate, float]]:
-    """The candidates with their 0-1 scores, best first. A tie keeps the
-    better search position -- Etsy's own relevance is the fairest tie-break
-    -- and then the lower id, so the order never depends on thread timing."""
+    """The candidates with their 0-1 scores, best first."""
     scores = weighted(_metrics(candidates, now, reviews), weights)
     paired = list(zip(candidates, scores, strict=True))
     paired.sort(key=lambda pair: (-pair[1], pair[0].search_rank, pair[0].listing.listing_id))

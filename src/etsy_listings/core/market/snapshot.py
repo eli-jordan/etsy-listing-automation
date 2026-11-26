@@ -50,9 +50,7 @@ def save(workspace: Workspace, name: str, snapshot: MarketSnapshot) -> None:
 
 
 def load(workspace: Workspace, name: str) -> MarketSnapshot | None:
-    """``name``'s snapshot, or ``None`` when it has none -- or only a file
-    that no longer reads as one. The snapshot is derivable (the next run
-    rewrites it), so a damaged one is shown as no snapshot, not an error."""
+    """``name``'s snapshot, or ``None`` when it has none or it is unreadable."""
     path = workspace.market_snapshot_file(name)
     try:
         return MarketSnapshot.model_validate_json(path.read_bytes())

@@ -37,10 +37,7 @@ _DELIMITER_RUN = re.compile(r"<{3,}|>{3,}")
 
 
 def lead(description: str) -> str:
-    """A description's first sentence: up to and including the first ``.``,
-    ``!`` or ``?`` followed by a space, or up to the first line break,
-    whichever comes first. ``3.5 oz`` does not end a sentence; a heading
-    line with no full stop ends at its line break."""
+    """A description's first sentence, or its first line if that is shorter."""
     text = description.strip()
     match = _SENTENCE_END.search(text)
     if match is not None:
@@ -51,9 +48,7 @@ def lead(description: str) -> str:
 
 
 def market_block(result: MarketResult) -> str:
-    """The delimited block, or ``""`` for an empty result -- the one case
-    the proposal goes ahead without market data, and an empty block is one
-    more thing a model can decide means something."""
+    """The delimited block, or ``""`` for an empty result."""
     if result.empty:
         return ""
     payload = {
@@ -77,7 +72,6 @@ def market_block(result: MarketResult) -> str:
 
 
 def _defused(text: str) -> str:
-    """Other sellers' text with any run of three or more ``<`` or ``>``
-    shortened to two, so none of it can close the block early or open one
-    of its own."""
+    """Other sellers' text with ``<``/``>`` runs cut to two, so it cannot
+    close the block or open another."""
     return _DELIMITER_RUN.sub(lambda match: match.group(0)[0] * 2, text)

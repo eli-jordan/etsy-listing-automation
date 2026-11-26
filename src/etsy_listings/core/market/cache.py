@@ -2,23 +2,10 @@
 :class:`~etsy_listings.core.clients.etsy.market.EtsyMarketClient` the way
 ``clients/printify/cache.py`` wraps a catalog client.
 
-Two caches, both under ``.cache/market/`` (gitignored, fully derivable --
-render-cache storage):
-
-- **search** -- one file per query *and* search parameters, since the same
-  words asked with another page size or sort order are a different answer;
-- **stats** -- one file per ``listing_id``, holding the batch fields and the
-  review count, each with its own fetch time because research asks for them
-  at different moments and for different sets of listings.
-
-Similar queries return largely the same listings, so the stats cache is the
-one that absorbs most of a repeat run's calls even when extraction words the
-queries differently (features/market-seo-20260924/spec.md, *Cache*).
-
-Research calls from five threads at once. Every read and write of a cache
-file goes through one process-wide lock, and every write replaces its file
-whole, so no reader sees half a file and no two read-modify-writes of one
-listing's stats interleave. Etsy calls are made *outside* the lock.
+Research calls from several threads at once. Every cache file read and
+write holds one process-wide lock and replaces the file whole, so no reader
+sees half a file and no two read-modify-writes of one listing's stats
+interleave. Etsy calls are made *outside* the lock.
 """
 
 from __future__ import annotations
@@ -113,9 +100,7 @@ class CachedEtsyMarketClient:
 
     def listings_by_ids(self, ids: Sequence[int]) -> list[MarketListing]:
         """Each listing's batch fields, in the order asked, asking Etsy only
-        about those with no live entry. A listing Etsy left out of its answer
-        is gone (deactivated since the search) and is remembered as gone for
-        the same seven days, so a repeat run does not ask about it again."""
+        about those with no live entry; one Etsy left out is cached as gone."""
         wanted = list(dict.fromkeys(ids))
         known = self._cached_listings(wanted)
         missing = [listing_id for listing_id in wanted if listing_id not in known]
@@ -192,16 +177,14 @@ def _decoded_listing(data: JsonValue) -> MarketListing | _Gone:
 
 
 def _key(params: dict[str, str | int]) -> str:
-    """The file name for one search: a digest of every parameter, so any
-    change to what would be sent is a different entry."""
+    """The file name for one search: a digest of every parameter sent."""
     canonical = json.dumps(params, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
 
 
 def _read(path: Path) -> dict[str, Any] | None:
     """The entry at ``path``, or ``None`` for a missing, unreadable or
-    older-schema file: the cache is derivable, so anything doubtful is a
-    miss rather than an error."""
+    older-schema file."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
