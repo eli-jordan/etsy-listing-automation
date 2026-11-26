@@ -82,12 +82,6 @@ def read_shop(workspace: Workspace) -> ShopView:
 def edit_shop(
     workspace: Workspace, *, expected_revision: str, changes: Mapping[str, object]
 ) -> ShopView:
-    """Apply ``changes`` (dotted key to value; ``None`` removes an optional
-    key) if ``shop.yaml`` is still at ``expected_revision``.
-
-    Refuses with :class:`ShopRevisionConflictError` or :class:`InvalidShopEditError`,
-    writing nothing either way.
-    """
     refused = _refusals(changes)
     if refused:
         raise InvalidShopEditError(refused)
@@ -182,8 +176,7 @@ SETUP = "etsy-listings setup"
 def shop_connections(
     workspace: Workspace, *, etsy: EtsyShopClient, printify: PrintifyClient
 ) -> ShopConnections:
-    """Both rows. Credentials are checked on disk without reading their
-    values out; only a fully configured service is looked up live."""
+    """Credentials are checked for presence on disk, never read out."""
     return ShopConnections(_etsy_row(workspace, etsy), _printify_row(workspace, printify))
 
 
@@ -293,9 +286,6 @@ class ShopLookups:
 def shop_lookups(
     workspace: Workspace, *, etsy: EtsyListingClient, catalog: CatalogClient
 ) -> ShopLookups:
-    """The selectors' choices, each service failing on its own. A failure
-    reports a problem and no choices; it never touches ``shop.yaml``, and
-    the page keeps showing the saved value."""
     return ShopLookups(_etsy_lookups(workspace, etsy), _printify_lookups(workspace, catalog))
 
 
@@ -305,7 +295,7 @@ def _etsy_lookups(workspace: Workspace, client: EtsyListingClient) -> EtsyLookup
         return EtsyLookups(
             available=False, problem=f"No Etsy shop is configured yet. Run `{SETUP}`."
         )
-    # A fresh catalog per call: one in-memory fetch of each list (ADR-0033).
+    # Fresh per call (ADR-0033).
     shop = EtsyShopCatalog(client, shop_id)
     try:
         partners = shop.production_partners()
