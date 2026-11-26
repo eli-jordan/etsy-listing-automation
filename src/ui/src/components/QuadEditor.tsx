@@ -146,8 +146,7 @@ function positionMenu(el: HTMLElement, menu: Menu): void {
   Object.assign(el.style, { left: `${placed.x}px`, top: `${placed.y}px` });
 }
 
-/** The right-click menu's actions as a row under the photo, on a phone: a
- * finger has no right button, and a long press is the browser's own. */
+/** A phone has no right button, and a long press is the browser's own. */
 function BoxActions({
   onAdd,
   onDuplicate,
@@ -491,8 +490,7 @@ export function QuadEditor({
       )}
     </div>
   );
-  // On a phone the box actions sit under the photo, outside the canvas: the
-  // overlay stretches over everything inside it.
+  // Outside the canvas, which the phone overlay covers entirely.
   if (!phone || !interactive || !(onAddBox || hasBoxMenu)) return canvas;
   return (
     <>
