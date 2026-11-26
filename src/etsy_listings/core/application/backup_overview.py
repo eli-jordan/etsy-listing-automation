@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.application.backup_repository import MIN_PASSWORD_LENGTH
+from etsy_listings.core.application.backup_repository import MIN_PASSWORD_LENGTH, seller_today
 from etsy_listings.core.application.backup_restore import RestoreStatus
 from etsy_listings.core.backup.destinations import ChangedFile, planned_set_aside
 from etsy_listings.core.backup.repository import Snapshot
@@ -184,8 +184,7 @@ def destination_name(path: Path) -> str:
 
 
 def short_problem(problem: str | None) -> str | None:
-    """A copy's problem as a pill says it: its first phrase when that is
-    short, as "Folder not found: ..." is, else only that it was not copied."""
+    """A copy's problem as its pill says it."""
     if problem is None:
         return None
     first = re.split(r"[.:]", problem, maxsplit=1)[0].strip()
@@ -199,8 +198,7 @@ def _destination(facts: BackupFacts, path: Path) -> DestinationOverview:
     oldest_uncopied = min(
         (s.time for s in snapshots if copied is None or s.time > copied), default=None
     )
-    # The same day as the repair takes: the seller's, not UTC's.
-    today = facts.now.astimezone().date()
+    today = seller_today(facts.now)
     to_repair = recorded.changed or recorded.unexpected
     return DestinationOverview(
         path=str(path),

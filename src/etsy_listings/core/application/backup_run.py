@@ -13,6 +13,7 @@ from etsy_listings.core.application.backup_repository import (
     backup_settings,
     configured_backup,
     ensure_workspace_id,
+    seller_today,
 )
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
@@ -128,7 +129,6 @@ class BackupRunner:
         settings = backup_settings(self.workspace)
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
         try:
-            # Inside the try: a refused configuration is a failed run.
             backup = self._configured(settings)
             repository = backup.open()
             if settings.workspace_id is None:
@@ -209,9 +209,7 @@ class BackupRunner:
     def _copy_all(
         self, backup: ConfiguredBackup, run: _Run, cancel: threading.Event | None
     ) -> None:
-        """Steps 7 and 8, after the jobs resumed. An unreachable or changed
-        destination is recorded and the run goes on: the local backup still
-        counts. A damaged local file is a failed check and ends the run."""
+        """Copy to every destination, after the jobs resumed."""
         for destination in backup.destinations:
             run.enter("copying", destination)
             result = self._copy_one(backup, destination, run, cancel)
@@ -262,7 +260,7 @@ class BackupRunner:
         repair = repair_destination(
             backup.storage,
             destination,
-            today=self.now().astimezone().date(),
+            today=seller_today(self.now()),
             suspect=_suspects(before),
         )
         after = _after_copy(before.model_copy(update={"changed": ()}), repair.copy, self.now())
