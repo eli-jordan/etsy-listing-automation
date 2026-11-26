@@ -310,26 +310,6 @@ class ListingDetail(Listing):
     """Hash of selected design refs and bytes, for AI proposal staleness.
     Unreadable files contribute a stable marker; absent only with no design."""
 
-    @model_validator(mode="after")
-    def _require_a_price_source(self) -> ListingDetail:
-        """Describing a listing never re-decides whether it may be *written*.
-
-        A listing with neither ``pricing_plan`` nor ``prices`` is exactly the
-        state the editor exists to get a user out of -- it is what
-        ``GET /api/listing-draft`` hands back and what a refused create comes
-        back as -- so a description of it that refuses to render is a page that
-        cannot show the problem it is reporting. The write paths
-        (``Listing.load``, the PATCH, the POST) all validate a ``Listing``, not
-        this, and are unaffected.
-
-        Shadowing works because pydantic v2 collects validators by attribute
-        name across the MRO, so this replaces the parent's. That is a hazard in
-        general -- it is why `Listing` keeps its other five rules in a
-        differently-named validator this cannot touch -- and the whole reason
-        the price-source rule stands alone there.
-        """
-        return self
-
 
 class GarmentProfileSummary(BaseModel):
     name: str
