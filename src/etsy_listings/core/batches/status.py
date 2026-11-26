@@ -32,14 +32,10 @@ def standing(rows: Sequence[BatchRow]) -> Standing:
     if any(row.ai in DRAFTING for row in live):
         status = "drafting"
     elif live and reviewed == len(live):
-        # Before Stopped: a listing the seller reviewed after a Cancel batch
-        # is one they chose to finish without AI (spec, *Review workflow*).
         status = "complete"
     elif undrafted:
         status = "stopped"
     else:
-        # Also a batch with no listing left at all: Complete would claim a
-        # review that never happened.
         status = "in_review"
     return Standing(
         status=status,
