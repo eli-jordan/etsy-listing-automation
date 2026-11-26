@@ -12,9 +12,7 @@ export interface MediaState {
   etsy: { variation_images?: string | null };
 }
 
-/** Etsy's ceiling on listing images, mirrored from `config/media.py`'s
- * `MAX_IMAGES`. Videos are counted apart: a listing may hold twenty
- * images *and* two videos. */
+/** Etsy's ceiling on listing images, apart from videos; mirrors `config/media.py`'s `MAX_IMAGES`. */
 export const MAX_IMAGES = 20;
 
 /** Etsy's ceiling on listing videos, `config/media.py`'s `MAX_VIDEOS`. */
@@ -56,8 +54,6 @@ export function toggleFile(detail: MediaState, ref: string): Patch | null {
   return { media: [...detail.media.slice(0, 1), ref, ...detail.media.slice(1)] };
 }
 
-/** Fill in every colour this listing sells that `template` has no entry for,
- * as far as the ceiling allows. */
 export function addEveryMissingColour(detail: MediaState, template: string): Patch | null {
   const additions = entriesForMissing(detail, template);
   if (additions.length === 0) return null;
@@ -97,12 +93,20 @@ function moved(media: readonly MediaEntry[], from: number, to: number): MediaEnt
     const next = spliced(media, from, to);
     return fitsGallery(next) ? next : null;
   }
-  // Lift the featured video out, move the image among the rest, put it back.
+  const next = movedAroundFeaturedVideo(media, featured, from, to);
+  return fitsGallery(next) ? next : null;
+}
+
+function movedAroundFeaturedVideo(
+  media: readonly MediaEntry[],
+  featured: MediaEntry,
+  from: number,
+  to: number,
+): MediaEntry[] {
   const rest = media.filter((_, i) => i !== 1);
   const shift = (i: number) => (i > 1 ? i - 1 : i);
   const [thumbnail, ...after] = spliced(rest, shift(from), shift(to));
-  const next = [thumbnail as MediaEntry, featured, ...after];
-  return fitsGallery(next) ? next : null;
+  return [thumbnail as MediaEntry, featured, ...after];
 }
 
 function spliced(media: readonly MediaEntry[], from: number, to: number): MediaEntry[] {
@@ -112,9 +116,7 @@ function spliced(media: readonly MediaEntry[], from: number, to: number): MediaE
   return next;
 }
 
-/** `config/listing.py`'s `_check_gallery`, for the order alone: position 1 is
- * an image, and a listing with a video has one at position 2. The caps are
- * the adding rules' business; a move changes no count. */
+/** `config/listing.py`'s `_check_gallery`, order rules only: a move changes no count. */
 function fitsGallery(media: readonly MediaEntry[]): boolean {
   if (media.length > 0 && mediaKind(media[0] as MediaEntry) === "video") return false;
   if (count(media, "video") === 0) return true;

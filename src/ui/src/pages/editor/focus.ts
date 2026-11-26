@@ -23,14 +23,11 @@ import type {
  * not taken yet.
  */
 
-/** For a template, a `null` colour means its fixed scene, which is also what a
- * `multiple`/`single` template always is. */
+/** A template's `null` colour is its fixed scene, as every `multiple`/`single` template's is. */
 export type Focus =
   | { kind: "template"; template: string; colour: string | null }
   | { kind: "file"; asset: MediaFileSummary };
 
-/** A focus as a refresh remembers it: names only, because a file's summary
- * is whatever the server lists next time. */
 export type FocusRef =
   { kind: "template"; template: string; colour: string | null } | { kind: "file"; ref: string };
 
@@ -49,10 +46,6 @@ export function isFocusRef(value: unknown): value is FocusRef {
   );
 }
 
-/** The focus a remembered one names, or `null` while its template or file is
- * not listed. That is both "not loaded yet" and "gone since": the first
- * settles when the lists arrive, the second leaves the stage empty rather than
- * pointing it at a picture that no longer exists. */
 export function restoreFocus(
   ref: FocusRef | null,
   templates: readonly TemplateSummary[],
@@ -76,9 +69,6 @@ function hasColour(summary: TemplateSummary, colour: string): boolean {
   return summary.colours.includes(colour) || summary.colours.includes(`${summary.name}-${colour}`);
 }
 
-/** The reel's first picture, as a focus: what the stage opens on when the
- * seller has pointed at nothing yet, so reviewing starts without a click.
- * `null` for an empty reel, or while its first entry is not listed. */
 export function firstFocus(
   media: readonly MediaEntry[],
   templates: readonly TemplateSummary[],
@@ -95,19 +85,12 @@ export function firstFocus(
 
 export interface FocusView {
   title: string;
-  /** The file it would upload, or render from -- the same question either way,
-   * and the reason the foot shows a path at all. */
   path: string;
   picture: string;
   kind: "image" | "video";
-  /** What the listing's check says about this one file -- a video's sound
-   * note, a clip too short -- so the pane showing it says it too. */
   notes: Issue[];
   inListing: boolean;
-  /** Where it sits in the reel, or `-1` when it is something the locator is
-   * offering that the listing has not taken yet. Such a thing is not in the
-   * carousel at all, so clicking it opens nothing -- adding it first is one
-   * click away and is what the pane's own button is for. */
+  /** `-1` for something the locator offers that the reel does not hold. */
   reelIndex: number;
 }
 

@@ -77,11 +77,6 @@ function outcome(result: ListingTemplateSaveResult): SaveOutcome {
   return { saved: false, issues: result.issues, field_errors: result.field_errors ?? {} };
 }
 
-/** `useAutosave`'s transport for a listing template: valid-only
- * `PUT` of the whole document, the create that naming the draft is (from
- * `source`, carrying the edits made before it), and the rename. There is no
- * describing an unnamed one -- its issues are the draft's until it is
- * named. */
 export function listingTemplateTransport(source: ListingTemplateSource | null): AutosaveTransport {
   return {
     document: listingTemplateDocument,

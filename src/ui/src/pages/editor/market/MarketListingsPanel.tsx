@@ -24,8 +24,7 @@ function compact(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : String(n);
 }
 
-/** Views and favourites per day: whole numbers once they are big enough for
- * the tenths to be noise. */
+/** Whole numbers from 10 up, where tenths are noise. */
 function perDay(n: number): string {
   return n >= 10 ? String(Math.round(n)) : n.toFixed(1);
 }
@@ -57,8 +56,6 @@ function Queries({ queries, searching }: { queries: string[]; searching?: boolea
   );
 }
 
-/** The listing's first image at 40px, or a plain tile when it has none or it
- * fails to load -- a broken-image icon in a list of photos reads as a fault. */
 function Thumb({ url }: { url: string | null }) {
   const [broken, setBroken] = useState(false);
   if (url === null || broken) return <span className="mkt-thumb mkt-thumb--none" />;

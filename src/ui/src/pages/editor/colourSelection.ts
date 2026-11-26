@@ -17,8 +17,6 @@ export function selectColours(detail: ListingDetail, next: string[]): Record<str
     (entry: MediaEntry) => typeof entry === "string" || !entry.colour || !gone.has(entry.colour),
   );
   if (media.length !== detail.media.length) {
-    // Removing the thumbnail's colour must leave an image first and the
-    // featured video second. If no image survives, the videos go too.
     patch.media = settleGallery(media) ?? [];
   }
 
@@ -39,9 +37,6 @@ export function selectGarmentProfile(
   return { garment_profile: name, ...selectColours(detail, colours) };
 }
 
-/** ``record`` without the dropped colours, or ``null`` when it had none of
- * them -- so the caller can leave the field out of the patch entirely rather
- * than rewriting it to itself. */
 function withoutKeys<T>(
   record: Record<string, T> | undefined,
   dropped: Set<string>,
@@ -52,9 +47,6 @@ function withoutKeys<T>(
   return Object.fromEntries(entries);
 }
 
-/** How many `media:` entries would be discarded by narrowing to ``next`` --
- * what the tab warns with before a bulk Dark/Light switch throws away a reel
- * somebody built by hand. */
 export function mediaLostBy(detail: ListingDetail, next: string[]): number {
   const patch = selectColours(detail, next);
   const media = patch.media as MediaEntry[] | undefined;

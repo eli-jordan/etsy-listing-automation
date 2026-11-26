@@ -6,9 +6,6 @@ const DEFAULT = "default";
 const TONE_KEY = { light: "on-light", dark: "on-dark" } as const;
 const BASE_KEYS: readonly string[] = [DEFAULT, TONE_KEY.light, TONE_KEY.dark];
 
-/** What a base-slot card, a Recent panel or the full picker is choosing a
- * file for. Linked, the left card is `one` (`design.default`); unlinked it is
- * the light slot. The right card is always the dark slot. */
 export type SlotTarget = { kind: "one" } | { kind: "slot"; tone: Tone };
 
 export type Resolution =
@@ -64,8 +61,6 @@ export function representative(design: DesignMap): string | null {
   return null;
 }
 
-/** The file a slot card shows. Linked, both cards show `default` -- the dark
- * one only mirrors it. */
 export function slotFile(design: DesignMap, target: SlotTarget): string | null {
   if (isLinked(design)) return design[DEFAULT] ?? null;
   return target.kind === "slot" ? (design[TONE_KEY[target.tone]] ?? null) : null;
@@ -128,7 +123,7 @@ export const toneLabel = (tone: Tone): string =>
 export const cap = (name: string): string =>
   name === "" ? name : name.charAt(0).toUpperCase() + name.slice(1);
 
-/** "Black, Moss and Navy" -- the same list the server's messages spell. */
+/** Spelt as the server's messages spell a list. */
 export function listNames(names: readonly string[]): string {
   const capped = names.map(cap);
   if (capped.length <= 1) return capped.join("");
@@ -141,9 +136,6 @@ export const TILE = {
   neutral: "var(--color-neutral-200)",
 } as const;
 
-/** The cloth a colour's own thumbnails sit on: its sampled garment swatch,
- * else its tone's tile -- the row chip, the card under the stage and the
- * colour's picker all judge a file on the shirt that prints it. */
 export function clothFor(
   colour: string,
   swatch: string | undefined,

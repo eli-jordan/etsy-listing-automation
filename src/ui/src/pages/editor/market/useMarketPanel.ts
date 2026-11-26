@@ -9,7 +9,6 @@ export type MarketRun = Pick<AiRun, "busy" | "steps" | "queries" | "market">;
 interface Known {
   listing: string;
   snapshot: MarketSnapshot | null;
-  /** Came from a run's `market` event, which is newer than any `GET`. */
   fromRun: boolean;
 }
 

@@ -1128,7 +1128,11 @@ Two owners sit on it. `ListingAutosave` (`hooks/listingAutosave.ts`, bound by
 `useAutosave`) adds the listing editor's three states, unnamed, named but not on
 disk and on disk, chosen when a write goes, so an edit made during a create or
 rename is sent under the name it settled on. A listing template uses the same
-class through its own `AutosaveTransport`. A rename runs through the loop's
+class through its own `AutosaveTransport` (`listingTemplateDocument.ts`): a
+valid-only `PUT` of the whole document, naming the draft as a create from its
+source that carries the edits made before it, and the rename. It has no
+`describe`, because an unnamed template's issues are its draft's until it is
+named. A rename runs through the loop's
 `afterWrite`: it waits for any write out, drains under the old name, and runs
 only if that wrote, with no write going out during it. `useTemplateSession` keeps
 one loop per opening of a template. Its edit carries only whether a save is owed
