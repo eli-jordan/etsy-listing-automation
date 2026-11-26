@@ -245,9 +245,7 @@ function CalibratorHeader(props: HeaderProps) {
   );
 }
 
-/** Why the labels waiting to save have not, for beside the bar. A failed save
- * of anything else says so in the header alone. */
-function labelFailure({ save, config, saved }: TemplateSession): string | null {
+function unsavedLabelsFailure({ save, config, saved }: TemplateSession): string | null {
   if (save.kind !== "failed" && save.kind !== "conflict") return null;
   const waiting = JSON.stringify(config?.labels) !== JSON.stringify(saved?.labels);
   return waiting ? save.message : null;
@@ -335,11 +333,6 @@ export function CalibratorPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const closeSheet = useCallback(() => setSheetOpen(false), []);
 
-  // Refreshes overlap: assigning a kind fires one and saving fires another
-  // moments later. They are separate requests, so the *older* can resolve
-  // last -- putting the pre-assignment list back and reverting the template to
-  // "no kind set" on screen while the file on disk says otherwise. The
-  // sequence number makes a late response a no-op instead.
   const refreshSeq = useRef(0);
   const refreshTemplates = useCallback(() => {
     const seq = ++refreshSeq.current;
@@ -436,10 +429,6 @@ export function CalibratorPage() {
       />
     ) : null;
 
-  // Every colour already in use anywhere in the workspace, for the box
-  // colour field's suggestions. Suggestions rather than a closed list: a
-  // chart's colours are whatever the listing sells, and nothing here knows
-  // that -- wiring in the Printify catalog would be a much larger dependency.
   const knownColours = useMemo(
     () => [...new Set(templates.flatMap((t) => t.colours))].filter(Boolean).sort(),
     [templates],
@@ -523,7 +512,7 @@ export function CalibratorPage() {
               saved={session.saved?.labels ?? []}
               draft={config.labels}
               known={knownLabels}
-              failure={labelFailure(session)}
+              failure={unsavedLabelsFailure(session)}
               onChange={(labels) => setConfig({ ...config, labels })}
             />
           )}
