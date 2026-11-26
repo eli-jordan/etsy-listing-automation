@@ -1,7 +1,6 @@
-"""Internal robust normal/depth integration and metric fitting. ADR-0054.
+"""Robust normal/depth integration and metric fitting (ADR-0054).
 
 Camera normals X right/Y up/Z viewer become image X right/Y down/Z viewer.
-No experimental anchors or overlap controls are exposed.
 """
 
 from __future__ import annotations
@@ -31,10 +30,10 @@ _INSIDE_CLOTH_MASK = 0.95
 _LIGHTING_CONFIDENCE = 0.35
 LIGHTING_BLUR_SIGMA = 3
 MIN_LIGHTING_SAMPLES = 100
-_CLIPPED_GAIN = 1.7
+_CLIPPED_GAIN = 1.7  # shading over exposure above which a gain counts as clipped
 _MAD_TO_SIGMA = 1.4826
 _OUTLIER_SIGMAS = 2.5
-_MIN_OUTLIER_THRESHOLD = 0.002  # shading over exposure above which a gain counts as clipped
+_MIN_OUTLIER_THRESHOLD = 0.002
 Pixels = NDArray[np.uint8]
 
 

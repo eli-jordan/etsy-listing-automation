@@ -87,17 +87,10 @@ ReadinessReason = Literal[
 
 
 class ArtifactError(ValueError):
-    """Prepare the template again instead of interpreting an invalid map.
-
-    ``reason`` is the readiness cause each refusal reports, so status is read
-    from the type raised and never from its message."""
-
     reason: ClassVar[ReadinessReason] = "invalid_artifact"
 
 
 class StalePreparationError(ArtifactError):
-    """Current geometry, masks or evidence changed before publication."""
-
     reason: ClassVar[ReadinessReason] = "placement_changed"
 
 
@@ -205,19 +198,13 @@ MapSchema = Annotated[Literal[1, 2], BeforeValidator(_exact_schema)]
 
 
 class MapPointer(Record):
-    """``_renderer/maps/current.json``: the accepted generation and the
-    checksum its manifest must have."""
-
     schema_version: MapSchema
     generation_id: str
     manifest_checksum: str
 
 
 class Provenance(BaseModel):
-    """Who published a generation: diagnostics only, never numerical identity.
-
-    Unknown keys are ignored, so a diagnostic cannot invalidate a generation
-    whose numerical content is sound."""
+    """Diagnostics only; unknown keys are ignored so one cannot invalidate sound maps."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
     job_id: str | None = None
@@ -226,8 +213,6 @@ class Provenance(BaseModel):
 
     @model_serializer(mode="wrap")
     def _recorded(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
-        # Only the keys the publisher recorded, so a generation published
-        # without provenance still records ``{}``.
         dumped: dict[str, object] = handler(self)
         return {key: value for key, value in dumped.items() if key in self.model_fields_set}
 
@@ -405,7 +390,6 @@ def read_maps(
     *,
     known_maps: MaterialMaps | None = None,
 ) -> MaterialMaps:
-    """Check all NPY headers and uncompressed byte budgets before allocation."""
     if not _within(descriptor.extent, size):
         raise ArtifactError("Prepared map extent does not match main photo")
     if known_maps is not None and any(a.flags.writeable for a in arrays_of(known_maps).values()):
@@ -426,8 +410,7 @@ def _read_checked_maps(
     size: tuple[int, int],
     known_maps: MaterialMaps | None,
 ) -> MaterialMaps:
-    """``known_maps`` are the read-only arrays just written to ``path``; they
-    are kept, after their written bytes are proven, instead of loading a copy."""
+    # known_maps, once their written bytes are proven, stand in for a reload.
     if path.stat().st_size > MAX_ARCHIVE_BYTES or file_checksum(path) != descriptor.checksum:
         raise ArtifactError("Prepared archive size/checksum mismatch")
     names = set(descriptor.arrays)
@@ -527,9 +510,8 @@ def _maps_bytes(maps: Mapping[str | None, MaterialMaps]) -> int:
     return sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
 
 
-# Cache validation proofs, never arrays. A status poll must not decompress and
-# hash hundreds of MiB while holding the calibration lock. Immutable generation
-# files are revalidated after replacement, writes, removal or process restart.
+# Cache validation proofs, never arrays: a status poll must not decompress and hash
+# hundreds of MiB under the calibration lock.
 _VALIDATED: BoundedCache[tuple[Any, ...], bool] = BoundedCache(128)
 MAP_CACHE_BYTES = 512 * 1024 * 1024
 _MAPS: BoundedCache[tuple[Any, ...], Mapping[str | None, MaterialMaps]] = BoundedCache(
@@ -569,12 +551,8 @@ class Artifacts:
         self.calibration = CalibrationStore(workspace)
 
     def validate_inputs(self, inputs: PreparationInputs) -> None:
-        """Refuse known map limits before runtime inspection or numerical work.
-
-        Production baking includes optional patch labels. Every BOUNDS channel
-        is four bytes (float32 or int32); count the full retained generation,
-        not just one placement or compressed archive size.
-        """
+        # Counts the whole retained generation, patch labels included, at four bytes per
+        # BOUNDS channel (float32 or int32), not one placement or the compressed size.
         try:
             checked = PreparationInputs.model_validate(inputs.model_dump())
         except ValueError as exc:
@@ -614,7 +592,6 @@ class Artifacts:
         try:
             pointer = MapPointer.model_validate_json(path.read_bytes())
         except ValidationError as exc:
-            # A pointer missing or adding a key is damaged, whatever its schema.
             reshaped = any(e["type"] in ("missing", "extra_forbidden") for e in exc.errors())
             if _unsupported(exc) and not reshaped:
                 raise UnsupportedSchemaError(_UNSUPPORTED) from exc
@@ -663,12 +640,7 @@ class Artifacts:
     def inspect(
         self, name: str, inputs: PreparationInputs, *, target_size: tuple[int, int] | None = None
     ) -> Manifest:
-        """Inspect a validated immutable generation without retaining its arrays.
-
-        The template lock protects the pointer and files for the entire read.
-        Validation proofs are bounded and invalidated by every file's identity,
-        size and nanosecond write/change times. No model or prediction is read.
-        """
+        # The template lock covers the pointer and files for the whole read.
         try:
             with self.calibration.lock(name):
                 pointer, manifest = self._current(name)
@@ -767,16 +739,6 @@ class Artifacts:
         evidence: Mapping[str | None, str] | None = None,
         reset_masks_for_photo: bool = False,
     ) -> PreparationInputs:
-        """Read current pixel-affecting inputs without cache or installed models.
-
-        Evidence is the accepted checkpoint/preprocessing/photo/crop identity,
-        not a cache path or runtime selection. Omission retains identity from
-        the durable manifest. Explicit preparation supplies a new complete set.
-        Appearance and placement order do not enter preparation identity.
-        Explicit photo reset captures a zero mask identity only for a saved
-        mask belonging to another photo. It never writes masks or bypasses
-        damaged/missing mask components; valid same-photo edits are retained.
-        """
         with self.calibration.lock(name):
             config = template_state(self.workspace, name).require()
             if not isinstance(config.renderer, MarigoldRenderer):
@@ -813,8 +775,6 @@ class Artifacts:
         return {p.id: p.evidence for p in manifest.preparation_inputs.placements}
 
     def _mask_checksum(self, name: str, placement_id: str | None, *, reset: bool) -> str:
-        """The saved mask's identity, or zero for none. A photo reset also
-        counts a mask belonging to another photo as none."""
         if not self._has_mask(name, placement_id, reset=reset):
             return _ABSENT_DIGEST
         try:
@@ -841,8 +801,6 @@ class Artifacts:
         current_inputs: Callable[[], PreparationInputs],
         options: PublishOptions = PublishOptions(),
     ) -> Manifest:
-        """Publish a complete validated generation of ``maps``, prepared from
-        ``inputs``; ``current_inputs`` re-reads them before the switch."""
         generation = uuid4().hex
         with self._lease(name, generation):
             return self._publish(
@@ -933,12 +891,6 @@ class Artifacts:
     def reusable(
         self, name: str, inputs: PreparationInputs
     ) -> Iterator[Mapping[str | None, MaterialMaps]]:
-        """Lease exact unchanged placements while a replacement is fitted.
-
-        Photo, inference and compatibility must all match. Each retained map
-        additionally needs the same placement ID, quad, mask and evidence.
-        Missing/damaged old maps provide no reuse and never authorize inference.
-        """
         with ExitStack() as lease:
             reused: dict[str | None, MaterialMaps] = {}
             try:
@@ -952,8 +904,7 @@ class Artifacts:
                         and accepted.compatibility == inputs.compatibility
                     ):
                         unchanged = {p.id for p in inputs.placements if p in accepted.placements}
-                # acquire registers its own generation lease before loading. Keep
-                # archive reads outside the template lock so previews can snapshot.
+                # Outside the lock, so previews can snapshot; acquire leases its own generation.
                 if unchanged:
                     acquired = lease.enter_context(self.acquire(name, accepted))
                     reused = {key: acquired.maps[key].cropped_to_visibility() for key in unchanged}
