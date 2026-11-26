@@ -180,9 +180,6 @@ def _actions(desired: PrintifyProductDesired, *, creating: bool) -> tuple[Action
         )
     ]
     if desired.missing:
-        # reported, never fatal. A cell Printify has discontinued is
-        # its fact, not the user's mistake -- but a listing quietly selling
-        # five sizes where it asked for six is worth saying out loud.
         listed = ", ".join(f"{colour}/{size}" for colour, size in desired.missing)
         actions.append(
             Action(

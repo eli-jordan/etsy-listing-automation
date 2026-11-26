@@ -59,8 +59,6 @@ class EtsyActivateStage(Stage[EtsyActivateDesired, EtsyActivateApplied, etsy_mod
         lock: Lockfile,
         applied: EtsyActivateApplied | None,
     ) -> etsy_models.Listing | None:
-        """``None`` without a request when there is no Etsy listing yet: the
-        ``publish`` stage creates it as a draft earlier in this same run."""
         del applied
         listing_id = etsy_listing_id(lock)
         if listing_id is None:

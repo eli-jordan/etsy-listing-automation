@@ -181,10 +181,7 @@ def _manifest_entry(
 
 
 def renamed_media_refs(lock: Lockfile, old: str, new: str) -> Lockfile:
-    """``lock`` with this stage's refs to template ``old`` naming ``new``, or
-    ``lock`` itself when it holds none. Hashes and image ids stay: the images
-    on Etsy are the same images. A document that will not decode is left, and
-    costs the re-upload any undecodable document does."""
+    """``lock`` itself when it holds no ref to ``old``."""
     applied = lock.parse_applied_for(EtsyMediaStage.name, AppliedEtsyMedia)
     if applied is None:
         return lock
@@ -351,9 +348,7 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
         shop_id = ctx.workspace.defaults.etsy.require_shop_id()
 
         known_ids: dict[str, int] = dict(lock.remote.get(IMAGE_IDS_KEY) or {})
-        # Read again rather than trusting the plan's `live`: a stage earlier in
-        # this same apply can have changed the listing since. Printify's
-        # publish puts its own mockups on a listing the plan read as empty.
+        # Not the plan's `live`: Printify's publish, earlier in this apply, adds mockups.
         current = client.get_listing(listing_id, include_images=True)
         attached = [image.listing_image_id for image in current.images] if current else []
         sent_hashes = _sent_hashes(desired)
@@ -428,12 +423,8 @@ def _upload_missing(
     image_ids: dict[str, int],
     attached: list[int],
 ) -> None:
-    """Upload every manifest entry ``image_ids`` has no image for yet, adding
-    each new image to it.
-
-    `attached` tracks what the listing carries as uploads proceed. Etsy
-    refuses an upload past its 20-image cap, and the `image_ids` PATCH after
-    them, which detaches what we are replacing, only comes later."""
+    """Etsy refuses an upload past 20 images, and the closing ``image_ids``
+    PATCH that detaches replaced ones comes after, so room is made here."""
     for rank, entry in enumerate(desired.manifest, start=1):
         if entry.ref in image_ids:
             continue
@@ -457,11 +448,8 @@ def _upload_missing(
 def _make_room(
     ctx: RunContext, target: EtsyListingTarget, attached: list[int], *, keep: set[int]
 ) -> list[int]:
-    """Detach what the manifest no longer wants, so the next upload fits.
-
-    The same detach the closing `image_ids` PATCH would do, brought forward.
-    A listing cannot be emptied of images, so when nothing on it is ours yet
-    the first image stays until an upload of ours can take its place."""
+    """Etsy will not empty a listing of images, so with none of ours on it
+    yet the first image stays until one of ours replaces it."""
     remaining = [image_id for image_id in attached if image_id in keep] or attached[:1]
     ctx.emit(f"detaching {len(attached) - len(remaining)} image(s) to stay within Etsy's limit")
     target.client.update_listing(target.shop_id, target.listing_id, {"image_ids": remaining})

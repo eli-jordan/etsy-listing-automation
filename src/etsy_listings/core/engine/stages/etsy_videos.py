@@ -154,8 +154,6 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
         workspace = ctx.workspace
         config = workspace.load_listing(listing)
         listing_dir = workspace.listing_dir(listing)
-        # A listing that has never had a video asks nothing of Etsy, so it
-        # is not refused for want of a shop it would never use.
         if not any(media_kind(e) == "video" for e in config.media) and not (
             applied is not None and applied.videos
         ):
