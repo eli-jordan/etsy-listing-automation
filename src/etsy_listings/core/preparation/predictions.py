@@ -100,7 +100,7 @@ def read_prediction(
         return array
 
 
-_NPY_HEADER_READERS: Mapping[tuple[int, int], Callable[[Any], tuple[Any, bool, np.dtype]]] = {
+NPY_HEADER_READERS: Mapping[tuple[int, int], Callable[[Any], tuple[Any, bool, np.dtype]]] = {
     (1, 0): np.lib.format.read_array_header_1_0,
     (2, 0): np.lib.format.read_array_header_2_0,
 }
@@ -119,7 +119,7 @@ def _check_archive(path: Path, *, role: str, checksum: str, size: tuple[int, int
         if members[0].file_size > MAX_ARCHIVE_BYTES:
             raise PredictionError("Prediction array exceeds size limit")
         with archive.open(members[0]) as stream:
-            read_header = _NPY_HEADER_READERS.get(np.lib.format.read_magic(stream))
+            read_header = NPY_HEADER_READERS.get(np.lib.format.read_magic(stream))
             if read_header is None:
                 raise PredictionError("Unsupported prediction NPY version")
             shape, _, dtype = read_header(stream)

@@ -27,6 +27,7 @@ from pydantic import (
 )
 
 from etsy_listings.core.bounded_cache import BoundedCache
+from etsy_listings.core.preparation.predictions import NPY_HEADER_READERS
 from etsy_listings.core.render.config import (
     AnyTemplate,
     BoundingBox,
@@ -122,9 +123,23 @@ class PhotoIdentity(Record):
         return self
 
 
+_Corner = tuple[float, float]
+_Quad = tuple[_Corner, _Corner, _Corner, _Corner]
+
+
+def _quad(box: BoundingBox) -> _Quad:
+    top_left, top_right, bottom_right, bottom_left = box
+    return (
+        (top_left.x, top_left.y),
+        (top_right.x, top_right.y),
+        (bottom_right.x, bottom_right.y),
+        (bottom_left.x, bottom_left.y),
+    )
+
+
 class PlacementInput(Record):
     id: PlacementId | None
-    quad: tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]]
+    quad: _Quad
     mask: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence: str = Field(pattern=r"^[0-9a-f]{64}$")
 
@@ -134,12 +149,7 @@ class PlacementInput(Record):
     ) -> PlacementInput:
         return cls(
             id=placement_id,
-            quad=(
-                (box[0].x, box[0].y),
-                (box[1].x, box[1].y),
-                (box[2].x, box[2].y),
-                (box[3].x, box[3].y),
-            ),
+            quad=_quad(box),
             mask=mask,
             evidence=evidence,
         )
@@ -452,12 +462,6 @@ def _check_archive(
         _check_member(archive, member, descriptor, verify_payload=verify_payload)
 
 
-_NPY_HEADER_READERS: Mapping[tuple[int, int], Callable[[Any], tuple[Any, bool, np.dtype]]] = {
-    (1, 0): np.lib.format.read_array_header_1_0,
-    (2, 0): np.lib.format.read_array_header_2_0,
-}
-
-
 def _check_member(
     archive: zipfile.ZipFile,
     member: zipfile.ZipInfo,
@@ -471,7 +475,7 @@ def _check_member(
     if expected.shape != shape or expected.dtype != str(dtype):
         raise ArtifactError("Unsafe prepared array descriptor")
     with archive.open(member) as stream:
-        read_header = _NPY_HEADER_READERS.get(np.lib.format.read_magic(stream))
+        read_header = NPY_HEADER_READERS.get(np.lib.format.read_magic(stream))
         if read_header is None:
             raise UnsupportedSchemaError("Unsupported prepared NPY format")
         actual_shape, fortran, actual_dtype = read_header(stream)
