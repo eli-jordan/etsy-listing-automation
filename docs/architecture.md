@@ -1125,6 +1125,18 @@ and whether it must go even with nothing changed, an approval; the draft is read
 when the write goes. Payload shape stays with the owners, and so does the
 preview hold, which answers the loop's `due` hook instead of flushing. A template
 switch or reload makes the next read wait for the old opening's writes.
+
+The template session's saves carry three further rules. Approving from the
+Preview tab writes template.yaml even when nothing changed, because calibration
+status is derived from that file: the write is the approval. A save refused
+because template.yaml moved on (409 or 412) is a conflict, which only a reload
+clears; retrying would send the same stale `If-Match`. A completed preparation
+this session queued rewrites template.yaml's revision without changing what it
+saved, so the session adopts that revision as its `If-Match` baseline, but only
+while the disk holds exactly the saved document at exactly the prepared revision;
+anyone else's completion, or an edit made since, still surfaces as a conflict.
+Label-only saves move the revision without invalidating the preparation, so the
+session lists those revisions and a preparation at one of them is up to date.
 `pages/admin/useSaveQueue.ts` is a different model, acknowledging per key, and
 does not use the loop.
 

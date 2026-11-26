@@ -351,6 +351,39 @@ describe("useTemplateSession", () => {
     expect(onCatalogChanged).toHaveBeenCalledWith();
   });
 
+  it("never renders the previous template's document under the new name", async () => {
+    server.disk.set("shirt", { config: edited(PHOTO_WARP, 5), revision: "s1" });
+    const renders: { name: string; config: TemplateConfigState | null }[] = [];
+    const { result, rerender } = renderHook(
+      ({ name }) => {
+        const session = useTemplateSession(name);
+        renders.push({ name, config: session.config });
+        return session;
+      },
+      { initialProps: { name: "tee" } },
+    );
+    await waitFor(() => expect(result.current.load).toBe("ready"));
+
+    rerender({ name: "shirt" });
+    await waitFor(() => expect(result.current.load).toBe("ready"));
+
+    const underShirt = renders.filter((render) => render.name === "shirt");
+    expect(underShirt[0]?.config).toBeNull();
+    for (const render of underShirt)
+      expect([null, edited(PHOTO_WARP, 5)]).toContainEqual(render.config);
+  });
+
+  it("flushes a pending edit on a switch even while a preview would hold it", async () => {
+    server.disk.set("tee", { config: SINGLE, revision: "r1" });
+    const { result, rerender } = await opened();
+
+    act(() => result.current.setPreviewPending(true));
+    act(() => result.current.update(edited(SINGLE, 8)));
+    rerender({ name: "shirt" });
+
+    await waitFor(() => expect(server.disk.get("tee")?.config).toEqual(edited(SINGLE, 8)));
+  });
+
   it("flushes a pending edit on unmount", async () => {
     const { result, unmount } = await opened();
 
