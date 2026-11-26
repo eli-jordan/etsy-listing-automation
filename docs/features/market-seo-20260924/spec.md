@@ -55,9 +55,13 @@ defaults. Recognized unavailable or model/effort rejection permits fallback;
 malformed output gets one same-provider repair. Discovery remains advisory.
 
 - **Input:** the brief, the design image, and the garment profile's display
-  title (for example *Unisex Heavy Cotton Tee*).
+  title (for example *Unisex Heavy Cotton Tee*). Nothing else about the
+  garment is sent: its brand, colours and materials do not help a search find
+  comparable listings, and each is a way for a query to narrow to one seller's
+  wording.
 - **Output:** exactly three unique, non-empty buyer search phrases, such as
-  `retro sunset hiking shirt`. **Each ends in the buyer's word for the item
+  `retro sunset hiking shirt`. Uniqueness ignores case, as Etsy's search
+  does, so no search is spent twice. **Each ends in the buyer's word for the item
   type** (*shirt*, *tee*, *hoodie*), taken from the garment. That word does the
   job a taxonomy filter would (see [Search](#search)). The prompt asks for it,
   but validation doesn't check it. It is validated like a brief: a response

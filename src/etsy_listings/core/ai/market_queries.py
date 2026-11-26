@@ -14,14 +14,7 @@ QUERY_COUNT: Final = 3
 
 @dataclass(frozen=True)
 class MarketQueriesRequest:
-    """The inputs one extraction is built from.
-
-    ``garment_title`` is the garment profile's display title (for example
-    *Unisex Heavy Cotton Tee*). It is how the model learns the item type
-    whose buyer word ends every query; nothing else about the garment -- its
-    brand, colours or materials -- helps a search find comparable listings,
-    and each one is a way for a query to narrow to one seller's wording.
-    """
+    """The inputs one extraction is built from."""
 
     brief: str
     garment_title: str
@@ -73,13 +66,7 @@ def build_market_queries_task(seller_prompt: str, request: MarketQueriesRequest)
 
 def validate_market_queries(parsed: object) -> MarketQueries:
     """Hard-validate an already-JSON-decoded response: exactly three unique,
-    non-empty queries.
-
-    Whitespace is collapsed first, as a brief's is, and uniqueness ignores
-    case, because Etsy's search does: ``Hiking Shirt`` and ``hiking shirt``
-    are one search, and running it twice would spend a third of the market
-    step's calls learning nothing.
-    """
+    non-empty queries, whitespace collapsed and case ignored as Etsy's search does."""
     if not isinstance(parsed, dict):
         raise MarketQueriesValidationError("response: expected a JSON object")
     value = parsed.get("queries")
