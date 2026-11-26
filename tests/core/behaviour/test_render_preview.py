@@ -22,8 +22,7 @@ from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.engine.stages.render import (
     PREVIEW_WORKERS,
     RenderStage,
-    _hash_token,
-    scene_hash,
+    preview_path,
 )
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -46,9 +45,7 @@ def _render_state(ctx, lock=None) -> StageState:
 
 
 def _preview_path(ctx, desired, work) -> Path:
-    return ctx.workspace.preview_file(
-        LISTING, work.template, work.colour, _hash_token(scene_hash(desired, work))
-    )
+    return preview_path(ctx.workspace, desired, work)
 
 
 def test_preview_renders_every_scene_on_a_first_plan(workspace_root: Path) -> None:

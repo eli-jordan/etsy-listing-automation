@@ -19,6 +19,7 @@ from etsy_listings.core.config.template_positions import layer_boxes
 from etsy_listings.core.engine.change import Action, Verdict
 from etsy_listings.core.engine.context import RunContext, Swatch
 from etsy_listings.core.engine.lock import (
+    HASH_PREFIX,
     Lockfile,
     canonical_hash,
     hash_bytes,
@@ -280,15 +281,15 @@ def scene_hash(desired: RenderDesired, work: SceneWork) -> str:
 
 
 def _hash_token(digest: str) -> str:
-    """``scene_hash``'s value, stripped of its ``sha256:`` prefix.
+    return digest.removeprefix(HASH_PREFIX)
 
-    A colon is not a valid filename character on Windows, and
-    ``Workspace.preview_file`` treats the hash as a single path segment the
-    same way it does a colour or a template name -- which already refuses one
-    (see its docstring). Every call site that turns a ``scene_hash`` into a
-    path goes through this first.
-    """
-    return digest.removeprefix("sha256:")
+
+def preview_path(workspace: Workspace, desired: RenderDesired, work: SceneWork) -> Path:
+    """Where ``work``'s preview at its current :func:`scene_hash` lives. The hash
+    loses its ``sha256:`` prefix: a colon is not a valid Windows filename character."""
+    return workspace.preview_file(
+        desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
+    )
 
 
 RenderSceneState = Literal["cached", "stale", "missing"]
@@ -663,12 +664,7 @@ class _PreviewBatch:
                 continue
             if self.should_stop():
                 break
-            target = self.workspace.preview_file(
-                self.desired.listing,
-                work.template,
-                work.colour,
-                _hash_token(scene_hash(self.desired, work)),
-            )
+            target = preview_path(self.workspace, self.desired, work)
             if target.is_file():
                 self._mark_ready(work)
             else:
@@ -784,10 +780,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         # `snapshot()` has no workspace to ask, and by the time `preview()`
         # runs this is exactly the question it needs answered too.
         preview_exists = {
-            work.key: workspace.preview_file(
-                listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
-            ).is_file()
-            for work in desired.works
+            work.key: preview_path(workspace, desired, work).is_file() for work in desired.works
         }
         return replace(desired, preview_exists=preview_exists)
 
@@ -899,9 +892,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         for work in desired.works:
             if work.key not in changing:
                 continue
-            preview = ctx.workspace.preview_file(
-                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
-            )
+            preview = preview_path(ctx.workspace, desired, work)
             rewrites[work.output] = preview if preview.is_file() else None
         return rewrites
 
@@ -965,39 +956,43 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         *,
         preview: Path | None = None,
     ) -> None:
-        def inputs_changed() -> None:
-            # S01 TRY301: the stage turns this into a block; the raise stays out of its try.
-            raise ArtifactError("Render inputs changed; plan the listing again")
-
         try:
-            with lease_scene(
-                workspace,
-                work.template,
-                Composition(
-                    base=load_template_base(work.base_image),
-                    layers=_prepared_layers(work.layers, load_design),
-                    appearance=render.appearance,
-                    boxes=render.boxes,
-                ),
-                expected=render.inputs,
-            ) as scene:
-                if scene.identity != render.identity:
-                    inputs_changed()
-                if preview is not None and preview.is_file():
-                    _copy_preview(preview, target)
-                    return
-                # Keyed by the identity just checked against the plan, which
-                # lease_scene computed from the decoded pixels.
-                write_atomic(target, scene.encoded(SceneCache(workspace)))
+            RenderStage._write_prepared(workspace, work, render, target, preview)
         except ArtifactError as exc:
             raise StageBlockedError(str(exc)) from exc
+
+    @staticmethod
+    def _write_prepared(
+        workspace: Workspace,
+        work: SceneWork,
+        render: PreparedRender,
+        target: Path,
+        preview: Path | None,
+    ) -> None:
+        with lease_scene(
+            workspace,
+            work.template,
+            Composition(
+                base=load_template_base(work.base_image),
+                layers=_prepared_layers(work.layers, load_design),
+                appearance=render.appearance,
+                boxes=render.boxes,
+            ),
+            expected=render.inputs,
+        ) as scene:
+            if scene.identity != render.identity:
+                raise ArtifactError("Render inputs changed; plan the listing again")
+            if preview is not None and preview.is_file():
+                _copy_preview(preview, target)
+                return
+            # Keyed by the identity just checked against the plan, which
+            # lease_scene computed from the decoded pixels.
+            write_atomic(target, scene.encoded(SceneCache(workspace)))
 
     def _prune_previews(self, workspace: Workspace, desired: RenderDesired) -> None:
         valid: dict[str, set[str]] = {}
         for work in desired.works:
-            name = workspace.preview_file(
-                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
-            ).name
+            name = preview_path(workspace, desired, work).name
             valid.setdefault(work.template, set()).add(name)
         workspace.prune_previews(desired.listing, valid)
 
@@ -1016,10 +1011,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
 
         for work in desired.works:
             base = load_template_base(work.base_image)
-            preview_path = workspace.preview_file(
-                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
-            )
-            self._write_scene(work, preview_path, base, photo_warp)
+            self._write_scene(work, preview_path(workspace, desired, work), base, photo_warp)
             outputs[desired.relative(work.output)] = hash_file(work.output)
 
             swatches: tuple[Swatch, ...] = tuple(

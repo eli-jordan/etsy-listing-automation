@@ -16,8 +16,7 @@ from etsy_listings.core.engine.stages.render import (
     RenderSnapshot,
     RenderStage,
     SceneWork,
-    _hash_token,
-    scene_hash,
+    preview_path,
 )
 
 
@@ -85,9 +84,7 @@ def lookup_preview(
     work = next((w for w in desired.works if w.template == template and w.colour == colour), None)
     if work is None:
         return PreviewLookup(miss="no_scene")
-    path = ctx.workspace.preview_file(
-        listing, template, colour, _hash_token(scene_hash(desired, work))
-    )
+    path = preview_path(ctx.workspace, desired, work)
     if not path.is_file():
         return PreviewLookup(path=path, miss="missing_file")
     return PreviewLookup(path=path)
