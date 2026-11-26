@@ -41,9 +41,7 @@ AGENT = "create-mockup-template/1.0"
 POLL_SECONDS = 5
 TASK_TIMEOUT_SECONDS = 660  # Kie.ai ends a task at 10 minutes
 RETRY_SECONDS = (2, 5, 15, 30)
-WORKSPACE = os.environ.get(
-    "ETSY_API_WORKSPACE", r"C:\Users\Admin\iCloudDrive\naturally-inked-studio-workspace"
-)
+WORKSPACE = os.environ.get("ETSY_API_WORKSPACE", r"C:\Users\Admin\naturally-inked-studio-workspace")
 WORKSPACE_ENV = Path(WORKSPACE) / ".env"
 OUT_OF_CREDITS = "Kie.ai is out of credits"
 SUCCESS = 200  # failures arrive as HTTP 200 with another `code` in the body
@@ -199,19 +197,25 @@ def finished_url(task_id: str, key: str) -> str:
     )
 
 
-def task_for(image_url: str, prompt: str, ticket: Path, key: str) -> str:
-    """The task for this prompt: one an earlier run left waiting, or a new one."""
+def task_for(
+    image_url: str | None, prompt: str, ticket: Path, key: str, aspect_ratio: str = "1:1"
+) -> str:
+    """The task for this prompt: one an earlier run left waiting, or a new one.
+
+    With no image_url it's a text-to-image task.
+    """
     digest = hashlib.sha256(prompt.encode()).hexdigest()
     if ticket.is_file():
         saved, _, task_id = ticket.read_text(encoding="utf-8").partition(" ")
         if saved == digest:
             return task_id
+    source = {"image_input": [image_url]} if image_url else {}
     task = {
         "model": MODEL,
         "input": {
             "prompt": prompt,
-            "image_input": [image_url],
-            "aspect_ratio": "1:1",
+            **source,
+            "aspect_ratio": aspect_ratio,
             "resolution": "2K",
             "output_format": "png",
         },
@@ -231,11 +235,13 @@ def keep_previous(output: Path) -> None:
         output.replace(output.with_name(f"{output.stem}-round{rounds + 1}.keep"))
 
 
-def generate(image_url: str, brief: Path, output: Path, key: str) -> None:
+def generate(
+    image_url: str | None, brief: Path, output: Path, key: str, aspect_ratio: str = "1:1"
+) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     ticket = output.with_suffix(".task")
     try:
-        url = finished_url(task_for(image_url, prompt_text(brief), ticket, key), key)
+        url = finished_url(task_for(image_url, prompt_text(brief), ticket, key, aspect_ratio), key)
         request = urllib.request.Request(url, headers={"User-Agent": AGENT})
         raw = retrying(lambda: fetch(request))
     except TransientError:

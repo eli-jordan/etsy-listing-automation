@@ -1,6 +1,6 @@
 ---
 name: etsy-listing-create
-description: Turn design PNGs into new draft Etsy listings, ready for the seller's review. Creates them as a batch, then sets colours, the gallery, mockup positions, title, tags and lead. Use when the user asks to create, set up, prepare or finish new listings from designs.
+description: Turn design PNGs into new draft Etsy listings, ready for the seller's review. Upscales them through Kittl, creates them as a batch, then sets colours, the gallery, mockup positions, title, tags and lead. Use when the user asks to create, set up, prepare or finish new listings from designs.
 ---
 
 # Listing setup
@@ -15,9 +15,31 @@ uv run python .claude/skills/etsy-listing-create/scripts/setup.py COMMAND ...
 
 The scripts default to the app at `http://127.0.0.1:8000`, so pass `--url` before the command for any other port. `$ROOT` is the workspace that app serves. Give each listing its own output folder, such as `<work>/<name>`, because several runs may share a parent folder.
 
-Every write goes through `setup.py` or the SEO skill's `draft`. Each prints any `FIELD ERRORS` or `BLOCKS` it gets back, and a save is only done when it prints `saved`. Until step 5, it also lists the empty title and lead under `copy still to write`, which doesn't stop a save.
+Every write goes through `setup.py` or the SEO skill's `draft`. Each prints any `FIELD ERRORS` or `BLOCKS` it gets back, and a save is only done when it prints `saved`. Until step 6, it also lists the empty title and lead under `copy still to write`, which doesn't stop a save.
 
-## 1. Create the listings
+## 1. Upscale the prints
+
+Prints from the [etsy-research-design](../etsy-research-design/SKILL.md) skill are 4500x5400 but carry only about 120 DPI of real detail, so upscale each one through Kittl before `create`. A design folder with an `out-pre-upscale\` is already done. From the repo root:
+
+```bash
+uv run python .claude/skills/etsy-research-design/generate_designs.py upscale-source IDEA_DIR ...
+```
+
+For each `IDEA_DIR\upscale\<slug>-source.png` it writes (the print cropped to its art, flattened on its key colour, 1600 px on the long side):
+
+1. Call `kittl-upload-image` with no `imageUrl` and PUT the file's bytes to the URL it returns.
+2. Run `kittl-upscale-image` on the upload, which costs no tokens, and poll `kittl-get-image-upscale-status` until it finishes. Download the result, a JPEG of about 4096 px, to `IDEA_DIR\upscale\<slug>-kittl.jpg`.
+3. Put it back into the print:
+
+   ```bash
+   uv run python .claude/skills/etsy-research-design/generate_designs.py upscale-apply IDEA_DIR IDEA_DIR/upscale/<slug>-kittl.jpg
+   ```
+
+   It keeps the print's own transparency and its colours along a 6 px edge band, and moves the old print to `out-pre-upscale\`.
+
+Done when `generate_designs.py check` prints `ok` for every design and each one looks the same on its shirt as before, only sharper. Use the `out\` files in step 2.
+
+## 2. Create the listings
 
 ```bash
 setup.py health --root $ROOT
@@ -28,6 +50,8 @@ setup.py briefs <batch id>
 Use the naming convention the existing listings follow, for example `christmas-2026-`. `--strip-variant` drops a trailing `-a` or `-b` variant letter from file names. A staging problem leaves the batch unconfirmed and prints why. `briefs` waits for the app's AI to draft each brief, then prints them.
 
 `--label` is the batch's name in the app's Recent batches, where the seller finds it again, so name the collection the designs belong to. Use the zip's or folder's name when it has one, such as `Artistic Designs` or `Christmas 2026 part 2`. Otherwise name the theme the designs share. Leave out the skill's name, ids and timestamps, because the app already shows the date.
+
+Every `create` makes a new batch, because confirming a staging session always creates its own: the app can't add listings to an existing batch. Designs added to a collection later land in a second entry, so give it a label that tells the two apart, such as `Black History Month 2027 part 2`, and tell the seller.
 
 When the designs come from a zip or a folder named after a collection, rename the PNGs to short slugs before `create`, because the listing name is the prefix plus the file name. For example, rename `Artistic Designs - Boho Racoon.png` to `boho-raccoon.png`, and correct spelling while you're at it.
 
@@ -41,7 +65,7 @@ For each listing, run `setup.py look <name> --root $ROOT --out <dir>`. It prints
 
 Done when every listing exists and every brief matches its design.
 
-## 2. Choose colours
+## 3. Choose colours
 
 ```bash
 uv run python .claude/skills/etsy-listing-create/scripts/colour_sheet.py --root $ROOT --name <name> --out <dir>
@@ -57,7 +81,7 @@ Read `swatches.jpg` at normal size and pick 6 to 10 colours, or 4 to 12 when the
 
 Done when you've looked at every colour in the set, and you have a one-line reason for each top-8 colour you dropped.
 
-## 3. Build the gallery
+## 4. Build the gallery
 
 ```bash
 setup.py gallery <name> --colours a,b,c --hero b --variation <template> --scenes <t1>,<t2>:<colour>,...
@@ -65,13 +89,13 @@ setup.py gallery <name> --colours a,b,c --hero b --variation <template> --scenes
 
 `gallery` writes the shop's gallery shape: hero, video, size guide, lifestyle scenes, info card, then one variation tile for each other colour. It also enforces Etsy's limit of 20 images, so each extra colour leaves room for one less scene. A bare scene name takes the next colour in turn.
 
-Choose the variation template, the hero colour and 5 to 9 scenes from [reference/templates.md](reference/templates.md). The variation template fills the hero and every colour tile, about half the gallery, so vary it across the batch: rotate through the section's variation templates, give each listing the one that suits its art, and don't use any single template for most of the batch. The hero is the shirt that sells the design best at thumbnail size. Some colours look different in a photo than on a swatch, so confirm the hero and scene colours on the sheet in step 4.
+Choose the variation template, the hero colour and 5 to 9 scenes from [reference/templates.md](reference/templates.md). The variation template fills the hero and every colour tile, about half the gallery, so vary it across the batch: rotate through the section's variation templates, give each listing the one that suits its art, and don't use any single template for most of the batch. The hero is the shirt that sells the design best at thumbnail size. Some colours look different in a photo than on a swatch, so confirm the hero and scene colours on the sheet in step 5.
 
 Give every colour its own lifestyle scene with a model, as well as its variation tile, so a buyer sees each colour worn. The 20-image limit allows this for up to 9 colours, so prefer 9 or fewer when the design doesn't need more. With 10 or more colours, fill every free slot with a scene and leave the weakest colours without one. Below 5 colours, a colour may appear in more than one scene. Pass one bare scene name per colour to have `gallery` deal the colours out in turn, or name each scene's colour to match the shirt to the scene. When a section's scene list runs short, reuse a scene in another colour.
 
 Done when `gallery` prints `saved`.
 
-## 4. Check the mockups
+## 5. Check the mockups
 
 ```bash
 uv run python .claude/skills/etsy-listing-create/scripts/mockups.py sheet <name> --out <dir>
@@ -96,14 +120,14 @@ Moves work in the template box's own frame, as fractions of its width and height
 
 Done when the sheet has no buyer-visible fault, within two fix rounds. Note anything left for the seller.
 
-## 5. Write the title, tags and lead
+## 6. Write the title, tags and lead
 
-Once every listing has passed step 4, run the [etsy-listings-optimize-seo](../etsy-listings-optimize-seo/SKILL.md) skill's **new listings** branch on the whole batch together. Its eRank and autocomplete work runs in batches, so one run covers every design. Its scope is the batch's names, such as `christmas-2026-<slug>`.
+Once every listing has passed step 5, run the [etsy-listings-optimize-seo](../etsy-listings-optimize-seo/SKILL.md) skill's **new listings** branch on the whole batch together. Its eRank and autocomplete work runs in batches, so one run covers every design. Its scope is the batch's names, such as `christmas-2026-<slug>`.
 
 The lead is one sentence. It names who the shirt is for and what the design shows, from the brief, and it ends with the garment. It opens with the title's two lead terms, which the SEO skill checks.
 
 Done when `setup.py check <names>` shows every listing with 13 tags, a title, nothing under `copy still to write`, and `clean`.
 
-## 6. Report
+## 7. Report
 
 Finish with one row per listing: colours, hero, any print moves, title, and the path to its `sheet.jpg`. Then list what the seller should look at first: brief fixes, tags kept without data, leftover mockup notes, and anything uncertain. Say that the listings are local drafts, and that `plan` and `apply` remain the seller's to run.

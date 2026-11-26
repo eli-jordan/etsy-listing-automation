@@ -1,6 +1,6 @@
 ---
 name: etsy-research
-description: Research the Etsy marketplace for Naturally Inked Studio. Covers competitor listings, shops, reviews, trends and mockups, plus the user's own shop and drafts. Queries the Etsy Open API v3 with the shop's credentials from the iCloud Drive workspace, and drives the user's Chrome (Claude in Chrome) for what only etsy.com shows, such as Star Seller, Bestseller and Popular-now filters and badges. Use when a task mentions the Etsy API, Etsy research, or querying Etsy listings, or needs live Etsy data.
+description: Research the Etsy marketplace for Naturally Inked Studio. Covers competitor listings, shops, reviews, trends and mockups, plus the user's own shop and drafts. Queries the Etsy Open API v3 with the shop's credentials from the seller's workspace, and drives the user's Chrome (Claude in Chrome) for what only etsy.com shows, such as Star Seller, Bestseller and Popular-now filters and badges. Use when a task mentions the Etsy API, Etsy research, or querying Etsy listings, or needs live Etsy data.
 ---
 
 # Etsy research
@@ -78,4 +78,4 @@ For any endpoint, parameter or response field this file leaves out, look it up i
 
 ### Other workspaces
 
-`ETSY_API_WORKSPACE=<path>` points the script at another `etsy-listings` workspace. The default is `C:\Users\Admin\iCloudDrive\naturally-inked-studio-workspace`.
+`ETSY_API_WORKSPACE=<path>` points the script at another `etsy-listings` workspace. The default is `C:\Users\Admin\naturally-inked-studio-workspace`.

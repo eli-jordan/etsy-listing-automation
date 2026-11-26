@@ -358,6 +358,25 @@ def test_the_task_asks_for_the_2k_png_edit(
     }
 
 
+def test_a_task_with_no_source_image_is_text_to_image_at_the_given_ratio(
+    kie: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: dict[str, Any] = {}
+
+    def fake_call(_url: str, _key: str, data: bytes, _type: str) -> dict:
+        sent.update(json.loads(data))
+        return {"taskId": "t1"}
+
+    monkeypatch.setattr(kie, "call", fake_call)
+    kie.task_for(None, "Draw it", tmp_path / "x.task", KEY, "4:5")
+    assert sent["input"] == {
+        "prompt": "Draw it",
+        "aspect_ratio": "4:5",
+        "resolution": "2K",
+        "output_format": "png",
+    }
+
+
 def test_an_upload_sends_the_file_and_returns_its_url(
     kie: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

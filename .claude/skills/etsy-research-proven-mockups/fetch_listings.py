@@ -1,10 +1,15 @@
 """Fetch details and analysis-size images for the listings found in browser searches.
 
     uv run python .claude/skills/etsy-research-proven-mockups/fetch_listings.py RUN_DIR [--images N]
+    uv run python .claude/skills/etsy-research-proven-mockups/fetch_listings.py RUN_DIR \
+        --downloads "QUERY" ["QUERY" ...] [--images N]
 
 Reads every RUN_DIR/pages/*.txt (the output of etsy-research's
 extract_search_cards.js, one file per results page), looks each listing up
-through the Etsy API, and writes:
+through the Etsy API, and keeps the physical products. With --downloads it
+searches the API for each query instead (the top 100 by relevance) and keeps
+only digital downloads: the PNG, SVG and sublimation files print shops buy.
+Either way it writes:
 
     RUN_DIR/listings.json  one record per listing: details, shop stats, and
                            which searches/filters/badges surfaced it
@@ -28,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "etsy-research"))
 from etsy_api import WORKSPACE, Transport, _etsy_app_key_source
 
 BATCH = 100
+SEARCH_LIMIT = 100
 
 
 BADGES = {"B": "Bestseller", "P": "Popular now", "S": "Star Seller", "E": "Etsy's Pick"}
@@ -71,6 +77,20 @@ def _lookup(transport: Transport, ids: list[int]) -> list[dict[str, Any]]:
     return out
 
 
+def _search(transport: Transport, queries: list[str]) -> dict[int, dict[str, Any]]:
+    """Digital-download hits for each query, in the shape the page reader gives."""
+    found: dict[int, dict[str, Any]] = {}
+    for query in queries:
+        params = [("keywords", query), ("limit", str(SEARCH_LIMIT)), ("sort_on", "score")]
+        results = transport.get("/v3/application/listings/active", params=params).json()
+        downloads = [r for r in results["results"] if r.get("listing_type") == "download"]
+        for position, item in enumerate(downloads, 1):
+            hit = found.setdefault(item["listing_id"], {"hits": [], "badges": set(), "ad": False})
+            hit["hits"].append({"q": query, "filters": ["download"], "position": position})
+        sys.stdout.write(f"{query}: {len(downloads)} downloads in the top {SEARCH_LIMIT}\n")
+    return found
+
+
 def _download(client: httpx.Client, url: str, dest: Path) -> bool:
     if dest.exists():
         return True
@@ -89,13 +109,19 @@ def main() -> None:
     )
     parser.add_argument("run", type=Path)
     parser.add_argument("--images", type=int, default=6, help="images per listing (default 6)")
+    parser.add_argument(
+        "--downloads", nargs="+", metavar="QUERY", help="sample digital downloads instead"
+    )
     args = parser.parse_args()
     run: Path = args.run
+    run.mkdir(parents=True, exist_ok=True)
 
-    found = _read_pages(run)
-    details = _lookup(Transport(_etsy_app_key_source(WORKSPACE)), sorted(found))
-    # SVG/PNG design files carry no garment photos.
-    details = [item for item in details if item.get("listing_type") != "download"]
+    transport = Transport(_etsy_app_key_source(WORKSPACE))
+    found = _search(transport, args.downloads) if args.downloads else _read_pages(run)
+    details = _lookup(transport, sorted(found))
+    # Download listings show design files, not garments, so each run keeps one kind.
+    want_downloads = bool(args.downloads)
+    details = [i for i in details if (i.get("listing_type") == "download") == want_downloads]
 
     listings: list[dict[str, Any]] = []
     images: list[dict[str, Any]] = []
@@ -145,7 +171,7 @@ def main() -> None:
     (run / "images.json").write_text(json.dumps(images, indent=1), encoding="utf-8")
     sys.stdout.write(
         f"{len(found)} unique listings in the searches, {len(listings)} kept "
-        f"(digital downloads dropped), "
+        f"({'only digital downloads' if want_downloads else 'digital downloads dropped'}), "
         f"{len(images)} images ({ok.count(False)} failed)\n"
     )
 

@@ -3,6 +3,7 @@
     uv run python review.py scan REVIEW_DIR IDEAS_DIR [IDEAS_DIR ...]
     uv run python review.py build REVIEW_DIR
     uv run python review.py results REVIEW_DIR ROWS_FILE
+    uv run python review.py iterate REVIEW_DIR
 
 scan     drafts REVIEW_DIR/review.json from idea folders (IDEAS_DIR/NN-slug/out/*.png,
          refs/, prompt.md). Each IDEAS_DIR becomes one group. Re-running keeps the records
@@ -11,6 +12,9 @@ build    checks review.json, writes the page and its images to REVIEW_DIR/site/,
          writes the publish batches to REVIEW_DIR/publish-batches.json.
 results  reads the rows an ArtifactData list of the `reviews` collection returned (pasted
          into ROWS_FILE), writes REVIEW_DIR/review-results.json and prints tags by verdict.
+         A review-results.json from an earlier round is kept as review-results-roundN.json.
+iterate  writes revision-N.md, a brief filled from revision-brief.md, into the folder of
+         every design review-results.json tags Iterate, and prints their paths.
 """
 
 import argparse
@@ -23,6 +27,8 @@ from pathlib import Path
 from PIL import Image
 
 TEMPLATE = Path(__file__).with_name("review_template.html")
+REVISION_BRIEF = Path(__file__).with_name("revision-brief.md")
+REPO = Path(__file__).resolve().parents[3]
 ETSY = "https://www.etsy.com/listing/"
 DESIGN_MAX = (2250, 2700)  # half the 4500x5400 print: sharp at actual size, small to publish
 DESIGN_THUMB = (900, 1080)
@@ -374,9 +380,17 @@ def result_record(d: dict, tag: dict) -> dict:
     }
 
 
+def keep_last_round(review: Path) -> None:
+    current = review / "review-results.json"
+    if current.exists():
+        rounds = len(list(review.glob("review-results-round*.json")))
+        current.replace(review / f"review-results-round{rounds + 1}.json")
+
+
 def results(review: Path, rows_file: Path) -> None:
     rows = read_rows(rows_file)
     recs = [result_record(d, rows.get(d["id"], {})) for d in load(review)["designs"]]
+    keep_last_round(review)
     write_json(review / "review-results.json", recs)
     order = (*VERDICTS, "untagged")
     counts = ", ".join(f"{sum(r['verdict'] == v for r in recs)} {v}" for v in order)
@@ -393,6 +407,49 @@ def say_verdict(verdict: str, recs: list[dict]) -> None:
         say(f"  {r['id']}  {r['title']}{note}")
 
 
+# ---------- iterate ----------
+
+
+def revision_number(folder: Path, stem: str) -> int:
+    """The revision about to be made: one more than the versions already archived."""
+    return len(list((folder / "rejected").glob(f"{stem}-v*.png"))) + 1
+
+
+def revision_brief(rec: dict) -> Path:
+    png = Path(rec["file"])
+    folder = png.parents[1]
+    number = revision_number(folder, png.stem)
+    fields = {
+        "SLUG": png.stem,
+        "N": str(number),
+        "NOTE": " ".join(rec["note"].split()),
+        "FOLDER": str(folder),
+        "FILE": png.name,
+        "SHIRT": f"{rec['shirtName']} ({rec['shirt']})",
+        "REPO": str(REPO),
+    }
+    page = REVISION_BRIEF.read_text(encoding="utf8")
+    for key, value in fields.items():
+        page = page.replace(f"__{key}__", value)
+    out = folder / f"revision-{number}.md"
+    out.write_bytes(page.encode("utf8"))
+    return out
+
+
+def iterate(review: Path) -> None:
+    path = review / "review-results.json"
+    if not path.exists():
+        sys.exit(f"{path} is missing; run results first")
+    recs = [r for r in json.loads(path.read_text(encoding="utf8")) if r["verdict"] == "iterate"]
+    for rec in recs:
+        if not rec.get("note"):
+            say(f"  {rec['id']}: no note, so no brief; ask the seller what to change")
+        elif not Path(rec["file"]).exists():
+            say(f"  {rec['id']}: {rec['file']} is missing")
+        else:
+            say(str(revision_brief(rec)))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -406,13 +463,17 @@ def main() -> None:
     p = sub.add_parser("results")
     p.add_argument("review", type=Path)
     p.add_argument("rows", type=Path)
+    p = sub.add_parser("iterate")
+    p.add_argument("review", type=Path)
     a = parser.parse_args()
     if a.cmd == "scan":
         scan(a.review, a.ideas)
     elif a.cmd == "build":
         build(a.review)
-    else:
+    elif a.cmd == "results":
         results(a.review, a.rows)
+    else:
+        iterate(a.review)
 
 
 if __name__ == "__main__":
