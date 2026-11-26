@@ -8,20 +8,9 @@ import { PhoneSheet } from "../phone/PhoneSheet";
 import { usePager } from "../phone/usePager";
 import { stepPosition } from "./templateStep";
 
-/**
- * The calibrator's header on a phone, where the template rail has no room:
- * the open template's name is the button that opens every template in a
- * bottom sheet, with an arrow either side to step to its neighbours. A
- * left/right swipe on the header steps too -- on the header only, never on
- * the photo, where a finger drags the box's corners.
- *
- * Rendered only while the phone layout shows (App asks `useIsPhone`), so the
- * desktop header is untouched.
- */
+/** Swipes on the header only: on the photo a finger drags the box's corners. */
 
-/** How far the name follows a finger, as a share of the finger's travel.
- * The pager's other pages are the width of the screen; this is one button
- * between two arrows, and at one to one it would slide over them. */
+/** One button between two arrows: followed 1:1 it would slide over them. */
 const DRAG_FOLLOW = 0.35;
 
 interface SwitcherProps {
@@ -113,8 +102,7 @@ export function TemplateSwitcher({
   );
 }
 
-/** Renaming the open template from the sheet. The desktop renames by
- * double-clicking the name, which a finger cannot do reliably. */
+/** A finger cannot reliably double-click the name, as the desktop renames. */
 function RenameRow({ name, rename }: { name: string; rename: TemplateRename }) {
   const [text, setText] = useState<string | null>(null);
   const inputId = useId();

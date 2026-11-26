@@ -10,15 +10,11 @@ interface Option {
   swap: boolean;
 }
 
-/** A tag's group: the text before its colon, or null for a plain tag. Lower case,
- * so a hand-edited `Theme:` sits with `theme:`; the heading capitalises it anyway. */
 function groupOf(tag: string): string | null {
   const colon = tag.indexOf(":");
   return colon > 0 ? tag.slice(0, colon).toLowerCase() : null;
 }
 
-/** Each label once, as first written: hand edits keep their case, and matching
- * ignores it. */
 function distinctTags(items: string[][]): string[] {
   const spellings = new Map<string, string>();
   for (const tag of items.flat()) {
@@ -171,7 +167,7 @@ export function LabelSearch({
                 event.stopPropagation();
                 onOn(on.filter((t) => t !== tag));
                 setActive(NO_HIGHLIGHT);
-                // The button is about to go, and focus would fall out of the page.
+                // The button unmounts, and the browser would drop focus to the body.
                 field.current?.focus();
               }}
             >
