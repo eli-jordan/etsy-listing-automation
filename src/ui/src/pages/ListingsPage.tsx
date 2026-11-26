@@ -151,10 +151,7 @@ function useListFilters(isPhone: boolean) {
   const [query, setQuery] = useState(() => (isPhone ? (params.get("q") ?? "") : ""));
   const [desktopFilter, setDesktopFilter] = useState<Filter>("all");
   const filter = isPhone ? filterFrom(params.get("status")) : desktopFilter;
-  // Each edit starts from the last address this page asked for, not from
-  // `params`: the router answers a render later, so a chip tapped and a
-  // search typed before it does would each rebuild the address from the old
-  // one, and the second would put the first one's filter back.
+  // `params` lags a render behind setParams, so each edit builds on the last address asked for.
   const latestParams = useRef(params);
   useLayoutEffect(() => {
     latestParams.current = params;

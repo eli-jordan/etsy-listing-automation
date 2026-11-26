@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
 import * as listingsApi from "../../api/listings";
 import * as runsApi from "../../api/runs";
 import { EditableName } from "../../components/EditableName";
@@ -44,9 +44,15 @@ function EditorStub() {
   return <p>editor for {name}</p>;
 }
 
+function Address() {
+  const { search } = useLocation();
+  return <output aria-label="address">{search}</output>;
+}
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
+      <Address />
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/listings" element={<ListingsPage />} />
@@ -148,6 +154,20 @@ describe("ListingsPage on a phone", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "New listing" }));
     expect(await screen.findByText("new-listing page")).toBeTruthy();
+  });
+
+  it("keeps both a chip tapped and a search typed before the router has answered", async () => {
+    renderAt("/listings");
+    await screen.findByRole("list", { name: "Listings" });
+
+    act(() => {
+      fireEvent.click(screen.getByRole("radio", { name: /^Live/ }));
+      fireEvent.change(screen.getByPlaceholderText("Search listings…"), {
+        target: { value: "shirt" },
+      });
+    });
+
+    expect(screen.getByLabelText("address").textContent).toBe("?status=live&q=shirt");
   });
 
   it("starts filtered by ?status=, which the Dashboard's counts link to", async () => {
