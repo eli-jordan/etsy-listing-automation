@@ -27,34 +27,28 @@ class Resolved:
 
 @dataclass(frozen=True)
 class SlotEmpty:
-    """Light/dark mode, and the colour's tone slot is ``None`` or absent."""
-
     tone: Tone
 
 
 @dataclass(frozen=True)
 class Unclassified:
-    """Light/dark mode, and the garment profile gives this colour no tone."""
-
     colour: str
 
 
 @dataclass(frozen=True)
 class NeedsColour:
-    """Light/dark mode, and the scene names no colour to pick a slot by."""
+    pass
 
 
 @dataclass(frozen=True)
 class NoDesign:
-    """Neither ``default`` nor a tone key: nothing has been chosen."""
+    pass
 
 
 Resolution = Resolved | SlotEmpty | Unclassified | NeedsColour | NoDesign
 
 
 def is_light_dark(design: DesignMap) -> bool:
-    """Light/dark mode is recorded by the presence of a tone *key*, ``None``
-    included -- that is how an empty pair survives a reload."""
     return ON_LIGHT in design or ON_DARK in design
 
 
@@ -96,12 +90,6 @@ def representative(design: DesignMap) -> str | None:
 def slot_users(
     design: DesignMap, enabled: Sequence[str], tones: Mapping[str, Tone]
 ) -> dict[Tone, list[str]]:
-    """The enabled *automatic* colours of each tone, in enabled order.
-
-    A colour with its own design leaves the base-slot calculation, and an
-    unclassified one is in neither list -- it is blocked for its own reason.
-    Drives the missing-slot blocker and the one-slot warning.
-    """
     users: dict[Tone, list[str]] = {"light": [], "dark": []}
     for colour in enabled:
         if design.get(colour) is not None:
