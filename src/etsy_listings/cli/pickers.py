@@ -66,14 +66,9 @@ def build_blueprint_choices(
 ) -> list[Choice[Blueprint]]:
     """Blueprints as aligned ``marker brand model title`` rows.
 
-    Brand and model are what identify a garment to anyone who buys blanks --
-    "Gildan 18500" is the thing you look up, while Printify's titles bury it
-    ("Unisex Pullover Hoodie" is sold under half a dozen brands). Garments
-    this workspace already has a garment profile for come first and carry the marker:
-    in practice a shop reuses a handful of blueprints over and over, and
-    having to re-find the one used yesterday is the picker failing at its most
-    common job. Within each group, rows sort by brand then title, so the brand
-    column reads as blocks rather than as noise.
+    Brand and model identify a blank ("Gildan 18500"); Printify's titles do
+    not ("Unisex Pullover Hoodie" is sold under several brands). Garments
+    with a local garment profile come first, marked.
     """
     brand_width = max((len(b.brand) for b in blueprints), default=0)
     model_width = max((len(b.model) for b in blueprints), default=0)
@@ -89,18 +84,9 @@ def build_blueprint_choices(
 def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Choice[Path]]:
     """Designs as ``date name`` rows, newest first.
 
-    The date is in the row rather than implied by the order because "newest
-    first" is invisible otherwise -- and fzf reorders the rows the moment a
-    query is typed, at which point the only thing still saying how fresh a
-    design is, is the row itself. Ties (a batch exported in one go all carry
-    the same second) break on name, so the order is stable rather than
-    filesystem-dependent.
-
-    A design that already has a listing is marked: ``new`` refuses to
-    overwrite one (``ListingDocuments.create``), so the row would otherwise look
-    like a choice and behave like a dead end. Marked as a trailing note rather
-    than through :func:`marked_choices` -- this callout is a warning, and
-    sorting warnings to the top would be exactly wrong.
+    The date is in the label because fzf reorders rows once a query is
+    typed. A design that already has a listing gets a trailing note, not
+    :func:`marked_choices`, which would sort it to the top.
     """
     entries = sorted(
         ((path, path.stat().st_mtime) for path in paths),

@@ -32,10 +32,8 @@ without scrolling the prompt off the top."""
 def prompt_toolkit_works() -> bool:
     """Can prompt_toolkit drive this terminal at all?
 
-    Probed rather than inferred: the failure depends on the console handle
-    behind stdout, which no combination of ``platform``/``isatty``/``TERM``
-    describes reliably. Any exception means the same thing -- we cannot use
-    it -- so the breadth of the ``except`` is the point, not an oversight.
+    Probed, not inferred: the failure depends on the console handle behind
+    stdout, which ``platform``/``isatty``/``TERM`` do not describe reliably.
     """
     try:
         from prompt_toolkit.output.defaults import (  # noqa: PLC0415 -- startup cost: loads only to probe a prompt
@@ -89,17 +87,13 @@ def _fzf_via_cygwin_shell(host: PromptHost) -> list[str] | None:
         return None
     if found.returncode != 0 or not found.stdout.strip():
         return None
-    # `exec fzf "$@"` rather than pasting the arguments into the script text:
-    # one of them is the prompt, which carries the question, and hand-quoting
-    # that is how a shell injection gets written.
+    # The question stays an argument: pasting it into the script is a shell injection.
     return [sh, "-c", 'exec fzf "$@"', "fzf"]
 
 
 def _cygwin_sh(host: PromptHost) -> str | None:
-    """Cygwin's ``sh.exe``, found the way ``workspace/userpath.py`` finds
-    ``cygpath``: cygwin hands a Windows child a translated PATH, so its
-    ``/usr/bin`` is reachable as a Windows directory even though the POSIX
-    spelling is not."""
+    """Cygwin's ``sh.exe`` beside ``cygpath``: a Windows child gets a translated
+    PATH, so cygwin's ``/usr/bin`` is reachable only as a Windows directory."""
     if not host.windows:
         return None
     cygpath = host.commands.which("cygpath")
@@ -122,9 +116,6 @@ def choose(
         try:
             return _choose_with_fzf(machine, command, message, listed)
         except _FzfFailedError as exc:
-            # An fzf that is present but cannot run -- no terminal to draw on,
-            # most likely -- must not read as a cancelled prompt, or `new`
-            # would exit silently with nothing on screen to explain it.
             print(f"  {exc}; falling back to a plain list")
     if machine.prompt_toolkit():
         return _choose_with_questionary(message, listed, marker_hint)
@@ -193,13 +184,8 @@ def pick[T](
 def ask_text(
     message: str, *, default: str = "", allow_blank: bool = False, host: PromptHost | None = None
 ) -> str:
-    """:func:`text`, where declining ends the wizard.
-
-    A blank answer counts as declining by default -- most questions ask for a
-    name, and "" is not one. ``allow_blank`` is for the few where empty is a
-    real answer ("Preferred print provider (blank for none)"), and there it
-    still ends the wizard on a true cancel.
-    """
+    """:func:`text`, where declining (or, unless ``allow_blank``, a blank
+    answer) ends the wizard."""
     answer = text(message, default=default, host=host)
     if answer is None or (not answer and not allow_blank):
         raise Cancelled
@@ -222,21 +208,11 @@ FZF_DECLINED = frozenset({FZF_NO_MATCH, FZF_INTERRUPTED})
 def _choose_with_fzf(
     host: PromptHost, command: list[str], message: str, rows: list[str]
 ) -> str | None:
-    """fzf reads its keys from ``/dev/tty``, which is why it works under a
-    cygwin pty where prompt_toolkit cannot.
+    """fzf reads keys from ``/dev/tty``, so it works under a cygwin pty.
 
-    fzf's own default ranking is left on: for an empty query it preserves the
-    input order (so the marked rows stay on top), and once a query is typed it
-    ranks by its own fuzzy score.
-
-    Only two flags, and deliberately: cygwin's ``fzf`` package is 0.12.1, the
-    Ruby implementation, which rejects ``--height`` outright ("illegal
-    option") and takes the whole screen instead. Two flags every fzf since
-    2015 accepts is worth more here than an inline list on the recent ones.
-
-    stderr is left attached to the terminal rather than captured: fzf draws
-    its UI there when it cannot open ``/dev/tty``, and swallowing that would
-    turn a diagnosable failure into a blank screen.
+    Only flags every fzf since 2015 accepts: cygwin's fzf is 0.12.1 (Ruby),
+    which rejects ``--height``. stderr stays on the terminal because fzf
+    draws its UI there when it cannot open ``/dev/tty``.
     """
     try:
         result = host.commands.run(
