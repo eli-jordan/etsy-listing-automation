@@ -1,12 +1,52 @@
-"""Stopping a uvicorn server a browser test ran in a thread."""
+"""Starting and stopping a uvicorn server a browser test runs in a thread."""
 
 from __future__ import annotations
 
+import socket
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
 
+import pytest
 import uvicorn
 
 GRACEFUL_SECONDS = 10
+STARTUP_TIMEOUT_SECONDS = 30
+
+
+@contextmanager
+def serve(app: Any, *, name: str) -> Iterator[str]:
+    """Serve ``app`` on a free loopback port; yields its base URL.
+
+    The socket is bound to port 0 here and handed to uvicorn still open, so
+    no other process can take the port between choosing it and listening on
+    it. Choosing a port by binding and closing a probe socket, then letting
+    uvicorn bind it again, left that window open: under xdist another
+    worker's server took the port first (``[Errno 98] address already in
+    use`` on Linux CI).
+    """
+    listening = socket.socket()
+    listening.bind(("127.0.0.1", 0))
+    port: int = listening.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listening]}, daemon=True)
+    thread.start()
+    try:
+        _wait_started(server, name)
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        stop_server(server, thread)
+        listening.close()
+
+
+def _wait_started(server: uvicorn.Server, name: str) -> None:
+    deadline = threading.Event()
+    for _ in range(STARTUP_TIMEOUT_SECONDS * 20):
+        if server.started:
+            return
+        deadline.wait(0.05)
+    pytest.fail(f"{name} did not start in time")  # pragma: no cover - a pathologically slow machine
 
 
 def stop_server(server: uvicorn.Server, thread: threading.Thread) -> None:

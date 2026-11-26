@@ -429,7 +429,10 @@ def _added_lines(relative: Path) -> list[tuple[int, str]]:
     the rollout's business, not the agent's.
     """
     tracked = _run(["git"], "ls-files", "--error-unmatch", relative.as_posix())
-    text = (ROOT / relative).read_text(encoding="utf-8", errors="replace")
+    try:
+        text = (ROOT / relative).read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return []  # deleted since it was listed (see `_digest`): it adds nothing
     if tracked.returncode != 0:
         return list(enumerate(text.splitlines(), start=1))
     # An editor that rewrites the file with CRLF endings has not added every
@@ -472,8 +475,14 @@ SNAPSHOT = STATE / "agent-lint-snapshot.json"
 PORCELAIN_PREFIX = 3  # "XY " before each path in `git status --porcelain`
 
 
-def _digest(path: Path) -> str:
-    return hashlib.sha1(path.read_bytes(), usedforsecurity=False).hexdigest()
+def _digest(path: Path) -> str | None:
+    """The file's content hash, or None once it is gone: whatever else runs in
+    the checkout (a test's scratch directory, a build) can delete a file
+    between `git status` listing it and this read."""
+    try:
+        return hashlib.sha1(path.read_bytes(), usedforsecurity=False).hexdigest()
+    except FileNotFoundError:
+        return None
 
 
 def _dirty_sources() -> dict[str, str]:
@@ -486,8 +495,9 @@ def _dirty_sources() -> dict[str, str]:
         if entry[:1] in ("R", "C"):
             next(fields, None)  # a rename or copy names its source next
         path = ROOT / entry[PORCELAIN_PREFIX:]
-        if path.suffix in SOURCE_SUFFIXES and path.is_file():
-            dirty[entry[PORCELAIN_PREFIX:]] = _digest(path)
+        digest = _digest(path) if path.suffix in SOURCE_SUFFIXES and path.is_file() else None
+        if digest is not None:
+            dirty[entry[PORCELAIN_PREFIX:]] = digest
     return dirty
 
 
@@ -509,8 +519,9 @@ def _remember(paths: list[Path]) -> None:
     snapshot = _load_snapshot()
     for path in paths:
         relative = _inside_repo(path)
-        if relative is not None and path.is_file():
-            snapshot[relative.as_posix()] = _digest(path)
+        digest = _digest(path) if relative is not None and path.is_file() else None
+        if relative is not None and digest is not None:
+            snapshot[relative.as_posix()] = digest
     _save_snapshot(snapshot)
 
 
@@ -533,6 +544,10 @@ def _check(paths: list[Path]) -> int:
         _fix_python(relative)
     findings += _python_findings(python)
     findings += [f for relative in python + typescript for f in _unexplained_suppressions(relative)]
+    # A file deleted while it was checked (see `_digest`) has nothing left to
+    # fix; ruff would report it as unreadable (E902).
+    gone = tuple(f"{r.as_posix()}:" for r in python + typescript if not (ROOT / r).is_file())
+    findings = [finding for finding in findings if not finding.startswith(gone)]
     if not findings:
         return 0
     _report(findings)

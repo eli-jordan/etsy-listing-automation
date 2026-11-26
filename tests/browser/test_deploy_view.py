@@ -22,20 +22,17 @@ from __future__ import annotations
 
 import itertools
 import shutil
-import socket
-import threading
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-import uvicorn
 
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
-from tests.support.server import stop_server
+from tests.support.server import serve
 
 pytestmark = pytest.mark.browser
 
@@ -51,13 +48,6 @@ def _context_factory(workspace: Workspace, on_event: EventSink | None) -> RunCon
     )
 
 
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port: int = s.getsockname()[1]
-        return port
-
-
 @pytest.fixture
 def deploy_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]:
     """The real app, over `create_app(context_factory=fakes)` (this PR's own
@@ -70,26 +60,9 @@ def deploy_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]:
         )
 
     workspace = Workspace.discover(root_override=workspace_root)
-    port = _free_port()
     app = create_app(workspace, context_factory=_context_factory)
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-
-    deadline = threading.Event()
-    for _ in range(30 * 20):
-        if server.started:
-            break
-        deadline.wait(0.05)
-    else:  # pragma: no cover - only on a pathologically slow machine
-        server.should_exit = True
-        pytest.fail("deploy server did not start in time")
-
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        stop_server(server, thread)
+    with serve(app, name="deploy server") as url:
+        yield url
 
 
 DEFAULT_TIMEOUT_MS = 60_000

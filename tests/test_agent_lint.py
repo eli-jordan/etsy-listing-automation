@@ -8,7 +8,9 @@ import sys
 import time
 import uuid
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -699,13 +701,66 @@ def run_mode(
     )
 
 
-def test_a_file_a_shell_command_writes_is_checked_once(
-    scratch: Path, state: dict[str, str]
-) -> None:
-    (scratch / "written.py").write_text("print(missing)\n")
+# After a shell command the hook checks every dirty file in its checkout, so a
+# test of that cannot share the repository with the rest of this file: under
+# xdist, another worker's scratch file is dirty too, and appears or vanishes
+# between this test's two hook runs. These tests run a copy of the hook in a
+# checkout of their own, with the repository's lint configuration.
+CHECKOUT_FILES = (
+    "pyproject.toml",
+    ".gitignore",
+    "scripts/agent_lint.py",
+    "scripts/agent_lint_gate.py",
+    "scripts/agent_lint_rules.txt",
+)
 
-    first = run_mode("edit", shell_command("python make_it.py"), **state)
-    second = run_mode("edit", shell_command("python make_it.py"), **state)
+
+@dataclass(frozen=True)
+class Checkout:
+    root: Path
+    env: dict[str, str]
+
+    @property
+    def scratch(self) -> Path:
+        return self.root / "scratch"
+
+    def run(
+        self, payload: dict[str, object], *, gate: bool = False
+    ) -> subprocess.CompletedProcess[str]:
+        script = self.root / "scripts" / ("agent_lint_gate.py" if gate else "agent_lint.py")
+        return run_mode("edit", {**payload, "cwd": str(self.root)}, script=script, **self.env)
+
+
+def _git_in(root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=root, capture_output=True, check=True, timeout=60)
+
+
+@pytest.fixture
+def checkout(tmp_path: Path) -> Checkout:
+    """A private git checkout holding the hook, its snapshot already taken."""
+    root = tmp_path / "checkout"
+    for name in CHECKOUT_FILES:
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / name, root / name)
+    (root / "scratch").mkdir()
+    _git_in(root, "init", "--quiet")
+    _git_in(root, "add", "--all")
+    _git_in(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "base")
+    env = {
+        "AGENT_LINT_STATE_DIR": str(tmp_path / "state"),
+        # The copy has no .venv of its own; its tools come from this one.
+        "AGENT_LINT_VENV": sys.prefix,
+    }
+    seeded = run_mode("snapshot", {}, script=root / "scripts" / "agent_lint.py", **env)
+    assert seeded.returncode == 0, seeded.stderr
+    return Checkout(root, env)
+
+
+def test_a_file_a_shell_command_writes_is_checked_once(checkout: Checkout) -> None:
+    (checkout.scratch / "written.py").write_text("print(missing)\n")
+
+    first = checkout.run(shell_command("python make_it.py"))
+    second = checkout.run(shell_command("python make_it.py"))
 
     assert first.returncode == 2
     assert "written.py:1:" in first.stderr
@@ -714,25 +769,25 @@ def test_a_file_a_shell_command_writes_is_checked_once(
 
 
 def test_a_shell_command_after_an_edit_does_not_report_the_edit_again(
-    scratch: Path, state: dict[str, str]
+    checkout: Checkout,
 ) -> None:
-    source = scratch / "edited.py"
+    source = checkout.scratch / "edited.py"
     source.write_text("print(missing)\n")
 
-    edit = run_mode("edit", edited(source), **state)
-    after = run_mode("edit", shell_command("python make_it.py"), **state)
+    edit = checkout.run(edited(source))
+    after = checkout.run(shell_command("python make_it.py"))
 
     assert edit.returncode == 2
     assert after.returncode == 0, after.stderr
 
 
 def test_the_gate_skips_a_read_only_command_and_checks_one_that_writes(
-    scratch: Path, state: dict[str, str]
+    checkout: Checkout,
 ) -> None:
-    (scratch / "written.py").write_text("print(missing)\n")
+    (checkout.scratch / "written.py").write_text("print(missing)\n")
 
-    skipped = run_mode("edit", shell_command("git status"), script=GATE, **state)
-    checked = run_mode("edit", shell_command("python make_it.py"), script=GATE, **state)
+    skipped = checkout.run(shell_command("git status"), gate=True)
+    checked = checkout.run(shell_command("python make_it.py"), gate=True)
 
     assert skipped.returncode == 0, skipped.stderr
     assert checked.returncode == 2
@@ -741,23 +796,52 @@ def test_the_gate_skips_a_read_only_command_and_checks_one_that_writes(
 
 @pytest.mark.parametrize("tool", ["PowerShell", "run_terminal_command"])
 def test_a_powershell_or_grok_shell_command_is_gated_and_checked_as_a_shell_command(
-    tool: str, scratch: Path, state: dict[str, str]
+    tool: str, checkout: Checkout
 ) -> None:
     # Claude Code's PowerShell tool and Grok's terminal tool write files no
     # edit reports.
-    (scratch / "written.py").write_text("print(missing)\n")
+    (checkout.scratch / "written.py").write_text("print(missing)\n")
 
     read = shell_command("Get-ChildItem src | Select-Object -First 3", tool=tool)
     write = shell_command("Set-Content written.py 'print(missing)'", tool=tool)
-    skipped = run_mode("edit", read, script=GATE, **state)
-    checked = run_mode("edit", write, script=GATE, **state)
+    skipped = checkout.run(read, gate=True)
+    checked = checkout.run(write, gate=True)
 
     assert skipped.returncode == 0, skipped.stderr
     assert checked.returncode == 2
     assert "written.py:1:" in checked.stderr
 
 
-# --- the commit backstop (S06) --------------------------------------------------
+def _hook_module() -> ModuleType:
+    sys.path.insert(0, str(HOOK.parent))
+    try:
+        import agent_lint
+    finally:
+        sys.path.remove(str(HOOK.parent))
+    return agent_lint
+
+
+def test_a_file_deleted_after_git_lists_it_is_skipped_not_a_crash(tmp_path: Path) -> None:
+    # Something else in the checkout (a test's scratch directory, a build) can
+    # delete a dirty file between `git status` and the hook reading it.
+    agent_lint = _hook_module()
+
+    assert agent_lint._digest(tmp_path / "gone.py") is None
+    assert agent_lint._added_lines(Path(".agent-lint-gone") / "gone.py") == []
+
+
+def test_a_file_deleted_while_it_is_checked_reports_nothing(
+    scratch: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agent_lint = _hook_module()
+    source = scratch / "deleted.py"
+    source.write_text("print(missing)\n")
+    monkeypatch.setattr(agent_lint, "_fix_python", lambda _relative: source.unlink())
+
+    assert agent_lint._check([source]) == 0
+
+
+# --- the commit backstop (S06)--------------------------------------------------
 
 
 def test_pre_commit_refuses_findings_without_fixing_anything(scratch: Path) -> None:

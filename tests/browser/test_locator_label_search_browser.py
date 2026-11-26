@@ -12,7 +12,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 from playwright.sync_api import expect
 
 from etsy_listings.core.workspace.workspace import Workspace
@@ -20,6 +19,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 from tests.support.batches import GARMENT_PROFILE, LISTING_TEMPLATE, a_listing_template
 from tests.support.builders import edit_garment_profile, edit_listing
 from tests.support.marigold import wait_until
+from tests.support.workspace_files import read_workspace_yaml
 
 pytestmark = pytest.mark.browser
 
@@ -41,13 +41,7 @@ def _label_templates(root: Path) -> None:
 
 
 def _media(path: Path) -> list[object]:
-    """The file's media, or none while the server is renaming a new copy
-    into place: Windows refuses to open a file mid-replace."""
-    try:
-        text = path.read_text("utf-8")
-    except PermissionError:
-        return []
-    media: list[object] = yaml.safe_load(text)["media"]
+    media: list[object] = read_workspace_yaml(path)["media"]
     return media
 
 

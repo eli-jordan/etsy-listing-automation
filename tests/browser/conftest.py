@@ -5,29 +5,17 @@ a Vite dev server that only exists on a developer's machine.
 
 from __future__ import annotations
 
-import socket
-import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-import uvicorn
 
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
 from tests.support.mobile import PHONE_CONTEXT, PHONE_LANDSCAPE_CONTEXT
-from tests.support.server import stop_server
-
-STARTUP_TIMEOUT_SECONDS = 30
-
-
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port: int = s.getsockname()[1]
-        return port
+from tests.support.server import serve
 
 
 class _SingleProcessChromium:
@@ -111,27 +99,8 @@ def calibrator_server(
         )
 
     workspace = Workspace.discover(root_override=workspace_root)
-    port = _free_port()
-    config = uvicorn.Config(
-        create_app(workspace, **app_options), host="127.0.0.1", port=port, log_level="warning"
-    )
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-
-    deadline = threading.Event()
-    for _ in range(STARTUP_TIMEOUT_SECONDS * 20):
-        if server.started:
-            break
-        deadline.wait(0.05)
-    else:  # pragma: no cover - only on a pathologically slow machine
-        server.should_exit = True
-        pytest.fail("calibrator server did not start in time")
-
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        stop_server(server, thread)
+    with serve(create_app(workspace, **app_options), name="calibrator server") as url:
+        yield url
 
 
 DEFAULT_TIMEOUT_MS = 60_000

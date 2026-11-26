@@ -18,6 +18,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.workspace_files import read_workspace_yaml
+
 pytestmark = pytest.mark.browser
 
 COLOUR_MATRIX_TEMPLATE = "flat-lay-01"
@@ -42,11 +44,10 @@ def _aspect(box: list[dict]) -> float:
 
 
 def _template_config(workspace_root: Path, template: str) -> dict:
-    return yaml.safe_load(
-        (workspace_root / "mockup-templates" / template / "template.yaml").read_text(
-            encoding="utf-8"
-        )
+    config: dict = read_workspace_yaml(
+        workspace_root / "mockup-templates" / template / "template.yaml"
     )
+    return config
 
 
 def _rail_row(page, name: str):

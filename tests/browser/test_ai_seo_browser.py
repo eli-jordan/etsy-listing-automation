@@ -23,7 +23,6 @@ file's server carry AI Mode's constructor arguments for no reason.
 from __future__ import annotations
 
 import re
-import socket
 import threading
 import time
 from collections.abc import Iterator
@@ -33,7 +32,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import uvicorn
 import yaml
 from playwright.sync_api import Page, expect
 
@@ -58,7 +56,7 @@ from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_snapshot, s
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing, write_design
 from tests.support.clients import FakeClients
-from tests.support.server import stop_server
+from tests.support.server import serve
 
 pytestmark = pytest.mark.browser
 
@@ -228,13 +226,6 @@ class _CancelAwareProvider:
         raise ProviderCancelledError(self.name)
 
 
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port: int = s.getsockname()[1]
-        return port
-
-
 @contextmanager
 def _seo_server(
     workspace_root: Path,
@@ -255,31 +246,14 @@ def _seo_server(
         )
 
     workspace = Workspace.discover(root_override=workspace_root)
-    port = _free_port()
     etsy_market = market if market is not None else seeded_market()
     kwargs: dict[str, Any] = {
         "seo_provider_factory": lambda _workspace, _ai: providers,
         "clients": FakeClients(etsy_market=etsy_market).factories(),
     }
     app = create_app(workspace, **kwargs)
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-
-    deadline = threading.Event()
-    for _ in range(30 * 20):
-        if server.started:
-            break
-        deadline.wait(0.05)
-    else:  # pragma: no cover - only on a pathologically slow machine
-        server.should_exit = True
-        pytest.fail("ai-seo server did not start in time")
-
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        stop_server(server, thread)
+    with serve(app, name="ai-seo server") as url:
+        yield url
 
 
 @contextmanager

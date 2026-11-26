@@ -25,6 +25,7 @@ from etsy_listings.core.render.config import BoundingBox
 from etsy_listings.core.render.positions import Pose, compose, decompose
 
 from tests.support.builders import edit_listing
+from tests.support.workspace_files import read_workspace_yaml
 
 pytestmark = pytest.mark.browser
 
@@ -38,13 +39,12 @@ def _listing_file(root: Path) -> Path:
 
 
 def _listing(root: Path) -> dict[str, Any]:
-    return yaml.safe_load(_listing_file(root).read_text(encoding="utf-8"))
+    document: dict[str, Any] = read_workspace_yaml(_listing_file(root))
+    return document
 
 
 def _template_box(root: Path) -> BoundingBox:
-    config = yaml.safe_load(
-        (root / "mockup-templates" / TEMPLATE / "template.yaml").read_text(encoding="utf-8")
-    )
+    config = read_workspace_yaml(root / "mockup-templates" / TEMPLATE / "template.yaml")
     return TypeAdapter(BoundingBox).validate_python(config["bounding_box"])
 
 

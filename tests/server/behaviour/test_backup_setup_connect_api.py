@@ -255,8 +255,12 @@ def test_of_several_copies_it_connects_the_complete_one_that_passes_a_check(
     status = _ok(_set_up(client, storage, [syncing, failing, passing]))
 
     assert status["connected"]["destination"] == str(passing)
-    assert len(checks) == 2
     wait_for(lambda: len(_history(client)) == 1)
+    # Connecting wakes the schedule, whose first backup runs its own weekly
+    # check after backing up, as soon as it likes: only the checks before
+    # that backup were the copies'.
+    operations = restic.operations
+    assert operations[: operations.index("back_up")].count("check") == 2
     assert _without_locks(files(syncing)) == _without_locks(files(passing))
 
 

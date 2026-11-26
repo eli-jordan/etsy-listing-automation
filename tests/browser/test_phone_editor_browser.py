@@ -8,10 +8,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
 from tests.support.ai_runs import serve_running_ai_run
 from tests.support.mobile import PHONE_CONTEXT, assert_mobile_page_fits, swipe
+from tests.support.workspace_files import read_workspace_yaml
 
 pytestmark = pytest.mark.browser
 
@@ -30,7 +30,7 @@ def _active_tab(page) -> str:
 
 
 def _colours(listing: Path) -> list[str]:
-    media = yaml.safe_load(listing.read_text(encoding="utf-8"))["media"]
+    media = read_workspace_yaml(listing)["media"]
     return [entry["colour"] for entry in media]
 
 

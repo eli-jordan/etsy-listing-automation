@@ -455,6 +455,10 @@ def test_a_failed_shop_save_shows_on_screen_with_retry(phone_page, expect) -> No
 def test_info_cards_fit_the_phone_and_close(phone_page, expect) -> None:
     page = phone_page
     page.goto(f"{_origin(page)}/admin?section=defaults")
+    # The page fills in as the shop, its connections and lookups answer, and
+    # moves Renewal 167px down as it does. Measured before that, the tap
+    # beside the (i) landed on the tab bar's Listings instead.
+    page.wait_for_load_state("networkidle")
     button = page.get_by_role("button", name="About Renewal")
     button.scroll_into_view_if_needed()
     area = _hit_area(page, button)
@@ -533,6 +537,9 @@ def test_ai_providers_reorder_with_arrows_on_a_phone(phone_page, expect) -> None
 def test_an_admin_alarm_dialog_is_a_sheet_a_swipe_dismisses(phone_page, expect) -> None:
     page = phone_page
     page.goto(f"{_origin(page)}/admin")
+    # As in test_info_cards_fit_the_phone_and_close: a tap aimed while the
+    # connections load can land where the button was.
+    page.wait_for_load_state("networkidle")
     page.get_by_role("button", name="Change currency…").tap()
     dialog = page.get_by_role("dialog")
     expect(dialog).to_be_visible()
