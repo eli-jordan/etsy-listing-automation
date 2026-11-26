@@ -255,7 +255,34 @@ class ResolvedPrice(BaseModel):
     """Formatted as `Money` prints itself, e.g. ``"249 NOK"``."""
 
 
-class ListingDetail(Listing):
+def always_sent_list() -> Any:
+    """An empty-list default the server always sends. ``default_factory``
+    keeps the mutable default off the class (S01), and the explicit schema
+    default keeps OpenAPI, and so the generated client, from marking the field
+    optional."""
+    return Field(default_factory=list, json_schema_extra={"default": []})
+
+
+def always_sent_dict() -> Any:
+    """:func:`always_sent_list` for a mapping."""
+    return Field(default_factory=dict, json_schema_extra={"default": {}})
+
+
+class EditorTabFields(BaseModel):
+    """What the listing editor's tabs read, computed the same way for a
+    listing and a listing template, whose editor mounts those tabs unchanged."""
+
+    resolved_prices: list[ResolvedPrice] = always_sent_list()
+    garment_materials: list[str] | None = None
+    """Read-only fibre materials from the selected garment profile. A listing
+    never writes or owns them; the editor shows what Etsy will use."""
+    garment_product_type: str | None = None
+    garment_brand: str | None = None
+    garment_model: str | None = None
+    description_composed: str = ""
+
+
+class ListingDetail(EditorTabFields, Listing):
     """The full `Listing`, plus what the editor needs and nothing a listing
     itself would ever store: computed status, computed issues, and (only
     meaningful right after a PATCH) which fields a rejected candidate failed
@@ -267,38 +294,21 @@ class ListingDetail(Listing):
     draft, which has no file yet."""
     status: ListingStatus
     issues: list[Issue]
-    # S01: default_factory keeps the mutable default off the class, and the
-    # explicit schema default keeps OpenAPI (and the generated client) from
-    # treating a field the server always sends as optional.
-    field_errors: dict[str, str] = Field(default_factory=dict, json_schema_extra={"default": {}})
-    gestures: list[ListingGesture] = Field(default_factory=list, json_schema_extra={"default": []})
-    """The lifecycle actions the editor's action row offers: the listings
-    table's row gestures, from the same rule. Empty for the unsaved
-    draft, which has no lifecycle yet."""
+    field_errors: dict[str, str] = always_sent_dict()
     """Populated only when a PATCH's candidate failed `Listing.model_validate`
     -- the write was skipped and every other field here still describes the
     listing as it was before the PATCH. Empty on every GET and every
     successful PATCH; the frontend never re-implements this validation; it
     only renders what the server returns."""
+    gestures: list[ListingGesture] = always_sent_list()
+    """The lifecycle actions the editor's action row offers: the listings
+    table's row gestures, from the same rule. Empty for the unsaved
+    draft, which has no lifecycle yet."""
     etsy_listing_id: int | None = None
     printify_product_id: str | None = None
     pricing_plan_name: str | None = None
     """The resolved plan's filename stem, for display -- selecting a
     different plan from the UI is deferred (features/listings-ui-20260915/spec.md)."""
-    resolved_prices: list[ResolvedPrice] = Field(
-        default_factory=list, json_schema_extra={"default": []}
-    )
-    garment_materials: list[str] | None = None
-    """Read-only fibre materials from the selected garment profile.
-
-    They remain outside ``Listing`` because a listing never writes or owns
-    them; this derived field merely lets the editor show what Etsy will use.
-    """
-    # Profile context sent to AI SEO generation, including edits that leave
-    # the profile name and materials unchanged.
-    garment_product_type: str | None = None
-    garment_brand: str | None = None
-    garment_model: str | None = None
     description_composed: str = ""
     """The final `etsy.description` text, exactly as
     `Workspace.compose_description` joins it -- the one value the Details
@@ -506,7 +516,7 @@ class ListingTemplateAsset(BaseModel):
     source_ref: str
 
 
-class ListingTemplateDetail(ListingTemplate):
+class ListingTemplateDetail(EditorTabFields, ListingTemplate):
     """A listing template as its pages read it, saved or not -- one shape for
     both, as `ListingDetail` is one shape for a listing and the unnamed draft.
 
@@ -520,19 +530,7 @@ class ListingTemplateDetail(ListingTemplate):
     garment: str | None = None
     pricing_plan_name: str | None = None
     source: ListingTemplateSource | None = None
-    assets: list[ListingTemplateAsset] = Field(
-        default_factory=list, json_schema_extra={"default": []}
-    )
-    # What the listing editor's tabs read off a `ListingDetail`, computed the
-    # same way, because the listing-template editor mounts those tabs
-    # unchanged (UI doc §3, *Existing components the template editor needs*).
-    resolved_prices: list[ResolvedPrice] = Field(
-        default_factory=list, json_schema_extra={"default": []}
-    )
-    garment_materials: list[str] | None = None
-    garment_product_type: str | None = None
-    garment_brand: str | None = None
-    garment_model: str | None = None
+    assets: list[ListingTemplateAsset] = always_sent_list()
     description_composed: str = ""
     """The body alone: a template has no lead, and each listing's own is
     placed above it."""
