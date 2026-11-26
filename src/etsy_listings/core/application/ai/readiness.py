@@ -2,15 +2,10 @@
 (features/market-seo-20260924/spec.md, *AI runs*; batch-creation spec,
 *Design validation*).
 
-The rules, their order and their wording are core's, so the **AI Mode**
-button, ``POST /api/ai/runs`` and staging's *AI drafting can't run yet* all
-say the same thing; the server only decides how each answer travels. So is
-the choice of providers (:func:`default_ai_providers`), which a host passes
-as a :data:`ProviderFactory` -- the seam tests replace with fakes, since CI
-never calls a real Codex or Claude CLI.
-
-Every check is a local probe -- a file's existence, a provider's fast
-``--help``/``login status`` -- and changes nothing.
+The rules and their wording are core's, so the **AI Mode** button,
+``POST /api/ai/runs`` and staging all say the same thing. Every check is a
+local probe (a file's existence, a provider's fast ``--help`` or
+``login status``) and changes nothing.
 """
 
 from __future__ import annotations
@@ -42,8 +37,8 @@ limits from, so both come from one revision of ``settings.yaml`` (ADR-0057)."""
 def current_providers(
     factory: ProviderFactory, workspace: Workspace
 ) -> Sequence[AiProvider] | SettingsProblem:
-    """``factory``'s providers for ``settings.yaml`` as it is now: for a
-    readiness check, which captures nothing and reports a broken file."""
+    """``factory``'s providers for ``settings.yaml`` as it is now, without
+    capturing it: a broken file is reported, not raised."""
     settings = workspace.settings_or_problem()
     if isinstance(settings, SettingsProblem):
         return settings

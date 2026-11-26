@@ -47,15 +47,9 @@ def resolve_proposal(
     resolution: ProposalResolution,
 ) -> ListingProposal:
     """Record ``resolution``'s sections on the proposal it names, and answer
-    it as :func:`read_proposal` would.
-
-    Under the listing's write lock, re-checking the listing inside it, so a
-    delete or rename cannot land between the read and the write and leave a
-    record behind for a listing that is gone. Refusals, with nothing
-    recorded: :class:`ListingMissingError` (also after waiting for the lock),
-    :class:`ProposalMissingError`, and :class:`ProposalReplacedError` when the proposal
-    has been regenerated since.
-    """
+    it as :func:`read_proposal` would. The listing is checked again under its
+    write lock, so a delete or rename landing in between leaves no record for
+    a listing that is gone."""
     _require(workspace, name)
     with ListingDocuments(workspace).lock(name):
         _require(workspace, name)

@@ -114,8 +114,8 @@ class BatchQueue:
             self._wake.notify_all()
 
     def wait_idle(self, *, timeout: float) -> bool:
-        """Block until the dispatcher has answered every wake so far. What a
-        test waits on instead of a sleep; ``False`` on timeout."""
+        """Block until the dispatcher has answered every wake so far;
+        ``False`` on timeout."""
         return self._idle.wait(timeout)
 
     def _loop(self) -> None:
@@ -162,8 +162,7 @@ class BatchQueue:
             row = _row(batch, row_id)
             if batch is None or row is None or row.ai != "queued":
                 return False
-            # A pause that landed since `dispatch` looked leaves the row
-            # queued, and ends the round.
+            # A pause since `dispatch` looked leaves the row queued and ends the round.
             ticket = self._gate.admit(f"Batch AI for {row.name}")
             if ticket is None:
                 return False

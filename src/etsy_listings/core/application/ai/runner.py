@@ -189,8 +189,7 @@ class AiRunner:
         return ListingAiInputs.read(self.workspace, run.listing).prepare(market_block=market_block)
 
     def _chain(self, run: AiRun, captured: _Captured) -> None:
-        # A batch run can be asked to stop before its thread starts (Cancel
-        # batch landing just after the queue claimed the row, ADR-0048).
+        # Cancel batch can land after the queue claimed the row, before this ran.
         self._check(run)
         inputs = self._load(run)
         drafting = run.draft_brief and not inputs.request.brief.strip()
@@ -304,8 +303,8 @@ class AiRunner:
             cancel_event=run.cancel_event,
         )
         self._check(run)
-        # A delete asks the run to stop before it takes the lock, so a stop
-        # seen here is one the delete's own cleanup will not come back for.
+        # A delete stops the run before taking the lock; its cleanup will not
+        # come back for a stop seen here.
         documents = ListingDocuments(workspace)
         with documents.lock(run.listing):
             self._check(run)
