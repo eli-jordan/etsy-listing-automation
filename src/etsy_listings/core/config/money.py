@@ -17,12 +17,7 @@ class MoneyFormatError(ValueError): ...
 
 @dataclass(frozen=True, slots=True)
 class Money:
-    """An amount paired with its ISO-4217-ish currency code.
-
-    Immutable. The only way to construct one from untrusted input is
-    :meth:`parse`, which is also wired in as this type's pydantic validator so it
-    applies wherever ``Money`` is used as a field annotation.
-    """
+    """An amount paired with its ISO-4217-ish currency code."""
 
     amount: Decimal
     currency: str
@@ -76,11 +71,7 @@ class Money:
     def __get_pydantic_json_schema__(
         cls, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
     ) -> JsonSchemaValue:
-        # A plain-function core schema (needed so `Money.parse` runs on every
-        # untrusted input) carries no shape pydantic can derive a JSON Schema
-        # from on its own -- stated by hand instead, now that a `Listing`
-        # (which nests `Money` under `prices`/`price_overrides`) is exposed
-        # through the listings API's OpenAPI schema (features/listings-ui-20260915/spec.md).
+        # pydantic derives no JSON Schema from a plain-function core schema.
         return {"type": "string", "examples": ["349 NOK"]}
 
 
