@@ -1685,7 +1685,15 @@ written under an identity computed from the very arrays composed, so apply and
 previews share entries without trusting anything but that identity. A preview
 reaches the identity without decoding through `PIXEL_DIGESTS`, which keeps each
 photo's and design's pixel digest only while its `file_version` stamp is
-unchanged; preview responses carry the identity as their ETag. On Windows,
+unchanged; preview responses carry the identity as their ETag. Those digests
+are also kept on disk (`RememberedDigests`, `.cache/pixel-digests/`, one JSON
+file per file and kind, with its stamp) so the first view after a restart need
+not decode. Only the Listing Images preview reads them (`remembered_scene`,
+for `GET /api/listings/{name}/scene-preview` at full size), and the editor
+then calls `.../scene-preview/check`, which computes the digests, corrects the
+kept ones, and says whether the picture changed so the editor fetches it
+again. `saved_scene`, the scene warmer, render and deploy never read them.
+On Windows,
 USNs are trusted only while a short read-data metadata handle excludes other
 writers. An open writer can coalesce USN reasons, so a sharing conflict uses
 the existing content-hash fallback. Atomic replacement remains shared.
