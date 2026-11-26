@@ -142,3 +142,14 @@ def test_paths_are_left_alone_on_posix(tmp_path: Path, monkeypatch: pytest.Monke
 
     assert backup is not None
     assert str(backup.repository).replace("\\", "/") == "/cygdrive/c/backups"
+
+
+def test_a_workspace_id_is_kept_in_canonical_uuid_form(tmp_path: Path) -> None:
+    text = (
+        "backup:\n  repository: /srv/b\n  workspace_id: '{6F9619FF-8B86-D011-B42D-00C04FC964FF}'\n"
+    )
+
+    backup = _load(tmp_path, text).backup
+
+    assert backup is not None
+    assert backup.workspace_id == "6f9619ff-8b86-d011-b42d-00c04fc964ff"

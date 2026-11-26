@@ -25,8 +25,6 @@ the page could not show."""
 
 
 def _absent_is_empty(value: object) -> object:
-    """A key written with nothing under it (``market_seo:``) is YAML's
-    ``null``; it means "nothing tuned here", the same as leaving it out."""
     return {} if value is None else value
 
 
@@ -90,7 +88,7 @@ class AiSettings(BaseModel):
         DEFAULT_RUN_LIMIT_MINUTES,
         ge=MIN_RUN_LIMIT_MINUTES,
         le=MAX_RUN_LIMIT_MINUTES,
-        # A raised step limit must be checked against the default run limit too.
+        # pydantic runs no validator on a default unless asked.
         validate_default=True,
     )
     """The whole run: every task, its fallbacks and market research. At least
@@ -111,9 +109,7 @@ class AiSettings(BaseModel):
     @field_validator("run_limit_minutes")
     @classmethod
     def covers_every_step(cls, run: int, info: ValidationInfo) -> int:
-        """ADR-0057: refused, never raised on load. Fields validate in
-        declaration order, so a bad provider list or step limit is already
-        reported and missing from ``info.data``; that is not a second error."""
+        # pydantic leaves a field that failed validation out of info.data.
         providers = info.data.get("providers")
         step = info.data.get("step_limit_minutes")
         if providers is None or step is None:
@@ -210,15 +206,13 @@ class BackupSettings(BaseModel):
     @field_validator("repository", "restic_binary", mode="before")
     @classmethod
     def native_path(cls, value: object) -> object:
-        r"""A ``/cygdrive/c/...`` or Cygwin ``/home/...`` path from a hand edit,
-        translated as ``--root`` is. It must happen before pydantic makes a
-        ``Path``: on Windows that already reads it as ``\cygdrive\c\...``."""
+        # Before pydantic makes a Path: on Windows that reads /cygdrive/c as \cygdrive\c.
         return _native(value) if isinstance(value, str) else value
 
     @field_validator("workspace_id")
     @classmethod
     def a_uuid(cls, value: str | None) -> str | None:
-        """A UUID in its canonical form, so it is a valid restic tag."""
+        # The canonical form, so it is a valid restic tag.
         if value is None:
             return None
         try:
@@ -238,8 +232,6 @@ class BackupSettings(BaseModel):
     @field_validator("interval_hours", mode="wrap")
     @classmethod
     def offered_interval(cls, value: object, handler: ValidatorFunctionWrapHandler) -> int:
-        """Pydantic's own message lists each literal quoted; this one reads
-        as the page's choices."""
         try:
             return int(handler(value))
         except ValidationError:
@@ -249,9 +241,6 @@ class BackupSettings(BaseModel):
 
 @dataclass(frozen=True)
 class SettingsProblem:
-    """Why ``settings.yaml`` will not load, for a read that reports it rather
-    than raising: the message names the file and the dotted key."""
-
     message: str
 
 
