@@ -119,13 +119,7 @@ def _echo_event(event: Event) -> None:
 
 
 def _echo_blocked(plan: Plan) -> None:
-    """Say what this apply will *not* do, before it does the rest.
-
-    A blocked stage is not a failure -- the render stage still runs, and a
-    workspace that has not opted into Printify yet is not broken -- but it is
-    the half of the run the user cannot see happening, so it must be said out
-    loud rather than inferred from a product that never appears.
-    """
+    """Say what this apply will *not* do, before it does the rest."""
     for stage_plan in plan.stage_plans:
         if stage_plan.blocked:
             for line in format_blocked(stage_plan):
