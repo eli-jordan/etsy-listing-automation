@@ -617,8 +617,15 @@ owned assets under its write lock. The server decodes multipart uploads into
 byte streams; bounded loose-PNG/ZIP inspection in `core/batches` precedes
 review. Confirm and retry revalidate shared references and allocate names
 under the listing's document lock. They create ordinary listings and retained batch records,
-idempotently, without deploying (ADR-0047, ADR-0051). Staging expires seven
-days after its last edit and is swept at startup. `BatchQueue` dispatches
+idempotently, without deploying (ADR-0047, ADR-0051). A staging session
+(`.cache/staging/<id>/session.json`) and a batch (`.cache/batches/<id>.json`)
+are schema-versioned JSON written atomically; a record with an unknown
+`schema`, or one that will not parse, is absent, since it is cache. A batch
+keeps its staging session's id, so a second confirm finds the batch the first
+wrote. A failed row keeps its last run's steps, so it still shows where it
+failed after the server that ran it has gone. Staging expires seven days after
+its last edit, a session folder with no readable record by the folder's own
+age, and is swept at startup. `BatchQueue` dispatches
 queued rows through the existing AI runner, defaults to one concurrent batch
 row, reads the workspace concurrency setting, round-robins across batches and
 recovers interrupted rows on restart (ADR-0048).

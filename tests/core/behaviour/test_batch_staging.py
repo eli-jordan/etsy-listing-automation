@@ -8,6 +8,7 @@ the names the review shows.
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 import time
@@ -222,6 +223,22 @@ class TestLifetime:
         store.sweep(now=NOW + timedelta(days=9, seconds=1))
         assert store.load(session.id) is None
         assert _staging_left(workspace) == []
+
+    def test_a_session_folder_with_no_readable_record_expires_by_its_own_age(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        now = datetime.now(UTC)
+        stale, fresh = workspace.staging_dir("stale"), workspace.staging_dir("fresh")
+        for folder in (stale, fresh):
+            folder.mkdir(parents=True)
+            (folder / "upload.png").write_bytes(png(1))
+        eight_days_ago = (now - timedelta(days=8)).timestamp()
+        os.utime(stale, (eight_days_ago, eight_days_ago))
+
+        store.sweep(now=now)
+
+        assert not stale.exists()
+        assert fresh.is_dir()
 
     def test_a_record_with_an_unknown_schema_is_absent(
         self, workspace: Workspace, store: StagingStore
