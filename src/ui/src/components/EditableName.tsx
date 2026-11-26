@@ -12,19 +12,12 @@ export interface NameRefusal {
 export interface EditableNameProps {
   /** The committed name. `""` for a listing that has never been named. */
   value: string;
-  /** Enter or blur, with the trimmed text -- and only when it is non-empty and
-   * actually differs from `value`. Escape reverts and never commits, so a
-   * double-click you did not mean costs nothing. */
   onCommit: (next: string) => void;
   error?: NameRefusal | null;
   busy?: boolean;
   placeholder?: string;
   label?: string;
-  /** What is in the field right now, as it is typed. A listing that has no
-   * name yet can be given one by something other than this field (design-derived names,
-   * where picking a design names a draft), and that must not overwrite a name
-   * the seller is part-way through typing -- which `value` cannot show,
-   * because an uncommitted name is not the listing's name. */
+  /** Each keystroke, so a design-derived name can leave a part-typed one alone. */
   onDraftChange?: (text: string) => void;
   as?: "h1" | "span";
   titleClassName?: string;
@@ -52,9 +45,6 @@ export function EditableName({
   const reverting = useRef(false);
   const isPhone = useIsPhone();
 
-  // Adjusting state while rendering, rather than in an effect: the name landed
-  // (a rename went through, or this page moved to another listing) and the edit
-  // buffer is about the old one.
   if (committed !== value) {
     setCommitted(value);
     setText(value);
@@ -72,9 +62,6 @@ export function EditableName({
       setOpened(false);
       return;
     }
-    // The field stays open until `value` catches up: a create can still be
-    // refused, and closing over a name that was never written would show a
-    // heading for a listing that does not exist.
     onCommit(trimmed);
   }
 

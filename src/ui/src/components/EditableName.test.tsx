@@ -44,6 +44,30 @@ describe("EditableName", () => {
     expect(onCommit).toHaveBeenCalledWith("my-shirt");
   });
 
+  it("stays open after a commit until the name lands, then shows the new name", () => {
+    const { rerender } = render(<EditableName value="take-a-hike" onCommit={vi.fn()} />);
+    fireEvent.doubleClick(screen.getByRole("heading"));
+    const input = screen.getByLabelText("Listing name");
+    fireEvent.change(input, { target: { value: "go-for-a-walk" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByLabelText("Listing name")).toHaveValue("go-for-a-walk");
+
+    rerender(<EditableName value="go-for-a-walk" onCommit={vi.fn()} />);
+    expect(screen.queryByLabelText("Listing name")).toBeNull();
+    expect(screen.getByRole("heading")).toHaveTextContent("go-for-a-walk");
+  });
+
+  it("drops a half-typed edit when the page moves to another listing", () => {
+    const { rerender } = render(<EditableName value="take-a-hike" onCommit={vi.fn()} />);
+    fireEvent.doubleClick(screen.getByRole("heading"));
+    fireEvent.change(screen.getByLabelText("Listing name"), { target: { value: "half" } });
+
+    rerender(<EditableName value="cat-nap" onCommit={vi.fn()} />);
+    expect(screen.getByRole("heading")).toHaveTextContent("cat-nap");
+    fireEvent.doubleClick(screen.getByRole("heading"));
+    expect(screen.getByLabelText("Listing name")).toHaveValue("cat-nap");
+  });
+
   it("does not commit an empty name", () => {
     const onCommit = vi.fn();
     render(<EditableName value="" onCommit={onCommit} />);
