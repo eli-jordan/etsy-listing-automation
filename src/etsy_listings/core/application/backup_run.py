@@ -94,8 +94,8 @@ EXCLUDES: tuple[str, ...] = (
     #
     # Every temp-then-rename writer that ends its names in .tmp: a dot, the
     # name and a random part from workspace/atomic.py, engine/stages/render.py
-    # and preparation/scene_cache.py; the name and a uuid from market/cache.py
-    # and market/snapshot.py; the name, pid and thread from ai/viewable.py;
+    # and preparation/scene_cache.py (market/ writes through atomic.py); the
+    # name, pid and thread from ai/viewable.py;
     # the bare name from clients/etsy/tokens.py and engine/lock.py.
     "*.tmp",
     # The Marigold worker's predictions, ".{name}.npz.{uuid}" (server.py _publish).
