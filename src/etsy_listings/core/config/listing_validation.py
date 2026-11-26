@@ -406,7 +406,6 @@ _LINK_WHERE = "Artwork · Link the two designs if one is all this listing needs"
 
 
 def _names(colours: Iterable[str]) -> str:
-    """``Ivory``, ``Ivory and Natural``, ``Ivory, Natural and Sand``."""
     cap = [colour[:1].upper() + colour[1:] for colour in colours]
     if len(cap) <= 1:
         return "".join(cap)
@@ -417,17 +416,12 @@ def _shirts(tone: Tone) -> str:
     return f"{tone} shirts"
 
 
-def _depicted(
-    listing: Listing, templates: Mapping[str, TemplateInfo]
-) -> tuple[list[str], list[str]]:
-    """The garment colours the listing's mockup scenes show, and the
-    templates that show one without naming it (spec: *Artwork resolution*).
+class _Depicted(NamedTuple):
+    colours: list[str]
+    unnamed_single_templates: list[str]
 
-    The media entry's colour for a ``colour-matrix`` scene, every placement's
-    colour for a ``multiple`` one, the template's own colour for a ``single``.
-    A template with no config on disk is skipped, as the kind check skips it:
-    it is not this module's to report.
-    """
+
+def _depicted(listing: Listing, templates: Mapping[str, TemplateInfo]) -> _Depicted:
     colours: dict[str, None] = {}
     colourless: dict[str, None] = {}
     for entry in listing.media:
@@ -438,7 +432,7 @@ def _depicted(
             colourless.setdefault(entry.template, None)
         for colour in scene.shown:
             colours.setdefault(colour, None)
-    return list(colours), list(colourless)
+    return _Depicted(list(colours), list(colourless))
 
 
 class _SceneColours(NamedTuple):
@@ -460,8 +454,6 @@ def _scene_colours(
 
 
 def _unclassified_issue(severity: Severity, profile: str, colours: list[str]) -> list[Issue]:
-    """Colours ``profile`` gives no tone, naming the file that has to be fixed
-    -- tone is shared garment data a listing cannot correct (ADR-0053)."""
     if not colours:
         return []
     verb = "isn't" if len(colours) == 1 else "aren't"
@@ -476,10 +468,6 @@ def _unclassified_issue(severity: Severity, profile: str, colours: list[str]) ->
 
 
 def _check_template_tones(template: ListingTemplate, profile: GarmentProfile) -> list[Issue]:
-    """A listing template has no design, so nothing resolves yet: an
-    unclassified colour is a warning here, since any block refuses a
-    template's write. Every listing made from it blocks until the profile
-    is fixed (ADR-0053)."""
     unclassified = [colour for colour in template.colors if colour not in profile.colors]
     return _unclassified_issue("warn", template.garment_profile, unclassified)
 
@@ -624,11 +612,6 @@ def check_lifecycle_verb(lifecycle: str | None, *, published: bool) -> list[Issu
 
 
 def check_listing_yaml_present(*, present: bool) -> list[Issue]:
-    """Refuse to infer retire or delete from a missing file.
-
-    A directory that still has a lockfile is visible; a missing document is
-    not consent. Never send ``state``, never delete remotes.
-    """
     if present:
         return []
     return [Issue("block", "details", _LIFECYCLE_WHERE, MISSING_LISTING_YAML)]
@@ -639,8 +622,6 @@ _POSITION_ROUNDOFF = 1e-8
 
 
 def _similarity_pose(template_box: BoundingBox, box: BoundingBox) -> Pose | None:
-    """``box`` as a pose of ``template_box``, or ``None`` when it is not a
-    similarity of it (spec Validation 1)."""
     try:
         fit = decompose(template_box, box)
     except ValueError:
@@ -746,15 +727,6 @@ def positions_outside_limits(
     templates: Mapping[str, AnyTemplate],
     limits: TemplatePositionLimits,
 ) -> list[str]:
-    """The dotted keys of ``listing``'s positions that ``limits`` would refuse
-    for their scale, offset or rotation alone (spec Validation 2).
-
-    What a limits change would newly block, for Settings' confirmation
-    (template positions PR 5). A position refused whatever the limits -- not
-    a similarity, a template missing from ``media`` or unavailable, a stale
-    placement -- is not listed: the
-    listing is blocked already and new limits change nothing about it.
-    """
     referenced = {
         entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
     }
