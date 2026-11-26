@@ -26,18 +26,12 @@ Document = dict[str, Any]
 
 
 class ListingMissingError(MissingError):
-    """There is no ``listing.yaml`` by this name. Either there never was, or
-    a rename or delete holding the listing's lock moved it first."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"no listing {name!r}")
         self.name = name
 
 
 class ListingNameTakenError(ConflictError, ValueError):
-    """A create or rename named a listing directory that already exists,
-    with or without a ``listing.yaml`` in it."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"a listing already exists named {name!r}")
         self.name = name
@@ -59,9 +53,6 @@ class ListingDocuments:
         return not self._workspace.listing_dir(name).exists()
 
     def read(self, name: str) -> Document:
-        """``name``'s document as written. Raises :class:`ListingMissingError`
-        when there is none. Unlike :meth:`Workspace.load_listing`, this does
-        not validate it."""
         path = self._workspace.listing_file(name)
         try:
             text = read_bytes_retrying(path).decode("utf-8")
@@ -71,22 +62,9 @@ class ListingDocuments:
         return raw if isinstance(raw, dict) else {}
 
     def edit(self, name: str, change: Callable[[Document], Document | None]) -> Document | None:
-        """Pass ``name``'s document to ``change`` and write what it returns,
-        holding the lock throughout. Returns the written document.
-
-        ``change`` returns ``None`` to write nothing, and that is returned.
-        If it raises, nothing is written and the exception propagates.
-        Raises :class:`ListingMissingError` when there is no document, whether
-        before or after waiting for the lock.
-
-        The document is not validated here. The editor's patch validates what
-        it merged, but the tool's own small edits (a brief, a lifecycle mark)
-        must still apply to a document a seller has broken by hand.
-        """
         with self.lock(name):
             current = self.read(name)
-            # Callbacks may mutate nested values. Compare against the saved
-            # document, not the same object the callback was allowed to edit.
+            # A copy, so a callback that mutates in place still compares unequal.
             changed = change(copy.deepcopy(current))
             # Unchanged is a semantic no-op even when `design:` is in its old
             # form: canonicalising alone is not a reason to touch the file.
@@ -96,30 +74,13 @@ class ListingDocuments:
             return changed
 
     def create(self, name: str, document: Mapping[str, Any]) -> Path:
-        """Write ``document`` as the new listing ``name`` and return its path.
-
-        Checks, in order and holding the lock:
-
-        * ``InvalidNameError``: ``name`` is not a single path segment
-          (ADR-0013).
-        * :class:`ListingNameTakenError`: the name is not :meth:`is_free`.
-        * ``pydantic.ValidationError``: ``document`` does not validate
-          structurally. An incomplete document validates and is written
-          (ADR-0043).
-        """
         with self.lock(name):
             if not self.is_free(name):
                 raise ListingNameTakenError(name)
             return self.write(name, document)
 
     def write(self, name: str, document: Mapping[str, Any]) -> Path:
-        """Write ``document`` as ``name`` whether or not one is there, and
-        return its path. Raises ``pydantic.ValidationError``, writing nothing,
-        when ``document`` does not validate structurally.
-
-        Only for a writer that has already decided the name is its own:
-        :meth:`create`, and a batch re-entering a row it claimed.
-        """
+        """Overwrites: only for a writer that already owns ``name``."""
         with self.lock(name):
             Listing.model_validate(
                 dict(document), context={"currency": self._workspace.defaults.etsy.currency}

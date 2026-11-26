@@ -129,6 +129,18 @@ class TestEdit:
             documents.edit(NAME, refuse)
         assert workspace.listing_file(NAME).read_bytes() == before
 
+    def test_an_edit_applies_to_a_document_broken_by_hand(
+        self, workspace: Workspace, documents: ListingDocuments
+    ) -> None:
+        documents.write(NAME, a_document())
+        broken = workspace.listing_file(NAME)
+        broken.write_text(broken.read_text(encoding="utf-8") + "colours: [teal]\n", "utf-8")
+
+        documents.edit(NAME, lambda raw: {**raw, "brief": "A sunset hike."})
+
+        assert _on_disk(workspace)["brief"] == "A sunset hike."
+        assert _on_disk(workspace)["colours"] == ["teal"]
+
     def test_a_missing_listing_is_refused_and_not_recreated(
         self, workspace: Workspace, documents: ListingDocuments
     ) -> None:
