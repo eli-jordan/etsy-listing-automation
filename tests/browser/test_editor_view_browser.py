@@ -152,7 +152,11 @@ def test_a_reload_keeps_the_lightbox_on_the_picture_it_had_reached(page) -> None
     _wait_for_picture(page, ".lightbox__image")
 
 
-def test_a_view_picture_that_has_gone_leaves_the_stage_empty(page, workspace_root: Path) -> None:
+def test_a_view_picture_that_has_gone_falls_back_to_the_first_image(
+    page, workspace_root: Path
+) -> None:
+    """The stage never points at a picture that no longer exists: it opens
+    on the reel's first image, as it does when nothing was remembered."""
     (workspace_root / "common-media").mkdir()
     design = next(path for path in IMAGES.iterdir() if path.suffix == ".png")
     shared = workspace_root / "common-media" / "sizing.png"
@@ -168,7 +172,9 @@ def test_a_view_picture_that_has_gone_leaves_the_stage_empty(page, workspace_roo
     page.reload()
 
     page.locator(".locator").wait_for(state="visible")
-    page.get_by_text("Point at something on the left").wait_for(state="visible")
+    title = page.locator(".preview-meta__title")
+    title.filter(has_text="flat-lay-01 · black").wait_for(state="visible")
+    assert "sizing" not in title.inner_text()
 
 
 def test_a_new_browser_tab_starts_from_the_editors_default(page) -> None:
