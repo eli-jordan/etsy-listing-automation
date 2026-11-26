@@ -1,16 +1,11 @@
 """Whether AI can run: for one listing, and for a batch created now
 (features/market-seo-20260924/spec.md, *AI runs*; batch-creation spec,
-*Design validation*; module-structure plan, PR 9).
+*Design validation*).
 
-The rules, their order and their wording are core's, so the **AI Mode**
-button, ``POST /api/ai/runs`` and staging's *AI drafting can't run yet* all
-say the same thing; the server only decides how each answer travels. So is
-the choice of providers (:func:`default_ai_providers`), which a host passes
-as a :data:`ProviderFactory` -- the seam tests replace with fakes, since CI
-never calls a real Codex or Claude CLI.
-
-Every check is a local probe -- a file's existence, a provider's fast
-``--help``/``login status`` -- and changes nothing.
+The rules and their wording are core's, so the **AI Mode** button,
+``POST /api/ai/runs`` and staging all say the same thing. Every check is a
+local probe (a file's existence, a provider's fast ``--help`` or
+``login status``) and changes nothing.
 """
 
 from __future__ import annotations
@@ -42,8 +37,8 @@ limits from, so both come from one revision of ``settings.yaml`` (ADR-0057)."""
 def current_providers(
     factory: ProviderFactory, workspace: Workspace
 ) -> Sequence[AiProvider] | SettingsProblem:
-    """``factory``'s providers for ``settings.yaml`` as it is now: for a
-    readiness check, which captures nothing and reports a broken file."""
+    """``factory``'s providers for ``settings.yaml`` as it is now, without
+    capturing it: a broken file is reported, not raised."""
     settings = workspace.settings_or_problem()
     if isinstance(settings, SettingsProblem):
         return settings
@@ -53,12 +48,6 @@ def current_providers(
 def default_ai_providers(
     workspace: Workspace, ai: AiSettings, *, host: CliHost = LOCAL_CLI_HOST
 ) -> Sequence[AiProvider]:
-    """Capture the enabled chain and all task preferences from ``ai`` (ADR-0056).
-
-    Newly constructed adapters never reread settings during repair or fallback.
-    Missing AI settings preserve Codex, Claude, Grok and account defaults.
-    Every adapter finds and runs its CLI through ``host``.
-    """
     adapters: dict[str, type[CodexProvider] | type[ClaudeProvider] | type[GrokProvider]] = {
         "codex": CodexProvider,
         "claude": ClaudeProvider,
@@ -87,11 +76,6 @@ def unready_reason(
     tooling is missing, since the former is fixed by editing the listing and
     the latter is not the listing's to fix at all.
 
-    A design, a brief, a usable garment profile (query extraction needs its
-    item type), ``prompts/seo.md`` and ``prompts/market-queries.md``, and a
-    ready provider. An empty brief is allowed only when ``draft_brief`` is
-    true, and then ``prompts/brief.md`` is needed too.
-
     The listing itself being saved is the caller's to check first.
     """
     drafting = draft_brief and not listing.brief.strip()
@@ -111,8 +95,6 @@ def unready_reason(
 
 
 def missing_prompt(workspace: Workspace, *, draft_brief: bool) -> Path | None:
-    """The first prompt file a run needs that is not there: ``seo.md`` and
-    ``market-queries.md`` always, ``brief.md`` when the run drafts."""
     prompts = [workspace.seo_prompt_file(), workspace.market_queries_prompt_file()]
     if draft_brief:
         prompts.append(workspace.brief_prompt_file())
@@ -120,7 +102,6 @@ def missing_prompt(workspace: Workspace, *, draft_brief: bool) -> Path | None:
 
 
 def provider_problem(providers: Sequence[AiProvider]) -> str | None:
-    """``None`` when some provider is ready, else every provider's reason."""
     checks = [provider.readiness() for provider in providers]
     if any(check.ready for check in checks):
         return None
@@ -142,11 +123,6 @@ SETUP_REMEDY = "Add one in Setup, then come back. Your staging is kept."
 
 
 def batch_blocked(workspace: Workspace, providers: Sequence[AiProvider]) -> AiReadinessBlock | None:
-    """Brief-only batch readiness: the brief prompt and a ready provider.
-
-    Research prompts and market access belong to the seller's later AI Mode
-    request (ADR-0048, amendment 2026-10-29).
-    """
     prompt_file = workspace.brief_prompt_file()
     if not prompt_file.is_file():
         shown = prompt_file.relative_to(workspace.root).as_posix()

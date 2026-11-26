@@ -174,6 +174,14 @@ module-level patch because a patch silently reaches every caller of the
 module, including ones the test never meant to fake, and stops working once a
 caller holds the function rather than the module.
 
+Every seam a host fills lives in `application/dependencies.py`, not beside the
+worker that calls it, because the deploy executor and the AI runner are
+implementation-only: a host names the seam without importing the machinery
+behind the coordinator. Everything else an operation coordinates through (the
+AI run registry, the batch queue, AI readiness and the deploy-to-AI handoff) is
+core's own and taken as its concrete class; with one implementation each, an
+interface would have had nothing to vary.
+
 `core/application/credentials.py` owns finding, verifying and storing a
 credential and both halves of the Etsy grant around the browser step;
 `cli/credentials.py` owns asking for one and saying what happened.
@@ -391,6 +399,14 @@ still matches what is saved, through the rules gathered in
 `DISK_IMAGES`, which the scene warmer uses. `server/api/scene_responses.py` turns a
 picture into a response: the WebP encoding of a frame, and the identity headers
 and `304` of a rendered scene.
+
+Calibration is judged by eye, so the artwork a preview may use is open: the
+server's bundled targets plus whatever the seller uploads.
+`application.calibration_designs` stores uploads in the workspace's
+`test-designs/`, never in `designs/`, which holds artwork listings ship; a
+calibration target is not a product. It decides what an upload may be called
+and refuses bytes that do not decode as an image before writing anything; the
+route decodes the multipart request, so only bytes and a filename enter core.
 
 Position mode is the one place a browser composes a scene. While a listing's
 position is ahead of its composite, `pages/editor/positions/liveRenderer.ts` draws
@@ -617,8 +633,12 @@ owned assets under its write lock. The server decodes multipart uploads into
 byte streams; bounded loose-PNG/ZIP inspection in `core/batches` precedes
 review. Confirm and retry revalidate shared references and allocate names
 under the listing's document lock. They create ordinary listings and retained batch records,
-idempotently, without deploying (ADR-0047, ADR-0051). Staging expires seven
-days after its last edit and is swept at startup. `BatchQueue` dispatches
+idempotently, without deploying (ADR-0047, ADR-0051). Only a new batch asks
+whether AI could draft; a confirm finishing a batch an earlier one began does
+not, because its listings are already half made. Each row's upload is kept
+beside the batch, so Retry and the summary of a never-created row still have it
+after the staging session has gone. Staging expires seven days after its last
+edit and is swept at startup and before Recent batches is listed. `BatchQueue` dispatches
 queued rows through the existing AI runner, defaults to one concurrent batch
 row, reads the workspace concurrency setting, round-robins across batches and
 recovers interrupted rows on restart (ADR-0048).
@@ -1062,7 +1082,11 @@ later. Each traces to a decision.
   three-way, against the dump of the model the file held, so defaults and
   normalised values the seller never wrote stay out. Only a new file is
   rendered whole, in its owner's layout. Garment profiles and pricing plans are
-  create-if-absent and never touch an existing file (ADR-0055).
+  create-if-absent and never touch an existing file (ADR-0055), so a hand
+  edit such as a trimmed colour list carries into every later listing. A
+  profile records the catalog's brand and model verbatim, `®` included;
+  matching normalises both sides, so a hand edit need not reproduce the
+  symbol.
 - **A client is built through `core/connections.py`.** Which credential is
   resolved when, what a missing one means, and where the Etsy token file lives
   are one set of answers, not four (`cli`, `setup`, `auth` and the e2e layer
@@ -1082,8 +1106,16 @@ later. Each traces to a decision.
   prove it are core's; what to say before asking, how to ask, and what to say
   when it fails are the CLI's. Capturing stays separate from storing because
   `auth` writes per credential as it goes while `setup` writes once every
-  question is answered. OAuth consent and the loopback callback are a
-  credential workflow, not the application server.
+  question is answered. `auth`'s credentials are independent, so a proved
+  Printify token survives abandoning the Etsy sign-in; `setup` stores last
+  because a token left by a cancelled run is a workspace that looks configured
+  and is not. No operation combines proving with storing, and a token is
+  verified from the value in hand, never from `.env`. Printify's proof is the
+  shop list itself, which `setup` needs next. An Etsy consent near the end of
+  its 90 days is only ever a warning: the credential still works, and
+  refusing two weeks early would break commands over a failure that has not
+  happened. OAuth consent and the loopback callback are a credential workflow,
+  not the application server.
 - **Secrets never enter the repo.** Tokens in `.auth/`, keys in `.env`, both
   gitignored, and both in the *workspace*, not the repo. `core/config/secrets.py`
   is the reader for environment/file API keys; `core/clients/etsy/tokens.py`
@@ -1504,8 +1536,26 @@ folder beside the target (`restic init`, or the destinations' own one-way copy
 that the password must open and that must pass a `check`), renames it into
 place, chooses the workspace ID (ADR-0061) and saves the block last. A failure
 at any step undoes the ones before it, so the workspace is left as it was: no
-password, no block, no repository and no staging folder. The module docstring
-gives the reasons for the order.
+password, no block, no repository and no staging folder; an undo that fails is
+logged rather than raised over the failure it undoes.
+
+The order is what makes that hold. Refusing first means a stale page or an
+invalid interval is refused before a copy that can take many minutes, and a
+terminal never prompts for a password an attempt would refuse anyway. The
+password is stored before any repository exists, so even a process killed part
+way never leaves a repository on this disk whose password this machine did not
+record; killed there, it leaves at most the password, which is only a retry,
+and a failure the process sees puts `.env` back byte for byte. The repository
+is built in staging and renamed whole, so the storage folder is never half a
+repository, and the undo removes only a folder holding restic's `config`,
+remaking the empty folder the seller named. The block is saved last as the
+commit point: once it names the folder the schedule may back up into it, so
+the folder must already hold a complete, checked repository; the save checks
+the revision again. A new repository is refused beside a destination's copy
+because the copy would then look changed. When connecting, a wrong password
+stops at the first copy, since every copy has the same keys, and a wrong
+password read from `.env` says how to change it there, because it is never
+asked for again.
 
 A missing repository has two ways back, in `core/application/backup_missing.py`,
 both refused while the configured folder holds restic's `config`.
@@ -1521,6 +1571,10 @@ First-time set-up connects too. `backup_setup.prepare_set_up` refuses what
 only set-up refuses, and asks `backup_provisioning.source_for` whether the
 destinations hold a repository: copies of one repository share `config`'s
 bytes, and only a copy holding every file the others hold may be the source.
+A copy whose files are all in another (one still syncing) is left out, so the
+first copy back only adds to it; a source missing files the other has would
+have them deleted as expired. Part of a copy without `config`, two different
+repositories, and copies that each lack files the other has are refused.
 When one does, `POST /api/backup/setup` and `backup init` connect it (the
 first copy that opens and passes a check) instead of creating, and the
 coordinator holds the `connect` slot meanwhile. The answer's `connected` names

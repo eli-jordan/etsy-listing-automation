@@ -1,20 +1,3 @@
-"""The two ways back from a missing repository: create a new one, or
-connect an existing one (workspace-backup spec, *Missing repository*;
-plan, PR 8).
-
-Both run only while ``backup.repository`` holds no restic repository, and
-both take the folder the seller confirms, which becomes
-``backup.repository`` when it differs: a workspace restored onto another
-machine names a folder from the old one.
-
-Each says only where the repository comes from and how the password is got;
-``backup_provisioning`` does the rest, in its one order, leaving nothing
-behind when it is refused or fails. **The password** is the one in ``.env``
-(or the environment) when there is one, else the one the seller gives. A
-new repository's must be ``MIN_PASSWORD_LENGTH`` long; an existing one's is
-whatever it was made with.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -45,8 +28,6 @@ class RepositoryPresentError(ConflictError):
 
 @dataclass(frozen=True)
 class Replacement:
-    """What the seller confirmed for either action."""
-
     repository: Path
     """The local folder, new or empty; saved as ``backup.repository``."""
     password: str | None
@@ -62,9 +43,6 @@ def create_new_repository(
     binaries: ResticBinaries,
     restic: OpenRepository | None = None,
 ) -> None:
-    """Create a repository at ``answers.repository`` and save it as the
-    backup repository; refuses a folder that holds files, and a destination
-    that still holds a repository's copy."""
     _replace(workspace, NewRepository(), answers, binaries=binaries, restic=restic)
 
 
@@ -76,8 +54,6 @@ def connect_repository(
     binaries: ResticBinaries,
     restic: OpenRepository | None = None,
 ) -> None:
-    """Copy the repository at ``source`` into the new folder
-    ``answers.repository``, check the password opens it, then save both."""
     _replace(workspace, DestinationCopy((source,)), answers, binaries=binaries, restic=restic)
 
 

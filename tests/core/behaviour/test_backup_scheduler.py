@@ -91,7 +91,7 @@ def coordinator(
 
 
 def _ran(coordinator: BackupCoordinator, restic: InMemoryRestic) -> bool:
-    started = coordinator.check()
+    started = coordinator.start_if_due()
     coordinator.join(timeout=10)
     assert started == (restic.ran("back_up") > 0)
     return started
@@ -134,11 +134,11 @@ def test_nothing_starts_while_a_run_is_in_progress(
     coordinator: BackupCoordinator, restic: InMemoryRestic, clock: Clock
 ) -> None:
     restic.hold("back_up")
-    assert coordinator.check()
+    assert coordinator.start_if_due()
     wait_for(lambda: restic.ran("back_up") == 1)
 
     clock.now = NOW + timedelta(days=3)
-    assert not coordinator.check()
+    assert not coordinator.start_if_due()
     with pytest.raises(BackupBusyError) as refused:
         coordinator.run_now()
     assert isinstance(refused.value, ConflictError)
@@ -174,10 +174,10 @@ def test_a_failed_run_is_tried_again_an_hour_later_not_at_every_check(
     assert _ran(coordinator, restic)
 
     clock.now = NOW + RETRY_AFTER - timedelta(minutes=1)
-    assert not coordinator.check()
+    assert not coordinator.start_if_due()
 
     clock.now = NOW + RETRY_AFTER
-    assert coordinator.check()
+    assert coordinator.start_if_due()
     coordinator.join(timeout=10)
     assert restic.ran("back_up") == 2
 

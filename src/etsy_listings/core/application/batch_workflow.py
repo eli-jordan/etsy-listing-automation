@@ -1,18 +1,3 @@
-"""A batch from confirm to review: creating its listings, the seller's
-controls over its AI queue, its record, and the reads the batch pages and
-the listing editor make of it (batch-creation spec, *Confirming a batch*
-through *Review workflow*; ADR-0048; module-structure plan, PR 7).
-
-Creating listings is ``batches``' -- ``confirm`` and ``retry_row`` allocate
-each name under that listing's write lock and are idempotent, so a repeat
-finishes the same batch rather than making a second. This module decides
-around them: a new batch is not created into a queue that cannot run
-(``BatchQueue.blocked``), Retry recreates a failed row or requeues its AI or
-refuses, and every change that queues work wakes the queue. The queue is
-:class:`~etsy_listings.core.application.ai.batch_queue.BatchQueue`, the one
-the application runtime's AI coordinator dispatches from (ADR-0048).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -60,9 +45,6 @@ from etsy_listings.core.workspace.workspace import Workspace
 ProposalState = Literal["ready", "stale", "resolved"]
 
 
-# ------------------------------------------------------------- confirming
-
-
 def confirm_batch(
     workspace: Workspace,
     records: BatchRecords,
@@ -72,14 +54,7 @@ def confirm_batch(
 ) -> Batch:
     """Create one listing per creatable row of staging session
     ``session_id`` -- or finish the batch a previous confirm began -- and
-    wake the queue for the rows now queued.
-
-    Only a *new* batch asks whether the queue could draft: one that exists
-    already has listings half made, and is finished whatever AI's state.
-    Refusals, with nothing created: :class:`AiDraftingBlockedError`,
-    ``batches.ConfirmRefusedError`` (names to fix, nothing creatable, a shared ref
-    broken since staging), :class:`StagingMissingError`, ``InvalidNameError``.
-    """
+    wake the queue for the rows now queued."""
     workspace.staging_dir(session_id)
     if records.batches.load(session_id) is None:
         blocked = queue.blocked()
@@ -93,9 +68,6 @@ def confirm_batch(
     return batch
 
 
-# --------------------------------------------------------------- retrying
-
-
 def retry_batch_row(
     workspace: Workspace,
     records: BatchRecords,
@@ -104,10 +76,6 @@ def retry_batch_row(
     *,
     queue: BatchQueue,
 ) -> Batch:
-    """Retry one row (UI doc §7): its creation, if that failed -- which
-    queues it once it exists -- else its AI, keeping the saved brief.
-    :class:`NothingToRetryError` for a row whose AI is not failed, stopped or
-    cancelled, or whose listing was deleted."""
     batch = read_batch(workspace, records.batches, batch_id)
     target = _row(batch, row_id)
     if target.creation == "failed":
@@ -126,8 +94,6 @@ def retry_batch(
     *,
     queue: BatchQueue,
 ) -> Batch:
-    """**Retry N failed**: every row whose creation failed is created, then
-    every row whose AI failed is queued again."""
     batch = read_batch(workspace, records.batches, batch_id)
     failed = {row.id for row in batch.rows if row.creation == "failed"}
     _recreate(workspace, records, batch_id, failed, queue=queue)
@@ -148,14 +114,9 @@ def _recreate(
     queue.wake()
 
 
-# --------------------------------------------- steering and the record
-
-
 def cancel_batch(
     workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueue
 ) -> Batch:
-    """**Cancel batch** (spec, *Cancellation and deletion*): queued rows are
-    stopped and running ones asked to stop. Everything written stays."""
     read_batch(workspace, batches, batch_id)
     queue.cancel(batch_id)
     return read_batch(workspace, batches, batch_id)
@@ -164,7 +125,6 @@ def cancel_batch(
 def resume_batch(
     workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueue
 ) -> Batch:
-    """**Resume**: stopped and cancelled rows join the queue again."""
     read_batch(workspace, batches, batch_id)
     queue.resume(batch_id)
     return read_batch(workspace, batches, batch_id)
@@ -173,10 +133,6 @@ def resume_batch(
 def delete_batch(
     workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueue
 ) -> None:
-    """Delete the batch record (spec, *Cancellation and deletion*): its
-    queued and running work is cancelled first, then only the record goes --
-    rows, review flags, queue state and its frozen template. Designs,
-    listings, briefs and proposals are the workspace's and stay."""
     read_batch(workspace, batches, batch_id)
     queue.cancel(batch_id)
     with batches.lock(batch_id):
@@ -185,8 +141,7 @@ def delete_batch(
 
 
 def rename_batch(workspace: Workspace, batches: BatchStore, batch_id: str, label: str) -> Batch:
-    """The label only, so its id -- and every link to it -- stays. A blank
-    label keeps the one it had."""
+    """The label only, so its id -- and every link to it -- stays."""
     with batches.lock(batch_id):
         batch = read_batch(workspace, batches, batch_id)
         label = label.strip()
@@ -199,9 +154,6 @@ def rename_batch(workspace: Workspace, batches: BatchStore, batch_id: str, label
 def mark_reviewed(
     workspace: Workspace, batches: BatchStore, batch_id: str, row_id: str, *, reviewed: bool
 ) -> Batch:
-    """Mark reviewed / Mark needs review (spec, *Review workflow*).
-    :class:`BatchRowNotReviewableError` for a row still queued or drafting,
-    deleted, or never created."""
     read_batch(workspace, batches, batch_id)
     try:
         return batches.review(batch_id, row_id, reviewed=reviewed)
@@ -209,9 +161,6 @@ def mark_reviewed(
         raise BatchRowMissingError(row_id) from exc
     except NotReviewableError as exc:
         raise BatchRowNotReviewableError(exc.args[0]) from exc
-
-
-# ------------------------------------------------------------------ reads
 
 
 def read_batch(workspace: Workspace, batches: BatchStore, batch_id: str) -> Batch:
@@ -225,9 +174,7 @@ def read_batch(workspace: Workspace, batches: BatchStore, batch_id: str) -> Batc
 
 
 def batch_row_upload(workspace: Workspace, batches: BatchStore, batch_id: str, row_id: str) -> Path:
-    """The upload a row was made from: what a row that was never created
-    shows on the summary, having no listing design. Kept beside the batch
-    for Retry once the staging session has gone."""
+    """The upload a row was made from, kept beside the batch."""
     batch = read_batch(workspace, batches, batch_id)
     try:
         path = row_upload(workspace, batch, row_id)
@@ -239,10 +186,6 @@ def batch_row_upload(workspace: Workspace, batches: BatchStore, batch_id: str, r
 
 
 def deployable(workspace: Workspace, row: BatchRow) -> bool:
-    """Whether a batch deploy takes this row (ADR-0059): marked reviewed,
-    its listing there to deploy and not drafting, with changes its last
-    apply did not deploy. A reviewed row already deployed stays out until
-    it is edited again."""
     return (
         row.reviewed
         and reviewable(row)
@@ -255,8 +198,7 @@ def batch_deploy_listings(
     workspace: Workspace, batches: BatchStore, batch_id: str
 ) -> tuple[str, ...]:
     """The listings a batch plan deploys, in the batch's row order: every
-    :func:`deployable` row. :class:`NothingToDeployError` when there are
-    none, so no empty plan is queued."""
+    :func:`deployable` row, refusing an empty plan."""
     batch = read_batch(workspace, batches, batch_id)
     names = tuple(dict.fromkeys(row.name for row in batch.rows if deployable(workspace, row)))
     if not names:
@@ -271,10 +213,8 @@ class ListingMembership:
 
 
 def listing_batch(workspace: Workspace, batches: BatchStore, name: str) -> ListingMembership | None:
-    """The batch that made listing ``name``, for the editor's row above the
-    head (UI doc §8), or ``None``. A row names its listing exactly, as the
-    rename and delete hooks match it; a deleted row is not the listing's.
-    Should two batches both claim it, the newer wins."""
+    """The newest batch whose live row names listing ``name`` exactly, as
+    the rename and delete hooks match it, or ``None``."""
     workspace.listing_dir(name)
     newest = sorted(batches.all(), key=lambda b: (b.created_at, b.id), reverse=True)
     for batch in newest:
@@ -286,7 +226,7 @@ def listing_batch(workspace: Workspace, batches: BatchStore, name: str) -> Listi
 
 @dataclass(frozen=True)
 class RecentBatch:
-    """One row of Recent batches (UI doc §2): a confirmed batch, with where
+    """One row of Recent batches: a confirmed batch, with where
     it stands, or a staging session not confirmed yet (``standing`` ``None``),
     which reopens staging and expires."""
 
@@ -308,9 +248,7 @@ def recent_batches(
     now: datetime | None = None,
 ) -> list[RecentBatch]:
     """Every batch, and every staging session not confirmed yet, newest
-    first. Expired staging is swept first, so the list never offers a
-    session that has gone. A confirmed session stays until every row is
-    materialised and shares its batch's id: that one is listed as the
+    first. A confirmed session shares its batch's id and is listed as the
     batch."""
     staging.sweep(now=now or datetime.now(UTC))
     recorded = batches.all()
@@ -348,10 +286,8 @@ def row_proposal(
     workspace: Workspace, proposals: ProposalStore, row: BatchRow, *, facts: WorkspaceFacts
 ) -> tuple[ProposalState | None, list[str]]:
     """The row's listing's cached proposal, judged as the editor judges it
-    (ADR-0049), so the summary's *Stale: ...* is the drawer's: sections
-    waiting and current, waiting but out of date (with why), or every
-    section dealt with. ``None`` without a listing or a proposal, or when
-    the listing will not read."""
+    (ADR-0049); ``None`` without a listing or a proposal, or when the
+    listing will not read."""
     record = proposals.load(row.name) if has_listing(row) else None
     if record is None:
         return None, []
