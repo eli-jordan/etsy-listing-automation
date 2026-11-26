@@ -101,15 +101,7 @@ def _swatch_glyph() -> str | None:
 
 
 def _echo_event(event: Event) -> None:
-    """Progress line, prefixed with one colour block per garment the scene
-    shows. The colour is sampled from the mockup itself, so a run reads as the
-    colour set it produced instead of a column of slugs -- and a miscalibrated
-    bounding box is visible in the swatch without opening the PNG.
-
-    ``color=True`` where a swatch is printed: the decision that colour is
-    wanted has already been made above, so click must not second-guess it by
-    stripping the escapes back out.
-    """
+    """Progress line, prefixed with one colour block per garment the scene shows."""
     glyph = _swatch_glyph() if event.swatches else None
     if glyph is None:
         typer.echo(f"  {event.message}")
@@ -384,10 +376,8 @@ def unlock(
 
     `publish` polls for up to ~10 minutes before giving up; this calls
     Printify's own remedy (`publishing_failed.json`) for the product that
-    poll named. Its one job has never been exercised against a genuinely
-    stuck publish -- none has stuck in probing -- so it ships built and
-    unverified rather than withheld. Re-run `apply` afterwards; this command
-    only asks Printify to clear the lock, it does not touch the lockfile.
+    poll named. It only asks Printify to clear the lock and does not touch
+    the lockfile, so re-run `apply` afterwards.
     """
     unlock_listing(open_workspace(root), listing, connections.printify_client)
 
@@ -447,8 +437,6 @@ def main() -> None:
     try:
         app()
     except OSError as exc:
-        # `... | head` closing the pipe early is not a failure worth a
-        # traceback; exit 1 as Click does for its own broken-pipe case.
         if not terminal.stdout_reader_gone(exc):
             raise
         terminal.discard_stdout()
