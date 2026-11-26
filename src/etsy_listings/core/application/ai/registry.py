@@ -151,6 +151,9 @@ class AiRun:
             if self._ticket is not None:
                 self._ticket.release()
 
+    def fail_unless_finished(self, message: str) -> None:
+        self.finish("failed", message)
+
     def wait_settled(self, timeout: float | None = None) -> bool:
         """Block until the run has finished and its listeners have heard.
         ``False`` on timeout."""
@@ -293,8 +296,10 @@ class AiRunRegistry:
     def release_deploy(self, listings: Iterable[str]) -> None:
         keys = {name.casefold() for name in listings}
         with self._lock:
-            self._deploying.subtract(keys)
-            self._deploying += Counter()  # drop the zeroes
+            for key in keys:
+                self._deploying[key] -= 1
+                if self._deploying[key] <= 0:
+                    del self._deploying[key]
 
     def deploying(self, listing: str) -> bool:
         with self._lock:

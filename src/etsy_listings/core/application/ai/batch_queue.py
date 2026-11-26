@@ -11,7 +11,12 @@ from etsy_listings.core.application.ai.readiness import (
     batch_blocked,
     current_providers,
 )
-from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
+from etsy_listings.core.application.ai.registry import (
+    AiRun,
+    AiRunRegistry,
+    Conflict,
+    Deploying,
+)
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
@@ -36,19 +41,20 @@ Slot = tuple[str, str]
 
 def queue_order(batches: list[Batch], after: str | None) -> list[Slot]:
     """Every queued row in the order the dispatcher would start them, with
-    nothing holding a listing: the batches oldest first, turned so the one
-    after ``after`` (the batch served last) leads, then their queued rows
-    dealt out one per batch in turn."""
-    ordered = sorted(batches, key=lambda b: (b.created_at, b.id))
+    nothing holding a listing; ``after`` is the batch served last."""
+    ordered = _rotated_after(sorted(batches, key=lambda b: (b.created_at, b.id)), after)
+    return _round_robin([[(b.id, row.id) for row in b.rows if row.ai == "queued"] for b in ordered])
+
+
+def _rotated_after(ordered: list[Batch], after: str | None) -> list[Batch]:
     ids = [b.id for b in ordered]
-    if after in ids:
-        turn = ids.index(after) + 1
-        ordered = ordered[turn:] + ordered[:turn]
-    return _dealt([[(b.id, row.id) for row in b.rows if row.ai == "queued"] for b in ordered])
+    if after not in ids:
+        return ordered
+    turn = ids.index(after) + 1
+    return ordered[turn:] + ordered[:turn]
 
 
-def _dealt(lanes: list[list[Slot]]) -> list[Slot]:
-    """Every lane's slots, one from each lane in turn."""
+def _round_robin(lanes: list[list[Slot]]) -> list[Slot]:
     order: list[Slot] = []
     for depth in range(max((len(lane) for lane in lanes), default=0)):
         order.extend(lane[depth] for lane in lanes if depth < len(lane))
@@ -84,12 +90,14 @@ class BatchQueue:
         registry.subscribe(self._finished)
 
     def start(self) -> None:
-        """Return interrupted rows to the queue, then start dispatching."""
-        for batch in self._batches.all():
-            self._update(batch.id, lambda row: row.ai == "running", ai="queued")
+        self._requeue_interrupted_rows()
         self._thread = threading.Thread(target=self._loop, name="batch-queue", daemon=True)
         self._thread.start()
         self.wake()
+
+    def _requeue_interrupted_rows(self) -> None:
+        for batch in self._batches.all():
+            self._update(batch.id, lambda row: row.ai == "running", ai="queued")
 
     def stop(self, *, timeout: float = 10.0) -> None:
         """Start nothing more. Runs already going are the runner's to stop."""
@@ -165,9 +173,7 @@ class BatchQueue:
                 origin="batch",
                 ticket=ticket,
             )
-            if not isinstance(run, AiRun):
-                # A manual run holds the listing, or a deploy does: a
-                # row Retry queued mid-deploy starts once the deploy ends.
+            if isinstance(run, Conflict | Deploying):
                 return False
             self._save_claim(batch, row, run)
             with self._state:

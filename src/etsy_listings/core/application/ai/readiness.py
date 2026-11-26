@@ -81,11 +81,6 @@ def unready_reason(
     tooling is missing, since the former is fixed by editing the listing and
     the latter is not the listing's to fix at all.
 
-    A design, a brief, a usable garment profile (query extraction needs its
-    item type), ``prompts/seo.md`` and ``prompts/market-queries.md``, and a
-    ready provider. An empty brief is allowed only when ``draft_brief`` is
-    true, and then ``prompts/brief.md`` is needed too.
-
     The listing itself being saved is the caller's to check first.
     """
     drafting = draft_brief and not listing.brief.strip()

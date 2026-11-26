@@ -158,8 +158,7 @@ class AiRunner:
                 )
                 self._end_failed(run, INTERNAL_ERROR_MESSAGE)
         finally:
-            # A defect in the ending itself must still end the run.
-            run.finish("failed", INTERNAL_ERROR_MESSAGE)
+            run.fail_unless_finished(INTERNAL_ERROR_MESSAGE)
 
     def _end_failed(self, run: AiRun, message: str) -> None:
         active = run.active_step
