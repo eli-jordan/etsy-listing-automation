@@ -7,7 +7,14 @@ const CAP = "Templates hold up to 10 labels";
 function bar(over: Partial<Parameters<typeof LabelsBar>[0]> = {}) {
   const onChange = vi.fn();
   render(
-    <LabelsBar saved={[]} draft={[]} known={[]} failure={null} onChange={onChange} {...over} />,
+    <LabelsBar
+      saved={[]}
+      draft={[]}
+      catalogLabels={[]}
+      failure={null}
+      onChange={onChange}
+      {...over}
+    />,
   );
   return onChange;
 }
@@ -51,8 +58,8 @@ describe("LabelsBar", () => {
 
   describe("adding a label", () => {
     it("suggests labels the template does not hold, at most six", () => {
-      const known = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "held", "Pending"];
-      bar({ saved: ["held"], draft: ["held", "pending"], known });
+      const catalogLabels = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "held", "Pending"];
+      bar({ saved: ["held"], draft: ["held", "pending"], catalogLabels });
 
       openField();
 
@@ -60,7 +67,7 @@ describe("LabelsBar", () => {
     });
 
     it("offers a hand-edited label as it would save, and only if it could", () => {
-      bar({ known: ["Theme:Xmas", "theme:xmas", "oops!"] });
+      bar({ catalogLabels: ["Theme:Xmas", "theme:xmas", "oops!"] });
 
       openField();
 
@@ -68,7 +75,7 @@ describe("LabelsBar", () => {
     });
 
     it("narrows suggestions to the typed text and offers Create", () => {
-      bar({ known: ["cosy", "warm"] });
+      bar({ catalogLabels: ["cosy", "warm"] });
 
       type("cos");
 
@@ -76,7 +83,7 @@ describe("LabelsBar", () => {
     });
 
     it("adds the first suggestion on Enter", () => {
-      const onChange = bar({ saved: ["warm"], draft: ["warm"], known: ["cosy"] });
+      const onChange = bar({ saved: ["warm"], draft: ["warm"], catalogLabels: ["cosy"] });
 
       fireEvent.keyDown(type("cos"), { key: "Enter" });
 
@@ -92,7 +99,7 @@ describe("LabelsBar", () => {
     });
 
     it("creates the text when Create is clicked, over a suggestion", () => {
-      const onChange = bar({ known: ["cosy"] });
+      const onChange = bar({ catalogLabels: ["cosy"] });
 
       type("cos");
       fireEvent.click(screen.getByRole("option", { name: "Create “cos”" }));
@@ -101,7 +108,7 @@ describe("LabelsBar", () => {
     });
 
     it("adds a suggestion when it is clicked", () => {
-      const onChange = bar({ known: ["cosy"] });
+      const onChange = bar({ catalogLabels: ["cosy"] });
 
       openField();
       fireEvent.click(screen.getByRole("option", { name: "cosy" }));
@@ -122,7 +129,7 @@ describe("LabelsBar", () => {
     });
 
     it("does nothing on Enter with no text", () => {
-      const onChange = bar({ known: ["cosy"] });
+      const onChange = bar({ catalogLabels: ["cosy"] });
 
       fireEvent.keyDown(openField(), { key: "Enter" });
 

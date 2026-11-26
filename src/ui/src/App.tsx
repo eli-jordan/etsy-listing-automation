@@ -511,7 +511,7 @@ export function CalibratorPage() {
               key={templateName}
               saved={session.saved?.labels ?? []}
               draft={config.labels}
-              known={knownLabels}
+              catalogLabels={knownLabels}
               failure={unsavedLabelsFailure(session)}
               onChange={(labels) => setConfig({ ...config, labels })}
             />
