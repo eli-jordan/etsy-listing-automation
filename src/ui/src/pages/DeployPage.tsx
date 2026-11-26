@@ -65,8 +65,6 @@ export function DeployPage() {
   const leavingRef = useRef(false);
   const applyStartRef = useRef<Promise<void> | null>(null);
   const [status, setStatus] = useState("");
-  /** The run this page is following, so a reconnect answering after Back
-   * opens nothing. */
   const activeRunRef = useRef<string | null>(null);
   const reconnectRef = useRef<(id: string) => void>(() => {});
 
@@ -76,7 +74,6 @@ export function DeployPage() {
     streamRef.current = openRunStream(id, {
       ...(lastEventId === undefined ? {} : { lastEventId }),
       onEvent: (event) => setState((s) => applyRunEvent(s, event)),
-      // `openEventStream` does not retry, so this is what keeps the page live.
       onError: () => {
         if (activeRunRef.current !== id) return;
         setStatus("Connection lost. Reconnecting…");
