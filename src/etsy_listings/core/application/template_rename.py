@@ -29,6 +29,7 @@ active deploys is a check, not a lock: the second-process caveat in
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,7 +43,12 @@ from etsy_listings.core.batches.records import BatchRecords
 from etsy_listings.core.config.template_refs import rename_template_refs
 from etsy_listings.core.engine.template_refs import follow_template_rename
 from etsy_listings.core.workspace import locks
-from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
+from etsy_listings.core.workspace.atomic import (
+    REPLACE_ATTEMPTS,
+    REPLACE_BACKOFF_SECONDS,
+    read_bytes_retrying,
+    write_yaml_atomic,
+)
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
@@ -118,11 +124,30 @@ def _move(workspace: Workspace, old: str, new: str, destination: Path) -> None:
     if destination.exists():
         raise TemplateNameTakenError(new)
     try:
-        workspace.template_dir(old).rename(destination)
+        _rename_waiting_out_readers(workspace.template_dir(old), destination)
     except PermissionError as exc:
         raise TemplateInUseError(f"A file in {old!r} is open; try again in a moment") from exc
     except OSError as exc:
         raise InvalidNameError(new) from exc
+
+
+def _rename_waiting_out_readers(source: Path, destination: Path) -> None:
+    """``source.rename``, waiting out a read. Windows refuses to rename a
+    directory while any file in it is open, and the app's own reads open
+    them all the time: the page that asks for a rename has just fetched the
+    template's thumbnail and rendered its preview. Those reads lasted 30ms
+    at most, and refused one rename in five on the first try. They get the
+    atomic writer's bound, about a second (`_replace` in
+    :mod:`~etsy_listings.core.workspace.atomic`); a file still open after
+    that is held by something else, and is refused."""
+    for _ in range(REPLACE_ATTEMPTS - 1):
+        try:
+            source.rename(destination)
+        except PermissionError:
+            time.sleep(REPLACE_BACKOFF_SECONDS)
+        else:
+            return
+    source.rename(destination)
 
 
 def _follow_listing_templates(workspace: Workspace, old: str, new: str, outcome: _Outcome) -> None:

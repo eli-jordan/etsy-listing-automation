@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from etsy_listings.core.application import template_rename as template_rename_module
 from etsy_listings.core.application.refusals import (
     TemplateInUseError,
     TemplateMissingError,
@@ -285,10 +286,33 @@ def test_a_file_held_open_refuses_with_nothing_changed(
         raise PermissionError
 
     monkeypatch.setattr(Path, "rename", held_open)
+    monkeypatch.setattr(template_rename_module, "REPLACE_BACKOFF_SECONDS", 0)
 
     with pytest.raises(TemplateInUseError):
         _rename(workspace, records)
     assert listing_file(workspace.root).read_bytes() == before
+
+
+def test_a_file_open_for_a_moment_is_waited_out(
+    workspace: Workspace, records: BatchRecords, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The app's own reads (the page's thumbnail and preview) hold a
+    template's files for milliseconds; Windows refuses the rename meanwhile."""
+    rename = Path.rename
+    refusals = iter([PermissionError(), PermissionError()])
+
+    def briefly_open(self: Path, target: Path) -> Path:
+        refusal = next(refusals, None)
+        if refusal is not None:
+            raise refusal
+        return rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", briefly_open)
+
+    _rename(workspace, records)
+
+    assert workspace.has_template(NEW)
+    assert not workspace.has_template(OLD)
 
 
 # ------------------------------------------------------------ a deployed listing
