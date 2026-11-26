@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from PIL import Image, UnidentifiedImageError
 
@@ -433,25 +433,30 @@ def _depicted(
     for entry in listing.media:
         if not isinstance(entry, TemplateMediaEntry):
             continue
-        shown, unnamed = _scene_colours(entry, templates)
-        if unnamed:
+        scene = _scene_colours(entry, templates)
+        if scene.single_names_none:
             colourless.setdefault(entry.template, None)
-        for colour in shown:
+        for colour in scene.shown:
             colours.setdefault(colour, None)
     return list(colours), list(colourless)
 
 
+class _SceneColours(NamedTuple):
+    shown: list[str]
+    single_names_none: bool
+
+
 def _scene_colours(
     entry: TemplateMediaEntry, templates: Mapping[str, TemplateInfo]
-) -> tuple[list[str], bool]:
-    """The colours one media entry's scene shows, and whether it is a
-    ``single`` scene that names none."""
+) -> _SceneColours:
     if entry.colour is not None:
-        return [entry.colour], False
+        return _SceneColours([entry.colour], single_names_none=False)
     info = templates.get(entry.template)
     if info is None or info.kind == "colour-matrix":
-        return [], False
-    return sorted(info.colours), info.kind == "single" and not info.colours
+        return _SceneColours([], single_names_none=False)
+    return _SceneColours(
+        sorted(info.colours), single_names_none=info.kind == "single" and not info.colours
+    )
 
 
 def _unclassified_issue(severity: Severity, profile: str, colours: list[str]) -> list[Issue]:
