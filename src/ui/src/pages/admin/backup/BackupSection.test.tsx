@@ -643,7 +643,7 @@ describe("Restore", () => {
     target: `${LIVE}-restore-bbbbbbbb`,
     started_at: iso(0),
     outcome: "running",
-    percent: 0.25,
+    fraction: 0.25,
     bytes_done: 5_000_000_000,
     bytes_total: 20_100_000_000,
     files_done: 1285,
@@ -755,7 +755,7 @@ describe("Restore", () => {
     withPolls(async () => {
       await restoreNewest();
       status.mockResolvedValue(
-        healthy({ restore: restoring({ outcome: "succeeded", percent: 1, files_done: 5142 }) }),
+        healthy({ restore: restoring({ outcome: "succeeded", fraction: 1, files_done: 5142 }) }),
       );
       await poll();
       const done = await screen.findByRole("dialog", { name: "Restored 5,142 files" });
@@ -784,7 +784,7 @@ describe("Restore", () => {
       const dialog = await restoreNewest();
       await userEvent.click(within(dialog).getByRole("button", { name: "Keep working" }));
       status.mockResolvedValue(
-        healthy({ restore: restoring({ outcome: "succeeded", percent: 1, files_done: 5142 }) }),
+        healthy({ restore: restoring({ outcome: "succeeded", fraction: 1, files_done: 5142 }) }),
       );
       await poll();
       expect(await screen.findByText(/^Restored the backup from/)).toBeVisible();
@@ -829,7 +829,7 @@ describe("Restore", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     status.mockResolvedValue(
-      healthy({ restore: restoring({ outcome: "succeeded", percent: 1, files_done: 5142 }) }),
+      healthy({ restore: restoring({ outcome: "succeeded", fraction: 1, files_done: 5142 }) }),
     );
     open();
     await userEvent.click(await screen.findByRole("button", { name: "Show" }));

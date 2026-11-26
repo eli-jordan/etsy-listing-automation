@@ -7342,6 +7342,11 @@
             ],
             "title": "Finished At"
           },
+          "fraction": {
+            "default": 0.0,
+            "title": "Fraction",
+            "type": "number"
+          },
           "message": {
             "anyOf": [
               {
@@ -7363,11 +7368,6 @@
             ],
             "title": "Outcome",
             "type": "string"
-          },
-          "percent": {
-            "default": 0.0,
-            "title": "Percent",
-            "type": "number"
           },
           "seconds_left": {
             "anyOf": [

@@ -80,7 +80,7 @@ def test_a_restore_runs_on_its_own_thread_and_its_status_follows_it(
     coordinator.join_restore(timeout=10)
 
     assert running is not None
-    assert (running.outcome, running.percent, running.bytes_total) == ("running", 0.25, 8_000_000)
+    assert (running.outcome, running.fraction, running.bytes_total) == ("running", 0.25, 8_000_000)
     assert (running.snapshot_id, running.seconds_left) == (SNAPSHOT, 180)
     done = coordinator.overview().restore
     assert done is not None
@@ -130,7 +130,7 @@ def test_stop_ends_the_restore_part_way_and_says_how_far_it_got(
 
     stopped = coordinator.overview().restore
     assert stopped is not None
-    assert (stopped.outcome, stopped.percent) == ("stopped", 0.25)
+    assert (stopped.outcome, stopped.fraction) == ("stopped", 0.25)
     assert restic.stopped("restore") == 1
 
 

@@ -5116,6 +5116,11 @@ export interface components {
       files_total?: number | null;
       /** Finished At */
       finished_at?: string | null;
+      /**
+       * Fraction
+       * @default 0
+       */
+      fraction: number;
       /** Message */
       message?: string | null;
       /**
@@ -5124,11 +5129,6 @@ export interface components {
        * @enum {string}
        */
       outcome: "running" | "succeeded" | "failed" | "stopped";
-      /**
-       * Percent
-       * @default 0
-       */
-      percent: number;
       /** Seconds Left */
       seconds_left?: number | null;
       /** Snapshot Id */

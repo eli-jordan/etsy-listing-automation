@@ -229,7 +229,7 @@ describe("AppShell backup warning", () => {
           target: "D:/restored",
           started_at: "2026-11-23T10:00:00Z",
           outcome: "running",
-          percent: 0.1,
+          fraction: 0.1,
         },
       };
       const status = vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(restoring);
