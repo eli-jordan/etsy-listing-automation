@@ -378,6 +378,10 @@ class TestPreviewScene:
         assert smaller.bounding_box[2].x == pytest.approx(25)
         assert scaled(cfg, 1.0) is cfg
 
+    def test_a_box_valid_at_true_size_survives_a_preview_too_small_to_hold_it(self) -> None:
+        smaller = scaled(RenderConfig(bounding_box=BOX), 0.005)
+        assert smaller.bounding_box[2].x == pytest.approx(0.5)
+
     def test_compose_paints_the_design_inside_the_scaled_box_and_reads_maps_only_when_asked(
         self, workspace: Workspace
     ) -> None:

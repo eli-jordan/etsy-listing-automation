@@ -60,19 +60,12 @@ TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
 @dataclass(frozen=True)
 class TemplatePhoto:
-    """One scene photo: which colour it is (``None`` for a fixed scene) and
-    where it really is, workspace-relative."""
-
     colour: str | None
     file: str
 
 
 @dataclass(frozen=True)
 class TemplateOverview:
-    """One template as the calibrator's rail shows it. Calibration status is
-    derived on every read, never stored -- a persisted flag could disagree
-    with the config beside it."""
-
     name: str
     kind: TemplateKind | None
     colours: list[str]
@@ -151,9 +144,6 @@ def _not_loaded_reason(state: TemplateState) -> str | None:
 
 
 def _stand_in_photo(workspace: Workspace, name: str, state: TemplateState) -> Path | None:
-    """The photo that stands for the template: its main photo while it loads
-    and has one, else whichever the folder offers, since listing a template is
-    how the seller reaches the UI that fixes it."""
     if state.config is None:
         return workspace.template_preview_photo(name)
     try:
@@ -163,8 +153,7 @@ def _stand_in_photo(workspace: Workspace, name: str, state: TemplateState) -> Pa
 
 
 def _photo_size(photo: Path | None) -> tuple[int | None, int | None]:
-    """From the image header alone (``Image.open`` is lazy). An unreadable
-    file answers ``None``."""
+    """Header only: ``Image.open`` is lazy."""
     if photo is None:
         return None, None
     try:
@@ -176,10 +165,6 @@ def _photo_size(photo: Path | None) -> tuple[int | None, int | None]:
 
 
 def _status_reason(config: AnyTemplate) -> str | None:
-    """Only ``multiple`` has states beyond "has a config": a chart starts
-    with no placements, and a box can be placed before anyone says which
-    colour it depicts. The other kinds get a box when their kind is
-    assigned -- a badly placed box is wrong, not incomplete."""
     if not isinstance(config, MultipleTemplate):
         return None
     if not config.placements:
@@ -206,10 +191,6 @@ def _photos(workspace: Workspace, name: str, config: AnyTemplate) -> list[Templa
 
 
 def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
-    """The template's own photo: ``colour``'s in a colour-matrix set, else
-    whichever stands for the template. :class:`TemplatePhotoMissingError` when
-    there is none, or the colour's suffix is ambiguous -- the case
-    ``template_base_image`` refuses to guess at."""
     require_template(workspace, name)
     source: Path | None
     if colour is None:
@@ -237,8 +218,6 @@ class ColourAssignment:
 
 
 def colour_report(workspace: Workspace, name: str) -> list[ColourAssignment]:
-    """Each photo's colour, before committing to ``colour-matrix``. Writes
-    nothing; ``SlugCollisionError`` for two photos on one slug."""
     require_template(workspace, name)
     photos = workspace.template_photos(name)
     slugs = _colour_slugs(workspace, photos)
@@ -249,15 +228,6 @@ def colour_report(workspace: Workspace, name: str) -> list[ColourAssignment]:
 
 
 def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTemplate:
-    """The first calibration step: say what the template is, and write its
-    starting ``template.yaml``.
-
-    ``colour-matrix`` renames each photo to the slug its name means, as the
-    colour report said it would; a fixed-scene kind makes its one photo
-    ``scene.png`` (ADR-0014). Refusals, nothing written: :class:`TemplateMissingError`,
-    :class:`TemplateAlreadyCalibratedError`, :class:`TemplateKindRefusedError` (no
-    photos, or a set for a fixed scene) and ``SlugCollisionError``.
-    """
     require_template(workspace, name)
     state = CalibrationStore(workspace).state(name)
     if not isinstance(state, TemplateAbsent):
@@ -269,10 +239,6 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
 
     config: AnyTemplate
     if kind == "colour-matrix":
-        # ADR-0004 makes the filename the slug, and this is where that becomes
-        # true: `new` writes the slug into a listing's media, so a photo left
-        # as `Heather Grey.png` fails to render from a template the calibrator
-        # had declared finished.
         photos = _rename_photos_to_slugs(workspace, photos)
         with Image.open(photos[0]) as img:
             size = img.size
@@ -308,27 +274,18 @@ def _default_box(size: tuple[int, int]) -> BoundingBox:
 
 
 def _colour_slugs(workspace: Workspace, photos: list[Path]) -> dict[Path, str]:
-    """Through ``slug_map`` with ``exceptions.yaml``, so the calibrator's
-    slug is the rest of the tool's (ADR-0004). Two photos on one slug raise
-    ``SlugCollisionError`` rather than one being lost at rename time."""
     slugs = slug_map([photo.stem for photo in photos], workspace.load_exceptions())
     return {photo: slugs[photo.stem] for photo in photos}
 
 
 def _rename_photos_to_slugs(workspace: Workspace, photos: list[Path]) -> list[Path]:
-    """Each photo renamed to ``{slug}.png``; the new paths, sorted.
-
-    A case-only rename (``Forest.png`` -> ``forest.png``) goes via a
-    temporary name: on a case-insensitive filesystem ``replace()`` onto a
-    path differing only in case is a no-op, which would make the calibrator
-    behave differently on the two platforms this tool runs on.
-    """
+    """Via a temporary name: on a case-insensitive filesystem a case-only
+    ``replace()`` is a no-op."""
     slugs = _colour_slugs(workspace, photos)
     renamed: list[Path] = []
     for photo in photos:
         target = photo.with_name(f"{slugs[photo]}.png")
-        # By *name*: `WindowsPath("Forest.png") == WindowsPath("forest.png")`,
-        # so a Path comparison would skip exactly the case-only rename.
+        # By name: WindowsPath equality ignores case, so it would skip a case-only rename.
         if photo.name == target.name:
             renamed.append(photo)
             continue
@@ -347,9 +304,6 @@ class SavedConfig:
 
 
 def read_config(workspace: Workspace, name: str) -> SavedConfig:
-    """The template's ``template.yaml`` and when it was last written.
-    Read before its file is stat()ed, so a template with no config to read
-    answers its state's refusal, not an ``OSError``."""
     require_template(workspace, name)
     store = CalibrationStore(workspace)
     with store.lock(name):
@@ -367,10 +321,6 @@ def save_config(workspace: Workspace, name: str, config: AnyTemplate) -> None:
 
 @dataclass(frozen=True)
 class CalibrationSave:
-    """One calibrator save: the whole template document and any flattened
-    mask edits, committed only if ``expected_revision`` is still current.
-    ``request_id`` makes a retried save idempotent."""
-
     config: AnyTemplate
     expected_revision: str
     request_id: str
@@ -419,10 +369,6 @@ def save_calibration(workspace: Workspace, name: str, save: CalibrationSave) -> 
 
 @dataclass(frozen=True)
 class PositionedListing:
-    """A listing that holds its own position for a template (ADR-0058).
-    ``placements`` names the placement IDs a ``multiple`` chart's position
-    covers, sorted; it is empty for a single or colour-matrix box."""
-
     listing: str
     placements: tuple[str, ...]
 
@@ -443,8 +389,6 @@ def positioned_listings(workspace: Workspace, template: str) -> list[PositionedL
 
 
 def _held_position(document: dict[str, object], template: str) -> tuple[str, ...] | None:
-    """The placement IDs ``document`` positions on ``template`` (``()`` for one
-    box), or ``None`` when it holds no position there that could render."""
     positions = document.get("template_positions")
     if document.get("lifecycle") == "deleted" or not isinstance(positions, dict):
         return None
@@ -464,11 +408,6 @@ def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
 
 @dataclass(frozen=True)
 class PreviewGeometry:
-    """Unsaved geometry: what is under the seller's cursor, not what
-    ``template.yaml`` says. ``kind`` is the shape it was given in; ``boxes``
-    one per layer (a ``multiple`` chart's placements, else one); ``colour``
-    the colour-matrix photo to composite over."""
-
     kind: TemplateKind
     boxes: tuple[BoundingBox, ...]
     colour: str | None = None
@@ -479,9 +418,7 @@ class PreviewGeometry:
 
 @dataclass(frozen=True)
 class PreviewScene:
-    """Everything a preview composites except the images themselves: which
-    photo (and the key its derived maps cache under), where those maps live,
-    and the layers in the photo's true pixel space."""
+    """Layers are in the photo's true pixel space."""
 
     photo: ScenePhoto
     derived_dir: Path
@@ -506,14 +443,6 @@ def _drawn_or_saved_renderer(geometry: PreviewGeometry, config: AnyTemplate) -> 
 def unsaved_preview(
     workspace: Workspace, name: str, geometry: PreviewGeometry, *, design: Callable[[], Path]
 ) -> PreviewScene:
-    """The calibrator's live preview. Geometry shaped for another kind than
-    the template is refuses with :class:`TemplatePreviewKindMismatchError`.
-
-    ``design`` resolves the one file every layer composites -- a calibrator
-    test design, whose library is the caller's -- and may refuse; it is asked
-    after the kind check and before the photo is looked for.
-    Refusals: :class:`TemplateMissingError`, the template state's own,
-    :class:`TemplatePhotoMissingError`."""
     config = _load_config(workspace, name)
     if not isinstance(_drawn_or_saved_renderer(geometry, config), PhotoWarpRenderer):
         raise PreparationRequiredError("Prepare the template first: Marigold maps are required")
@@ -543,15 +472,6 @@ def saved_preview(
     design: LayerDesign,
     boxes: LayerBoxes | None = None,
 ) -> PreviewScene:
-    """The saved geometry, as the render stage composites it -- the listing
-    editors' read-only preview. ``colour`` picks the photo of a
-    colour-matrix set and means nothing to the other kinds.
-
-    ``design`` is asked once per layer, with the colour that layer depicts
-    (:func:`~etsy_listings.core.render.config.scene_layers`, the render
-    stage's own pairing), before the photo is looked for. ``boxes`` is the
-    listing's saved position for this template (ADR-0058), so the preview
-    shows the box the render stage renders at."""
     config = _load_config(workspace, name)
     depicted = colour if isinstance(config, ColourMatrixTemplate) else None
     pairs = scene_layers(config, depicted, boxes or {})
@@ -580,9 +500,6 @@ def _scene(
 
 @dataclass(frozen=True)
 class LazyMaps:
-    """The derived maps at a preview base's size, each asked for only when a
-    painted layer displaces (``height``) or shades (``luminance``)."""
-
     height: Callable[[], FloatMap]
     luminance: Callable[[], FloatMap]
 
@@ -595,10 +512,6 @@ def compose_preview(
     design: Callable[[Path], RGBA],
     maps: LazyMaps,
 ) -> Image.Image:
-    """Composite each layer's design onto ``base`` -- the scene's photo,
-    possibly downscaled by ``scale`` -- at the scene's layers, scaled to
-    match. ``design`` decodes a layer's file; a layer with none stays bare,
-    so no layers at all is the photo itself."""
     painted = [
         (scaled(cfg, scale), path)
         for cfg, path in zip(scene.layers, scene.designs, strict=True)
@@ -614,16 +527,9 @@ def compose_preview(
 
 
 def scaled(cfg: RenderConfig, scale: float) -> RenderConfig:
-    """``cfg`` restated on a canvas ``scale`` times the photo's true size.
-
-    Boxes are stored in the photo's true pixel space, so a downscaled base
-    needs them scaled -- and ``displace.strength`` with them, since it is
-    multiplied by an absolute pixel figure (``DISPLACE_MAX_PX``); left alone
-    the editor would show several times the distortion of the render it
-    predicts. ``shade`` is per-pixel. ``model_copy`` skips revalidation on
-    purpose: a box valid at true size must not become degenerate because the
-    preview is small.
-    """
+    """``displace.strength`` scales too: it multiplies an absolute pixel
+    figure. ``model_copy`` skips revalidation, so a true-size box survives a
+    tiny preview."""
     if scale == 1.0:
         return cfg
     return cfg.model_copy(
@@ -637,10 +543,6 @@ def scaled(cfg: RenderConfig, scale: float) -> RenderConfig:
 def template_swatch(
     workspace: Workspace, name: str, colour: str, *, photo: Callable[[Path], RGB]
 ) -> str:
-    """A colour-matrix colour's real garment shade, ``#rrggbb``: the median
-    pixel inside the saved box of the colour's own photo, which ``photo``
-    decodes. Only a colour-matrix template has a photo per colour to sample
-    (:class:`TemplatePhotoMissingError` otherwise, as for a colour with none)."""
     config = _load_config(workspace, name)
     if not isinstance(config, ColourMatrixTemplate):
         raise TemplatePhotoMissingError(f"{name!r} is not a colour-matrix template")
