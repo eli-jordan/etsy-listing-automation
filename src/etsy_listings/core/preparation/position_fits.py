@@ -57,15 +57,10 @@ _MAX_RECORD_BYTES = 1024 * 1024
 
 
 class PositionCoverageError(ArtifactError):
-    """The template's evidence does not reach a listing position, so no fit
-    can be made until preparation infers evidence covering its padded quad."""
-
     reason = "missing_maps"
 
 
 class FitInputs(Record):
-    """Everything a position fit's pixels depend on; its digest is the key."""
-
     template: str
     photo: PhotoIdentity
     placement: PlacementInput
@@ -79,8 +74,6 @@ class FitInputs(Record):
 
 
 class FitRecord(Record):
-    """A fit's ``fit.json``: its inputs and the arrays its archive must hold."""
-
     schema_version: Literal[1]
     inputs: FitInputs
     artifact: PlacementArtifact
@@ -120,7 +113,6 @@ def template_boxes(config: AnyTemplate) -> dict[str | None, BoundingBox]:
 
 
 def positioned_quads(config: AnyTemplate, boxes: LayerBoxes) -> dict[str | None, BoundingBox]:
-    """The layers ``boxes`` moves off the template's own box."""
     own = template_boxes(config)
     return {key: box for key, box in boxes.items() if key in own and box != own[key]}
 
@@ -171,9 +163,6 @@ class PositionFits:
     def requests(
         self, template: str, inputs: PreparationInputs, quads: Mapping[str | None, BoundingBox]
     ) -> dict[str | None, FitRequest]:
-        """A fit request per positioned layer, against the template's current
-        evidence. Refuses with :class:`PositionCoverageError` when that
-        evidence does not cover a posed quad."""
         if not quads:
             return {}
         posed = _with_quads(inputs, quads)
@@ -206,17 +195,14 @@ class PositionFits:
         *,
         verify: bool = True,
     ) -> bool:
-        """Whether the template's current evidence covers every one of
-        ``quads`` (its :func:`padded_quads`; spec, *Evidence coverage*).
-        ``verify=False`` takes its files as sound, for a quick answer."""
+        """``verify=False`` takes the evidence files as sound, for a quick answer."""
         posed = _with_quads(inputs, quads)
         selected = self.evidence.select(posed, self.evidence.current(template), verify=verify)
         return len(selected) == len(posed.placements)
 
     @contextmanager
     def lease(self, keys: Iterable[str]) -> Iterator[None]:
-        """Hold the fits named by ``keys`` against :meth:`prune` until exit,
-        whether or not they exist yet."""
+        """Holds ``keys`` against :meth:`prune`, whether or not they exist yet."""
         held = list(keys)
         with _GUARD:
             _LEASED.update(held)
@@ -251,8 +237,6 @@ class PositionFits:
         return fit
 
     def ensure(self, request: FitRequest) -> PositionFit:
-        """The fit, fitting and storing it first when it is missing, or
-        waiting for the caller already fitting it."""
         key = request.key
         with _GUARD:
             lock = _LOCKS.setdefault((str(self.workspace.root).casefold(), key), threading.Lock())
@@ -318,7 +302,6 @@ class PositionFits:
             write_bytes_atomic(
                 staging / _RECORD, json_bytes(record.model_dump(mode="json")), durable=True
             )
-            # Only reached when the stored fit did not validate: replace it.
             if final.exists():
                 self.workspace.remove_position_fit(key)
             with suppress(FileExistsError, PermissionError):
@@ -342,10 +325,6 @@ class PositionFits:
         return PositionFit(maps, numerical_digest({record.artifact.id: maps}))
 
     def prune(self, keep: Collection[str], *, since: float | None = None) -> list[str]:
-        """Remove every stored fit whose key is not in ``keep``, and any
-        abandoned staging directory. Fits being written or leased are left
-        alone, and so is any entry modified at or after ``since`` -- when
-        ``keep`` was computed -- since a position saved meanwhile may need it."""
         removed = []
         for name in self.workspace.position_fits():
             with _GUARD:
