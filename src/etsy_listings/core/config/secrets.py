@@ -1,13 +1,5 @@
-"""Credentials, read from the *workspace's* gitignored ``.env`` -- never from
-this repository (docs/guides/setup.md).
-
-Process environment wins over the file, which is what makes a one-off
-``PRINTIFY_API_TOKEN=... etsy-listings new...`` work without editing
-anything. Values are read lazily by whoever needs them, and a missing one is
-reported by :class:`MissingCredentialError` naming the exact file it should be
-in -- the alternative was a bare ``401 Unauthorized`` traceback out of httpx,
-which tells the user nothing about what to do next.
-"""
+"""Credentials from the workspace's gitignored ``.env`` (ADR-0025); the process
+environment wins over the file."""
 
 from __future__ import annotations
 
@@ -55,9 +47,6 @@ class MissingCredentialError(UserFacingError):
 
 
 class _EnvValues(BaseSettings):
-    """The raw read. Separate from :class:`Secrets` so the public type stays a
-    plain frozen dataclass that also remembers *which* file it read."""
-
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     printify_api_token: str | None = None
@@ -70,7 +59,7 @@ def _backup_password(env_file: Path) -> str | None:
     override = os.environ.get(BACKUP_PASSWORD_VAR)
     if override or not env_file.is_file():
         return override or None
-    # Passwords may contain a literal ${...}. dotenv expansion would change the key.
+    # dotenv would expand a literal ${...} in the password.
     values = dotenv_values(env_file, interpolate=False, encoding="utf-8")
     folded = {key.upper(): value for key, value in values.items()}
     return folded.get(BACKUP_PASSWORD_VAR) or None
@@ -78,13 +67,6 @@ def _backup_password(env_file: Path) -> str | None:
 
 @dataclass(frozen=True)
 class EtsyAppKey:
-    """The two halves of Etsy's app key, and the one place they are joined.
-
-    A pair rather than a pre-joined string because they are stored, asked for
-    and verified separately; :meth:`header` is the only spelling of the colon,
-    so a request that omits the shared secret cannot be written by accident.
-    """
-
     keystring: str
     shared_secret: str
 
@@ -126,13 +108,6 @@ class Secrets:
         return self.printify_api_token
 
     def require_etsy_app_key(self) -> EtsyAppKey:
-        """Both halves, or a message naming the half that is missing.
-
-        Reported one variable at a time on purpose: "the Etsy app key is
-        missing" sends a user who pasted the keystring back to a page where
-        the keystring is plainly present, and the shared secret sits behind a
-        visibility toggle they may never have clicked.
-        """
         keystring = self._require_etsy_half(ETSY_KEYSTRING_VAR, self.etsy_keystring)
         shared_secret = self._require_etsy_half(ETSY_SHARED_SECRET_VAR, self.etsy_shared_secret)
         return EtsyAppKey(keystring, shared_secret)
