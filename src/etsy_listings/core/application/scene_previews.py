@@ -1,4 +1,5 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
@@ -236,7 +237,7 @@ def _editor_frame(
 ) -> SceneFrame:
     """The interactive composite of an unsaved draft: never cached, and
     refused rather than prepared when its maps are not ready."""
-    try:
+    with _unusable_files_need_preparation(ArtifactError, PredictionError, OSError):
         image = editor_preview(
             workspace,
             name,
@@ -244,10 +245,6 @@ def _editor_frame(
             base=images.photo,
             artwork=lambda: images.artwork(draft.design()),
         )
-    except (ArtifactError, PredictionError, OSError) as exc:
-        # Prepared maps or evidence on disk that cannot be used: not a refusal
-        # of the request, but the same answer as preparation being needed.
-        raise PreparationRequiredError(str(exc)) from exc
     return SceneFrame(image, interactive=True)
 
 
@@ -346,31 +343,39 @@ def _prepared_preview(
         sources = _layer_sources(requested, depicted, design)
         appearance = renderer.config.appearance
         cache = SceneCache(workspace)
-        try:
+        with _unusable_files_need_preparation(ArtifactError):
             fits = PositionFits(workspace).requests(
                 name, inputs, positioned_quads(saved.config, boxes)
             )
             cached = _cached(
                 workspace, name, inputs, cache, _SceneFiles(path, sources, appearance, fits)
             )
-        except ArtifactError as exc:
-            raise PreparationRequiredError(str(exc)) from exc
         if cached is not None:
             png, identity, generation_id = cached
             return RenderedScene(png, identity, generation_id, saved.revision)
         base, photo_pixels = PIXEL_DIGESTS.decode_photo(path)
         layers = _layers(sources)
-    try:
-        with lease_scene(
+    with (
+        _unusable_files_need_preparation(ArtifactError),
+        lease_scene(
             workspace,
             name,
             Composition(base, layers, appearance, photo_pixels=photo_pixels, boxes=boxes),
             expected=inputs,
-        ) as scene:
-            return RenderedScene(
-                scene.encoded(cache), scene.identity, scene.manifest.generation_id, saved.revision
-            )
-    except ArtifactError as exc:
+        ) as scene,
+    ):
+        return RenderedScene(
+            scene.encoded(cache), scene.identity, scene.manifest.generation_id, saved.revision
+        )
+
+
+@contextmanager
+def _unusable_files_need_preparation(*unusable: type[Exception]) -> Iterator[None]:
+    """Prepared maps or evidence on disk that cannot be used are not a refusal
+    of the request, but the same answer as preparation being needed."""
+    try:
+        yield
+    except unusable as exc:
         raise PreparationRequiredError(str(exc)) from exc
 
 
