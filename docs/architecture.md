@@ -1106,7 +1106,9 @@ later. Each traces to a decision.
 
 Every editor that autosaves a document writes through one module,
 `src/ui/src/hooks/writeLoop.ts`. It owns the 800ms debounce from the last edit,
-one write at a time, collapsing edits into the next write, holding an edit until
+long enough that a run of keystrokes collapses into one request and short enough
+that "Saved a moment ago" reads as true; a blur, a tab switch and an unmount cut it
+short, so no save waits on the timer alone. It also owns one write at a time, collapsing edits into the next write, holding an edit until
 it is written, and what a flush reports. A failed or refused edit stays held and
 goes with the next edit or flush; it never retries on its own. The loop has no
 React, no payload and no clock of its own: an owner gives it `send`, `merge` and
@@ -1145,8 +1147,9 @@ session lists those revisions and a preparation at one of them is up to date.
 `pages/admin/useSaveQueue.ts` is a different model, acknowledging per key, and
 does not use the loop.
 
-A flush resolves once no write is out and answers `Settled`: `written`, or not
-with a message. It never rejects, because the debounce, a blur and an unmount
+A flush resolves once no write is out and answers `Settled`: `written`, meaning
+the disk holds every edit made before the flush, or not, with a message in the
+seller's terms. It never rejects, because the debounce, a blur and an unmount
 have nowhere to send a rejection. Callers about to act on the file read the
 answer. Deploy, Create listing template, Back to batch and Clone stay on the page
 when an edit was not written, since each goes on to read a file without it, and
