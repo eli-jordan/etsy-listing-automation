@@ -1157,6 +1157,27 @@ the page head already says why. A template rename and a preparation refuse with
 the message. Delete waits for the flush and goes on regardless: an edit that
 would not save goes with the listing.
 
+## Phone sheets and Back
+
+On a phone, Back closes the open sheet the way it closes a native one, rather
+than leaving the page under it. `src/ui/src/phone/sheetHistory.ts` does it, used
+through `usePhoneModal`. Opening a sheet pushes one history entry: the same URL,
+React Router's own state copied so the router reads it as the page it is on, and
+a `phoneSheet` token carrying a per-page-load id, since a reload leaves an earlier
+load's tokens in history. Back pops the entry; a capture listener on the window,
+registered before the router's, sees the `popstate` first, keeps the router from
+hearing it, and closes the sheet. The page never navigates.
+
+A sheet closed any other way (Done, a swipe, an action) drops its entry with
+`history.back()`, again unheard by the router. It waits a tick first, because an
+action may navigate as it closes: React Router pushes the new page a microtask
+later, and going back then would undo the navigation. When something else is on
+top by then, the entry stays, an orphan: Back from the new page lands on it and
+the router shows the old page, and the next Back skips the orphan's duplicate of
+that page, so one Back still goes one page back. `test_phone_listings_browser.py`
+covers Back on a sheet, on a sheet that hands over to a confirm, and after a
+sheet closed by Cancel.
+
 ## Frontend build and asset distribution
 
 `src/ui` is a self-contained npm project: React source and colocated Vitest
