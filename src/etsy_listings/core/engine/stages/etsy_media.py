@@ -1,43 +1,3 @@
-"""The ``etsy_media`` stage: upload what changed, reorder/detach with one
-``image_ids`` PATCH, then the per-colour variation-image links (decisions 5
-and 6).
-
-**The manifest is `listing.media`'s images, in order** -- ADR-0031's
-full-replacement media sync retained, ids now surviving a reorder (decision
-5). Videos share `media:` because it is the gallery, but Etsy ranks
-images among images and places videos by a separate mechanism (decision 9),
-so this stage never sees one: ranks, `MediaChange`s and the snapshot count
-images only, and adding a video is not a reason for this stage to run. Each entry's
-``ref`` is ``"{template}:{colour}"`` for a colour-matrix entry, the bare
-template name for a `single`/`multiple` one, or the entry's own
-workspace-relative path for a shared ``common-media/`` asset -- stable across
-a re-render, since the render stage's own output path does not appear in it.
-
-**A file that does not exist yet is `pending`, not missing (ADR-0034's local
-twin).** `desired()` runs at plan time, before any stage has applied anything
-this run; if `render` is about to create the file in the *same* `apply`,
-`etsy_media`'s own `apply` -- running after it in pipeline order -- finds the
-file there. So `apply` re-hashes each file itself at upload time rather than
-trusting `desired`'s plan-time hash, and a `pending` entry `plan` still
-reports as work, because the run that clears it is this one.
-
-**Drift needs a mapping `plan()` itself is never handed.** Whether a
-previously-uploaded image is still on the listing depends on
-``lock.remote``'s ref -> id map, and `plan()` only receives
-``(desired, applied, live)`` -- so `read_live()` resolves the question itself
-(it *is* handed the lockfile) and hands `plan()` the answer, `dangling_refs`,
-rather than the raw ids for `plan()` to reconcile blind.
-
-**No `overwrite: true` in-place replace, deliberately.** It is a genuine
-optimisation (decision 5) -- skip the `image_ids` PATCH entirely when a
-mockup's bytes changed but its position did not -- but decision 6 also
-proves the price of it: a replaced image's id changes, and any variation
-link still naming the old one goes dangling and invisible until re-asserted.
-The two-step upload-then-`image_ids` path this stage takes is the one ADR-0031 describes without
-qualification, so it is the one built first; the
-in-place path is a later, separate change.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -116,8 +76,6 @@ class AppliedMediaEntry(BaseModel):
 
 
 class AppliedEtsyMedia(BaseModel):
-    """The verbatim last-applied document."""
-
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     manifest: tuple[AppliedMediaEntry, ...]
@@ -168,8 +126,6 @@ class EtsyMediaDesired:
 
 @dataclass(frozen=True)
 class LiveImage:
-    """One image Etsy actually has on the listing right now."""
-
     rank: int | None
     image_id: int
     url: str | None
@@ -210,16 +166,12 @@ def _manifest_entry(
 ) -> ManifestEntry:
     workspace = ctx.workspace
     if isinstance(entry, str):
-        # A bare string is a file ref, resolved the same way `design:` is:
-        # ADR-0046's two roots, the workspace or `./` for the listing's own.
         source = workspace.resolve_ref(entry, listing_dir=workspace.listing_dir(listing))
         colour = None
     else:
         source = workspace.render_file(listing, entry.template, entry.colour)
         colour = entry.colour if entry.template == variation_template else None
 
-    # A render the render stage is about to rewrite is not what this stage will
-    # upload: its replacement is, and that is the preview apply promotes.
     current = ctx.rewrites.get(source, source)
     content_hash = hash_file(current) if current is not None and current.is_file() else PENDING
     file = to_workspace_relative_posix(workspace.root, source)
@@ -275,8 +227,6 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
         if blocked is not None:
             return blocked
 
-        # No image-count gate here: `Listing` refuses a gallery over Etsy's
-        # caps when it loads, so a second copy could never fire.
         config = ctx.workspace.load_listing(listing)
 
         variation_template = config.etsy.variation_images
@@ -372,9 +322,6 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
         return Verdict.no_work(drift=drift_found)
 
     def snapshot(self, desired: EtsyMediaDesired, live: EtsyMediaLive | None) -> EtsyMediaSnapshot:
-        """Both manifests in full -- the frontend's thumbnails and
-        badges are built from this plus the ``MediaChange``s ``plan()``
-        already emitted, never from diffing these two lists itself."""
         desired_rows = tuple(
             DesiredImageSnapshot(rank=rank, ref=entry.ref, file=entry.file)
             for rank, entry in enumerate(desired.manifest, start=1)
@@ -451,7 +398,6 @@ class MediaNotRenderedError(RuntimeError):
 
 
 def _sent_hashes(desired: EtsyMediaDesired) -> dict[str, str]:
-    """Each manifest entry's current bytes, which is what an upload sends."""
     hashes: dict[str, str] = {}
     for entry in desired.manifest:
         if not entry.source.is_file():
@@ -466,12 +412,6 @@ def _reusable_image_ids(
     known_ids: dict[str, int],
     live_ids: frozenset[int],
 ) -> dict[str, int]:
-    """The images still on the listing whose bytes are unchanged, by ref, in
-    manifest order.
-
-    ``applied`` is the document the engine decoded during planning, not a
-    second read of the same subtree: an upload is skipped only when the bytes
-    match what was *last uploaded*, and that is the only thing that knows."""
     applied_hashes = {e.ref: e.hash for e in applied.manifest} if applied is not None else {}
     return {
         ref: known_ids[ref]
@@ -550,23 +490,6 @@ def _actions(desired: EtsyMediaDesired) -> tuple[Action, ...]:
 def _media_changes(
     desired: EtsyMediaDesired, applied: AppliedEtsyMedia | None
 ) -> tuple[MediaChange, ...]:
-    """One :class:`~etsy_listings.core.engine.change.MediaChange` per rank whose
-    ref differs between what was last applied and what this run wants.
-
-    Replaces the single "the media manifest changed" reason the plan already
-    carried: a reason cannot say *which* image is new, which moved or which
-    was dropped, so drawing *New* / *was 2* / *Removed* badges used to mean
-    the frontend diffing two ref lists itself (ADR-0008, decision 4). Matched by
-    **rank**, not by ref -- a ref appearing at a different rank is exactly a
-    reorder, and the frontend (which also has both full manifests, from the
-    snapshot) is what turns "before ref X, after ref Y" into a moved-from-N
-    badge, never this stage.
-
-    A rank whose ref is unchanged but whose bytes are not -- a re-rendered
-    mockup, or one not rendered yet -- is a change with ``before == after``:
-    the same image, replaced. A render's bytes are hashed, not the inputs
-    that produced it, so a re-render that comes out identical is no change.
-    """
     wanted = list(desired.applied().manifest)
     previous = list(applied.manifest) if applied is not None else []
     changes: list[MediaChange] = []
@@ -588,9 +511,6 @@ def _ref(entry: AppliedMediaEntry | None) -> str | None:
 
 
 def _drift(applied: AppliedEtsyMedia | None, live: EtsyMediaLive | None) -> tuple[Drift, ...]:
-    """A previously-uploaded image no longer on the listing -- an outside
-    delete, or a replacement that minted a new id and left the old one
-    dangling (decision 6, measured: nothing in the API says a swatch broke)."""
     if applied is None or live is None or not live.dangling_refs:
         return ()
     return (

@@ -8,16 +8,14 @@ ADR-0034's threading of ``lock.remote`` rather than a second lockfile read:
 ``Publish`` mints the Etsy listing id ``EtsyListing`` and ``EtsyMedia`` both
 PATCH, and ``EtsyMedia`` needs whatever images survive the first two to
 exist. ``EtsyVideos()`` follows ``EtsyMedia()`` because a second video is
-placed by the number of images on the listing when it is attached (ADR-0045,
-decision 9), so the images have to be there and in order first.
+placed by the number of images on the listing when it is attached, so the
+images have to be there and in order first.
 AI proposals run separately from deployment; there is no Generate stage.
 
 **A stage in this list is not a stage that always runs.**
 ``PrintifyProduct`` reports itself unconfigured, rather than failing, in a
 workspace with no ``printify.shop_id``: a listing with no title or
-description filled in yet is perfectly valid for rendering mockups, and a
-`plan` that refused to run at all there would be a regression dressed as a
-validation.
+description filled in yet is perfectly valid for rendering mockups.
 Running ``setup`` is what opts a workspace in. ``Publish``/``EtsyListing``/
 ``EtsyMedia`` follow the same rule for ``etsy.shop_id``.
 
@@ -50,9 +48,6 @@ STAGES: list[AnyStage] = [
 
 
 def publishing_pipeline(stages: Sequence[AnyStage] = STAGES, *, publish: bool) -> list[AnyStage]:
-    """``stages``, with :class:`EtsyActivateStage` last when the run asked to
-    publish still-draft listings rather than leave them drafts. Opt-in: a run
-    that does not ask keeps today's draft-only pipeline exactly."""
     pipeline = list(stages)
     if publish:
         pipeline.append(EtsyActivateStage())

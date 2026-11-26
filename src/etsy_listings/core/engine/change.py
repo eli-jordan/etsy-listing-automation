@@ -1,8 +1,3 @@
-"""The shared ``Change`` vocabulary. ADR-0008: each stage writes its own comparison, so
-the shared surface here is the vocabulary and a handful of helpers -- not a
-generic differ. Keeping the *mechanics* shared is what stops six near-identical
-routines diverging."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -74,14 +69,12 @@ Change = FieldChange | ListChange | PriceChange | MediaChange
 
 
 def scalar(path: str, desired: Any, applied: Any) -> FieldChange | None:
-    """Compare two scalar values (or equal-shaped pydantic models); ``None`` if unchanged."""
     if desired == applied:
         return None
     return FieldChange(path=path, before=applied, after=desired)
 
 
 def sequence(path: str, desired: list[Any], applied: list[Any]) -> ListChange | None:
-    """Compare two lists as sets-with-order; ``None`` if unchanged."""
     if desired == applied:
         return None
     added = tuple(item for item in desired if item not in applied)
@@ -98,7 +91,6 @@ def drift(
     last_applied_label: str | None = None,
     live_label: str | None = None,
 ) -> Drift | None:
-    """Compare last-applied to live state; ``None`` if no drift."""
     if applied is None or live is None or applied == live:
         return None
     return Drift(
@@ -112,17 +104,7 @@ def drift(
 
 @dataclass(frozen=True)
 class Action:
-    """One concrete unit of work a stage will perform if applied, with the
-    files it reads and the files it writes.
-
-    ``plan`` is meant to answer "what would happen, exactly?", not just "does
-    something need to happen?" -- a stage that reports ``will_run`` without
-    saying what it will read and write leaves the user guessing. Paths are
-    workspace-relative and forward-slashed, the same form that enters a hash
-    (see ``to_workspace_relative_posix``), so plan output is identical on
-    Windows and Linux.
-
-    ``missing_outputs`` is the subset of ``outputs`` that does not exist on
+    """``missing_outputs`` is the subset of ``outputs`` that does not exist on
     disk right now. It is the stage that observes this, never the renderer:
     presentation may not stat a file.
     """
@@ -135,13 +117,11 @@ class Action:
 
 @dataclass(frozen=True)
 class StageIdle:
-    """The stage has nothing to do."""
+    pass
 
 
 @dataclass(frozen=True)
 class StageWork:
-    """The stage will run, with the reason and work inseparable."""
-
     reason: str
     changes: tuple[Change, ...] = field(default_factory=tuple)
     actions: tuple[Action, ...] = field(default_factory=tuple)
@@ -149,19 +129,13 @@ class StageWork:
 
 @dataclass(frozen=True)
 class StageBlocked:
-    """The stage cannot run, with the user-facing refusal inseparable."""
-
     message: str
 
 
 StageOutcome = StageIdle | StageWork | StageBlocked
-"""The only three answers a stage can give.
-
-The former product of ``will_run``, ``reason``, ``blocked``, changes and
-actions admitted contradictions that the repository's invariants explicitly
-forbid. The union is the stored truth; compatibility properties on
-:class:`Verdict` and :class:`StagePlan` are derived views for renderers.
-"""
+"""The only three answers a stage can give. The union is the stored truth;
+compatibility properties on :class:`Verdict` and :class:`StagePlan` are derived
+views for renderers."""
 
 
 class _OutcomeView:
@@ -195,29 +169,10 @@ class Verdict(_OutcomeView):
 
     @classmethod
     def no_work(cls, *, drift: tuple[Drift, ...] = ()) -> Verdict:
-        """Nothing to do. The common answer, and the one worth not spelling."""
         return cls(outcome=StageIdle(), drift=drift)
 
     @classmethod
     def refused(cls, message: str, *, drift: tuple[Drift, ...] = ()) -> Verdict:
-        """This stage cannot run, and the live state is what says so.
-
-        The pre-flight half of the same idea is ``desired()`` returning
-        ``Blocked``, and it covers every refusal that can be decided from
-        config alone. This covers the rest: a retail price below Printify's
-        cost needs ``variants[].cost``, which exists only on a product that
-        already exists (ADR-0020's amendment), so the check *cannot* happen
-        before ``read_live``.
-
-        The alternative it replaces was a verdict that would not run carrying
-        a ``reason`` -- and ``cli.render`` prints a reason only for stages
-        that do run, so the refusal reached nobody: the listing was skipped
-        under a plan reading "No changes." A refusal that renders as silence
-        is worse than no check at all, because it looks like agreement.
-
-        ``drift`` still travels: what Etsy has drifted to is worth reporting
-        whether or not this run is allowed to fix it.
-        """
         return cls(outcome=StageBlocked(message=message), drift=drift)
 
     @classmethod
@@ -229,13 +184,6 @@ class Verdict(_OutcomeView):
         drift: tuple[Drift, ...] = (),
         actions: tuple[Action, ...] = (),
     ) -> Verdict:
-        """Work to do, and why -- the two being inseparable is the point.
-
-        ``will_run`` used to be an expression standing beside a ``reason``
-        string that restated it, so a stage could run while reporting no
-        reason, or report one while not running. Here a reason is required and
-        ``will_run`` follows from it.
-        """
         return cls(
             outcome=StageWork(reason=reason, changes=changes, actions=actions),
             drift=drift,
@@ -248,13 +196,6 @@ class Verdict(_OutcomeView):
 
 @dataclass(frozen=True)
 class StagePlan(_OutcomeView):
-    """One stage's named outcome, drift evidence and optional review facts.
-
-    The outcome owns the mutually exclusive idle/work/blocked decision.
-    ``snapshot`` carries unchanged facts for review and remains excluded from
-    the ADR-0039 fingerprint.
-    """
-
     stage: str
     outcome: StageOutcome
     drift: tuple[Drift, ...] = field(default_factory=tuple)

@@ -81,14 +81,6 @@ def compare(
     was: AppliedProduct | None,
     live: Product | None,
 ) -> ProductComparison:
-    """Three-way compare desired, applied and live.
-
-    ``will_run`` is derived from ``reason`` rather than computed beside it:
-    the two used to be separate expressions of one rule -- ``was is None or
-    bool(changes) or live is None`` on one side, a three-branch string on the
-    other -- and separate expressions of one rule are how a stage comes to
-    report "no changes" while running anyway.
-    """
     wanted = desired.applied()
     changes = _changes(desired, wanted, was)
     reason = _reason(was, live, changes)
@@ -107,11 +99,6 @@ def compare(
 def _reason(
     was: AppliedProduct | None, live: Product | None, changes: tuple[Change, ...]
 ) -> str | None:
-    """Why this stage will run, or ``None`` when it will not.
-
-    The single expression of the rule. ``None`` here *is* ``will_run=False``,
-    so there is no third state in which a stage runs for no stated reason.
-    """
     if was is None:
         return "no Printify product yet -- it will be created"
     if live is None:
@@ -141,9 +128,6 @@ def _changes(
     for variant in sorted(desired.variants, key=lambda v: v.id):
         previous = was_prices.get(variant.id)
         if previous is not None and previous != variant.price:
-            # Rendered back into `Money` rather than shown as the minor units
-            # the document stores. "34900 -> 39900" is the wire format; the
-            # user wrote "349 NOK", and that is what a diff has to say back.
             changes.append(
                 PriceChange(
                     size=variant.size,
@@ -163,19 +147,6 @@ def _changes(
 
 
 def _colour_change(wanted: AppliedProduct, was: AppliedProduct) -> Change | None:
-    """A named colour added or removed.
-
-    Read straight off each variant's own ``colour_slug`` -- carried on
-    :class:`~etsy_listings.core.engine.stages.product_document.AppliedVariant`
-    itself rather than looked up from this run's catalog resolution, which is
-    what lets a colour Printify has since discontinued still be
-    named in ``removed``: it has no cell left to resolve, but it still has the
-    name it was applied under.
-
-    Replaces a UI that would otherwise have to diff two colour lists itself
-    to ring a newly added one (ADR-0008, decision 4) -- the ``FieldChange`` below
-    only ever carried a count.
-    """
     wanted_colours = sorted({v.colour_slug for v in wanted.variants})
     was_colours = sorted({v.colour_slug for v in was.variants})
     return sequence("colors", wanted_colours, was_colours)
@@ -222,18 +193,6 @@ def _area_path(design_hash: str) -> str:
 
 
 def _drift(was: AppliedProduct | None, live: Product | None) -> tuple[Drift, ...]:
-    """What changed in Printify since we last applied.
-
-    Every field here compares against *last-applied* (``was``), never
-    *desired* -- an edit made locally but not yet applied is a ``change``,
-    reported by ``_changes``, not drift. Comparing against desired made every
-    pending edit (a new colour included) read as if Printify or a human had
-    already reverted it on republish, before ``apply`` ever ran.
-
-    ``was.prices`` is already the enabled subset -- an applied document only
-    ever records what was actually sent -- so it is the same ``{id: price}``
-    shape as ``live.enabled_variants()``.
-    """
     if was is None or live is None:
         return ()
 
@@ -253,8 +212,6 @@ def _drift(was: AppliedProduct | None, live: Product | None) -> tuple[Drift, ...
 
 
 def _variants_drift(ours: dict[int, int], theirs: dict[int, int]) -> Drift | None:
-    """The enabled variants and their prices, by count; when the count is
-    unchanged, whether the selection or any price moved."""
     if theirs == ours:
         return None
     live_description = f"{len(theirs)} enabled"

@@ -9,13 +9,11 @@ writes and a way to recreate a product ``read_live`` just said was missing.
 
 **The 404 confirmation is polled, not a single GET.** The cascade this checks
 -- Printify DELETE on a still-connected product taking the Etsy draft with it
--- was measured to land as an immediate 404 (docs/features/listing-lifecycle-20260916/spec.md, "The
-cascade"), but a user hit the single-GET version reporting the listing
-survived, then found it gone in Shop Manager moments later: read-after-write
-on Etsy's side is not guaranteed instant. A short backoff tolerates that lag
-without changing the policy -- a listing that never actually goes still fails
-the same way, files kept, after the same ceiling `publish`'s own poll uses the
-pattern for (`_poll_until_unlocked`).
+-- usually lands as an immediate 404 (docs/features/listing-lifecycle-20260916/spec.md,
+"The cascade"), but read-after-write on Etsy's side is not guaranteed instant.
+A short backoff tolerates that lag without changing the policy: a listing that
+never actually goes still fails the same way, files kept, after the same
+ceiling `publish`'s own poll uses.
 """
 
 from __future__ import annotations
@@ -50,7 +48,7 @@ class AppliedRetract(BaseModel):
 
 @dataclass(frozen=True)
 class RetractDesired:
-    """Marker: this listing should have no remotes and then no files."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -154,8 +152,6 @@ class RetractStage:
         return StageApplyResult(applied=AppliedRetract().model_dump(mode="json"))
 
     def _wait_for_gone(self, ctx: RunContext, listing_id: int) -> bool:
-        """Poll for the 404 rather than trusting one GET -- the cascade is
-        real but not always instant (see the module docstring)."""
         delay = POLL_INITIAL_DELAY
         deadline = self._now() + self._poll_ceiling
         while True:

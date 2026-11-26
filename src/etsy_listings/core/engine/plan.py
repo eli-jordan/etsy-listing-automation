@@ -60,13 +60,6 @@ class StageState:
 
 @dataclass(frozen=True)
 class PlannedRun:
-    """What ``plan`` produced, and what ``apply`` needs to act on it.
-
-    ``plan`` is the presentation-facing half: ``cli.render`` formats it and the
-    UI will serialise it, neither comparing state itself. ``states`` is the
-    half only ``execute`` reads.
-    """
-
     plan: Plan
     states: tuple[StageState, ...]
 
@@ -79,26 +72,6 @@ def build_plan(
     *,
     on_event: EngineEventSink = ignore_engine_event,
 ) -> PlannedRun:
-    """Three-way compare desired/applied/live across every stage, in order.
-
-    Every stage's ``read_live`` is called, ``local`` ones included: a local
-    stage has no *remote* state, but it can still have outputs on disk that
-    were deleted or edited since the last apply, and a plan that doesn't look
-    is a plan that reports "no changes" over a half-empty render cache. What
-    ``local`` buys is that the read is cheap and local, so it stays out of
-    the unimplemented live-fetch thread pool. A local difference is reported
-    as work to redo rather than as drift. Each stage's own ``plan()`` computes the diff; this
-    function only orchestrates the walk and assembles the result.
-
-    ``on_event`` emits ``EngineStageChecking`` before each stage's own
-    walk and ``EngineStagePlanned`` after it, with the resolved ``StagePlan``
-    -- snapshot included -- so the UI can show one stage resolving after
-    another, in pipeline order. The planner remains sequential. ``None`` -- the
-    default every existing caller gets -- is a plain walk with nothing
-    watching; a listing wrapped wholesale in ``_all_blocked`` still reports
-    each stage's block through the same two calls, since a blocked stage is
-    still a stage the strip has to show.
-    """
     decision = lifecycle_walk(ctx, listing, lock, stages)
     if decision.blocked is not None:
         planned = _all_blocked(
@@ -139,8 +112,6 @@ def _chosen_at_apply(stage: AnyStage) -> bool:
 
 
 def _blocked(states: list[StageState]) -> bool:
-    """Whether a stage the review planned is blocked. A stage chosen at apply
-    is left out: ``publishable`` must read the same with it or without it."""
     return any(
         state.stage_plan.blocked is not None
         for state in states
@@ -206,17 +177,10 @@ def _walk(
     the stage is left with is three questions about three states.
     """
     on_event(EngineStageChecking(listing, stage.name))
-    # The stage's own subtree, looked up and decoded here rather than by each
-    # stage for itself -- a stage never needs to know which key in the
-    # lockfile is its own, nor what a document it cannot read should mean.
     applied = lock.parse_applied_for(stage.name, stage.applied_model)
     desired = stage.desired(ctx, listing, applied)
 
     if isinstance(desired, Blocked):
-        # Refused: no live read, because there is nothing this run could do
-        # with the answer, and a blocked remote stage should not spend a
-        # request finding that out. No snapshot either -- there is no desired
-        # document a snapshot could be a fact about.
         state = StageState(
             stage=stage,
             desired=desired,
@@ -263,7 +227,6 @@ def _rewrites(ctx: RunContext, state: StageState) -> Mapping[Path, Path | None]:
 
 
 def _review_hash(stage: AnyStage, desired: Any) -> str | None:
-    """Optional stable stage evidence, kept out of transient snapshots (ADR-0039)."""
     method = getattr(stage, "review_hash", None)
     if method is None:
         return None
@@ -272,12 +235,6 @@ def _review_hash(stage: AnyStage, desired: Any) -> str | None:
 
 
 def _snapshot(stage: AnyStage, desired: Any, live: Any) -> BaseModel | None:
-    """A stage's optional ``snapshot()``.
-
-    Not part of ``Stage``'s formal surface (see ``stage.py``'s note on why),
-    so looked up rather than called directly: a stage without one --
-    ``render`` and ``retract``, for now -- simply has nothing to ask.
-    """
     method = getattr(stage, "snapshot", None)
     if method is None:
         return None

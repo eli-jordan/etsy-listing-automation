@@ -1,36 +1,3 @@
-"""The ``printify_product`` stage: the first one that writes to a remote API.
-
-Built against [docs/research/api-findings.md](../../../../docs/research/api-findings.md) rather
-than the API reference, because several of the answers are not the obvious
-ones and each has produced a plausible-looking wrong implementation:
-
-- The product comes back carrying the **whole blueprint matrix** -- 238
-  variants for a product created with 6 -- so every comparison goes through
-  the enabled subset.
-- ``variants`` on an update **merges by id**. Omitting one does not disable
-  it, so a dropped colour has to be retired explicitly, with a price, because
-  a variant entry is never partial.
-- ``print_areas.variant_ids`` must cover **every** variant on an update and
-  only the created ones on create, which is why ``apply`` branches and why an
-  update reads the product first.
-- ``POST products.json`` has no idempotency key and no conflict, so nothing on
-  the server stops a re-run making a second product.
-
-The desired document is deliberately *not* the API's shape. It holds design
-**content hashes** where the payload holds upload ids: an upload id is remote
-state that only exists after a call, and putting one in a hashed document
-would mean `plan` could not run without the network. ``apply`` resolves hash
-to upload id, from the lockfile where it can and by uploading where it cannot.
-
-What is left here is what genuinely needs a context: resolving a listing into
-a desired product, reading the live one, and sending it. The two documents and
-the gate that reads one live in
-:mod:`~etsy_listings.core.engine.stages.product_document`, and the comparison over
-them in:mod:`~etsy_listings.core.engine.stages.product_diff` -- both pure, both
-reachable without a workspace. ``plan()`` below assembles a ``Verdict`` from
-what the comparison decided; it decides nothing itself.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -127,8 +94,6 @@ that could exist.
 
 @dataclass(frozen=True)
 class _ListingInputs:
-    """What the product is built from, once the listing's own gates pass."""
-
     config: Listing
     profile: GarmentProfile
     description: str
@@ -153,8 +118,6 @@ def _listing_inputs(workspace: Workspace, listing: str) -> _ListingInputs | Bloc
     if isinstance(description, Blocked):
         return description
 
-    # ADR-0053: the colours this product sells must each resolve to a file.
-    # No scenes: which photo a mockup uses is the render stage's question.
     blocked = check_artwork(config, profile, {})
     if blocked is not None:
         return blocked
@@ -256,7 +219,6 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
         applied: AppliedProduct | None,
         live: Product | None,
     ) -> Verdict:
-        """Three states in, a verdict out. Everything else moved."""
         comparison = compare(desired, applied, live)
         if comparison.reason is None:
             return Verdict.no_work(drift=comparison.drift)
@@ -326,10 +288,6 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
         spec = _spec(desired, uploads)
 
         if live is None:
-            # ADR-0023: the lockfile is the primary guard, and this walk closes
-            # the one window it cannot -- create succeeded, the process died
-            # before the lockfile was written. Only on the create path, so a
-            # no-op run never pays for it.
             adopted = client.find_product_by_copy(
                 shop_id, title=desired.title, description=desired.description
             )
@@ -350,9 +308,6 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
         )
 
 
-# ------------------------------------------------------------------ helpers
-
-
 def _shop_id(ctx: RunContext) -> int:
     return ctx.workspace.defaults.printify.require_shop_id()
 
@@ -363,10 +318,6 @@ def _variant_row(colour: str, size: str, minor_units: int, currency: str) -> Pro
 
 @dataclass(frozen=True)
 class ResolvedVariantPricing:
-    """The blueprint, print provider and priced variant matrix a listing
-    resolves to -- everything about a Printify product that depends on the
-    catalog and nothing about its artwork or copy."""
-
     blueprint_id: int
     print_provider_id: int
     variants: tuple[PricedVariant, ...]
@@ -374,15 +325,6 @@ class ResolvedVariantPricing:
 
 
 def resolve_variant_pricing(ctx: RunContext, listing: str) -> ResolvedVariantPricing:
-    """Resolve a listing's garment and priced variant matrix from the catalog.
-
-    Shared with the `publish` stage (features/etsy-listing-20260910/spec.md decision 1), which
-    rebuilds its own desired variant matrix through this same function rather
-    than reading this stage's lockfile subtree -- the cost is one extra
-    resolution pass per listing per run (the catalog is disk-cached; the rest
-    is arithmetic), and it buys the two stages independence from each other's
-    lockfile shape.
-    """
     workspace = ctx.workspace
     config = workspace.load_listing(listing)
     profile = workspace.load_garment_profile(config.garment_profile)
@@ -435,15 +377,6 @@ def _group_by_design(
     colours: Sequence[str],
     paths: Mapping[str, Path],
 ) -> tuple[ArtworkGroup, ...] | Blocked:
-    """Partition ``colours`` by the file each prints -- one print area each.
-
-    Keyed by the file's **content hash**, not its ref or its ``design:`` key
-    (ADR-0053): two names for identical bytes are one area, and reshaping the map
-    without changing what any garment prints changes no area. Uploads are
-    content-addressed already, and no print area ever shares an image with
-    another. First-seen order, so the payload's print areas follow the order
-    the listing wrote its colours in.
-    """
     digests: dict[str, str] = {}
     groups: dict[str, tuple[Path, list[str]]] = {}
     for colour in dict.fromkeys(colours):

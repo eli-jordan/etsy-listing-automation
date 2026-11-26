@@ -1,13 +1,5 @@
-"""The per-colour swatch links (ADR-0030, decision 6), set by two stages.
-
-`etsy_media` sets them after it uploads and orders the images. `etsy_videos`
-sets them again after placing a second video, because placing one means
-cutting `image_ids` short for a moment, and detaching an image deletes its
-swatch link for good -- restoring the image restores nothing else (decision
-9's "What it costs", measured). One rule and two callers, so the rule lives
-in neither: a copy in the video stage would be a second answer to "which
-image is this colour's swatch", and the first to go stale.
-"""
+"""The per-colour swatch links, set by both `etsy_media` and `etsy_videos`, so
+the rule lives in neither stage."""
 
 from __future__ import annotations
 
@@ -34,8 +26,6 @@ def manifest_ref(entry: MediaEntry) -> str:
 
 
 def swatch_refs(media: Sequence[MediaEntry], template: str | None) -> dict[str, str]:
-    """colour slug -> manifest ref, for every `media:` entry drawn from the
-    `variation_images:` template. Empty when the feature is off."""
     if template is None:
         return {}
     return {
@@ -54,10 +44,6 @@ def set_variation_images(
     colours: tuple[str, ...],
     image_id_by_colour: Mapping[str, int],
 ) -> None:
-    """Bind each colour's swatch to its image, through Etsy's own colour
-    property. Skipped, loudly, when the inventory has no single property
-    matching the listing's colours -- decision 6's "reports and does
-    nothing", not a failure."""
     client, shop_id, listing_id = target.client, target.shop_id, target.listing_id
     inventory = client.get_listing_inventory(listing_id)
     colour_property = resolve_colour_property(inventory, colours, ctx.workspace.load_exceptions())

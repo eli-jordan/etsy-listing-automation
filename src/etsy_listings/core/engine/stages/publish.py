@@ -1,39 +1,6 @@
-"""The ``publish`` stage: asks Printify to push a product to the connected
-Etsy shop, and polls until the resulting listing id exists.
-
-Three things measured in
-[docs/research/printify-etsy-integration.md](../../../../docs/research/printify-etsy-integration.md)
-shape this stage:
-
-- **The lock is real and asynchronous.** ``POST publish.json`` answers
-  ``200 {}`` immediately; the actual work happens behind ``is_locked``, which
-  cycled true -> false over roughly 8 seconds in the probe. So ``apply`` polls
-  ``get_product`` rather than trusting the response.
-- **``{variants: true}`` is safe; everything else stays false.** A forced
-  divergence and republish proved copy, tags and media all survive a
-  republish untouched -- this tool owns those, Printify should never sync
-  them. ``shipping_template: false`` does not prevent Printify attaching its
-  own profile (risk 13), but it is still sent, because a hint that sometimes
-  works is better than no hint (decision 7) -- the `etsy_listing` stage is
-  what actually re-asserts the shipping profile.
-- **Printify copies the product's ``visible`` flag onto the Etsy listing.**
-  ``false`` lands a first publish as a draft, but it also turns an *active*
-  listing inactive on every republish; ``true`` keeps it active (measured
-  2026-11-07, after a price change deactivated every live listing). So
-  ``apply`` sets ``visible`` to match the listing's current Etsy state just
-  before it publishes: ``true`` only for an ``active`` listing, so a draft
-  stays a draft and a listing paused in Shop Manager stays paused.
-- **A retail price below Printify's cost is a `400`.** ``variants[].cost``
-  only exists on a product that already exists, which is exactly what
-  ``read_live`` has in hand by the time ``plan`` runs -- so the check lives in
-  ``plan()``, turning a remote refusal into something `plan` can say before
-  anything is sent (ADR-0020's amendment).
-
-The desired variant matrix is rebuilt through
-:func:`~etsy_listings.core.engine.stages.printify_product.resolve_variant_pricing`,
-the same pure resolution `printify_product` uses, rather than read out of that
-stage's lockfile subtree -- decision 1's stage independence.
-"""
+"""The ``publish`` stage: asks Printify to push a product to the connected Etsy
+shop, and polls until the resulting listing id exists. The Printify behaviour
+it relies on is in docs/research/printify-etsy-integration.md."""
 
 from __future__ import annotations
 
@@ -99,13 +66,6 @@ NO_SHOP_BLOCKED = Blocked(
 
 
 class PublishTimeoutError(UserFacingError, RuntimeError):
-    """A publish that never cleared ``is_locked`` within the poll ceiling.
-
-    The lock is real (measured); the remedy -- ``unlock`` -- has never been
-    exercised against a genuine one, because none has stuck in probing. This
-    still fails loudly rather than leaving the run waiting forever.
-    """
-
     def __init__(self, product_id: str) -> None:
         super().__init__(
             f"Printify's publish for product {product_id} did not finish within "
@@ -131,8 +91,6 @@ class PublishWithoutProductError(UserFacingError, RuntimeError):
 
 
 class PublishApplied(BaseModel):
-    """The verbatim last-applied document."""
-
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     sync_flags: dict[str, bool]
@@ -156,10 +114,6 @@ class PublishDesired:
 
     @property
     def variants(self) -> dict[int, int]:
-        """``{variant_id: price}`` -- the shape every existing comparison
-        here wants, and the only one variant identity does not survive a JSON
-        round-trip as (see ``PrintifyProductDesired.prices`` for the same
-        reasoning)."""
         return {variant.id: variant.price for variant in self.priced_variants}
 
     def applied(self) -> PublishApplied:
@@ -257,8 +211,6 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: PublishApplied | None
     ) -> PublishLive | None:
-        """``None`` without a request when there is no product id yet --
-        nothing to publish before `printify_product` has ever applied."""
         del applied
         product_id = lock.remote.get(PRODUCT_ID_KEY)
         if not product_id:
@@ -281,9 +233,6 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
         if live is not None and live.variant_costs:
             shortfall = _below_cost(desired.variants, live.variant_costs)
             if shortfall:
-                # A refusal, not a quiet no-op: `plan` renders this beside the
-                # ones `desired()` raises. It cannot *be* one of those -- the
-                # costs it needs arrive with `read_live` (ADR-0020's amendment).
                 return Verdict.refused(_below_cost_message(shortfall), drift=drift)
 
         if applied is None:
@@ -297,10 +246,6 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
         return Verdict.no_work(drift=drift)
 
     def snapshot(self, desired: PublishDesired, live: PublishLive | None) -> PublishSnapshot:
-        """The below-cost rows only, named -- reuses ``_below_cost``
-        rather than re-deriving which variants are under cost, so the price
-        table's red marker cannot drift from the rule ``plan()`` refuses
-        with."""
         if live is None or not live.variant_costs:
             return PublishSnapshot()
         shortfall = _below_cost(desired.variants, live.variant_costs)
@@ -353,8 +298,6 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
     def _poll_until_unlocked(
         self, client: PrintifyClient, shop_id: int, product_id: str
     ) -> Product | None:
-        """Poll ``get_product`` until it is unlocked and carries ``external``,
-        or the ceiling passes. ``None`` on timeout."""
         delay = POLL_INITIAL_DELAY
         deadline = self._now() + self._poll_ceiling
         while True:

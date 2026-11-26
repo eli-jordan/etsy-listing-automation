@@ -1,17 +1,3 @@
-"""The ``Stage`` protocol. ADR-0007: a fixed ordered list of stages sharing one
-protocol; ``local`` marks a stage as having no *remote* state, so the engine
-skips drift reporting for it rather than each stage having to remember.
-Dependencies between stages are list order, not a dependency graph.
-
-``local`` does not mean "reads nothing". A local stage still has state that
-exists outside its lockfile entry -- the render stage's PNGs are on disk, and
-they can be deleted or edited between runs. ``read_live()`` is where a stage
-observes that, local or not; what ``local`` decides is that any difference is
-work to redo, not *drift* to warn about (there is no second writer to have
-drifted from), and that the read is cheap and local, so it never joins ADR-0009's
-live-fetch thread pool.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -37,33 +23,14 @@ is part of *this* protocol."""
 
 @dataclass(frozen=True)
 class Blocked:
-    """A stage cannot run, and why -- as a *value*, never an exception.
-
-    A stage that refuses is something ``plan`` has to **report**, not something
-    that should end the walk. Raising ends it: the exception unwinds
-    ``build_plan`` from wherever it was in :data:`STAGES`, so a design a
-    hundred pixels too short cost the user the render stage's plan as well,
-    and printed one line where a whole listing's worth of intent belonged.
-
-    Returned instead, it becomes :attr:`StagePlan.blocked` like any other
-    reason a stage will not run -- one vocabulary rather than two, and the UI's
-    serialiser gets it for free because it is already part of the plan.
-
-    ``message``'s first line is the consequence in the user's terms; any
-    further lines are the remedy. ``cli.render`` relies on that shape.
-    """
+    """``message``'s first line is the consequence in the user's terms; any
+    further lines are the remedy. ``cli.render`` relies on that shape."""
 
     message: str
 
 
 class StageBlockedError(UserFacingError):
-    """A blocked stage reached ``apply``.
-
-    ``execute`` only runs stages the plan flagged, and a blocked stage is
-    never flagged -- so this is a wiring defect, not a configuration problem.
-    It exists so ``apply`` fails loudly rather than shipping a half-built
-    payload if that invariant is ever broken.
-    """
+    pass
 
 
 class Stage(Protocol[D, A, L]):
@@ -78,7 +45,7 @@ class Stage(Protocol[D, A, L]):
     """
 
     name: str
-    local: bool  # True => no remote state; differences are work, not drift
+    local: bool
 
     group: str | None
     """The stage a reader shows this one under, or ``None`` for a stage of

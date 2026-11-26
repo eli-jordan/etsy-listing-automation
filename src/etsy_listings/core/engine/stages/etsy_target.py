@@ -49,9 +49,6 @@ SHOP_REMEDY = "Run `etsy-listings setup`, then `etsy-listings auth`, to connect 
 
 @dataclass(frozen=True)
 class EtsyListingTarget:
-    """The Etsy listing a stage writes: the signed-in client, and the shop
-    and listing ids every write names."""
-
     client: EtsyListingClient
     shop_id: int
     listing_id: int
@@ -94,12 +91,6 @@ def check_etsy_shop(ctx: RunContext, *, consequence: str) -> Blocked | None:
 
 
 def etsy_listing_id(lock: Lockfile) -> int | None:
-    """The listing `publish` minted, or ``None`` before it ever has.
-
-    ``None`` rather than a raise because both readers have a legitimate
-    nothing-to-do answer at plan time: ``read_live`` returns ``None`` without
-    spending a request on a listing that does not exist yet.
-    """
     listing_id = lock.remote.get(ETSY_LISTING_ID_KEY)
     if not listing_id:
         return None
@@ -107,11 +98,6 @@ def etsy_listing_id(lock: Lockfile) -> int | None:
 
 
 def require_etsy_listing_id(lock: Lockfile, *, to: str) -> int:
-    """The listing id, or a loud failure -- ``apply``'s half of the question.
-
-    ``to`` completes "cannot {to}", so each stage names its own work while the
-    diagnosis stays written once.
-    """
     listing_id = etsy_listing_id(lock)
     if listing_id is None:
         raise EtsyListingNotMintedError(to)

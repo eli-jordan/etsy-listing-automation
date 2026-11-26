@@ -94,8 +94,6 @@ def walk(
     lock: Lockfile,
     stages: Sequence[AnyStage],
 ) -> LifecycleWalk:
-    """Missing yaml, wrong verb, or retract-only -- listing-level, so they
-    wrap the walk rather than living in any one stage."""
     pipeline = list(stages)
     present = ListingDocuments(ctx.workspace).exists(listing)
     if not present:
@@ -126,8 +124,6 @@ def walk(
 
 
 def after_apply(ctx: RunContext, listing: str, planned: PlannedRun) -> None:
-    """The listing-level half of a successful apply: wipe after retract, or
-    consume ``lifecycle: renew``. ``plan`` never writes the yaml."""
     if _retract_succeeded(planned):
         remove_listing(ctx.workspace, listing)
         return

@@ -92,7 +92,6 @@ def ignore_engine_event(event: EngineRunEvent) -> None:
 
 
 def never_stop() -> bool:
-    """The default stop signal: a run nobody can pause."""
     return False
 
 

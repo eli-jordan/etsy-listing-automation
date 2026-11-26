@@ -1,22 +1,3 @@
-"""The product stage's two documents, and the gate that reads one of them.
-
-Three things that are one subject: the **desired** product a listing asks for
-( :class:`PrintifyProductDesired`), the **applied** document recording what was
-last sent ( :class:`AppliedProduct`, ADR-0008), and
-:func:`check_garment_unchanged`, which is a question about the applied
-document and nothing else.
-
-They live here rather than beside the stage because two modules need them and
-neither should import the other: the stage builds them and sends them, and
-:mod:`~etsy_listings.core.engine.stages.product_diff` compares them. A module both
-can depend on is what keeps the comparison reachable without a workspace, a
-lockfile and two fake clients.
-
-Nothing here does I/O, holds a client, or reads a clock -- which is what makes
-the comparison built on it a pure function, and what lets
-``tests/core/unit/test_product_document.py`` exercise it directly.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -55,16 +36,6 @@ class AppliedVariant(BaseModel):
 
 @dataclass(frozen=True)
 class ArtworkGroup:
-    """One design file, and the garment colours that print it.
-
-    Colours rather than Printify variant ids: which file a colour gets is a
-    fact about the listing, and turning it into ids is
-    :meth:`PrintifyProductDesired.variant_ids`'s job. One group per *file*,
-    identified by its content hash (ADR-0053) -- ADR-0053's light/dark split and a
-    colour's own design are both simply more than one group, and a
-    single-artwork listing is the one-group case.
-    """
-
     design: Path
     design_hash: str
     colours: tuple[str, ...]
@@ -87,27 +58,6 @@ class AppliedPrintArea(BaseModel):
 
 
 class AppliedProduct(BaseModel):
-    """The verbatim last-applied document, as a type rather than a dict.
-
-    It is *stored* as JSON, and it used to be *read back* as JSON too:
-    ``applied.get("title")`` beside ``document["print_areas"]`` beside
-    ``entry["id"]``, spelled again in each of the three functions that
-    compared them. Nothing stopped one drifting from the others, and the shape
-    of a missing value was whatever ``.get`` happened to return -- which is why
-    the price diff carried a ``("?", "?")`` fallback for a lookup that cannot
-    miss.
-
-    Typed, the comparison is field access and the fallbacks are gone. The bytes
-    on disk are unchanged: :meth:`PrintifyProductDesired.applied` dumps exactly
-    the document that was written before, so no existing lockfile is
-    invalidated and no product is re-applied for having been re-read.
-
-    It has no ``parse()`` of its own. Decoding a stage's subtree -- including
-    what a document that will not decode means -- is
-    :meth:`~etsy_listings.core.engine.lock.Lockfile.parse_applied_for`'s, so that
-    the rule has one implementation rather than one per stage.
-    """
-
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     title: str
@@ -158,46 +108,16 @@ class PrintifyProductDesired:
 
     @property
     def prices(self) -> dict[int, int]:
-        """``{variant_id: price}`` -- the shape the wire wants, and the only
-        place that shape is needed."""
         return {variant.id: variant.price for variant in self.variants}
 
     def variant_ids(self, group: ArtworkGroup) -> tuple[int, ...]:
-        """The Printify variants a group's colours resolve to, in id order.
-
-        The group itself knows only colours -- which ink a colour gets is a
-        fact about the listing, not about Printify -- so turning them into ids
-        is this stage's half of the job, and it is the one place that does it.
-
-        **Sorted**, and that is a fix rather than a tidying. These ids go into
-        ``print_areas[].variant_ids``, which is part of the hashed document,
-        and they used to come out in resolution order -- colour-outer,
-        size-inner, so the order the listing happens to write ``colors:`` in.
-        Reordering that list changed ``input_hash`` and re-applied a product
-        nothing about which had changed. Printify does not care about the
-        order, so nothing is lost by making the document not care either.
-        """
         colours = set(group.colours)
         return tuple(sorted(v.id for v in self.variants if v.colour_slug in colours))
 
     def applied(self) -> AppliedProduct:
-        """The hashable last-applied form: no paths, no upload ids, no clock.
-
-        Variants are a list sorted by id rather than a mapping, because a JSON
+        """Variants are a list sorted by id rather than a mapping, because a JSON
         round-trip turns integer keys into strings and the comparison would
-        then find a difference on every run. The sort is also what keeps the
-        hash independent of the colour-outer, size-inner order the catalog
-        resolves cells in.
-
-        **Print areas are sorted by design hash** for the same reason, one
-        level up. Groups come in first-seen order on purpose, so the payload's
-        print areas follow the order the listing wrote its colours in -- which
-        is right for the wire and wrong for a document that is compared and
-        hashed: moving a colour to the top of ``colors:`` reordered this list
-        and made an unchanged product look changed. The wire keeps its order;
-        only the record is canonicalised. The design hash is the key the
-        groups were partitioned on (ADR-0053), so it is unique here.
-        """
+        then find a difference on every run."""
         return AppliedProduct(
             title=self.title,
             description=self.description,
@@ -224,18 +144,6 @@ class PrintifyProductDesired:
 def check_garment_unchanged(
     was: AppliedProduct | None, *, blueprint_id: int, print_provider_id: int
 ) -> Blocked | None:
-    """Refuse a garment or printer change on a listing that already has a product.
-
-    A deliberate refusal, not a missing feature. Printify ignores both
-    fields on an update -- ``200``, no change -- so the only automated route is
-    delete-and-recreate, which takes the Etsy listing behind the product with
-    it: reviews, favourites, search history, to save retyping a short YAML
-    file. A listing is cheap; the listing's history is not.
-
-    Here rather than in ``gates``, which is for checks no single stage owns:
-    this one is entirely about this stage's own applied document, and it needed
-    that document's type to stop reading it as a dict.
-    """
     if was is None:
         return None
 
@@ -259,5 +167,4 @@ def check_garment_unchanged(
 
 
 def money(minor_units: int, currency: str) -> Money:
-    """Minor units back into the form the config was written in."""
     return Money(Decimal(minor_units) / 100, currency)
