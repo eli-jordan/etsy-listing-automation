@@ -1,5 +1,3 @@
-"""Prediction publication and retention, owned by job execution."""
-
 from __future__ import annotations
 
 import threading
@@ -72,10 +70,7 @@ class EvidenceStore(EvidenceReader):
             return tuple(retained)
 
     def rehome(self, old: str, new: str) -> Callable[[CropEvidence], CropEvidence]:
-        """Move template ``old``'s retained predictions to ``new``, and answer
-        how a job's evidence follows them. A prediction's path spells its
-        template, in the pointer, in each set's manifest and in job records.
-        The caller holds both templates' locks."""
+        """Caller holds both templates' locks."""
         source = self.workspace.preparation_predictions_dir(old)
         target = self.workspace.preparation_predictions_dir(new)
         prefix = f"{source.relative_to(self.root).as_posix()}/"

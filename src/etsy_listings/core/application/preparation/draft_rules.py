@@ -19,11 +19,6 @@ from etsy_listings.core.workspace.calibration import Calibration, CalibrationSto
 
 @dataclass(frozen=True)
 class EditorDraft:
-    """The calibrator's unsaved state: its geometry, the calibration
-    ``revision`` it was drawn against, mask strokes not yet saved, and the
-    colour-matrix photo it shows (``None`` for other kinds). ``config.labels``
-    are the labels of that revision, not the seller's latest."""
-
     config: AnyTemplate
     revision: str
     mask_edits: list[MaskEdit]
@@ -33,10 +28,6 @@ class EditorDraft:
 def drawn_against(
     store: CalibrationStore, name: str, saved: Calibration, draft: EditorDraft
 ) -> bool:
-    """Whether ``saved`` is the calibration ``draft`` was drawn against, labels
-    aside. A label save moves the revision (spec *Saving*) and nothing a preview
-    draws, masks included, so a frame in flight as one lands stays good: the
-    saved document with the draft's labels must hash to the draft's revision."""
     if saved.revision == draft.revision:
         return True
     relabelled = saved.config.model_copy(update={"labels": draft.config.labels})
@@ -72,8 +63,6 @@ def prepared_renderer(saved: AnyTemplate, requested: AnyTemplate) -> MarigoldRen
 def check_prepared_geometry(
     requested: AnyTemplate, renderer: MarigoldRenderer, inputs: PreparationInputs
 ) -> None:
-    """Refuse a full-size scene of anything but the prepared geometry and
-    inference: its maps are only of those."""
     quads = {key: tuple((p.x, p.y) for p in box) for key, box in placement_boxes(requested)}
     expected = {p.id: p.quad for p in inputs.placements}
     if quads != expected or renderer.config.inference != inputs.inference:

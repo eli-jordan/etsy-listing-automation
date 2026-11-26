@@ -1,5 +1,3 @@
-"""Safe phases of explicit preparation, reached only through Preparations."""
-
 from __future__ import annotations
 
 import hashlib
@@ -62,12 +60,7 @@ class StoppedError(Exception):
 
 @dataclass
 class WorkerSlot:
-    """The one warm inference worker, shared by the coordinator and its execution.
-
-    Execution selects the worker and records the request in flight; the
-    coordinator cancels that request and closes the worker. ``call`` is read
-    and written under the store's condition.
-    """
+    """``call`` is read and written under the store's condition."""
 
     worker: InferenceWorker | None = None
     selection: tuple[str, str] | None = None
@@ -258,9 +251,6 @@ class Execution:
         self.write(identity, evidence=retained, placement_evidence=assignments, snapshot=inputs)
 
     def cover(self, identity: str) -> None:
-        """Infer evidence covering each padded quad, then retain it after the
-        template's current evidence, which so stays the first choice for the
-        template's own maps: those are not refitted (spec *Evidence coverage*)."""
         job = self.owner.status(identity)
         current = self.evidence.current(job.template)
         padded = job.snapshot.model_copy(
@@ -286,9 +276,6 @@ class Execution:
         self.write(identity, evidence=retained, phase="completed", step="coverage")
 
     def _infer_crop(self, run: _InferenceRun, placement: PlacementInput) -> CropEvidence:
-        """Evidence for a placement no existing crop covers: plan its crop (or
-        reuse a known one with the same rectangle), then predict each role it
-        lacks a valid prediction for."""
         identity = run.job.id
         planned = self.evidence.new_crop(run.job.snapshot, placement.quad)
         selected = next(
@@ -374,8 +361,6 @@ class Execution:
         return selected
 
     def _claim_call(self, identity: str, request: str) -> None:
-        """Record ``request`` as the call in flight, so Cancel can reach it;
-        refuse once the job is cancelled."""
         with self.owner.store.condition:
             latest = self.owner.store.read(identity)
             if latest.cancel_intent:
@@ -485,8 +470,6 @@ class Execution:
     def _placement_mask(
         self, job: Job, placement: PlacementInput, base: NDArray[np.uint8]
     ) -> tuple[Job, FloatMap]:
-        """The placement's visibility mask, proposing and committing an
-        automatic one when it has none; with the job as it now stands."""
         mask_path = self.owner.workspace.preparation_work(
             job.id, "mask-" + placement_key(placement.id) + ".png"
         )
@@ -508,8 +491,7 @@ class Execution:
     def _propose_mask(
         self, job: Job, placement: PlacementInput, base: NDArray[np.uint8], mask_path: Path
     ) -> Job:
-        """Propose an automatic mask, plan it on the job, then install it
-        under the template lock."""
+        """Plans the mask on the job before installing it: recovery relies on that order."""
         identity = job.id
         proposal = propose_mask(base, np.array(placement.quad, np.float32))
         data = self.owner.calibration.encode_mask(
@@ -650,9 +632,6 @@ class Execution:
 
 @dataclass
 class _InferenceRun:
-    """One job's inference pass: the evidence it has gathered so far, in
-    order, and the earlier evidence it may reuse."""
-
     job: Job
     values: list[CropEvidence]
     candidates: tuple[CropEvidence, ...]

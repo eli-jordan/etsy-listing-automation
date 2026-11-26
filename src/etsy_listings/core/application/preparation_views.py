@@ -1,5 +1,3 @@
-"""Read-only authoring facts and masks, independent of host transport."""
-
 from dataclasses import dataclass
 
 from etsy_listings.core.application.mockup_templates import require_template

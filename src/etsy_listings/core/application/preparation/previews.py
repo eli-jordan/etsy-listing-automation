@@ -1,5 +1,3 @@
-"""Revision-bound transient composites; never publish maps or select models."""
-
 import hashlib
 from collections.abc import Callable
 from pathlib import Path
@@ -65,8 +63,7 @@ def _composite_target(
     image: RGB,
     base: Callable[[Path], RGB],
 ) -> RGB:
-    """The composite background. Shared maps are fitted against the fixed main
-    photo ``image``; only this background follows the editor's colour."""
+    """Maps are fitted to the main photo; only the background follows the colour."""
     target = (
         base(workspace.template_base_image(name, draft.colour))
         if draft.config.kind == "colour-matrix" and draft.colour is not None
@@ -85,14 +82,7 @@ def editor_preview(
     base: Callable[[Path], RGB],
     artwork: Callable[[], tuple[RGBA, FloatMap]],
 ) -> Image.Image:
-    """Fit original coordinates, rasterize a disposable 1024px editor image.
-
-    Draft masks replay against exactly the client's acknowledged revision, or
-    a later one differing only in labels. A save racing this request cannot
-    apply a stroke twice. The snapshot leaves
-    the lock before fitting; the host/client must discard superseded responses.
-    No generation pointer, history, PNG or approval identity is written.
-    """
+    """The snapshot leaves the lock before fitting: the client must discard superseded responses."""
     config, mask_edits = draft.config, draft.mask_edits
     with interactive(workspace):
         store = CalibrationStore(workspace)
