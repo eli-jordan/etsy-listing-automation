@@ -47,8 +47,7 @@ export function ArtworkPicker({ title, hint, cloth, current, library, onPick, on
             type="text"
             placeholder="Search your designs…"
             value={query}
-            // A phone opening the keyboard over half the sheet before
-            // anything is chosen hides the list being chosen from.
+            // A phone's keyboard would cover the list being chosen from.
             autoFocus={!phone}
             onChange={(event) => setQuery(event.target.value)}
           />

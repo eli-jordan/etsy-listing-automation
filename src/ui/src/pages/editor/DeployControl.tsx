@@ -37,8 +37,6 @@ export function DeployControl({ name, flush }: { name: string; flush: () => Prom
 
   async function startDeploy() {
     const settled = await flush();
-    // A plan of the old file would review something the seller has moved on
-    // from. The page head already says why it stayed.
     if (settled.written) navigate(deployUrl);
   }
 

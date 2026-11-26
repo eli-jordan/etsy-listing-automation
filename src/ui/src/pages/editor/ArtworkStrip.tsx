@@ -39,8 +39,7 @@ interface Props {
   onPreview: (colour: string) => void;
 }
 
-/** How many the strip offers before the full list is needed. Four fills one
- * row of the picker grid; the rest are a search away. */
+/** One row of the picker grid. */
 const RECENT = 4;
 
 const ONE: SlotTarget = { kind: "one" };
@@ -54,7 +53,7 @@ function targetLabel(target: SlotTarget): string {
 
 const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer.types).includes("Files");
 
-/** Enter/leave counted, so passing over a child doesn't drop the state. */
+/** Counted: `dragenter`/`dragleave` also fire for every child the pointer crosses. */
 function useDragDepth(onChange: (holding: boolean) => void) {
   const depth = useRef(0);
   return {
@@ -105,8 +104,6 @@ export function ArtworkStrip({
   const [uploading, setUploading] = useState<{ target: SlotTarget; name: string } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const hold = useDragDepth(setHolding);
-  // An upload outlives the render that started it; it picks into the map as
-  // it is when the file lands, not as it was when the file was dropped.
   const latest = useRef(design);
   useEffect(() => {
     latest.current = design;
@@ -218,8 +215,7 @@ export function ArtworkStrip({
         }
         onDragEnter={(e) => hold.enter(e)}
         onDragLeave={() => hold.leave()}
-        // Over the card but between targets: take the drop so the browser
-        // doesn't navigate to the file, and do nothing with it.
+        // A drop nobody takes, the browser opens as a page.
         onDragOver={(e) => {
           if (hasFiles(e)) e.preventDefault();
         }}
@@ -418,7 +414,6 @@ function Slot({
         if (hasFiles(e)) e.preventDefault();
       }}
       onDrop={(e) => {
-        // Bubbles on to the card, which clears its own holding state.
         e.preventDefault();
         drag.reset();
         const dropped = e.dataTransfer.files[0];
