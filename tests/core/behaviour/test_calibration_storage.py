@@ -459,7 +459,7 @@ def test_every_save_checkpoint_recovers_coherent_calibration(
         assert retried == restored
 
 
-@pytest.mark.parametrize("damage", ["payload", "manifest"])
+@pytest.mark.parametrize("damage", ["payload", "last-payload", "manifest", "escaping-destination"])
 def test_damaged_recovery_data_blocks_without_accepting_mixed_calibration(
     workspace_root: Path, monkeypatch, damage: str
 ) -> None:
@@ -470,6 +470,8 @@ def test_damaged_recovery_data_blocks_without_accepting_mixed_calibration(
 
     store = make_store(workspace_root)
     before = store.read("example")
+    config_file = store.workspace.template_config_file("example")
+    saved_config = config_file.read_bytes()
     config = load_template_config(
         {**before.config.model_dump(mode="json"), "renderer": {"type": "photo-warp"}}
     )
@@ -489,10 +491,19 @@ def test_damaged_recovery_data_blocks_without_accepting_mixed_calibration(
     if damage == "payload":
         payload = json.loads(manifest.read_bytes())["files"][0]["payload"]
         (transaction / payload).write_bytes(b"corrupted")
+    elif damage == "last-payload":
+        payload = json.loads(manifest.read_bytes())["files"][-1]["payload"]
+        (transaction / payload).write_bytes(b"corrupted")
+    elif damage == "escaping-destination":
+        document = json.loads(manifest.read_bytes())
+        document["files"][-1]["destination"] = "../../escaped.json"
+        manifest.write_bytes(json.dumps(document).encode())
     else:
         manifest.write_bytes(b"corrupted")
     with pytest.raises(CalibrationRepairRequiredError, match="repair"):
         CalibrationStore(store.workspace).read("example")
+    assert not (store.workspace.root / "mockup-templates" / "escaped.json").exists()
+    assert config_file.read_bytes() == saved_config
 
 
 def test_damaged_brush_history_is_discarded_without_losing_mask(workspace_root: Path) -> None:
