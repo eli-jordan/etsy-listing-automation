@@ -405,7 +405,9 @@ def test_restart_at_cpu_mask_and_publication_checkpoints_finishes_coherently(wor
         ),
     )
     coordinator.start()
-    assert exited.wait(10)
+    # The whole run up to the step, inference and the CPU mask passes, so it
+    # gets a completion's budget and diagnostics, not a bare 10s.
+    wait_checkpoint(coordinator, job.id, exited)
     with pytest.raises(ProcessExit):
         coordinator.close()
     restarted = Preparations(workspace, runtime=runtime)
@@ -459,7 +461,7 @@ def test_multiple_first_mask_crash_never_exposes_partial_maps_and_preserves_new_
         ),
     )
     coordinator.start()
-    assert exited.wait(10)
+    wait_checkpoint(coordinator, job.id, exited)
     with pytest.raises(ProcessExit):
         coordinator.close()
     assert not workspace.template_map_current("shirt").exists()
