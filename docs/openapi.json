@@ -186,7 +186,7 @@
       },
       "AiProviderSettings": {
         "additionalProperties": false,
-        "description": "One provider's preferences for every task (ADR-0056).\n\nDiscovery is advisory, so model and effort are intentionally not enums.\nA retired value stays usable until the seller replaces it.",
+        "description": "One provider's preferences for every task.",
         "properties": {
           "effort": {
             "anyOf": [
@@ -9119,7 +9119,7 @@
       },
       "TemplateEtsyConfig": {
         "additionalProperties": false,
-        "description": "`EtsyListingConfig` without the copy an instance writes for itself.\nThe four settings keep the meanings `EtsyListingConfig` documents.",
+        "description": "`EtsyListingConfig` without the copy an instance writes for itself.",
         "properties": {
           "description": {
             "$ref": "#/components/schemas/TemplateDescriptionConfig",

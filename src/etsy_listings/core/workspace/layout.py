@@ -1,9 +1,4 @@
-"""The names of everything in a workspace tree. ADR-0013.
-
-Only :class:`etsy_listings.core.workspace.workspace.Workspace` reads these -- the
-rest of the codebase asks it for a path rather than joining names itself, so
-this file is the single place the layout is defined.
-"""
+"""The names of everything in a workspace tree; only ``Workspace`` joins them (ADR-0013)."""
 
 from __future__ import annotations
 
@@ -65,9 +60,7 @@ LISTING_FILE = "listing.yaml"
 GENERATED_FILE = "generated.yaml"
 LOCK_FILE = "state.lock.json"
 
-# Per mockup template set, inside MOCKUP_TEMPLATES_DIR/<name>/, and per
-# listing template, inside LISTING_TEMPLATES_DIR/<name>/. One name for
-# both files: the directory says which kind of template it is.
+# Per mockup template and per listing template: the directory says which kind.
 TEMPLATE_FILE = "template.yaml"
 RENDERER_DIR = "_renderer"
 """Inside MOCKUP_TEMPLATES_DIR/<name>/: every file the app writes for a
@@ -138,8 +131,7 @@ FX_CACHE_FILE = "fx.json"
 
 ROOT_ENV_VAR = "ETSY_LISTINGS_ROOT"
 
-# ADR-0054: durable calibration assets, outside disposable workspace cache,
-# inside RENDERER_DIR.
+# Inside RENDERER_DIR: durable calibration assets, not cache (ADR-0054).
 RENDERER_SETTINGS_FILE = "renderer-settings.json"
 CALIBRATION_TRANSACTION_DIR = "calibration-transaction"
 CALIBRATION_RECEIPT_FILE = "calibration-receipt.json"

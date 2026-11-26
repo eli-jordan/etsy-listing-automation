@@ -142,6 +142,25 @@ def test_a_run_can_borrow_credentials_without_borrowing_the_workspace_cache(
     assert isinstance(ctx.etsy, HttpEtsyListingClient)
 
 
+def test_the_shop_client_looks_up_without_a_bearer_when_nobody_signed_in(
+    workspace_root: Path,
+) -> None:
+    _env(workspace_root, KEY_PAIR)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"count": 0, "results": []})
+
+    client = connections.etsy_shop_client(
+        workspace_root,
+        http=httpx.Client(transport=httpx.MockTransport(handler), base_url=ETSY_BASE_URL),
+    )
+    assert client.find_shops("NaturallyInked") == []
+
+    assert "authorization" not in seen[0].headers
+
+
 # ------------------------------------------------------------ Etsy market
 
 

@@ -1,15 +1,3 @@
-"""`common-copy/*.md`: reusable description bodies, and the one place their
-Markdown front matter is parsed (AI SEO implementation plan, PR2:
-"Description and common-copy boundaries").
-
-A common-copy file is `---`-delimited YAML front matter (`title`, `targets`,
-optional `summary`) followed by its Markdown body -- the body a
-`description.ref` supplies to :func:`~etsy_listings.core.config.description.compose_description`.
-:func:`parse_common_copy` is pure: it takes the ref only to name it in a
-refusal, and the raw text `Workspace.load_common_copy` already read. Nothing
-else in the codebase may parse this shape -- see that method's docstring.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,11 +12,7 @@ does not name it is not usable as a description body, whatever else it
 names."""
 
 
-class CommonCopyError(ValueError):
-    """A `description.ref` that does not resolve to usable common copy --
-    missing, malformed front matter, or not targeted to `description`
-    (`docs/features/ai-seo-20260922/interactions.md` section 6). The message always
-    names the ref, since a stage or the editor's banner surfaces it verbatim."""
+class CommonCopyError(ValueError): ...
 
 
 @dataclass(frozen=True)
@@ -40,7 +24,6 @@ class CommonCopyDocument:
 
 
 def _front_matter(ref: str, lines: list[str]) -> tuple[dict[str, Any], int]:
-    """The front matter's mapping, and the index of its closing delimiter."""
     if not lines or lines[0].strip() != FRONT_MATTER_DELIMITER:
         raise CommonCopyError(
             f"{ref!r}: missing front matter -- expected the file to open with a '---' block"
@@ -72,12 +55,6 @@ def _targets(ref: str, raw_targets: object) -> tuple[str, ...]:
 
 
 def parse_common_copy(ref: str, raw: str) -> CommonCopyDocument:
-    """``raw`` is the file's full text; ``ref`` is used only to name it in a
-    refusal. Reading the file is
-    :meth:`~etsy_listings.core.workspace.workspace.Workspace.load_common_copy`'s job
-    -- this function does no I/O, so it is exercised directly against string
-    fixtures rather than real files on disk.
-    """
     lines = raw.splitlines()
     header, end = _front_matter(ref, lines)
 

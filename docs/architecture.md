@@ -115,7 +115,7 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and holds a listing template's lock around each of its check-then-writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 | `core/engine` | Stage protocol, comparison, lockfile, lifecycle, runs, previews and status | Stages return values; the engine decides execution and records progress |
 | `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `locks.py`, the process-wide keyed locks for listings, mockup templates and listing templates; `listing_documents.py` is the one reader and writer of `listing.yaml` and takes each listing's lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
-| `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Batch rows and AI runs stay with `core/application/listing_identity.py` |
+| `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Designs, garment profiles and pricing plans are reusable and stay. A delete pending its remote retraction (ADR-0035) drops only the snapshot and proposal, since the seller has finished researching the listing. Batch rows and AI runs stay with `core/application/listing_identity.py` |
 | `core/render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
 | `core/clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs, OAuth tokens and fakes | Shared transport per vendor; separate caller authority through protocols |
 | `core/config` | Validated documents, settings, money, slugs, secrets and local listing refusals | No knowledge of directory layout; path-based loaders and the design-resolution check currently perform file I/O |
@@ -133,6 +133,20 @@ data tree, including how to enumerate it. Only `core/engine` computes
 deployment changes and folds a run's lockfile. Render passes are pure, so
 input hashes and golden images describe deterministic work shared by
 calibration and deployment.
+
+A `UserFacingError` means the run stopped for a reason the user can act on (a
+design too small, a colour that does not exist, copy still carrying a
+sentinel), and its message is the whole useful output: the CLI prints it, and
+`--all` carries on to the next listing. Anything else is a defect and prints a
+traceback; a client sees `INTERNAL_ERROR_MESSAGE` in its place. A refusal picks
+one of four categories:
+
+| Category | Means |
+|---|---|
+| `MissingError` | What the request names is not there: it never was, or something removed or moved it first |
+| `ConflictError` | The request is well formed, but what the workspace holds now forbids it: a name already taken, a row with nothing to retry, a template that must be prepared first |
+| `StaleError` | The request was made against a revision that has since changed; nothing was written, and the caller reloads and asks again |
+| `RefusedError` | The request's own content cannot be taken, whatever the workspace holds: a file that is not an image, a kind the photos cannot be, mask strokes outside the photo |
 
 A core refusal reaches HTTP through one seam. Each refusal class inherits a
 category from `core/errors.py` (missing, conflict, stale or refused), and
@@ -152,9 +166,23 @@ still answer it themselves. `template.yaml` is the exception, because
 
 ### Clients, credentials and prompts
 
-`core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
-bearers resolve at request time, but the Etsy app key pair is read during
-construction to decide whether an optional client exists. Nothing in the
+`core/connections.py` builds clients and `RunContext` without reading a
+credential. Printify tokens, the Etsy app key pair and signed-in bearers
+resolve on each request, so a workspace that only renders mockups still plans,
+a stage that needs a missing credential reports itself blocked, and a rotated
+key takes effect without a restart. `etsy_app_key` is the separate,
+non-raising availability question readiness and setup ask; half a pair reads
+as absent, since `auth etsy` captures both halves at once and is the remedy
+either way. The token store resolves its keystring inside each refresh, so
+`auth --check` can build one for a workspace with no credentials. Shop lookups
+attach a bearer only when a sign-in exists, and market requests never attach
+one: Etsy rotates the refresh token on every use, and a refresh research does
+not need is a chance to race a deploy for the one valid token. `setup` and
+`auth` verify a token the user has just typed through `printify_client_for`
+before it is stored, because a stored unverified credential makes a workspace
+that looks configured and is not. `credentials_root` lets the e2e layer borrow
+a configured workspace's credentials while every cache stays in its disposable
+workspace. Nothing in the
 server calls `connections` for a client. `create_app` takes
 `connections.run_context` as `Deployments`' `ContextFactory`, and an
 `application.dependencies.ClientFactories` for every other client: the Etsy
@@ -704,7 +732,12 @@ configured-identity retention and the editable key set. `core/workspace/revision
 lock around read, revision comparison, validation and atomic replace. A stale
 revision refuses with 412 and `kind: "stale"`; invalid values refuse with field
 errors and 422.
-Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
+Semantic no-ops leave the source bytes and file untouched, per ADR-0055. A
+conflict never overwrites an external edit, even a comment-only one: the page
+reloads instead. An optional file such as `settings.yaml` is read with
+`absent_ok`, as no bytes at `ABSENT_REVISION`, and a save against that
+revision creates it. Absent is not the empty file's hash, so a file that
+appears meanwhile, even an empty one, is an external edit like any other.
 
 A successful save replaces the server workspace's defaults inside the same
 revision lock, after the replace succeeds (`replace_if_unchanged(adopt=...)`),
@@ -840,6 +873,16 @@ File references without a prefix resolve from the workspace root. `./` resolves
 from the owning listing or listing-template directory; subdirectories are
 allowed, while absolute paths, backslashes and `..` segments are refused
 (ADR-0046). Reference resolution checks the resolved target against the root.
+One interpreter serves every owner (a listing, a listing template, and a
+template frozen into a staging session or batch, whose `./` is the frozen copy
+and whose bare refs stay live), so a template's refs mean the same once it
+becomes a listing. The editor's unnamed draft resolves against a stand-in
+listing directory at the same depth: a workspace-rooted ref lands on the same
+file, and a `./` ref finds nothing, since a listing with no directory has no
+files of its own. Picture endpoints serve only images and videos whose
+resolved path is inside the directory asked of, never the `listing.yaml`,
+`template.yaml` or lockfile beside them. A listing template's own files are
+the ones under its `assets/`, where Save as listing template puts them.
 Layout names are validated as single segments, but not all layout accessors
 check symlink/junction containment; that remaining gap is audit finding F02.
 
@@ -1047,7 +1090,10 @@ later. Each traces to a decision.
   one.** Everything else asks for `workspace.lock_file(name)` rather than
   joining `listings/<name>/state.lock.json`, and for
   `workspace.template_photos(name)` rather than globbing
-  `mockup-templates/<name>/*.png`. Two rules enforce it: `resolve()` rejects
+  `mockup-templates/<name>/*.png`. Reading is the same: `load_listing`,
+  `load_garment_profile`, `load_pricing_plan` and `load_exceptions` open the
+  tree's files, so no caller runs its own `yaml.safe_load` on a path it
+  assembled. Two rules enforce it: `resolve()` rejects
   paths escaping the root (`ADR-0013`), and the layout accessors reject any
   name that is not a single path segment. Together they keep the server's
   endpoints safe — template names arrive from URLs — so this is a security
@@ -1087,6 +1133,17 @@ later. Each traces to a decision.
   profile records the catalog's brand and model verbatim, `®` included;
   matching normalises both sides, so a hand edit need not reproduce the
   symbol.
+  The mechanism: ruamel's composer gives each node's exact span, the smallest
+  node whose value changed is re-rendered with ruamel at that spot, and every
+  other byte is copied through, because even a ruamel round-trip dump would
+  normalise indentation, quoting and line endings the seller never touched.
+  Values are compared with PyYAML's `safe_load`, the reader every owner uses,
+  and ruamel is held to the same YAML 1.1 rules, so a rendered `'yes'` stays a
+  string. The result is read back and must equal the intended document; when it
+  cannot (an edit through an alias, say) the edit is refused and the owner
+  writes nothing. Ordered rows with a declared identity, such as the named AI
+  providers (ADR-0056), move with their source text when reordered, so a
+  comment stays with its provider rather than its index.
 - **A client is built through `core/connections.py`.** Which credential is
   resolved when, what a missing one means, and where the Etsy token file lives
   are one set of answers, not four (`cli`, `setup`, `auth` and the e2e layer

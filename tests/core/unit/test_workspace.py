@@ -521,6 +521,18 @@ def test_template_base_image_falls_back_to_a_trailing_segment_match(
     )
 
 
+def test_the_trailing_segment_fallback_matches_whole_hyphen_segments_only(
+    workspace_root: Path,
+) -> None:
+    pack = workspace_root / "mockup-templates" / "vendor-pack"
+    pack.mkdir()
+    (pack / "flat-lay-flo-blue.png").write_bytes(b"")
+    ws = Workspace.discover(root_override=workspace_root)
+
+    assert ws.template_base_image("vendor-pack", "o-blue") == pack / "o-blue.png"
+    assert ws.template_base_image("vendor-pack", "flo-blue") == pack / "flat-lay-flo-blue.png"
+
+
 def test_template_base_image_prefers_an_exact_match_over_the_fallback(
     workspace_root: Path,
 ) -> None:
@@ -806,6 +818,15 @@ class TestListingTemplateLayout:
         ws.remove_listing_template("heavyweight-tee")
 
         assert not ws.listing_template_dir("heavyweight-tee").exists()
+
+    def test_its_own_files_are_the_ones_under_assets_only(self, ws: Workspace) -> None:
+        self._write(ws, "heavyweight-tee")
+        asset = ws.listing_template_assets_dir("heavyweight-tee") / "chart.png"
+        asset.parent.mkdir()
+        asset.write_bytes(b"png")
+        (ws.listing_template_dir("heavyweight-tee") / "stray.png").write_bytes(b"png")
+
+        assert ws.listing_template_media_files("heavyweight-tee") == [asset]
 
     def test_a_dot_slash_ref_resolves_against_the_template_directory(self, ws: Workspace) -> None:
         resolved = ws.resolve_template_ref("./assets/chart.png", template="heavyweight-tee")

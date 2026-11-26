@@ -168,6 +168,39 @@ def test_shape_and_membership_refuse_in_validation_and_plan(
     assert_plan_refuses(ctx, issues[0].message)
 
 
+NOTHING_ALLOWED = TemplatePositionLimits.model_validate(
+    {"scale": {"min": 1, "max": 1}, "offset": 0, "rotation": 0}
+)
+
+
+def test_a_sheared_position_is_not_listed_as_outside_the_limits(workspace_root: Path) -> None:
+    from etsy_listings.core.config.listing_validation import positions_outside_limits
+
+    ctx = a_context(workspace_root)
+    original = template_state(ctx.workspace, TEMPLATE).require()
+    config, position = shape_case("shear", [point.model_dump() for point in original.bounding_box])
+    edit_listing(workspace_root, media=[{"template": TEMPLATE}], template_positions=position)
+    listing = ctx.workspace.load_listing(FIXTURE_LISTING)
+
+    assert positions_outside_limits(listing, {TEMPLATE: config}, NOTHING_ALLOWED) == []
+
+
+def test_a_position_for_a_template_not_in_media_is_not_listed_as_outside_the_limits(
+    workspace_root: Path,
+) -> None:
+    from etsy_listings.core.config.listing_validation import positions_outside_limits
+
+    ctx = a_context(workspace_root)
+    original = template_state(ctx.workspace, TEMPLATE).require()
+    scaled = compose(original.bounding_box, Pose(scale=1.05))
+    position = {"unused": {"bounding_box": [point.model_dump() for point in scaled]}}
+    edit_listing(workspace_root, media=[{"template": TEMPLATE}], template_positions=position)
+    listing = ctx.workspace.load_listing(FIXTURE_LISTING)
+
+    templates = {TEMPLATE: original, "unused": original}
+    assert positions_outside_limits(listing, templates, NOTHING_ALLOWED) == []
+
+
 def test_marigold_positions_validate_like_photo_warp_ones(workspace_root: Path) -> None:
     """Spec rule 5 is lifted (option B): a Marigold position is refused only
     for what refuses any position, and a limits change lists it."""

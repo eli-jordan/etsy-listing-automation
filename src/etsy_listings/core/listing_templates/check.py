@@ -1,14 +1,4 @@
-"""A listing template's completeness, with its inputs read off the workspace
-.
-
-`config/listing_validation.check_listing_template` is pure, as
-`check_listing` is; somebody has to resolve its description ref and probe its
-videos first. For a listing that is `core/application/listing_reads.py`'s
-``_business_issues``;
-for a listing template it is this, and the one thing that varies is where a
-ref points -- beneath the template's directory once it is saved, at the
-files it will copy while it is still a draft.
-"""
+"""A listing template's completeness, with its description ref and videos read first."""
 
 from __future__ import annotations
 
@@ -30,9 +20,6 @@ def check_listing_template_files(
     resolve: Callable[[str], Path],
     facts: WorkspaceFacts,
 ) -> list[Issue]:
-    """Every issue with ``template``, its refs resolved through ``resolve``.
-    A ref that will not resolve is a video that cannot be read, reported
-    against the ref -- the same answer `WorkspaceFacts.videos` gives."""
     body = template.etsy.description
     described = workspace.resolve_description(DescriptionConfig(text=body.text, ref=body.ref))
     videos: dict[str, VideoFacts | ProbeFailure] = {}
@@ -58,11 +45,6 @@ def check_listing_template_files(
 def template_issues(
     workspace: Workspace, name: str, template: ListingTemplate, *, facts: WorkspaceFacts
 ) -> list[Issue]:
-    """The issues ``template`` has as listing template ``name`` -- the one on
-    disk, whose shared refs can have changed under it since it was saved
-    complete, or a ``PUT``'s candidate, whose ``./`` refs name that
-    template's directory."""
-
     def resolve(ref: str) -> Path:
         return workspace.resolve_template_ref(ref, template=name)
 

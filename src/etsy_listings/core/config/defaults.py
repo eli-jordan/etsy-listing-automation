@@ -1,5 +1,3 @@
-"""``shop.yaml``: shop-wide configuration."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,15 +9,6 @@ from etsy_listings.core.config.errors import ConfigLoadError, format_validation_
 
 
 class MissingDefaultError(ValueError):
-    """A ``shop.yaml`` field that only some phases need, asked for by a
-    phase that needs it.
-
-    Raised at the point of use rather than at load, so a workspace can be set
-    up and used for everything that doesn't need the field yet. The message
-    carries the dotted path, because "shop_id" alone is ambiguous now that
-    both ``etsy`` and ``printify`` have one.
-    """
-
     def __init__(self, field_path: str, needed_to: str, how_to_find: str) -> None:
         self.field_path = field_path
         super().__init__(
@@ -30,11 +19,9 @@ class MissingDefaultError(ValueError):
 class PrintifyDefaults(BaseModel):
     """Which Printify shop this workspace creates products in.
 
-    Every product call is shop-scoped -- ``/v1/shops/{shop}/products.json`` --
-    so nothing in Phase 2 can run without it. Optional at load anyway, for the
-    same reason the Etsy ids are: a workspace that only renders mockups has no
-    use for it, and every workspace written before Phase 2 has no ``printify:``
-    block at all.
+    Optional at load, like the Etsy ids: a workspace that only renders mockups
+    has no use for it, and a product call that needs it raises
+    :class:`MissingDefaultError` then.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -65,10 +52,8 @@ class PrintifyDefaults(BaseModel):
 
 
 class EtsyReturnPolicyDefaults(BaseModel):
-    """A return policy's identity, since Etsy gives the resource no title.
-    The three terms *are* the identity -- `getShopReturnPolicies`
-    is matched on them exactly, and `describe()` (models.py) is what a plan
-    renders instead of a bare id."""
+    """Etsy return policies have no title: `getShopReturnPolicies` is matched
+    on these three terms exactly."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -78,16 +63,6 @@ class EtsyReturnPolicyDefaults(BaseModel):
 
 
 class EtsyListingDefaults(BaseModel):
-    """Every field a listing inherits, and nothing that identifies the shop
-    (features/etsy-listing-20260910/spec.md, "Config, after this phase"). Overridable per listing in
-    `listing.yaml`'s own `etsy:` block.
-
-    `who_made` defaults to `someone_else`: the shirt genuinely was
-    made by another company, and that declaration requires a production
-    partner attached to the *listing* -- checked at plan time (decision 3),
-    not here, since resolving a name to a partner needs the shop's live list.
-    """
-
     model_config = ConfigDict(extra="forbid")
 
     who_made: str = "someone_else"
@@ -120,9 +95,6 @@ class EtsyDefaults(BaseModel):
     """The shop's name on Etsy -- the human-readable half of its identity, and
     what `findShops` resolves the id from."""
 
-    # Deferrable, like `printify.shop_id`: it normally comes back *from* the
-    # Etsy API, so demanding it at load time made a workspace unusable before
-    # an Etsy shop exists to discover it from.
     shop_id: int | None = None
 
     listing_defaults: EtsyListingDefaults = EtsyListingDefaults()
@@ -178,8 +150,6 @@ class Defaults(BaseModel):
 
     @classmethod
     def from_document(cls, path: Path, raw: object) -> Defaults:
-        """``raw`` read as ``path`` would be, raising pydantic's own error so
-        an editor can name each refused field (the Admin page's Shop saves)."""
         if isinstance(raw, dict):
             _refuse_moved_keys(path, raw)
         return cls.model_validate(raw)

@@ -1,5 +1,3 @@
-"""``listings/{name}/listing.yaml``: everything commercial and creative, configuration layering."""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -29,7 +27,7 @@ from etsy_listings.core.config.media import (
 )
 from etsy_listings.core.config.media import MediaEntry as MediaEntry
 from etsy_listings.core.config.media import TemplateMediaEntry as TemplateMediaEntry
-from etsy_listings.core.config.money import Money, PriceField, require_currency
+from etsy_listings.core.config.money import Money, require_currency
 from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.config.template_positions import TemplatePositions
 
@@ -57,7 +55,7 @@ MAX_TAG_LENGTH = 20
 MAX_TITLE_LENGTH = 140
 
 
-def _coerce_design(raw: Any) -> Any:  # pydantic validator boundary
+def _coerce_design(raw: object) -> object:
     """The written forms a ``design:`` has had, read as the one map.
 
     A bare path is the single-artwork shorthand written before the map
@@ -95,10 +93,7 @@ def _check_design_entry(key: str, ref: str | None, colors: list[str] | None) -> 
         )
 
 
-def _check_design(design: Mapping[str, str | None], colors: list[str] | None) -> None:
-    """The malformed maps -- refused writes, not blockers (spec: *Saving,
-    blockers and warnings*). Incomplete ones (an empty slot, no design at
-    all) are `config/listing_validation.py`'s to explain."""
+def _refuse_malformed_design(design: Mapping[str, str | None], colors: list[str] | None) -> None:
     if DEFAULT in design and is_light_dark(design):
         raise ValueError(
             "design: default cannot be combined with on-light or on-dark -- a listing "
@@ -130,15 +125,6 @@ def canonical_document(document: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _check_gallery(media: list[MediaEntry]) -> None:
-    """`media:` is the gallery in order, and these are the layouts
-    Etsy cannot show at all -- malformed rather than incomplete, so
-    they refuse the write instead of waiting in the issues banner.
-
-    Position 1 is the thumbnail and Etsy only ever puts an image there. Etsy
-    pins the featured video at position 2 (decision 9), so a listing with any
-    video has one there; the second may sit anywhere after it. Images and
-    videos have separate caps because Etsy counts them apart.
-    """
     try:
         kinds: list[MediaKind] = [media_kind(entry) for entry in media]
     except UnknownMediaTypeError as exc:
@@ -185,13 +171,6 @@ def check_production_fields(
     media: list[MediaEntry],
     currency: str | None,
 ) -> None:
-    """The structural rules over the fields a listing and a listing template
-    both carry: prices in the workspace's currency, a gallery Etsy can
-    show, and no override or media entry for a colour that is not on sale.
-
-    One function rather than a copy in each model, because a listing template
-    is instantiated *into* a listing: a rule stated twice here is a template
-    that saves and then makes listings that will not load."""
     if currency:
         _check_currencies(prices, price_overrides, currency)
 
@@ -275,7 +254,7 @@ class Listing(BaseModel):
     a colour key is checked against the colours the listing sells, so this
     field's error lands on ``design`` itself (``_design_keys``)."""
     brief: str
-    prices: dict[str, PriceField] = {}
+    prices: dict[str, Money] = {}
     """Per-size overrides on top of ``pricing_plan`` -- optional and partial.
     A listing with no ``pricing_plan`` must cover every size it needs here,
     exactly as before this field became optional."""
@@ -285,7 +264,7 @@ class Listing(BaseModel):
     unlike ``garment_profile``/``media[].template``) -- see docs/reference/listing-configuration.md.
     Resolution and
     loading are the caller's job; ``Listing`` never touches ``Workspace``."""
-    price_overrides: dict[str, dict[str, PriceField]] = {}
+    price_overrides: dict[str, dict[str, Money]] = {}
     etsy: EtsyListingConfig = EtsyListingConfig()
     media: list[MediaEntry]
     template_positions: TemplatePositions | None = None
@@ -314,7 +293,7 @@ class Listing(BaseModel):
     def _design_keys(
         cls, design: dict[str, str | None], info: ValidationInfo
     ) -> dict[str, str | None]:
-        _check_design(design, info.data.get("colors"))
+        _refuse_malformed_design(design, info.data.get("colors"))
         return design
 
     @model_validator(mode="after")
@@ -334,19 +313,6 @@ class Listing(BaseModel):
 
         Answers ``Self`` rather than ``Listing`` because the UI's
         ``ListingDetail`` *is* a ``Listing`` with display fields hung off it.
-
-        There is no ``draft()`` beside this one any more. This model used to
-        hold one rule an unsaved draft was allowed to fail -- "set
-        ``pricing_plan`` or ``prices``" -- which made a document that merely
-        had nothing chosen yet indistinguishable from one that was malformed.
-        ADR-0043 moved that refusal to where the other seven incompletenesses
-        already lived: `config/listing_validation.py` explains it in the
-        banner, and `engine/stages/gates.py` turns it into the `Blocked` that
-        stops a deploy. What this model still refuses is a document that
-        contradicts itself -- a ``media[].colour`` naming a colour the listing
-        does not sell, a price in the wrong currency, a title over Etsy's
-        limit -- and those are failures about a field somebody filled in, not
-        about one they have not reached.
         """
         return cls.model_validate(dict(EMPTY_DRAFT), context={"currency": currency})
 
@@ -354,8 +320,6 @@ class Listing(BaseModel):
     def load(
         cls, path: Path, *, currency: str, read: Callable[[Path], bytes] = Path.read_bytes
     ) -> Listing:
-        """``read`` fetches the file's bytes, as for ``ListingTemplate.load``:
-        the workspace passes its retrying reader."""
         return load_model(
             cls, path, context={"currency": currency}, read=read, missing="listing file not found"
         )
@@ -363,11 +327,6 @@ class Listing(BaseModel):
     def resolved_price(
         self, color: str, size: str, *, pricing_plan: PricingPlan | None = None
     ) -> Money:
-        """``price_overrides`` > ``prices`` > the referenced pricing plan's own
-        (override-then-flat) resolution. ``pricing_plan`` is an already-loaded
-        object, not the ``str`` ref -- loading it is the caller's job, the same
-        point ``design`` refs get resolved (see the ``pricing_plan`` field's
-        docstring)."""
         return resolve_price(
             self.prices, self.price_overrides, color, size, pricing_plan=pricing_plan
         )
@@ -381,9 +340,6 @@ def resolve_price(
     *,
     pricing_plan: PricingPlan | None = None,
 ) -> Money:
-    """The one precedence rule for a price, for a listing and for a listing
-    template alike (ADR-0047 reuses the price models, so it reuses their
-    resolution): ``price_overrides`` > ``prices`` > the plan's own."""
     override = price_overrides.get(color, {}).get(size)
     if override is not None:
         return override

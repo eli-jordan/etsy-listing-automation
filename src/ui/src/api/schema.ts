@@ -2210,10 +2210,7 @@ export interface components {
     };
     /**
      * AiProviderSettings
-     * @description One provider's preferences for every task (ADR-0056).
-     *
-     *     Discovery is advisory, so model and effort are intentionally not enums.
-     *     A retired value stays usable until the seller replaces it.
+     * @description One provider's preferences for every task.
      */
     AiProviderSettings: {
       /** Effort */
@@ -5919,7 +5916,6 @@ export interface components {
     /**
      * TemplateEtsyConfig
      * @description `EtsyListingConfig` without the copy an instance writes for itself.
-     *     The four settings keep the meanings `EtsyListingConfig` documents.
      */
     TemplateEtsyConfig: {
       /** @default {} */
