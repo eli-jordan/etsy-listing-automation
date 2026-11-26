@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING
 
 from etsy_listings import __about__
 from etsy_listings.core.ai import ProposalStore
@@ -26,6 +26,9 @@ from etsy_listings.core.engine.plan import PlannedRun, build_plan
 from etsy_listings.core.engine.preview import render_pending
 from etsy_listings.core.engine.stage import AnyStage
 from etsy_listings.core.errors import UserFacingError
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 
 @dataclass(frozen=True)
@@ -101,40 +104,25 @@ def plan_fingerprint(plan: Plan) -> str:
     reviewed = replace(
         plan, stage_plans=tuple(sp for sp in plan.stage_plans if not sp.chosen_at_apply)
     )
-    canonical = _canonical(reviewed)
-    assert isinstance(canonical, dict)  # `Plan` is a dataclass; see `_canonical`
-    return canonical_hash(canonical)
+    return canonical_hash(_canonical_dataclass(reviewed))
 
 
-_UNHASHED_FIELDS = frozenset({"snapshot", "chosen_at_apply"})
-"""``StagePlan`` fields left out of the fingerprint by name. ``chosen_at_apply``
-is always ``False`` on what is left once those stage plans are dropped, and
-leaving it out keeps every other fingerprint as it was before the field."""
+def _canonical_dataclass(value: DataclassInstance) -> dict[str, object]:
+    return {
+        f.name: _canonical(getattr(value, f.name))
+        for f in fields(value)
+        if not f.metadata.get("unhashed")
+    }
 
 
-def _canonical(value: Any) -> Any:  # a generic tree walk, by construction
-    """``value``, rendered into the ``dict``/``list``/scalar tree
-    :func:`~etsy_listings.core.engine.lock.canonical_hash` can hash.
-
-    A stage's ``snapshot`` is dropped by name rather than by type, which is
-    safe because no other field on :class:`~etsy_listings.core.engine.change.Plan`,
-    :class:`~etsy_listings.core.engine.change.StagePlan` or a ``Change`` is ever
-    called ``snapshot``. ``Money`` is checked before the generic dataclass
-    branch below, since it is itself a (frozen) dataclass and would otherwise
-    be unrolled into its raw ``Decimal`` amount rather than the string form a
-    listing actually wrote -- ``Decimal`` and ``dict`` do not otherwise appear
-    anywhere in a ``Plan``, so there is no separate branch for either: every
-    other value is a dataclass, a ``list``/``tuple`` of one, or a plain scalar
-    ``json.dumps`` already handles.
-    """
+def _canonical(value: object) -> object:
+    """``value`` as the ``dict``/``list``/scalar tree ``canonical_hash`` hashes.
+    ``Money`` is checked first: it is a dataclass too, and a plan shows the
+    string a listing wrote, not its ``Decimal`` amount."""
     if isinstance(value, Money):
         return str(value)
     if is_dataclass(value) and not isinstance(value, type):
-        return {
-            f.name: _canonical(getattr(value, f.name))
-            for f in fields(value)
-            if f.name not in _UNHASHED_FIELDS
-        }
+        return _canonical_dataclass(value)
     if isinstance(value, list | tuple):
         return [_canonical(item) for item in value]
     return value

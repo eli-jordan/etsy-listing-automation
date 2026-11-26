@@ -194,12 +194,17 @@ class Verdict(_OutcomeView):
         return self.outcome.message if isinstance(self.outcome, StageBlocked) else None
 
 
+UNHASHED: dict[str, bool] = {"unhashed": True}
+"""``field`` metadata for a :class:`StagePlan` field the ADR-0039 plan
+fingerprint leaves out."""
+
+
 @dataclass(frozen=True)
 class StagePlan(_OutcomeView):
     stage: str
     outcome: StageOutcome
     drift: tuple[Drift, ...] = field(default_factory=tuple)
-    snapshot: BaseModel | None = None
+    snapshot: BaseModel | None = field(default=None, metadata=UNHASHED)
     group: str | None = None
     """The stage this one is shown under (``Stage.group``), stamped by the
     engine like ``stage`` itself."""
@@ -208,7 +213,7 @@ class StagePlan(_OutcomeView):
     """Stable execution inputs not expressed by changes/actions (ADR-0039).
     Separate from display snapshots, so preview availability cannot stale a review."""
 
-    chosen_at_apply: bool = False
+    chosen_at_apply: bool = field(default=False, metadata=UNHASHED)
     """The stage is one the apply adds by the seller's choice
     (``Stage.chosen_at_apply``), stamped by the engine like ``group``. Left
     out of the ADR-0039 fingerprint, plan and all."""
