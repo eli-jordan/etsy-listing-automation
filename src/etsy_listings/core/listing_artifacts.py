@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from etsy_listings.core.ai import ProposalStore
@@ -32,7 +33,8 @@ def move_listing(workspace: Workspace, old: str, new: str) -> None:
             raise ListingMissingError(old)
         if not documents.is_free(new):
             raise ListingNameTakenError(new)
-        for source, target in zip(_keyed(workspace, old), _keyed(workspace, new), strict=True):
+        for path_of in _KEYED_PATHS:
+            source, target = path_of(workspace, old), path_of(workspace, new)
             if not source.exists():
                 continue
             if target.is_dir():
@@ -45,7 +47,8 @@ def remove_listing(workspace: Workspace, name: str) -> None:
     """Wipe listing ``name`` and everything keyed by it. Designs, garment
     profiles and pricing plans stay, because they are reusable."""
     with ListingDocuments(workspace).lock(name):
-        for path in _keyed(workspace, name):
+        for path_of in _KEYED_PATHS:
+            path = path_of(workspace, name)
             if path.is_dir():
                 remove_tree(path)
             else:
@@ -62,13 +65,11 @@ def discard_research(workspace: Workspace, name: str) -> None:
         ProposalStore(workspace).remove(name)
 
 
-def _keyed(workspace: Workspace, name: str) -> tuple[Path, ...]:
-    """The listing's own paths, in a fixed order so a move can pair old with
-    new. The listing directory comes first. The proposal is not in this
-    list: its store moves it, because the record names its listing."""
-    return (
-        workspace.listing_dir(name),
-        workspace.renders_dir(name),
-        workspace.preview_dir(name),
-        workspace.market_snapshot_file(name),
-    )
+_KEYED_PATHS: tuple[Callable[[Workspace, str], Path], ...] = (
+    Workspace.listing_dir,
+    Workspace.renders_dir,
+    Workspace.preview_dir,
+    Workspace.market_snapshot_file,
+)
+"""The listing's own paths. The proposal is not one: its record names its
+listing, so :class:`ProposalStore` moves it."""
