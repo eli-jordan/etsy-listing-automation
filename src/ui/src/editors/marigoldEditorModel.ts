@@ -36,10 +36,6 @@ export function previewJobs(
   return [{ id: templateName, label: templateName, body }];
 }
 
-/** The editor canvas's own preview: the job for the chosen colour (the only
- * job, for other kinds) at the calibration revision and that revision's
- * labels, with the unsaved mask strokes. `null` until there is a revision and
- * a job to show. */
 export function editorPreviewRequest(
   kind: TemplateConfigState["kind"],
   jobs: PreviewJob[],
@@ -55,8 +51,6 @@ export function editorPreviewRequest(
   return { ...body, calibration_revision: revision, labels, mask_edits: maskEdits };
 }
 
-/** The parts of a template that Marigold's prepared maps depend on, as a
- * comparable string; `null` for anything not rendered by Marigold. */
 export function marigoldMapInputs(value: TemplateConfigState | null): string | null {
   if (value?.renderer.type !== "marigold") return null;
   return JSON.stringify({
@@ -69,8 +63,6 @@ export function marigoldMapInputs(value: TemplateConfigState | null): string | n
   });
 }
 
-/** The masks a placement's saved strokes started from, oldest first -- none
- * when the histories were read at another revision. */
 export function undoBases(
   histories: { revision: string; values: Record<string, MaskHistory> },
   revision: string,
@@ -80,9 +72,6 @@ export function undoBases(
   return histories.values[id ?? IMPLICIT_PLACEMENT_ID]?.strokes.map((s) => s.before) ?? [];
 }
 
-/** Whether Undo has anything to take back: a stroke drawn since the save,
- * or a saved one (`undoCount`) the draft has not already undone -- none once
- * the draft resets to the automatic mask. */
 export function canUndoMask(draft: ReturnType<typeof maskDraft>, undoCount: number): boolean {
   if (draft.strokes.length > 0) return true;
   return !draft.automatic && undoCount > draft.undoSaved;

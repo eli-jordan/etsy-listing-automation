@@ -21,7 +21,6 @@ import { ListingsPage } from "./pages/ListingsPage";
 import { NewBatchPage } from "./pages/NewBatchPage";
 import { StagingPage } from "./pages/StagingPage";
 import { purgeLegacyProposals } from "./pages/editor/aiSeo/legacyProposals";
-// Last, so the phone layout's rules come after every desktop rule they adjust.
 import "./phone/index.css";
 
 // ADR-0049: proposals live on the server now; the old browser-local copies go.
@@ -32,9 +31,7 @@ if (!container) {
   throw new Error("missing #root element");
 }
 
-// A data router rather than `<BrowserRouter>`: the listing-template editor
-// warns before navigating away from values the server has not written (UI
-// doc §3), and React Router's blocker exists only on a data router.
+// A data router: React Router's blocker, which useUnsavedWarning needs, exists only there.
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route element={<AppShell />}>
