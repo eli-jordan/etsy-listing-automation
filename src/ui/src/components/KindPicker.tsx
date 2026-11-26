@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import { assignKind, getColourReport } from "../api/calibrator";
 import type { ColourReportRow, TemplateKind } from "../types";
 
-/** A takeover rather than an inspector field: kind decides the whole shape of
- * template.yaml, so every other control is meaningless until it is answered. */
-
 function effectiveKind(chosen: TemplateKind | null, colourMatrixDisabled: boolean): TemplateKind {
   if (colourMatrixDisabled) return chosen && chosen !== "colour-matrix" ? chosen : "single";
   return chosen ?? "colour-matrix";
@@ -32,12 +29,6 @@ export function KindPicker({ templateName, onAssigned }: Props) {
       .catch(() => setReport([]));
   }, [templateName]);
 
-  // One photo cannot be a colour set: "one photo per colour" over a single
-  // file means a matrix of one, which is what `single` already is -- and
-  // accepting it names the colour after the filename, so `photo.png` became a
-  // garment colour called "photo". So the option is off for one photo, and
-  // the default follows the count: several photos read as a colour set, one
-  // reads as a single garment.
   const photos = report.length;
   const colourMatrixDisabled = photos === 1;
   const kind = effectiveKind(chosen, colourMatrixDisabled);

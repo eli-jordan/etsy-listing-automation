@@ -95,8 +95,7 @@ export function menuPlacement(
 const MIN_TOUCH_TARGET_PX: ScreenPx = 44;
 export const GRIP_RADIUS_PX = MIN_TOUCH_TARGET_PX / 2;
 
-/** The phone grip's radius, so it covers `GRIP_RADIUS_PX` on screen. Before
- * the overlay has a width, the drawn dot's own radius. */
+/** The phone grip's radius, so it covers `GRIP_RADIUS_PX` on screen. */
 export function gripRadius(
   overlayScreenWidth: ScreenPx,
   viewBoxWidth: PhotoPx,

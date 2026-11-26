@@ -34,8 +34,6 @@ interface Props<T extends PhotoWarpConfig> {
   footer?: ReactNode;
 }
 
-/** The workbench every photo-warp kind is edited in: a view bar, a canvas, a
- * full-size preview panel, and an inspector. */
 export function EditorShell<T extends PhotoWarpConfig>({
   rendererControls,
   templateName,

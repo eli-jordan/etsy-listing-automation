@@ -9,12 +9,8 @@ export interface InfoState {
   toggle: (field: string) => void;
 }
 
-/**
- * Where a phone's card sits: under its button, across the page's content
- * width rather than 300px from the button's left edge (which ran off the
- * screen), with its arrow still pointing at the button. Measured, since the
- * button can sit anywhere in its row.
- */
+/** Where a phone's card sits: under its button, across the page's content
+ * width, its arrow on the button. Measured: the button can sit anywhere in its row. */
 function usePhoneCardPlacement(
   anchor: RefObject<HTMLSpanElement | null>,
   active: boolean,

@@ -26,26 +26,10 @@ interface Job {
 }
 
 /**
- * The editors' debounced preview loop; it revokes every object URL it no
- * longer shows (docs/architecture.md, *Two sizes, one pipeline*).
- *
- * `body` is compared by value, not identity: an editor rebuilds it on every
- * render, and comparing by identity would restart the debounce on renders that
- * changed nothing the preview depends on. Pass `null` to hold off entirely
- * (a colour-matrix template with no colour selected yet).
- *
- * **One request is in flight at a time.** A drag outruns any debounce short
- * enough to feel live, and firing regardless just queues renders behind each
- * other on a server that runs them one at a time -- which does not make the
- * newest frame arrive sooner, only every frame arrive later, and progressively
- * later as the drag goes on. So a change during a render is *recorded* rather
- * than sent, and the render that finishes immediately starts the latest one
- * instead. Intermediate frames nobody would have seen are dropped, which is
- * the point.
- *
- * Renders at `editor` scale. The image that comes back is therefore smaller
- * than the template's real photo, and must not be measured to find the
- * coordinate space -- see `QuadEditor`'s `space` prop.
+ * The editors' debounced preview loop, one request in flight at a time
+ * (docs/architecture.md, *Two sizes, one pipeline*). It renders at `editor`
+ * scale, so the image that comes back must not be measured for the coordinate
+ * space: see `QuadEditor`'s `space` prop.
  */
 export function usePreview(
   templateName: string,
