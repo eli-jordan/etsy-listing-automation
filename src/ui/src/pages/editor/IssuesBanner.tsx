@@ -12,9 +12,7 @@ import { useIsPhone } from "../../phone/usePhone";
 interface Props {
   issues: Issue[];
   activeTab?: IssueTab;
-  /** Absent where there are no tabs to jump to -- the listing-template
-   * *name it* page, which is read only -- and the rows then offer no action. */
-  onJumpTo?: (tab: IssueTab) => void;
+  onJumpTo: (tab: IssueTab) => void;
   subject?: "listing" | "listing-template";
   when?: string;
   onRemovePosition?: (template: string, placement: string | null) => void;
@@ -26,8 +24,6 @@ function summarise(issues: Issue[], subject: Props["subject"]): string {
   const parts: string[] = [];
   const stops = subject === "listing-template" ? "this template saves" : "deploying";
   if (blocks > 0) parts.push(`${blocks} to fix before ${stops}`);
-  // "Other" only beside a blocker count, where it says these are the ones
-  // that do not stop a deploy; on its own it would be other than nothing.
   const other = blocks > 0 ? "other " : "";
   if (warns > 0) parts.push(warns === 1 ? `1 ${other}warning` : `${warns} ${other}warnings`);
   return parts.join(" · ");
@@ -61,21 +57,16 @@ export function IssuesBanner({
   onRemovePosition,
 }: Props) {
   const phone = useIsPhone();
-  // On a phone the list starts folded to its one-line summary: a new listing
-  // has seven of them, which would fill the first screen.
   const [unfolded, setUnfolded] = useState(false);
   const visible = issues.filter((issue) => issue.severity !== "info");
   if (visible.length === 0) return null;
   const folded = phone && !unfolded;
-  // On a phone a Fix folds the list again on its way to the tab, so the tab
-  // it opens is not pushed below the screen by the list that opened it.
-  const jumpTo =
-    phone && onJumpTo !== undefined
-      ? (tab: IssueTab) => {
-          setUnfolded(false);
-          onJumpTo(tab);
-        }
-      : onJumpTo;
+  const jumpTo = phone
+    ? (tab: IssueTab) => {
+        setUnfolded(false);
+        onJumpTo(tab);
+      }
+    : onJumpTo;
 
   return (
     <div className="issues">
@@ -143,7 +134,6 @@ function RowAction({
       </button>
     );
   }
-  if (onJumpTo === undefined) return null;
   if (issue.tab === activeTab) return <span className="issue__fix issue__fix--here">Below</span>;
   return (
     <button

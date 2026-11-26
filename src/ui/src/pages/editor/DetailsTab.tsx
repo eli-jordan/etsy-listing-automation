@@ -445,12 +445,6 @@ export function DetailsTab(props: Props) {
     </div>
   );
 
-  // The top listings panel sits beside the fields once there is a search to
-  // show (docs/features/market-seo-20260924/interactions.md, section 3). Without one the
-  // fields keep their own width: an empty "run AI Mode" card would be noise
-  // on every new listing. The wrapper is there either way, so the fields are
-  // never remounted -- losing the seller's focus and caret -- when research
-  // starts mid-edit and the panel appears.
   return (
     <div className={aiSeo === null || aiSeo.market === null ? undefined : "mkt-layout"}>
       {fields}

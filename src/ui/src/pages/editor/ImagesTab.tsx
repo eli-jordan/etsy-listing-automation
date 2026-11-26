@@ -76,8 +76,6 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   const directoryName = directory?.name ?? null;
   const scope = directory === null ? null : viewScope(directory.kind, directory.name);
 
-  /** What the seller pointed at since this tab opened. Until then the stage
-   * shows what a refresh remembered, once the lists can say it still exists. */
   const [pointed, setPointed] = useState<Focus | null>(null);
   const [remembered, setRemembered] = useViewState<FocusRef | null>(
     scope,
@@ -352,9 +350,6 @@ function AdjustScreen({
   );
 }
 
-/** The stage's picture, or what to say instead of a broken image: a positioned
- * Marigold scene cannot render while its template is being prepared. It loads
- * again by itself when preparation ends. */
 function StagePicture({
   src,
   alt,
@@ -421,9 +416,7 @@ function PreviewPane({
           </div>
         )}
         {view?.kind === "video" && (
-          /* Its own controls, not the carousel button: a click on a
-                clip is play or seek (ADR-0045). Keyed by the file, so
-                pointing at another clip starts that one afresh. */
+          /* A click on a clip plays or seeks: its own controls (ADR-0045). */
           <video
             key={view.picture}
             className="preview-stage__video"
@@ -461,8 +454,6 @@ function PreviewPane({
         )}
       </div>
 
-      {/* Always there, so the reel below does not jump when the stage
-            first gets something to show. */}
       <div className={positioning === null ? "preview-foot" : "preview-foot tp-foot"}>
         {view !== null && (
           <>

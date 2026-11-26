@@ -44,6 +44,15 @@ describe("ImagesTab", () => {
     expect(screen.queryByText("unfinished")).not.toBeInTheDocument();
   });
 
+  it("lays out the stage's foot before there is anything to show, so the reel does not jump", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+    await waitFor(() => expect(calibrator.listTemplates).toHaveBeenCalled());
+
+    expect(screen.getByText("Point at something on the left")).toBeInTheDocument();
+    expect(document.querySelector(".preview-foot")).not.toBeNull();
+  });
+
   it("expands a colour-matrix template into colour chips and adds one on click", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
     const onUpdate = vi.fn();
@@ -557,6 +566,23 @@ describe("ImagesTab's own files (./) and videos", () => {
     expect(clip).toHaveAttribute("src", "/api/listings/take-a-hike/media-files/close-up.mp4/file");
     expect(clip).toHaveAttribute("controls");
     expect(stage.querySelector("img")).toBeNull();
+  });
+
+  it("starts another clip afresh rather than reusing the one playing", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([
+      CLOSE_UP,
+      { name: "wide.mp4", file: "listings/take-a-hike/wide.mp4", ref: "./wide.mp4", kind: "video" },
+    ]);
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "close-up.mp4" }));
+    const first = document.querySelector(".preview-stage video");
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "wide.mp4" }));
+
+    const second = document.querySelector(".preview-stage video");
+    expect(second).toHaveAttribute("src", "/api/listings/take-a-hike/media-files/wide.mp4/file");
+    expect(second).not.toBe(first);
   });
 
   it("goes back to an <img> when an image is hovered after a video", async () => {
