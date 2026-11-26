@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import BeforeValidator, GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
 
@@ -28,7 +28,7 @@ class Money:
     currency: str
 
     @classmethod
-    def parse(cls, raw: Any) -> Money:  # accepts arbitrary YAML scalars
+    def parse(cls, raw: object) -> Money:
         if isinstance(raw, Money):
             return raw
         if isinstance(raw, bool) or not isinstance(raw, str | int | float):
@@ -91,13 +91,3 @@ def require_currency(money: Money, expected: str, field: str) -> None:
             f"currency is {expected} (set in shop.yaml); every price must be "
             f"written in {expected}"
         )
-
-
-def _coerce_money(raw: Any) -> Money:  # pydantic validator boundary
-    return Money.parse(raw)
-
-
-PriceField = Annotated[Money, BeforeValidator(_coerce_money)]
-"""A ``Money`` field as it appears on a config model -- shared by ``Listing``
-and ``PricingPlan`` so a size's price means the same thing, and validates the
-same way, in both places."""

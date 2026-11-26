@@ -5,15 +5,15 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, ValidationError, ValidationInfo, model_validator
 
 from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
-from etsy_listings.core.config.money import Money, PriceField, require_currency
+from etsy_listings.core.config.money import Money, require_currency
 
 
 class PricingPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     garment_profile: str
-    prices: dict[str, PriceField]
-    price_overrides: dict[str, dict[str, PriceField]] = {}
+    prices: dict[str, Money]
+    price_overrides: dict[str, dict[str, Money]] = {}
     """Same shape as ``Listing.price_overrides`` -- a whole tier can carry a
     colour markup, not just one listing."""
 

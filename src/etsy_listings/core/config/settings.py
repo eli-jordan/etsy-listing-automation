@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import (
     BaseModel,
@@ -11,6 +11,7 @@ from pydantic import (
     Field,
     ValidationError,
     ValidationInfo,
+    ValidatorFunctionWrapHandler,
     field_validator,
 )
 
@@ -23,7 +24,7 @@ Enforced here, not only by the slider, so a hand edit cannot set a limit
 the page could not show."""
 
 
-def _absent_is_empty(value: Any) -> Any:  # pre-validation YAML
+def _absent_is_empty(value: object) -> object:
     """A key written with nothing under it (``market_seo:``) is YAML's
     ``null``; it means "nothing tuned here", the same as leaving it out."""
     return {} if value is None else value
@@ -234,7 +235,7 @@ class BackupSettings(BaseModel):
 
     @field_validator("interval_hours", mode="wrap")
     @classmethod
-    def offered_interval(cls, value: object, handler: Any) -> int:  # pydantic's wrap handler
+    def offered_interval(cls, value: object, handler: ValidatorFunctionWrapHandler) -> int:
         """Pydantic's own message lists each literal quoted; this one reads
         as the page's choices."""
         try:

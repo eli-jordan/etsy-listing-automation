@@ -27,7 +27,7 @@ from etsy_listings.core.config.media import (
 )
 from etsy_listings.core.config.media import MediaEntry as MediaEntry
 from etsy_listings.core.config.media import TemplateMediaEntry as TemplateMediaEntry
-from etsy_listings.core.config.money import Money, PriceField, require_currency
+from etsy_listings.core.config.money import Money, require_currency
 from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.config.template_positions import TemplatePositions
 
@@ -55,7 +55,7 @@ MAX_TAG_LENGTH = 20
 MAX_TITLE_LENGTH = 140
 
 
-def _coerce_design(raw: Any) -> Any:  # pydantic validator boundary
+def _coerce_design(raw: object) -> object:
     """The written forms a ``design:`` has had, read as the one map.
 
     A bare path is the single-artwork shorthand written before the map
@@ -264,7 +264,7 @@ class Listing(BaseModel):
     a colour key is checked against the colours the listing sells, so this
     field's error lands on ``design`` itself (``_design_keys``)."""
     brief: str
-    prices: dict[str, PriceField] = {}
+    prices: dict[str, Money] = {}
     """Per-size overrides on top of ``pricing_plan`` -- optional and partial.
     A listing with no ``pricing_plan`` must cover every size it needs here,
     exactly as before this field became optional."""
@@ -274,7 +274,7 @@ class Listing(BaseModel):
     unlike ``garment_profile``/``media[].template``) -- see docs/reference/listing-configuration.md.
     Resolution and
     loading are the caller's job; ``Listing`` never touches ``Workspace``."""
-    price_overrides: dict[str, dict[str, PriceField]] = {}
+    price_overrides: dict[str, dict[str, Money]] = {}
     etsy: EtsyListingConfig = EtsyListingConfig()
     media: list[MediaEntry]
     template_positions: TemplatePositions | None = None

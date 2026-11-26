@@ -13,7 +13,6 @@ import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from etsy_listings.core.workspace.yaml_source import UNSET, edit_yaml_bytes
 
@@ -87,7 +86,7 @@ def write_yaml_atomic(
     document: object,
     *,
     new: Callable[[], str],
-    before: Any = UNSET,  # any YAML value
+    before: object = UNSET,
     durable: bool = False,
 ) -> bool:
     """Make the YAML file at ``path`` read as ``document``; whether it was

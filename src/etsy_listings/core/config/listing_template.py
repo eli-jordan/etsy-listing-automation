@@ -35,7 +35,7 @@ from etsy_listings.core.config.errors import (
     load_model,
 )
 from etsy_listings.core.config.listing import MediaEntry, check_production_fields, resolve_price
-from etsy_listings.core.config.money import Money, PriceField
+from etsy_listings.core.config.money import Money
 from etsy_listings.core.config.pricing_plan import PricingPlan
 
 
@@ -71,9 +71,9 @@ class ListingTemplate(BaseModel):
 
     garment_profile: str
     colors: list[str]
-    prices: dict[str, PriceField] = {}
+    prices: dict[str, Money] = {}
     pricing_plan: str | None = None
-    price_overrides: dict[str, dict[str, PriceField]] = {}
+    price_overrides: dict[str, dict[str, Money]] = {}
     etsy: TemplateEtsyConfig = TemplateEtsyConfig()
     media: list[MediaEntry]
 
