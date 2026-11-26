@@ -12,9 +12,7 @@ const EVENT_READ_THROTTLE_MS = 250;
 const STREAM_RETRY_MS = 1000;
 const READ_RETRY_MS = 3000;
 
-/** Where a reconnect resumes after `event`: nowhere in particular after a
- * resync, which asks for a fresh read. */
-function eventCursor(event: PreparationEvent): number | undefined {
+function resumeCursorAfter(event: PreparationEvent): number | undefined {
   if ("resync" in event) return undefined;
   return "sequence" in event ? event.sequence : event.last_event_sequence;
 }
@@ -40,7 +38,7 @@ export function usePreparation(name: string | null, version: number, previewPend
       stream = followPreparation(id, {
         ...(cursor === undefined ? {} : { lastEventId: cursor }),
         onEvent: (event) => {
-          cursor = eventCursor(event);
+          cursor = resumeCursorAfter(event);
           if (!eventTimer)
             eventTimer = setTimeout(() => {
               eventTimer = undefined;
