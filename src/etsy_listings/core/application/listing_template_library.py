@@ -80,22 +80,18 @@ class ListingTemplateCard:
     name: str
     template: ListingTemplate
     garment: str
-    """The blueprint as a seller names it, or the profile's own name when it
-    will not load."""
+    """The profile's own name when it will not load."""
     pricing_plan_name: str | None
     batch_count: int
     """Batches made from it, while their records last."""
     design_minimum: tuple[int, int] | None
-    """The smallest design the garment's print area takes, ``(width,
-    height)``."""
+    """``(width, height)``."""
 
 
 @dataclass(frozen=True)
 class TemplateSave:
-    """What a create or an edit did. ``saved`` false: nothing was written,
-    and ``issues`` (a ``block`` among them) or ``field_errors`` say why.
-    Saved: ``issues`` are the warnings left, and ``template`` the template
-    as it now reads."""
+    """Unsaved, nothing was written and ``issues`` or ``field_errors`` say
+    why; saved, ``issues`` are the warnings left."""
 
     saved: bool
     issues: list[Issue]
@@ -106,8 +102,8 @@ class TemplateSave:
 def list_listing_templates(
     workspace: Workspace, *, batches: BatchStore
 ) -> list[ListingTemplateCard]:
-    """Every listing template's card. One whose file will not load is left
-    out rather than failing the page -- only a hand edit makes one."""
+    """A template whose file will not load is left out rather than failing
+    the page."""
     facts = WorkspaceFacts.gather(workspace)
     used = Counter(batch.listing_template for batch in batches.all())
     cards: list[ListingTemplateCard] = []
@@ -137,8 +133,8 @@ def read_listing_template(workspace: Workspace, name: str) -> ListingTemplateVie
 
 @dataclass(frozen=True)
 class DraftOrigin:
-    """Where a new listing template is drafted from: exactly one of a listing
-    (Save as listing template) or another template (Clone)."""
+    """Exactly one of a listing (Save as listing template) or a template
+    (Clone)."""
 
     listing: str | None = None
     template: str | None = None

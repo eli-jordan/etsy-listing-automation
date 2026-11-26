@@ -121,7 +121,6 @@ def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) ->
 @dataclass(frozen=True)
 class ListingScenes:
     artwork: Callable[[str | None], Path | None]
-    """:func:`scene_artwork`'s answer."""
     positions: TemplatePositions | None
 
     def boxes(self, template: str) -> LayerBoxes:
@@ -387,10 +386,8 @@ def _business_issues(
     *,
     published: bool,
 ) -> list[Issue]:
-    """*listing_dir* rather than a listing name, because the unnamed draft
-    has no directory. A workspace-rooted ref resolves the same against any
-    listing directory, so `Workspace.draft_listing_dir` answers for it
-    exactly as a real one would."""
+    """Takes a directory, not a name: the unnamed draft has none, and a
+    workspace-rooted ref resolves the same against any listing directory."""
     return check_listing(
         listing,
         inputs,

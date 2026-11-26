@@ -226,9 +226,8 @@ class _StagePlanDTO(BaseModel):
     outcome: StageOutcomeDTO
     drift: tuple[DriftDTO, ...] = ()
     group: str | None = None
-    """The stage this one is shown under -- the engine's answer, carried
-    so the review nests ``etsy_videos`` under ``etsy_media`` without
-    inferring it from a name."""
+    """The engine's answer, so the review nests ``etsy_videos`` under
+    ``etsy_media`` without inferring it from a name."""
 
 
 class RenderStagePlanDTO(_StagePlanDTO):

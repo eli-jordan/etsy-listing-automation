@@ -190,7 +190,7 @@ def cancel_run(target: Annotated[Target, Depends(target)]) -> RunSummary:
     """Cancel a queued or running plan. Leaving the page never cancels an
     apply."""
     result = target.deployments.cancel(target.run.id)
-    if result is False:
+    if result == "refused":
         raise HTTPException(status_code=409, detail="this run cannot be cancelled")
     return _summary(target.run, target.deployments)
 

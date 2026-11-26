@@ -64,11 +64,7 @@ class RunExecutor:
     registry: RunRegistry
     stages: list[AnyStage] = field(default_factory=lambda: list(STAGES))
     ai: AiCoordinator | None = None
-    """Whose AI work a run takes its listings from before reading them
-    (ADR-0050); a host with no AI work passes none."""
     gate: JobGate = field(default_factory=JobGate)
-    """The backup's pause (workspace-backup spec, *Pausing jobs*); a host
-    that never backs up keeps one that is never paused."""
     _thread: threading.Thread | None = field(default=None, init=False, repr=False)
     _stop: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
@@ -121,10 +117,8 @@ class RunExecutor:
                 else:
                     self._run_apply(run)
         except Exception:
-            # A defect gets a traceback in the log and a generic
-            # message on the page -- never the exception text itself, which
-            # might be anything from a stack of internal paths to a client
-            # library's own error string.
+            # The page gets a generic message, never the exception text,
+            # which may hold internal paths or a client library's error.
             logger.exception("run %s (%s) ended with an unhandled error", run.id, run.kind)
             listing = run.listings[0] if run.listings else ""
             run.append(

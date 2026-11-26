@@ -396,20 +396,20 @@ def test_runs_execute_one_at_a_time_in_the_order_queued_after_yielding_ai_work(
 def test_an_apply_cannot_be_cancelled(idle: Deployments) -> None:
     run = _run(idle.submit(ListingApply((LISTING,), {})))
 
-    assert idle.cancel(run.id) is False
+    assert idle.cancel(run.id) == "refused"
     assert run.phase == "queued"
 
 
-def test_cancel_answers_none_for_an_unknown_run(idle: Deployments) -> None:
-    assert idle.cancel("no-such-run") is None
+def test_cancel_answers_missing_for_an_unknown_run(idle: Deployments) -> None:
+    assert idle.cancel("no-such-run") == "missing"
 
 
 def test_a_queued_plan_is_cancelled_outright(idle: Deployments) -> None:
     run = _run(idle.submit(ListingPlan((LISTING,))))
 
-    assert idle.cancel(run.id) is True
+    assert idle.cancel(run.id) == "cancelled"
     assert run.phase == "cancelled"
-    assert idle.cancel(run.id) is False, "a finished run cannot be cancelled again"
+    assert idle.cancel(run.id) == "refused", "a finished run cannot be cancelled again"
 
 
 def test_a_planning_run_stops_before_its_next_listing(
@@ -432,7 +432,7 @@ def test_a_planning_run_stops_before_its_next_listing(
     try:
         assert planning.wait(timeout=10)
         assert run.phase == "planning"
-        assert deployments.cancel(run.id) is True
+        assert deployments.cancel(run.id) == "cancelled"
         assert run.phase == "planning", "a running plan is asked, not forced"
         cancelled.set()
         _wait_until_terminal(run)
