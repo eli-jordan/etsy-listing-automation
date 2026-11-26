@@ -25,40 +25,27 @@ __all__ = [
     "PRINTIFY",
     "Capture",
     "CredentialPrompt",
-    "MissingProofError",
+    "VerifiedCapture",
     "announce_gitignore",
     "capture",
+    "capture_verified",
     "nothing_to_prove",
     "refuse",
     "store",
 ]
 
 
-class MissingProofError(RuntimeError):
-    """A caller asked for a verification's result where none was produced.
-
-    A wiring defect rather than anything a user did: it means
-    ``verify_reused=False`` was paired with a caller that needs the proof.
-    """
-
-    def __init__(self, values: tuple[str, ...]) -> None:
-        super().__init__(
-            f"this credential ({len(values)} value(s)) was captured without being verified, "
-            f"so there is no result to hand back. Pass verify_reused=True if the caller needs one."
-        )
-
-
 @dataclass(frozen=True)
 class CredentialPrompt:
-    """How a wizard asks for one core credential.
-
-    ``asks`` is parallel to the credential's ``variables``: one prompt per
-    environment variable, in the order they are asked and written.
-    """
+    """How a wizard asks for one core credential: one prompt per variable."""
 
     credential: credentials.Credential
     asks: tuple[str, ...]
     blurb: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.asks) != len(self.variables):
+            raise ValueError(f"{self.variables} needs one prompt each, got {self.asks}")
 
     @property
     def variables(self) -> tuple[str, ...]:
@@ -93,18 +80,15 @@ ANTHROPIC = CredentialPrompt(
     credential=credentials.ANTHROPIC,
     asks=("Anthropic API key (blank to skip):",),
     blurb=(
-        "An Anthropic API key generates listing copy (Phase 4; not needed yet).",
+        "An Anthropic API key is optional; no command uses it.",
         "  https://console.anthropic.com/settings/keys",
     ),
 )
 
 
 @dataclass(frozen=True)
-class Capture[T]:
+class Capture:
     values: tuple[str, ...]
-    proof: T | None
-    """``None`` when nothing was proved -- a reused credential the caller
-    chose not to re-verify, or a skipped optional one."""
     reused: bool
     """True when every value was already on this machine, so nothing was asked
     and nothing needs writing back."""
@@ -113,70 +97,74 @@ class Capture[T]:
     def skipped(self) -> bool:
         return not any(value.strip() for value in self.values)
 
-    def require_proof(self) -> T:
-        """The proof, for a caller that asked for one and needs it typed.
 
-        A caller passing ``verify_reused=True`` on a required credential
-        always gets a proof, but the field is ``T | None`` for the callers
-        that do not. This is where that narrowing happens once, rather than
-        with an ``assert`` at each call site -- ``assert`` disappears under
-        ``python -O``, and this must not.
-        """
-        if self.proof is None:
-            raise MissingProofError(self.values)
-        return self.proof
+@dataclass(frozen=True)
+class VerifiedCapture[T](Capture):
+    proof: T
 
 
-def capture[T](
+type Verify[T] = Callable[[tuple[str, ...]], tuple[T, str]]
+"""Receives the values and answers ``(proof, detail)``: whatever the caller
+wants back, and one line saying what was proved. A refusal goes through
+:func:`refuse`."""
+
+
+def capture(
     root: Path,
     prompt: CredentialPrompt,
     *,
-    verify: Callable[[tuple[str, ...]], tuple[T, str]],
-    verify_reused: bool = True,
+    verify: Verify[object],
     reuse_message: str | None = None,
-) -> Capture[T]:
+) -> Capture:
     """Ask for ``prompt``'s credential unless this machine already has it, and
-    prove it.
-
-    ``verify`` receives the values and answers ``(proof, detail)``: whatever
-    the caller wants back, and one line saying what was proved. It is the
-    caller's because proving a credential means using it, and only the caller
-    knows what it wanted to use it for.
-
-    ``verify_reused`` decides whether a credential already on this machine is
-    proved again, and the two commands genuinely differ. ``auth`` says no:
-    "already set -- leaving it alone" is the whole of that step, and spending
-    a network call to re-confirm what nobody asked about is not free. ``setup``
-    says yes, because verifying the Printify token *is* asking which shops it
-    reaches and it needs that answer either way.
-
-    A verification that refuses does so through :func:`refuse`, which names
-    the command to re-run; nothing is written by this function in any case --
-    see :func:`store`.
-    """
+    prove what was asked. A credential already here is left alone, unproved."""
     existing = credentials.stored_values(root, prompt.credential)
     if all(existing):
-        values = tuple(value for value in existing if value is not None)
         typer.echo(reuse_message or _default_reuse_message(prompt))
-        proof = verify(values)[0] if verify_reused else None
-        return Capture(values=values, proof=proof, reused=True)
+        return Capture(values=_present(existing), reused=True)
 
-    values = _ask(prompt, existing)
+    values = _ask(prompt, existing, allow_blank=prompt.credential.optional)
     if prompt.credential.optional and not any(values):
         typer.echo("  skipped.")
-        return Capture(values=values, proof=None, reused=False)
+        return Capture(values=values, reused=False)
 
+    _proof, detail = verify(values)
+    typer.echo(f"  {detail}")
+    return Capture(values=values, reused=False)
+
+
+def capture_verified[T](
+    root: Path,
+    prompt: CredentialPrompt,
+    *,
+    verify: Verify[T],
+    reuse_message: str | None = None,
+) -> VerifiedCapture[T]:
+    """:func:`capture` for a caller that needs the proof, so a credential
+    already here is proved too. Blank answers are not accepted."""
+    existing = credentials.stored_values(root, prompt.credential)
+    if all(existing):
+        typer.echo(reuse_message or _default_reuse_message(prompt))
+        values = _present(existing)
+        return VerifiedCapture(values=values, reused=True, proof=verify(values)[0])
+
+    values = _ask(prompt, existing, allow_blank=False)
     proof, detail = verify(values)
     typer.echo(f"  {detail}")
-    return Capture(values=values, proof=proof, reused=False)
+    return VerifiedCapture(values=values, reused=False, proof=proof)
 
 
-def _ask(prompt: CredentialPrompt, existing: Sequence[str | None]) -> tuple[str, ...]:
+def _present(existing: Sequence[str | None]) -> tuple[str, ...]:
+    return tuple(value for value in existing if value is not None)
+
+
+def _ask(
+    prompt: CredentialPrompt, existing: Sequence[str | None], *, allow_blank: bool
+) -> tuple[str, ...]:
     typer.echo("")
     for line in prompt.blurb:
         typer.echo(line)
 
-    allow_blank = prompt.credential.optional
     answers: list[str] = []
     for ask, already in zip(prompt.asks, existing, strict=True):
         # A half-present pair keeps the half it has and asks only for the
@@ -185,7 +173,7 @@ def _ask(prompt: CredentialPrompt, existing: Sequence[str | None]) -> tuple[str,
     return tuple(answer.strip() for answer in answers)
 
 
-def store[T](root: Path, prompt: CredentialPrompt, capture: Capture[T]) -> None:
+def store(root: Path, prompt: CredentialPrompt, capture: Capture) -> None:
     if capture.reused or capture.skipped:
         return
     credentials.store(root, prompt.credential, capture.values)

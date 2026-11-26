@@ -105,13 +105,13 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
             credentials.refuse(str(exc), command="setup")
         return shops, f"verified -- the token can reach {len(shops)} shop(s)."
 
-    captured = credentials.capture(
+    captured = credentials.capture_verified(
         root,
         credentials.PRINTIFY,
         verify=verify,
         reuse_message=f"Using the {PRINTIFY_TOKEN_VAR} this machine already has.",
     )
-    return captured.values[0], captured.require_proof()
+    return captured.values[0], captured.proof
 
 
 def _pick_shop(shops: list[Shop]) -> Shop:
