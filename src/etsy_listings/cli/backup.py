@@ -10,7 +10,7 @@ from typing import Annotated, Any
 import typer
 
 from etsy_listings.cli import prompts
-from etsy_listings.cli.options import open_workspace, root_option
+from etsy_listings.cli.options import RootOption, open_workspace
 from etsy_listings.core.application.backup_provisioning import (
     NewRepository,
     PasswordSource,
@@ -67,7 +67,7 @@ def _ask_password(source: Source) -> str:
 
 
 @app.command()
-def init(root: str | None = root_option()) -> None:
+def init(root: RootOption = None) -> None:
     """Create the repository backup.repository names in settings.yaml, or,
     when a destination already holds a backup, copy that one there and use it.
 
@@ -140,7 +140,7 @@ class _ProgressLines:
 
 
 @app.command()
-def run(root: str | None = root_option()) -> None:
+def run(root: RootOption = None) -> None:
     """Back up the workspace now and apply the retention; prune and check the
     repository once a week. For when the app is stopped: it pauses no jobs
     in a running server."""
@@ -164,7 +164,7 @@ def run(root: str | None = root_option()) -> None:
 
 
 @app.command()
-def check(root: str | None = root_option()) -> None:
+def check(root: RootOption = None) -> None:
     """Check the backup repository's structure with restic check."""
     workspace = open_workspace(root)
     with _reported():
@@ -194,7 +194,7 @@ def _snapshot_line(snapshot: Snapshot) -> str:
 
 
 @app.command()
-def snapshots(root: str | None = root_option(), *, json_output: JsonOption = False) -> None:
+def snapshots(root: RootOption = None, *, json_output: JsonOption = False) -> None:
     """List the repository's snapshots, oldest first."""
     workspace = open_workspace(root)
     with _reported():
@@ -231,7 +231,7 @@ def restore_progress_line(figures: RestoreProgress) -> str:
 def restore_command(
     snapshot: Annotated[str, typer.Argument(help="A snapshot id, its start, or latest.")],
     target: Annotated[str, typer.Argument(help="A new or empty folder to restore into.")],
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Restore a snapshot into a new folder, never over the workspace.
 
@@ -285,7 +285,7 @@ def _status_lines(status: BackupStatus) -> list[str]:
 
 
 @app.command()
-def status(root: str | None = root_option(), *, json_output: JsonOption = False) -> None:
+def status(root: RootOption = None, *, json_output: JsonOption = False) -> None:
     """Show the backup configuration and whether the repository opens.
 
     Exits 1 when backups are configured but the repository cannot be read."""

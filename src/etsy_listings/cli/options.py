@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated
 
 import typer
 
@@ -14,15 +14,16 @@ ROOT_HELP = (
 )
 
 
-def root_option() -> Any:  # typer.Option is typed Any at this boundary
-    return typer.Option(
-        None,
+RootOption = Annotated[
+    str | None,
+    typer.Option(
         "--root",
         help=ROOT_HELP,
         envvar=layout.ROOT_ENV_VAR,
         show_envvar=True,
         metavar="PATH",
-    )
+    ),
+]
 
 
 def open_workspace(root: str | None) -> Workspace:

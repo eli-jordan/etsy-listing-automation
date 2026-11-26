@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import typer
 
-from etsy_listings.cli.options import open_workspace, root_option
+from etsy_listings.cli.options import RootOption, open_workspace
 
 
 def ui(
-    root: str | None = root_option(),
+    root: RootOption = None,
     host: str = typer.Option(
         "0.0.0.0",
         "--host",

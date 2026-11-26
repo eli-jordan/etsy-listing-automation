@@ -5,7 +5,7 @@ import sys
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 
@@ -16,7 +16,7 @@ from etsy_listings.cli.auth import run_auth
 from etsy_listings.cli.backup import app as backup_app
 from etsy_listings.cli.marigold import app as marigold_app
 from etsy_listings.cli.new import run_new
-from etsy_listings.cli.options import open_workspace, root_option
+from etsy_listings.cli.options import RootOption, open_workspace
 from etsy_listings.cli.render import format_blocked, format_plan
 from etsy_listings.cli.setup import run_setup
 from etsy_listings.cli.ui import ui
@@ -238,15 +238,9 @@ CheckOption = Annotated[
 ]
 
 
-def _auth_root_option() -> Any:  # typer.Option is typed Any at this boundary
-    """``--root`` as `auth` needs it: no shop.yaml required.
-
-    `auth` and `setup` are the two commands that run *before* a workspace
-    exists, so neither can discover one by walking up for its marker file --
-    they take the directory they are given.
-    """
-    return typer.Option(
-        None,
+AuthRootOption = Annotated[
+    str | None,
+    typer.Option(
         "--root",
         help=(
             "Which workspace to store credentials in. Defaults to the current "
@@ -256,7 +250,8 @@ def _auth_root_option() -> Any:  # typer.Option is typed Any at this boundary
         envvar=layout.ROOT_ENV_VAR,
         show_envvar=True,
         metavar="PATH",
-    )
+    ),
+]
 
 
 def _run_auth(root: str | None, parts: Sequence[AuthPart], *, check: bool) -> None:
@@ -269,7 +264,7 @@ def _run_auth(root: str | None, parts: Sequence[AuthPart], *, check: bool) -> No
 @auth_app.callback(invoke_without_command=True)
 def auth(
     ctx: typer.Context,
-    root: str | None = _auth_root_option(),
+    root: AuthRootOption = None,
     *,
     check: CheckOption = False,
 ) -> None:
@@ -290,7 +285,7 @@ def auth(
 
 @auth_app.command("printify", epilog=EPILOG)
 def auth_printify(
-    root: str | None = _auth_root_option(),
+    root: AuthRootOption = None,
     *,
     check: CheckOption = False,
 ) -> None:
@@ -300,7 +295,7 @@ def auth_printify(
 
 @auth_app.command("etsy", epilog=EPILOG)
 def auth_etsy(
-    root: str | None = _auth_root_option(),
+    root: AuthRootOption = None,
     *,
     check: CheckOption = False,
 ) -> None:
@@ -310,7 +305,7 @@ def auth_etsy(
 
 @auth_app.command("anthropic", epilog=EPILOG)
 def auth_anthropic(
-    root: str | None = _auth_root_option(),
+    root: AuthRootOption = None,
     *,
     check: CheckOption = False,
 ) -> None:
@@ -338,7 +333,7 @@ def plan(
         bool, typer.Option("--all", help="Plan every listing in the workspace")
     ] = False,
     publish: PublishOption = False,
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Three-way diff against live state; decides which stages need to run.
 
@@ -373,7 +368,7 @@ def apply(
         bool, typer.Option("--all", help="Apply every listing in the workspace")
     ] = False,
     publish: PublishOption = False,
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Execute every stage the plan identified: render, create or update the
     Printify product, publish it, and patch the resulting Etsy listing's
@@ -404,7 +399,7 @@ def apply(
 @app.command(epilog=EPILOG)
 def unlock(
     listing: str = typer.Argument(help="Listing name, e.g. take-a-hike"),
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Clear a Printify product stuck publishing (`is_locked: true`).
 
@@ -448,7 +443,7 @@ def new(
     category: str = typer.Option(
         "tshirt", "--category", help="Blueprint category filter, matched against title/brand/model"
     ),
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Interactive design/garment/provider picker; writes garment profile (if absent) + listing.
 
