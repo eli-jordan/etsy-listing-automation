@@ -10,6 +10,7 @@ const plan: PlanDTO = {
   listing: "alpha",
   is_live: false,
   etsy_listing_id: null,
+  publishable: false,
   stage_plans: [renderStage],
 };
 
@@ -74,5 +75,23 @@ describe("listingRunState", () => {
     expect(listing?.plan).toEqual(plan);
     expect(listing?.fingerprint).toBe("fp-alpha");
     expect(listing?.stageRuntime.render?.kind).toBe("applied");
+  });
+
+  it("gives a batch apply's chosen publish step a row, and adopts nothing else", () => {
+    // The apply's fresh plan matched the review's fingerprint, which leaves
+    // the publish step out: that step is the only way the two can differ.
+    const activate = stagePlan("etsy_activate", { will_run: true, reason: "still a draft" });
+    const applying: PlanDTO = {
+      ...plan,
+      publishable: true,
+      stage_plans: [stagePlan("render", { will_run: false }), activate],
+    };
+    const state = batchDeployState(events.slice(0, 3), [
+      { type: "listing_planned", id: 7, listing: "alpha", plan: applying, fingerprint: "fp-alpha" },
+    ]);
+    const listing = state.listings.alpha;
+
+    expect(listing?.reviewedPlan).toEqual(plan);
+    expect(listing?.plan?.stage_plans).toEqual([renderStage, activate]);
   });
 });

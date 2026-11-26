@@ -42,6 +42,7 @@ function plan(stagePlans: StagePlanDTO[], overrides: Partial<PlanDTO> = {}): Pla
     listing: "mushroom-club-tee",
     is_live: false,
     etsy_listing_id: 1698234512,
+    publishable: false,
     stage_plans: stagePlans,
     ...overrides,
   };

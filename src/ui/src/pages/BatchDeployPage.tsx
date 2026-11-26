@@ -89,14 +89,24 @@ function isTerminalApply(state: BatchDeployState): boolean {
   return state.applyStarted && TERMINAL_PHASES.has(state.phase);
 }
 
-/** A plan with nothing left to do: ready, nothing failed, and no stage that
+/** Whether applying would do something for `plan`'s listing: a stage that
+ * would run, or -- with the seller's opt-in -- making a draft live. */
+function hasWork(plan: PlanDTO, publish: boolean): boolean {
+  return plan.stage_plans.some(stageWillRun) || (publish && plan.publishable);
+}
+
+/** A plan with nothing left to do: ready, nothing failed, and nothing that
  * would run. */
-function nothingToApply(state: BatchDeployState, plans: readonly PlanDTO[]): boolean {
+function nothingToApply(
+  state: BatchDeployState,
+  plans: readonly PlanDTO[],
+  publish: boolean,
+): boolean {
   if (state.phase !== "ready") return false;
   const failed = Object.values(state.listings).some(
     (listing) => listing.planFailure !== null || listing.failureMessage !== null,
   );
-  return !failed && plans.every((plan) => plan.stage_plans.every((stage) => !stageWillRun(stage)));
+  return !failed && plans.every((plan) => !hasWork(plan, publish));
 }
 
 const DRAWER_MODES: Record<BatchStage, "applying" | "applied" | "review"> = {
@@ -135,10 +145,11 @@ function runBatchId(run: RunDetail | null, runId: string): string | null {
   return run.batch_id ?? null;
 }
 
-function freshPlanRequest(batchId: string | null, publish: boolean): CreateRunRequest {
+/** Planned without the publish step: the apply adds it when chosen. */
+function freshPlanRequest(batchId: string | null): CreateRunRequest {
   return batchId === null
-    ? { kind: "plan", scope: "workspace", publish }
-    : { kind: "plan", scope: "batch", batch_id: batchId, publish };
+    ? { kind: "plan", scope: "workspace", publish: false }
+    : { kind: "plan", scope: "batch", batch_id: batchId, publish: false };
 }
 
 function reviewedApplyRequest(
@@ -216,6 +227,12 @@ export function BatchDeployPage() {
   const leavingRef = useRef(false);
   const [applyPending, setApplyPending] = useState(false);
   const [batchLabel, setBatchLabel] = useState<string | null>(null);
+  /** Publish new and draft listings on Etsy (opt-in), chosen at apply for
+   * the review on this URL: the review is planned without the step, and the
+   * apply adds it, so changing it plans nothing. */
+  const [publishChoice, setPublishChoice] = useState<{ run: string; publish: boolean } | null>(
+    null,
+  );
 
   const openStream = useCallback((id: string, lastEventId: number, source: BatchRunSource) => {
     streamRef.current?.close();
@@ -368,8 +385,13 @@ export function BatchDeployPage() {
     visibleState.previewsRendered.has(key),
   ).length;
   const previewsReady = readyPreviews === requiredPreviews.length;
-  const runnableCount = plans.filter((plan) => plan.stage_plans.some(stageWillRun)).length;
-  const nothingToDo = nothingToApply(visibleState, plans);
+  const publishDrafts = publishChoice?.run === runId && publishChoice.publish;
+  const goingLive = useMemo(
+    () => plans.filter((plan) => plan.publishable).map((plan) => plan.listing),
+    [plans],
+  );
+  const runnableCount = plans.filter((plan) => hasWork(plan, publishDrafts)).length;
+  const nothingToDo = nothingToApply(visibleState, plans, publishDrafts);
   const summaryByName = useMemo(
     () => new Map(summaries.map((summary) => [summary.name, summary])),
     [summaries],
@@ -400,16 +422,13 @@ export function BatchDeployPage() {
     [navigate],
   );
 
-  const startFreshPlan = useCallback(
-    async (publish: boolean) => {
-      try {
-        await followCreatedRun(await createRun(freshPlanRequest(batchId, publish)));
-      } catch {
-        setStatus(copy.planRefused);
-      }
-    },
-    [batchId, copy, followCreatedRun],
-  );
+  const startFreshPlan = useCallback(async () => {
+    try {
+      await followCreatedRun(await createRun(freshPlanRequest(batchId)));
+    } catch {
+      setStatus(copy.planRefused);
+    }
+  }, [batchId, copy, followCreatedRun]);
 
   async function handleApply() {
     if (run?.kind !== "plan" || visibleState.phase !== "ready" || !previewsReady) return;
@@ -426,7 +445,7 @@ export function BatchDeployPage() {
               listingsToApply.map((listing) => [listing.listing, listing.fingerprint as string]),
             ),
             reviewed_run_id: run.id,
-            publish: run.publish,
+            publish: publishDrafts,
           }),
         );
         await followCreatedRun(created);
@@ -455,8 +474,6 @@ export function BatchDeployPage() {
   }
 
   const phase = visibleState.phase;
-  /** The run's own choice: changing it plans again on a new run's URL. */
-  const publishDrafts = run?.id === runId ? run.publish : false;
   const planning = !visibleState.applyStarted && isPlanning(phase);
   const stage = batchStage({ planning, applying, terminalApply });
   const planTimestamp = formatGeneratedAt(visibleState.generatedAt);
@@ -560,13 +577,17 @@ export function BatchDeployPage() {
         </>
       )}
 
-      {visibleState.phase === "ready" && !visibleState.applyStarted && run !== null && (
-        <PublishDraftsToggle
-          checked={publishDrafts}
-          disabled={applyPending}
-          onChange={(next) => void startFreshPlan(next)}
-        />
-      )}
+      {visibleState.phase === "ready" &&
+        !visibleState.applyStarted &&
+        run !== null &&
+        goingLive.length > 0 && (
+          <PublishDraftsToggle
+            checked={publishDrafts}
+            disabled={applyPending}
+            onChange={(next) => setPublishChoice({ run: runId, publish: next })}
+            goingLive={goingLive}
+          />
+        )}
 
       <div className="dv-foot batch-deploy-footer">
         <p>
@@ -593,7 +614,7 @@ export function BatchDeployPage() {
           }
           runnableCount={runnableCount}
           previewsReady={previewsReady}
-          onPlanAgain={() => void startFreshPlan(publishDrafts)}
+          onPlanAgain={() => void startFreshPlan()}
           onApply={() => void handleApply()}
         />
       </div>

@@ -123,7 +123,29 @@ def build_plan(
         if rewrites:
             ctx = replace(ctx, rewrites={**ctx.rewrites, **rewrites})
 
-    return _assemble(listing, lock, tuple(states), published=decision.published)
+    return _assemble(
+        listing,
+        lock,
+        tuple(states),
+        published=decision.published,
+        publishable=decision.activatable and not _blocked(states),
+    )
+
+
+def _chosen_at_apply(stage: AnyStage) -> bool:
+    """Whether the apply adds ``stage`` by the seller's choice
+    (``Stage.chosen_at_apply``). Optional, like ``needs_every_earlier_stage``."""
+    return bool(getattr(stage, "chosen_at_apply", False))
+
+
+def _blocked(states: list[StageState]) -> bool:
+    """Whether a stage the review planned is blocked. A stage chosen at apply
+    is left out: ``publishable`` must read the same with it or without it."""
+    return any(
+        state.stage_plan.blocked is not None
+        for state in states
+        if not state.stage_plan.chosen_at_apply
+    )
 
 
 def _held_by_earlier_block(stage: AnyStage, earlier: list[StageState]) -> StageState | None:
@@ -145,7 +167,9 @@ def _held_by_earlier_block(stage: AnyStage, earlier: list[StageState]) -> StageS
         desired=Blocked(message),
         applied=None,
         live=None,
-        stage_plan=StagePlan.block(stage.name, message, group=stage.group),
+        stage_plan=StagePlan.block(
+            stage.name, message, group=stage.group, chosen_at_apply=_chosen_at_apply(stage)
+        ),
     )
 
 
@@ -163,7 +187,9 @@ def _all_blocked(
             desired=Blocked(message),
             applied=None,
             live=None,
-            stage_plan=StagePlan.block(stage.name, message, group=stage.group),
+            stage_plan=StagePlan.block(
+                stage.name, message, group=stage.group, chosen_at_apply=_chosen_at_apply(stage)
+            ),
         )
         for stage in stages
     )
@@ -196,7 +222,12 @@ def _walk(
             desired=desired,
             applied=applied,
             live=None,
-            stage_plan=StagePlan.block(stage.name, desired.message, group=stage.group),
+            stage_plan=StagePlan.block(
+                stage.name,
+                desired.message,
+                group=stage.group,
+                chosen_at_apply=_chosen_at_apply(stage),
+            ),
         )
         on_event(EngineStagePlanned(listing, state.stage_plan))
         return state
@@ -210,6 +241,7 @@ def _walk(
         snapshot=_snapshot(stage, desired, live),
         group=stage.group,
         review_hash=_review_hash(stage, desired),
+        chosen_at_apply=_chosen_at_apply(stage),
     )
     state = StageState(
         stage=stage, desired=desired, applied=applied, live=live, stage_plan=stage_plan
@@ -254,7 +286,12 @@ def _snapshot(stage: AnyStage, desired: Any, live: Any) -> BaseModel | None:
 
 
 def _assemble(
-    listing: str, lock: Lockfile, states: tuple[StageState, ...], *, published: bool
+    listing: str,
+    lock: Lockfile,
+    states: tuple[StageState, ...],
+    *,
+    published: bool,
+    publishable: bool = False,
 ) -> PlannedRun:
     return PlannedRun(
         plan=Plan(
@@ -262,6 +299,7 @@ def _assemble(
             is_live=published,
             etsy_listing_id=etsy_listing_id(lock),
             stage_plans=tuple(state.stage_plan for state in states),
+            publishable=publishable,
         ),
         states=tuple(states),
     )

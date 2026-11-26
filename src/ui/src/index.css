@@ -6289,6 +6289,22 @@ table.listings tbody tr:last-child td {
   display: block;
   color: color-mix(in srgb, var(--color-text) 58%, transparent);
 }
+/* Which listings an opt-in makes live, as small chips that wrap. */
+.dv-publish__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dv-publish__list li {
+  padding: 1px 8px;
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .dv-open-etsy {
   display: inline-flex;
   align-items: center;

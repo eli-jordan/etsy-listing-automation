@@ -19,3 +19,15 @@ it on the plan and includes it alongside changes, actions and drift. Preview
 availability, CDN URLs and other transient display facts remain excluded;
 finishing a preview does not change execution authority. A changed digest
 requires a new review before any apply stage runs.
+
+## Amendment: leave a stage chosen at apply out (2026-11-26)
+
+A stage the apply adds by the seller's choice, rather than one the review
+planned, is left out of the fingerprint, its plan and all. `etsy_activate`
+is the one: publishing new and draft listings is an opt-in made when
+applying (deploy spec §12), and refusing an apply because the review was
+planned without it would force a second, identical review just to say yes.
+The stage declares `chosen_at_apply`; the engine stamps it on the stage's
+plan, and the fingerprint drops those plans. Its effect is still reviewed:
+each plan carries `publishable`, which is hashed, and the apply plans again
+with the stage as every apply does, so drift elsewhere is caught as before.

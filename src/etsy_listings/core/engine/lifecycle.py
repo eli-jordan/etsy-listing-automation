@@ -64,6 +64,10 @@ class LifecycleWalk:
     stages: list[AnyStage]
     published: bool
     blocked: str | None = None
+    activatable: bool = False
+    """An opt-in publish could activate it: still an Etsy draft or not on
+    Etsy yet, with no ``lifecycle`` verb. ``build_plan`` adds the condition
+    that no stage is blocked."""
 
 
 def published_on_etsy(ctx: RunContext, lock: Lockfile) -> bool | None:
@@ -114,7 +118,11 @@ def walk(
         return LifecycleWalk(stages=pipeline, published=proven, blocked=verb_block.message)
     if config.lifecycle == "deleted":
         return LifecycleWalk(stages=[RetractStage()], published=proven)
-    return LifecycleWalk(stages=pipeline, published=proven)
+    return LifecycleWalk(
+        stages=pipeline,
+        published=proven,
+        activatable=not proven and config.lifecycle is None,
+    )
 
 
 def after_apply(ctx: RunContext, listing: str, planned: PlannedRun) -> None:

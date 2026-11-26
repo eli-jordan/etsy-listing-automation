@@ -40,11 +40,9 @@ def check_reviewed_apply(reviewed: Run | None, command: ReviewedApply) -> None:
 
 
 def _check_same_listings(reviewed: Run, command: ReviewedApply, scope: str) -> None:
-    """The publish choice, listings and fingerprints the review showed."""
-    if reviewed.publish != command.publish:
-        raise ReviewedPlanRefusedError(
-            f"apply must publish drafts exactly when the reviewed {scope} plan did"
-        )
+    """The listings and fingerprints the review showed. Not the publish
+    choice: the seller makes it when applying, and the fingerprint leaves the
+    stage it adds out (``etsy_activate`` is ``chosen_at_apply``)."""
     # A listing planned again after its previews rendered has a second event;
     # the later one is what the seller reviewed, in first-planned order.
     fingerprints: dict[str, str] = {}

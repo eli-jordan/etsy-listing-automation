@@ -16,6 +16,7 @@ const plan: PlanDTO = {
   listing: "mountain-shirt",
   is_live: true,
   etsy_listing_id: 42,
+  publishable: false,
   stage_plans: [
     stage("printify_product", {
       will_run: true,

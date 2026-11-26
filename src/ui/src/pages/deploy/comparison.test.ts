@@ -40,6 +40,7 @@ function plan(stagePlans: StagePlanDTO[], etsyListingId: number | null = 1698234
     listing: "mushroom-club-tee",
     is_live: etsyListingId !== null,
     etsy_listing_id: etsyListingId,
+    publishable: false,
     stage_plans: stagePlans,
   };
 }

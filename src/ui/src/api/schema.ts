@@ -4568,6 +4568,11 @@ export interface components {
       is_live: boolean;
       /** Listing */
       listing: string;
+      /**
+       * Publishable
+       * @default false
+       */
+      publishable: boolean;
       /** Stage Plans */
       stage_plans: (
         | components["schemas"]["RenderStagePlanDTO"]
