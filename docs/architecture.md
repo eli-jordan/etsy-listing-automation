@@ -152,9 +152,23 @@ still answer it themselves. `template.yaml` is the exception, because
 
 ### Clients, credentials and prompts
 
-`core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
-bearers resolve at request time, but the Etsy app key pair is read during
-construction to decide whether an optional client exists. Nothing in the
+`core/connections.py` builds clients and `RunContext` without reading a
+credential. Printify tokens, the Etsy app key pair and signed-in bearers
+resolve on each request, so a workspace that only renders mockups still plans,
+a stage that needs a missing credential reports itself blocked, and a rotated
+key takes effect without a restart. `etsy_app_key` is the separate,
+non-raising availability question readiness and setup ask; half a pair reads
+as absent, since `auth etsy` captures both halves at once and is the remedy
+either way. The token store resolves its keystring inside each refresh, so
+`auth --check` can build one for a workspace with no credentials. Shop lookups
+attach a bearer only when a sign-in exists, and market requests never attach
+one: Etsy rotates the refresh token on every use, and a refresh research does
+not need is a chance to race a deploy for the one valid token. `setup` and
+`auth` verify a token the user has just typed through `printify_client_for`
+before it is stored, because a stored unverified credential makes a workspace
+that looks configured and is not. `credentials_root` lets the e2e layer borrow
+a configured workspace's credentials while every cache stays in its disposable
+workspace. Nothing in the
 server calls `connections` for a client. `create_app` takes
 `connections.run_context` as `Deployments`' `ContextFactory`, and an
 `application.dependencies.ClientFactories` for every other client: the Etsy
