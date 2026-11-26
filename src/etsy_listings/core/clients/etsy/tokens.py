@@ -71,7 +71,6 @@ class StoredTokens:
 
     @classmethod
     def parse(cls, document: Any) -> StoredTokens | None:
-        """The stored document, or ``None`` if it is absent or will not decode."""
         if not isinstance(document, dict):
             return None
         try:

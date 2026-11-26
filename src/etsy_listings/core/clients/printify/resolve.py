@@ -104,8 +104,7 @@ class ResolvedVariant:
 class VariantResolution:
     variants: tuple[ResolvedVariant, ...]
     missing: tuple[tuple[str, str], ...]
-    """``(colour_slug, size)`` cells the catalog does not offer. Reported, not
-    fatal -- missing variant cells."""
+    """``(colour_slug, size)`` cells the catalog does not offer; reported, not fatal."""
 
     def ids(self, *, colours: Collection[str] | None = None) -> tuple[int, ...]:
         return tuple(v.id for v in self.variants if colours is None or v.colour_slug in colours)
