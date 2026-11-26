@@ -188,9 +188,6 @@ export function ListingsPage() {
   const [status, setStatus] = useState("");
   const isPhone = useIsPhone();
   const { filter, setPhoneFilter, setDesktopFilter, query, setQuery } = useListFilters(isPhone);
-  // New listing floats over the list on a phone held upright. Held sideways
-  // the head has room for it, and so few rows show that a floating button
-  // would sit on one.
   const isPhoneSideways = useIsPhoneLandscape();
   const floatingNew = isPhone && !isPhoneSideways;
   const fabHidden = useFabHiddenOnScroll(floatingNew);
