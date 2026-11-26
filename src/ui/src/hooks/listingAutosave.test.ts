@@ -90,18 +90,6 @@ describe("what the editor shows", () => {
 
     expect(listener).toHaveBeenCalledTimes(1);
   });
-
-  it("shows a bare design ref the way the server stores it, and sends it bare", async () => {
-    const { autosave, view, transport, settle } = editing();
-
-    // The form `listing.yaml` may still hold. Held as a string, `Object.keys`
-    // on it reports one "artwork" per character.
-    autosave.update({ design: "designs/take-a-hike.png" });
-    expect(view().detail.design).toEqual({ default: "designs/take-a-hike.png" });
-
-    await settle();
-    expect(transport.save.mock.calls[0]?.[1]).toEqual({ design: "designs/take-a-hike.png" });
-  });
 });
 
 describe("saving a listing on disk", () => {

@@ -210,10 +210,7 @@ def _may_write_at_name(workspace: Workspace, row: BatchRow) -> bool:
         return True
     if not documents.exists(row.name):
         return row.claimed and not workspace.lock_file(row.name).exists()
-    ref = documents.read(row.name).get("design")
-    if isinstance(ref, dict):
-        ref = ref.get("default") if len(ref) == 1 else None
-    return bool(ref == workspace.design_ref(row.design))
+    return documents.read(row.name).get("design") == {"default": workspace.design_ref(row.design)}
 
 
 def _create(

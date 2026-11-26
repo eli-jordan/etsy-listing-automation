@@ -237,7 +237,7 @@ class TestLock:
 HAND_EDITED = """\
 # Hiking tee -- kept apart from the batch ones.
 garment_profile: comfort-colors-1717
-design: designs/take-a-hike.png   # the bare form, from before ADR-0053
+design: { default: designs/take-a-hike.png }   # flow style
 colors: [black, ivory]
 brief: >
   Retro 70s sunset mountain scene.
@@ -267,10 +267,7 @@ class TestSourcePreservation:
     ) -> None:
         documents.edit(NAME, lambda raw: {**raw, "etsy": {**raw["etsy"], "title": "Hike Tee"}})
 
-        expected = HAND_EDITED.replace("'Take A Hike'", "'Hike Tee'").replace(
-            "design: designs/take-a-hike.png   # the bare form, from before ADR-0053\n",
-            "design:\n  default: designs/take-a-hike.png   # the bare form, from before ADR-0053\n",
-        )
+        expected = HAND_EDITED.replace("'Take A Hike'", "'Hike Tee'")
         assert hand_edited.read_bytes() == crlf(expected).encode("utf-8")
 
     def test_an_edit_that_changes_nothing_leaves_the_file_alone(
@@ -324,15 +321,11 @@ class TestSourcePreservation:
         self, documents: ListingDocuments, hand_edited: Path
     ) -> None:
         document = yaml.safe_load(HAND_EDITED)
-        document["design"] = {"default": "designs/take-a-hike.png"}
         document["media"].append({"template": "flat-lay-01", "colour": "ivory"})
 
         documents.write(NAME, document)
 
         expected = HAND_EDITED.replace(
-            "design: designs/take-a-hike.png   #",
-            "design:\n  default: designs/take-a-hike.png   #",
-        ).replace(
             "  - { template: flat-lay-01, colour: black }\n",
             "  - { template: flat-lay-01, colour: black }\n"
             "  - template: flat-lay-01\n    colour: ivory\n",
