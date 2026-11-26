@@ -12,11 +12,6 @@ import type {
   TemplateSummary,
 } from "../types";
 
-/**
- * The calibrator's whole HTTP surface. Everything above this file works in
- * domain types and never touches fetch, URLs or the generated schema.
- */
-
 export class CalibratorApiError extends Error {}
 
 export async function listTemplates(): Promise<TemplateSummary[]> {
@@ -37,9 +32,6 @@ export interface TemplateConfigDocument {
   revision: string;
 }
 
-/** A save the server refused because the file moved on since `revision`
- * was read (409 or 412): another tab, an external edit, or a preparation
- * that rewrote it. Only a reload resolves it. */
 export class TemplateConflictError extends CalibratorApiError {
   constructor() {
     super("Template changed elsewhere. Reload before saving.");
@@ -58,8 +50,6 @@ export async function getTemplateConfig(name: string): Promise<TemplateConfigDoc
     params: { path: { name } },
   });
   if (error) {
-    // Only a 404 means no template.yaml yet. A template that needs repair or
-    // will not parse has one, and must not be offered a kind.
     if (response.status === 404) return null;
     const fallback = `could not read the config for ${name}`;
     throw new CalibratorApiError(
@@ -211,12 +201,7 @@ type PreviewBody = {
 
 export type PreviewScale = "editor" | "full";
 
-/**
- * Renders a preview through the real server-side pipeline. The body shape
- * must match the target template's actual kind -- the endpoint rejects a
- * mismatch rather than guessing. Returns an object URL the caller owns and
- * must revoke.
- */
+/** Returns an object URL the caller must revoke. */
 export async function renderPreview(
   name: string,
   body: PreviewBody,

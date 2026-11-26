@@ -1186,7 +1186,9 @@ configuration. `npm run build` writes `src/ui/dist/`, which is gitignored. The
 Vite dev server proxies `/api` to a running `etsy-listings ui`. The typed
 client is generated: `scripts/export_openapi.py` writes `docs/openapi.json`
 from the FastAPI app and `npm run gen:api` turns it into
-`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011).
+`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011). Only the modules
+under `src/ui/src/api/` call the server: everything above them works in domain
+types and never touches `fetch`, URLs or the generated schema.
 
 `hatch_build.py` is a wheel-only hook configured in `pyproject.toml`. For a
 release wheel it always runs `npm ci` and `npm run build` in `src/ui`, so an
