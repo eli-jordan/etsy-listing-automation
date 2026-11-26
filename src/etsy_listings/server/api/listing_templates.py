@@ -1,8 +1,7 @@
-"""Listing-template endpoints (ADR-0047).
+"""Listing-template endpoints.
 
-``GET /draft`` is declared before ``GET /{name}``, so ``draft`` is refused as
-a name: a template called that could be created and never opened.
-"""
+``GET /draft`` is declared before ``GET /{name}``, so ``draft`` is refused as a
+name: a template called that could be created and never opened."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """The calibrator's uploaded test designs, kept in the workspace's
-``test-designs/`` (architecture, *The calibrator*)."""
+``test-designs/``."""
 
 from __future__ import annotations
 

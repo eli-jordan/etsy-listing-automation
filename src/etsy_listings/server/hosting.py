@@ -1,12 +1,8 @@
-"""Serve the workspace's HTTP app in the foreground: the startup interface
-``etsy-listings ui`` calls, and the only server module the CLI may import
-(ADR-0052). Uvicorn runs on the main thread, where it owns the Ctrl-C handling.
+"""Serve the workspace's HTTP app in the foreground for ``etsy-listings ui``,
+with uvicorn on the main thread, where it owns Ctrl-C.
 
-Shutdown goes through the ASGI lifespan ``create_app`` wires up: uvicorn
-waits for it without a timeout, so a queued run is cancelled, a plan run
-stops at its next boundary and an apply run finishes the stage it is in
-(ADR-0037).
-"""
+Shutdown runs the ASGI lifespan with no timeout, so a queued run is cancelled,
+a plan run stops at its next boundary and an apply run finishes its stage."""
 
 from __future__ import annotations
 

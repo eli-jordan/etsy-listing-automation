@@ -1,8 +1,7 @@
-"""Workspace root discovery and path resolution (ADR-0013).
+"""Workspace root discovery and path resolution.
 
-``Workspace.resolve()`` refuses to resolve outside the workspace root. That is
-a security boundary: the media and preview endpoints resolve through it.
-"""
+``Workspace.resolve()`` refuses to resolve outside the workspace root, a security
+boundary the media and preview endpoints resolve through."""
 
 from __future__ import annotations
 

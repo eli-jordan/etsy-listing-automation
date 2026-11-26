@@ -1,6 +1,5 @@
-"""The captured provider chain (ADR-0056), one same-provider output repair, and the
-run's step and run budgets (ADR-0057).
-"""
+"""The captured provider chain, one same-provider output repair, and the run's
+step and run budgets."""
 
 from __future__ import annotations
 

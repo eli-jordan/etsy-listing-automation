@@ -1,5 +1,5 @@
-"""Name -> id resolution: the only place a config name for a blueprint or
-print provider becomes a Printify integer id (ADR-0005)."""
+"""Name -> id resolution: the only place a config name for a blueprint or print
+provider becomes a Printify integer id."""
 
 from __future__ import annotations
 

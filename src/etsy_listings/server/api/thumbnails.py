@@ -1,8 +1,5 @@
-"""One rule for "a picture small enough to put in a list".
-
-Shared by ``templates.py`` (the calibrator's rail) and ``listings.py`` (the
-listings table and the editor's design strip). Nothing here is cached.
-"""
+"""One rule for "a picture small enough to put in a list", shared by the
+calibrator's rail and the listings pages; nothing here is cached."""
 
 from __future__ import annotations
 

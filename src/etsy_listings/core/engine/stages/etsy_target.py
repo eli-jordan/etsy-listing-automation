@@ -1,9 +1,4 @@
-"""Which listing, on which shop: the preamble the Etsy stages share.
-
-:class:`~etsy_listings.core.engine.stages.publish.PublishWithoutProductError`
-stays separate: it is about the Printify product id, and it is a
-:class:`~etsy_listings.core.errors.UserFacingError` rather than a wiring defect.
-"""
+"""Which listing, on which shop: the preamble the Etsy stages share."""
 
 from __future__ import annotations
 

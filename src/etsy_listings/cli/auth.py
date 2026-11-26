@@ -1,15 +1,8 @@
-"""The ``auth`` wizard: every credential this tool needs, each verified
-against its own API before it is stored.
+"""The ``auth`` wizard: every credential this tool needs, each verified against
+its own API and stored as soon as it is proved.
 
-- **Every credential is verified before it is stored**, against its own API:
-  Printify's shop list, Etsy's ping, and for the bearer, the token exchange
-  itself. Storing an unverified credential produces a workspace that looks
-  configured and is not. Each is stored as soon as it is proved, so a working
-  Printify token survives abandoning the Etsy sign-in.
-- **The browser is opened after the app key pair is known good.** A keystring
-  typo surfaces as an Etsy error page mid-consent otherwise, which is a long
-  way from the question that caused it.
-"""
+The browser opens only once the Etsy app key pair is known good, because a
+keystring typo otherwise surfaces as an Etsy error page mid-consent."""
 
 from __future__ import annotations
 

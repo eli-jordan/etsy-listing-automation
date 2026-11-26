@@ -1,15 +1,5 @@
-"""Listing-level lifecycle orchestration.
-
-Delete, retire and renew are one product concept. This module owns its questions:
-
-* which stages to walk (retract-only, the normal pipeline, or all blocked)
-* whether the listing has left Etsy ``draft`` -- one GET, one fact
-* what to do after a successful apply (wipe, or consume ``renew``)
-
-It does **not** own the retract stage's HTTP, ``listing_validation``'s
-sentences, or the pure badge table in ``status.py``. ``Plan.is_live`` is this
-module's published fact, threaded through ``build_plan``.
-"""
+"""Listing-level lifecycle: which stages delete, retire and renew walk, whether
+the listing has left Etsy ``draft``, and what follows a successful apply."""
 
 from __future__ import annotations
 

@@ -43,7 +43,7 @@ scripts/ agent_lint.py (lint hook) + agent_lint_gate.py and agent_lint_rules.txt
 .githooks/ pre-commit (the lint backstop for every commit)
 ```
 
-Each package's `__all__` lists its exports, and its `__init__.py` docstring states its purpose and what it deliberately withholds. Read both before reaching into a submodule.
+Each package's `__all__` lists its exports, and its `__init__.py` docstring states its purpose and anything it withholds that the Import Linter contracts in `pyproject.toml` do not already enforce. Read both, and those contracts, before reaching into a submodule.
 
 The tool lives here; user data (`shop.yaml`, `designs/`, `listings/`, `mockup-templates/`, `.cache/`) lives in a separate workspace directory found by walking up from cwd for `shop.yaml` (`ADR-0013`). Never write user data into this repo or assume cwd is the workspace.
 
@@ -184,7 +184,7 @@ Say everything else in code: a name, an extracted function or constant, a strong
 - Describe the code as it is. History ("used to", "no longer", "for now") and plan, PR, phase, decision or `docs/history/` ids stay out of code.
 - A comment that defends a workaround is a reason to fix the design, not to keep the comment.
 - Consumer-facing text stays, accurate and short: Typer command and option docstrings and `help=` strings (they are `--help`), FastAPI route and model docstrings (they are OpenAPI), lint suppression reasons.
-- In a package `__init__.py`, `__all__` is the export list. The docstring states the package's purpose and what it deliberately withholds, with no hand-kept module index.
+- In a package `__init__.py`, `__all__` is the export list. The docstring states the package's purpose, and what it withholds only where no Import Linter contract already enforces that, with no hand-kept module index. A module docstring is one purpose sentence, plus at most one sentence for an external constraint or hazard the whole module carries.
 - When you change code, update or delete the comments it touches. A stale comment is a defect.
 </important>
 

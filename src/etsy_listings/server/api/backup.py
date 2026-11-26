@@ -1,10 +1,5 @@
-"""The backup status, history, Back up now, set-up, repair, restore, and the
-missing-repository actions.
-
-``GET /api/backup`` is the one status source for the Backup page, the banner
-on every other page and both nav icons. Setup's edits are not here: they save
-through ``PATCH /api/admin/settings`` and its revision check.
-"""
+"""The backup status, history, Back up now, set-up, repair, restore and
+missing-repository endpoints."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Absolute mockup-only positions (ADR-0058); geometry reuses template.yaml's schema."""
+"""Absolute mockup-only positions; geometry reuses template.yaml's schema."""
 
 from pydantic import BaseModel, ConfigDict
 

@@ -1,11 +1,5 @@
-"""Normalize a provider's raw JSON, then hard-validate it against the proposal contract.
-
-Trademark findings never raise: they become ``kind="trademark"`` warnings on
-the built proposal. The watchlist deliberately excludes ordinary garment/print
-brands (Comfort Colors, Gildan, Bella+Canvas, ...): those are legitimate
-listing facts, and warning on every listing that correctly names its own
-garment would train sellers to ignore the warning.
-"""
+"""Normalize a provider's raw JSON, then hard-validate it against the proposal
+contract; trademark findings become warnings on the proposal, never errors."""
 
 from __future__ import annotations
 

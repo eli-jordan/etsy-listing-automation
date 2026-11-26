@@ -1,10 +1,6 @@
-"""Two shapes, because there are two kinds of "no". A refusal that ends the
-operation is raised: nothing was written, and the caller has nothing else to
-report. A malformed document is *returned*, because the caller still has a
-listing (or an empty draft) to describe alongside it: invalid input is a 200
-with the listing unchanged. Incompleteness is neither: ADR-0043 writes an
-incomplete listing and leaves its gaps to ``config/listing_validation.py``.
-"""
+"""The typed refusals operations answer with: raised when the operation ends with
+nothing written, returned for a malformed document the caller still describes
+alongside the unchanged listing."""
 
 from __future__ import annotations
 

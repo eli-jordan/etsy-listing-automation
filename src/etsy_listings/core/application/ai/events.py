@@ -1,12 +1,8 @@
-"""An AI run's events and the indicator nodes they move, which are also the
-SSE payload (features/market-seo-20260924/spec.md, *AI runs*).
+"""An AI run's events and the indicator nodes they move, which are also the SSE
+payload.
 
-Every event carries ``type``, the SSE ``event:`` name, and ``seq``, the SSE
-``id:`` a reconnect sends back as ``Last-Event-ID``. It is not called ``id``
-because a step event's ``id`` is the node it moves: a step event is a
-:class:`WorkflowStep` plus those two fields, which the browser reduces
-straight into its indicator.
-"""
+The SSE ``id:`` a reconnect sends back as ``Last-Event-ID`` is ``seq``, because
+a step event's ``id`` is the node it moves."""
 
 from __future__ import annotations
 

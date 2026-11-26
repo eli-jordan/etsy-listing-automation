@@ -1,7 +1,6 @@
-"""Robust normal/depth integration and metric fitting (ADR-0054).
+"""Robust normal/depth integration and metric fitting.
 
-Camera normals X right/Y up/Z viewer become image X right/Y down/Z viewer.
-"""
+Camera normals X right/Y up/Z viewer become image X right/Y down/Z viewer."""
 
 from __future__ import annotations
 

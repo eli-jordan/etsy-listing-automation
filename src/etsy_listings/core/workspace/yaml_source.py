@@ -1,4 +1,4 @@
-"""Edit a YAML document's values without rewriting the rest of it (ADR-0055)."""
+"""Edit a YAML document's values without rewriting the rest of it."""
 
 from __future__ import annotations
 

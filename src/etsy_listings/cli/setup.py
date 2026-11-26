@@ -1,29 +1,9 @@
-"""The ``setup`` wizard: an empty directory in, a workspace ``new`` can run
-in out.
+"""The ``setup`` wizard: an empty directory in, a workspace ``new`` can run in
+out; re-running it fills gaps and never corrects answers.
 
-This module orders the questions and says what happened. What a workspace
-needs and how ``shop.yaml`` is merged and written is
-:mod:`etsy_listings.core.application.workspace_setup`'s; finding the shops is
-:mod:`~etsy_listings.core.application.shop_discovery`'s; proving the token is
-:mod:`~etsy_listings.core.application.credentials`'. Questions go through
-:mod:`etsy_listings.cli.prompts` rather than questionary directly, because
-questionary cannot prompt at all under cygwin (see that module).
-
-The one rule that shapes it: **`setup` fills gaps, it does not correct
-answers.** Re-running it on a configured workspace must be safe, so every
-prompt is seeded from the file. Two orderings matter and are not arbitrary:
-
-- **The token is verified before anything is written.** A wizard that stores
-  a bad credential and fails three steps later has produced a workspace that
-  looks configured and is not, which is worse than failing at the question.
-- **The token and ``shop.yaml`` are written last.** ``shop.yaml`` is the file
-  that makes a directory a workspace, so writing it means "this worked". A
-  run cancelled halfway leaves directories, prompts and a ``.gitignore``,
-  which are harmless, and no token or ``shop.yaml``, so nothing downstream
-  mistakes the attempt for a workspace.
-
-:func:`run_setup` is the interface.
-"""
+The token is verified before anything is written, and the token and
+``shop.yaml`` are written last, so a cancelled run never leaves a directory
+that looks like a workspace."""
 
 from __future__ import annotations
 

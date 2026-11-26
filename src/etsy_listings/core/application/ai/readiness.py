@@ -1,12 +1,5 @@
-"""Whether AI can run: for one listing, and for a batch created now
-(features/market-seo-20260924/spec.md, *AI runs*; batch-creation spec,
-*Design validation*).
-
-The rules and their wording are core's, so the **AI Mode** button,
-``POST /api/ai/runs`` and staging all say the same thing. Every check is a
-local probe (a file's existence, a provider's fast ``--help`` or
-``login status``) and changes nothing.
-"""
+"""Whether AI can run, for one listing and for a batch created now, in the words
+the AI Mode button, ``POST /api/ai/runs`` and staging all show."""
 
 from __future__ import annotations
 

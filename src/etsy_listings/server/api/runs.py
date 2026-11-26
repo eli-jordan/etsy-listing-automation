@@ -1,15 +1,6 @@
-"""The runs resource (ADR-0041).
-
-Every write here is a call into
-:class:`~etsy_listings.core.application.deploy.deployments.Deployments` --
-this module never decides whether a run may start, only how a request
-becomes a run command and how the answer is carried over HTTP: a conflict
-and a refused review are ``409``s, a run nobody remembers a ``404``. Nothing
-here computes a diff or runs a run either (AGENTS.md's invariants): the FIFO
-worker thread in ``core/application/deploy/executor.py`` does both, on its
-own time, and these endpoints only ever read or nudge the
-:class:`~etsy_listings.core.application.deploy.registry.Run` it is working on.
-"""
+"""The runs resource: each write is a call into
+:class:`~etsy_listings.core.application.deploy.deployments.Deployments`, and this
+module only turns requests into run commands and answers into HTTP."""
 
 from __future__ import annotations
 

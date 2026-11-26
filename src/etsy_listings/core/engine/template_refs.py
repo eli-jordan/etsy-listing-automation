@@ -1,6 +1,5 @@
 """A listing's lockfile, following a mockup template to a new name: image refs
-move, render hashes stay (docs/features/template-rename-20261105/spec.md,
-*Deployed listings*)."""
+move, render hashes stay."""
 
 from __future__ import annotations
 

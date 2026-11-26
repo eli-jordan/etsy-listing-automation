@@ -1,5 +1,5 @@
 """``listing-templates/{name}/template.yaml``: a listing's reusable production
-settings (ADR-0047; spec *Listing templates*)."""
+settings."""
 
 from __future__ import annotations
 

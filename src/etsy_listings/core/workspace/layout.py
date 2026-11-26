@@ -1,4 +1,4 @@
-"""The names of everything in a workspace tree; only ``Workspace`` joins them (ADR-0013)."""
+"""The names of everything in a workspace tree; only ``Workspace`` joins them."""
 
 from __future__ import annotations
 

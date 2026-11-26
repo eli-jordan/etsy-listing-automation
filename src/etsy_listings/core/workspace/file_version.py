@@ -1,10 +1,8 @@
 """Content-change tokens for in-process caches, never deployment input hashes.
 
-Windows may give consecutive same-size writes identical timestamps. NTFS USNs
-identify writes after the last writable handle closes. While another writer
-is open, or on unsupported Windows filesystems, use a content hash. POSIX
-change time cannot be restored by utime.
-"""
+Windows may give consecutive same-size writes identical timestamps and NTFS USNs
+identify writes only after the last writable handle closes, so an open writer or
+an unsupported filesystem falls back to a content hash."""
 
 from __future__ import annotations
 

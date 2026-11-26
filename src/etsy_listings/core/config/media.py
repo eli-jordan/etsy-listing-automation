@@ -1,10 +1,8 @@
-"""What a `media:` entry is: a rendered ``{template, colour}`` or a file ref,
-and whether it is an image or a video.
+"""What a ``media:`` entry is: a rendered ``{template, colour}`` or a file ref, and
+whether it is an image or a video.
 
-A file ref's kind is read from its extension alone, so the answer is pure. An
-extension outside the two lists is refused: Etsy accepts exactly these formats,
-and anything else would surface only as a failed upload.
-"""
+A file ref's kind comes from its extension alone, and an extension outside the
+two lists is refused, since Etsy accepts exactly these formats."""
 
 from __future__ import annotations
 

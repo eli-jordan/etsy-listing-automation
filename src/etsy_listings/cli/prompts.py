@@ -1,16 +1,7 @@
 """How an interactive command asks a question, given the terminal it got.
 
-**Only fzf filters.** Without fzf, ``choose`` falls back to questionary's
-arrow-key list, else a numbered list over ``input()``. Filtering was tried in
-both and both were worse than not having it. questionary's autocomplete copies the
-highlighted row into the input buffer as you arrow through the menu, so the
-query silently becomes a row you never typed -- and clearing it back out
-leaves a fragment that matches nothing. A type-to-narrow loop over ``input()``
-avoids that but costs a full redraw per query to save scrolling a list the
-terminal already scrolls for free. A selector that only selects beats a filter
-that surprises you, and ``fzf`` is one package away for anyone who wants the
-fuzzy version.
-"""
+Only fzf filters: questionary's autocomplete copies the highlighted row into the
+query as you arrow through it, so without fzf ``choose`` is a plain list."""
 
 from __future__ import annotations
 

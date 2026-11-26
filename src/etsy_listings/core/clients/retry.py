@@ -1,13 +1,8 @@
-"""Backoff policy for every Etsy and Printify request. ADR-0009.
+"""Backoff policy for every Etsy and Printify request.
 
-**The method matters more than the status.** A 429 is a refusal to process --
-Printify rejected the request before touching it, so resending is free
-whatever the verb. A 5xx or a dropped connection is the opposite: the write
-may well have landed, and ``POST products.json`` has no idempotency key and no
-conflict, so a retried create is precisely how one design becomes two products
-(ADR-0023, and ``TestNothingStopsUsCreatingTheSameProductTwice`` in the e2e
-layer). So idempotent methods are retried on both; POST only on 429.
-"""
+A 429 is refused before any processing, so every method retries on it, but
+after a 5xx or a dropped connection a write may have landed and
+``POST products.json`` has no idempotency key, so POST retries only on 429."""
 
 from __future__ import annotations
 

@@ -1,17 +1,9 @@
-"""Everything this tool says to Printify.
+"""Everything this tool says to Printify: :class:`CatalogClient`, the read-only
+reference data, and :class:`PrintifyClient`, the shop-scoped half that writes and
+caches nothing, so ``plan`` never diffs against a stale shop.
 
-:class:`CatalogClient` is the read-only, shop-agnostic reference data;
-:class:`PrintifyClient` is the shop-scoped half that writes. A caller holding
-the first cannot reach a call that creates a product, because the method is
-not on the type it was handed.
-
-**Nothing caches on the write side, deliberately.** A shop's products are the
-state this tool is converging on, and a cached read of them would make ``plan``
-report a diff against a stale world.
-
-Deliberately withheld: ``unofficial_variant_costs``, the undocumented cost
-endpoint only the pricing-plan wizard may call.
-"""
+Withheld: ``unofficial_variant_costs``, which only the pricing-plan wizard may
+call."""
 
 from etsy_listings.core.clients.printify.cache import DEFAULT_TTL, CachedCatalogClient
 from etsy_listings.core.clients.printify.catalog import HttpCatalogClient

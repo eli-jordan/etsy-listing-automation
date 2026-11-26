@@ -1,9 +1,7 @@
 """A video file's facts, through PyAV; never raises.
 
 Etsy answers a file it cannot decode with a bare ``500``, so a clip passes only
-once one frame decodes. Nothing read here is hashed, so ``av`` needs only a
-floor pin.
-"""
+once one frame decodes."""
 
 from __future__ import annotations
 

@@ -1,8 +1,7 @@
-"""The template's lock covers only the move. It is not held across the listing
-edits, because a listing's lock is taken first everywhere else. The check for
-active deploys is a check, not a lock: the second-process caveat in
-:mod:`etsy_listings.core.workspace.locks` applies here too.
-"""
+"""Renaming a mockup template and every listing and lockfile that names it.
+
+The template's lock covers only the move, not the listing edits, because a
+listing's lock is taken first everywhere else."""
 
 from __future__ import annotations
 

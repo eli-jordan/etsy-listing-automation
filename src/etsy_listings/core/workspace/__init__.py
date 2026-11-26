@@ -1,9 +1,8 @@
-"""The user's data tree, and the only code that knows its layout (ADR-0013).
+"""The user's data tree, and the only code that knows its layout.
 
 Withheld, and imported from their own modules: ``template_state``,
 ``listing_documents``, ``locks``, ``atomic``, and ``calibration``'s
-``CalibrationStore`` and edit models.
-"""
+``CalibrationStore`` and edit models."""
 
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.facts import WorkspaceFacts, template_info

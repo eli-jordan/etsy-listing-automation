@@ -1,8 +1,6 @@
-"""The packaged default `prompts/seo.md`, prompt seeding and syncing, and the
-delimited JSON context/response-schema wrapper appended around a seller's
-plain prompt text. The wrapper only appends: the seller's prompt has no
-placeholder syntax and stays free-form prose above the delimiters.
-"""
+"""The packaged default ``prompts/seo.md``, prompt seeding and syncing, and the
+delimited JSON context and response-schema wrapper appended below a seller's
+free-form prompt."""
 
 from __future__ import annotations
 

@@ -1,11 +1,8 @@
-"""Provisioning the backup storage folder: bringing a restic repository into
-it, new or copied from a Destination, and saving the ``backup:`` block that
-names it (workspace-backup spec, *Set-up* and *Missing repository*;
-ADR-0060, ADR-0061).
+"""Provisioning the backup storage folder: bringing a restic repository into it,
+new or copied from a destination, and saving the ``backup:`` block that names it.
 
-Every entry point goes through :func:`provision`, which refuses first and
-undoes on failure (architecture, *restic for workspace backup*).
-"""
+Every entry point goes through :func:`provision`, which refuses first and undoes
+on failure."""
 
 from __future__ import annotations
 

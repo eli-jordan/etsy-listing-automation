@@ -1,11 +1,8 @@
-"""Market research: three buyer queries in, twenty scored comparable
-listings, a ranked phrase list and a market-data block out.
+"""Market research: three buyer queries in, twenty scored comparable listings, a
+ranked phrase list and a market-data block out.
 
-Withheld: the disk adapters ``cache`` and ``snapshot``, imported by their
-module names; and ``scoring`` and ``phrases``, the pure maths behind
-:func:`research`. A caller wanting a score or a phrase list gets it from a
-result, so there is one way to compute each.
-"""
+Withheld: ``cache`` and ``snapshot``, imported by module, and ``scoring`` and
+``phrases``, whose answers come only from a :func:`research` result."""
 
 from __future__ import annotations
 

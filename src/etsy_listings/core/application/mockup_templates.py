@@ -1,7 +1,8 @@
-"""Every path comes from ``Workspace``: template names arrive from URLs, and
-its accessors are where "stays inside the root" is enforced (ADR-0013,
-ADR-0046) -- an unusable name is its ``InvalidNameError``.
-"""
+"""The calibrator's mockup template operations: overviews, kinds, colour
+reports, saved calibration and previews.
+
+Every path comes from ``Workspace``, whose accessors keep a template name that
+arrived in a URL inside the root."""
 
 from __future__ import annotations
 

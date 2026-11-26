@@ -1,10 +1,9 @@
-"""Etsy's OAuth 2.0 authorization-code flow, as pure functions: no I/O,
-no clock, no globals.
+"""Etsy's OAuth 2.0 authorization-code flow, as pure functions: no I/O, no clock,
+no globals.
 
-Etsy requires PKCE on every flow, and compares the redirect URI against the
-registered string exactly, so :data:`REDIRECT_URI` is a constant that
-:mod:`callback` takes its port and path from.
-"""
+Etsy requires PKCE on every flow and compares the redirect URI exactly, so
+:data:`REDIRECT_URI` is the constant :mod:`callback` takes its port and path
+from."""
 
 from __future__ import annotations
 

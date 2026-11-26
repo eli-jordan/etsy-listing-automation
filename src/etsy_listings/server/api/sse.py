@@ -1,12 +1,8 @@
 """Server-sent event streams over a run's blocking event log.
 
-A run's ``wait_for_events`` blocks, because the thread appending events is a
-plain thread rather than a coroutine. The stream awaits it through
-``loop.run_in_executor`` with a short timeout, so the generator regularly
-yields control back to check the client is still there. A client going away
-ends only its stream; the run carries on, and a later connection replays it
-from ``Last-Event-ID``.
-"""
+The stream awaits ``wait_for_events`` in an executor with a short timeout so it
+notices a client going away, which ends only its stream; a later connection
+replays the run from ``Last-Event-ID``."""
 
 from __future__ import annotations
 

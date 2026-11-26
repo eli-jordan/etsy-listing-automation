@@ -1,12 +1,9 @@
-"""The 7-day market caches (features/market-seo-20260924/spec.md, *Cache*), wrapping any
-:class:`~etsy_listings.core.clients.etsy.market.EtsyMarketClient` the way
-``clients/printify/cache.py`` wraps a catalog client.
+"""The 7-day market caches, wrapping any
+:class:`~etsy_listings.core.clients.etsy.market.EtsyMarketClient`.
 
-Research calls from several threads at once. Every cache file read and
-write holds one process-wide lock and replaces the file whole, so no reader
-sees half a file and no two read-modify-writes of one listing's stats
-interleave. Etsy calls are made *outside* the lock.
-"""
+Research calls from several threads, so every cache file read and write holds
+one process-wide lock and replaces the file whole; Etsy calls are made outside
+it."""
 
 from __future__ import annotations
 

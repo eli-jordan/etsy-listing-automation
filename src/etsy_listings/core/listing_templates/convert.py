@@ -1,5 +1,5 @@
 """Save as listing template and Clone: a draft that writes nothing, then one
-:func:`save` (ADR-0047; spec *Creation and cloning*)."""
+:func:`save`."""
 
 from __future__ import annotations
 
