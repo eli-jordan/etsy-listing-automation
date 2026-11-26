@@ -5,8 +5,7 @@ import { useIsPhone } from "./usePhone";
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
 
-/** The open sheets, the newest last: only the top one keeps Tab. */
-const stack: HTMLElement[] = [];
+const openSheetsNewestLast: HTMLElement[] = [];
 
 let locks = 0;
 let unlockTo: { overflow: string; x: number; y: number } | null = null;
@@ -46,7 +45,7 @@ export function usePhoneModal(
     if (!isPhone || element === null) return;
     const unlock = lockPageScroll();
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    stack.push(element);
+    openSheetsNewestLast.push(element);
     element.setAttribute("data-phone-sheet", "");
     if (!element.contains(document.activeElement)) {
       if (!element.hasAttribute("tabindex")) element.setAttribute("tabindex", "-1");
@@ -55,7 +54,7 @@ export function usePhoneModal(
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || event.defaultPrevented) return;
-      if (stack[stack.length - 1] !== element) return;
+      if (openSheetsNewestLast[openSheetsNewestLast.length - 1] !== element) return;
       const inside = focusables(element);
       const first = inside[0];
       const last = inside[inside.length - 1];
@@ -78,12 +77,10 @@ export function usePhoneModal(
 
     return () => {
       document.removeEventListener("keydown", onKey);
-      const at = stack.indexOf(element);
-      if (at >= 0) stack.splice(at, 1);
+      const at = openSheetsNewestLast.indexOf(element);
+      if (at >= 0) openSheetsNewestLast.splice(at, 1);
       element.removeAttribute("data-phone-sheet");
       unlock();
-      // Back to the opener, unless the sheet handed focus on to something
-      // else (a dialog that followed it, a field on the next page).
       const active = document.activeElement;
       const lost = active === null || active === document.body || element.contains(active);
       if (lost && opener?.isConnected) opener.focus({ preventScroll: true });

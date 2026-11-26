@@ -10,10 +10,8 @@ import { useSwipe } from "./useSwipe";
  */
 
 export interface SheetGrow {
-  /** The finger is `by` px above where it started. */
-  onDrag: (by: number) => void;
-  /** The finger lifted after any drag; `swiped` when it was a swipe up. */
-  onRelease: (swiped: boolean) => void;
+  onDrag: (pxAboveStart: number) => void;
+  onRelease: (swipedUp: boolean) => void;
 }
 
 export interface SheetDragOptions {
@@ -21,8 +19,7 @@ export interface SheetDragOptions {
   enabled?: boolean;
   /** The element that moves, when it is not `zone` itself. */
   moves?: RefObject<HTMLElement | null>;
-  /** Fade the element as it is pulled down, for something with no box of
-   * its own to read as leaving (the Lightbox's picture on its dark ground). */
+  /** For something with no box of its own to read as leaving. */
   fade?: boolean;
   grow?: SheetGrow;
 }

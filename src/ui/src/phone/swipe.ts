@@ -1,16 +1,8 @@
-/**
- * The gesture arithmetic behind the phone's swipes, kept free of the DOM so
- * the thresholds are tested on numbers rather than synthetic touches.
- */
-
 export type SwipeDirection = "left" | "right" | "up" | "down";
 
-/** How far a finger must travel before a direction is locked in. Under it,
- * a touch is still a tap or a scroll that has not declared itself. */
+/** Under it, a touch is still a tap or a scroll that has not declared itself. */
 export const AXIS_LOCK_PX = 10;
 
-/** A swipe is a deliberate horizontal (or vertical) move: either far enough,
- * or a quick flick that is still more than a twitch. */
 export const DISTANCE_PX = 64;
 export const FLICK_PX = 28;
 export const FLICK_PX_PER_MS = 0.45;
