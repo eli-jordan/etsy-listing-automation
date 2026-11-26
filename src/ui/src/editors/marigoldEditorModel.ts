@@ -11,8 +11,6 @@ export function editorPlacements(config: TemplateConfigState, colours: string[])
   return [{ id: "implicit", colour, bounding_box: config.bounding_box }];
 }
 
-/** What the preview tab renders: one image per colour for a colour matrix,
- * else one image of the whole template. */
 export function previewJobs(
   config: TemplateConfigState,
   colours: string[],
@@ -84,7 +82,6 @@ export function canUndoMask(draft: ReturnType<typeof maskDraft>, undoCount: numb
   return !draft.automatic && undoCount > draft.undoSaved;
 }
 
-/** Why the preview tab cannot render yet, or `null` when it can. */
 export function previewBlocker(facts: {
   mapsReady: boolean;
   unsavedMaps: boolean;

@@ -24,8 +24,6 @@ interface Props {
   knownColours: string[];
 }
 
-/** Where the very first box lands when the photo has none. Middle-ish and
- * comfortably grabbable; it is meant to be dragged, not to be right. */
 const CENTRED_BOX: BoundingBox = [
   { x: 200, y: 150 },
   { x: 400, y: 150 },
@@ -114,9 +112,6 @@ function PhotoWarpMultipleEditor(props: Props) {
   const clampedIndex = Math.min(selectedIndex, Math.max(config.placements.length - 1, 0));
   const warning = uncolouredWarning(config.placements);
 
-  /** The box-editing operations, reached from the canvas -- one
-   * implementation, whether you used the right-click menu, the Delete key or
-   * the button. */
   const mutate = useCallback(
     (fn: (placements: Placement[]) => { placements: Placement[]; select: number }) => {
       const result = fn(config.placements);
@@ -130,9 +125,6 @@ function PhotoWarpMultipleEditor(props: Props) {
     () =>
       mutate((placements) => {
         const source = placements[clampedIndex] ?? placements[placements.length - 1];
-        // 2a: lands centred and selected -- no drawing mode, and every corner
-        // stays draggable afterwards. Offset from the last box when there is
-        // one, so a new box is never hidden exactly under its source.
         const bounding_box = source
           ? (source.bounding_box.map((p) => ({
               x:

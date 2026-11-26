@@ -4,19 +4,6 @@ import { useIsPhone } from "./usePhone";
 import { useSwipe } from "./useSwipe";
 
 /**
- * Pull down to dismiss, for anything the phone layout shows as a sheet: the
- * grab bar of every bottom sheet (`SheetGrabber`), the deploy drawer, and the
- * Lightbox's picture. Every one goes through here, so they all feel the same:
- *
- * - Pulled down, the moving element follows the finger one to one. Pulled
- *   up, it stays put, unless `grow` hands the upward drag to the caller.
- * - A swipe down slides it the rest of the way out in 180ms, then dismisses;
- *   a release short of one springs back over 180ms.
- * - With `prefers-reduced-motion`, a swipe down dismisses at once.
- *
- * Phone only, and a finger only: off the phone layout nothing listens and
- * nothing moves. A scrolling body inside keeps its own scroll.
- *
  * The element stays slid out until the sheet closes (`enabled` goes false or
  * the hook unmounts), so a dialog's closing animation never shows it
  * flashing back into place first.
@@ -31,14 +18,12 @@ export interface SheetGrow {
 
 export interface SheetDragOptions {
   onDismiss: () => void;
-  /** Off while the sheet is closed. */
   enabled?: boolean;
   /** The element that moves, when it is not `zone` itself. */
   moves?: RefObject<HTMLElement | null>;
   /** Fade the element as it is pulled down, for something with no box of
    * its own to read as leaving (the Lightbox's picture on its dark ground). */
   fade?: boolean;
-  /** Up grows the sheet (the deploy drawer) rather than doing nothing. */
   grow?: SheetGrow;
 }
 

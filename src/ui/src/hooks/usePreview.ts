@@ -22,7 +22,6 @@ function jobIdentity(job: Job): string {
   });
 }
 
-/** A `setUrl` updater that shows `next` and revokes the blob it replaces. */
 function replacingUrl(next: string | null) {
   return (previous: string | null) => {
     if (previous) URL.revokeObjectURL(previous);
@@ -102,10 +101,6 @@ export function usePreview(
   // to a stale image.
   const generation = useRef(0);
 
-  // A loop rather than a call that restarts itself: the "render the newest
-  // thing that arrived while I was busy" step is the same step as the first
-  // one, and writing it as recursion only made the function reference itself
-  // before it existed.
   const pump = useCallback(async () => {
     async function renderJob(job: Job) {
       const sent = generation.current;
@@ -116,9 +111,6 @@ export function usePreview(
           job.design,
           "editor",
         );
-        // A response for a template the editor has already left: revoked
-        // here rather than stored, or it leaks exactly like the old cleanup
-        // let the displayed one leak.
         const current = sent === generation.current;
         if (!current || (strictMode.current && latest.current !== jobIdentity(job))) {
           URL.revokeObjectURL(next);

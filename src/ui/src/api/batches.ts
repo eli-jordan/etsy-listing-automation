@@ -1,12 +1,6 @@
 import { api } from "./client";
 import type { components } from "./schema";
 
-/**
- * Staging and batches (batch plan PR 2, 4 and 5; ADR-0048, rename and delete hooks, ADR-0051): typed
- * wrappers over `/api/staging` and `/api/batches`, in
- * `api/listingTemplates.ts`'s shape.
- */
-
 export type StagingDetail = components["schemas"]["StagingDetail"];
 export type StagingRow = components["schemas"]["StagingRowDetail"];
 export type StagingPatch = components["schemas"]["StagingPatch"];
@@ -20,8 +14,6 @@ export type ListingBatch = components["schemas"]["ListingBatch"];
 
 export class BatchesApiError extends Error {}
 
-/** An upload refused before staging (UI doc §4): what was wrong, and how to
- * fix it. Nothing was kept. */
 export class StagingRefused extends BatchesApiError {
   constructor(readonly refusal: StagingRefusal) {
     super(refusal.message);
@@ -76,8 +68,6 @@ export async function cancelStaging(id: string): Promise<void> {
   if (response.status !== 204) throw new BatchesApiError("Staging could not be cancelled.");
 }
 
-/** Create the listings. Rejects with the server's sentence when the session
- * cannot be confirmed yet -- names to fix, or a shared ref that broke. */
 export async function confirmStaging(id: string): Promise<BatchDetail> {
   const { data, error } = await api.POST("/api/staging/{session_id}/confirm", {
     params: { path: { session_id: id } },
@@ -94,7 +84,6 @@ export async function getBatch(id: string): Promise<BatchDetail> {
   return data;
 }
 
-/** Retry one row: its creation if that failed, else its AI. */
 export async function retryBatchRow(id: string, row: string): Promise<BatchDetail> {
   const { data, error } = await api.POST("/api/batches/{batch_id}/rows/{row}/retry", {
     params: { path: { batch_id: id, row } },
@@ -109,8 +98,6 @@ const CONTROLS = {
   retry: "/api/batches/{batch_id}/retry",
 } as const;
 
-/** The batch's queue controls: Cancel batch, Resume, and Retry N
- * failed. Each answers the batch as it is afterwards. */
 export async function controlBatch(
   id: string,
   action: keyof typeof CONTROLS,
@@ -126,20 +113,16 @@ export function stagingThumbnailUrl(id: string, row: string): string {
   return `/api/staging/${encodeURIComponent(id)}/rows/${encodeURIComponent(row)}/thumbnail`;
 }
 
-/** A never-created row's kept upload: it has no listing design to show. */
 export function batchRowThumbnailUrl(id: string, row: string): string {
   return `/api/batches/${encodeURIComponent(id)}/rows/${encodeURIComponent(row)}/thumbnail`;
 }
 
-/** Recent batches (UI doc §2): every batch, and every unconfirmed staging
- * session, newest first, with a derived status. */
 export async function listBatches(): Promise<BatchIndexEntry[]> {
   const { data, error } = await api.GET("/api/batches");
   if (error || !data) throw new BatchesApiError("Recent batches could not be loaded.");
   return data;
 }
 
-/** Rename the batch: its label only (UI doc §7). */
 export async function renameBatch(id: string, label: string): Promise<BatchDetail> {
   const { data, error } = await api.PATCH("/api/batches/{batch_id}", {
     params: { path: { batch_id: id } },
@@ -149,8 +132,6 @@ export async function renameBatch(id: string, label: string): Promise<BatchDetai
   return data;
 }
 
-/** Delete batch record: its work is cancelled, and every listing, design,
- * brief and proposal stays (spec, *Cancellation and deletion*). */
 export async function deleteBatch(id: string): Promise<void> {
   const { response } = await api.DELETE("/api/batches/{batch_id}", {
     params: { path: { batch_id: id } },
@@ -158,7 +139,6 @@ export async function deleteBatch(id: string): Promise<void> {
   if (response.status !== 204) throw new BatchesApiError("The batch record was not deleted.");
 }
 
-/** Mark reviewed / Mark needs review (spec, *Review workflow*). */
 export async function setReviewed(
   id: string,
   row: string,
@@ -172,7 +152,6 @@ export async function setReviewed(
   return data;
 }
 
-/** The batch that made a listing, or `null` (UI doc §8). */
 export async function getListingBatch(name: string): Promise<ListingBatch | null> {
   const { data, error } = await api.GET("/api/listings/{name}/batch", {
     params: { path: { name } },

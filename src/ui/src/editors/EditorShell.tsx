@@ -13,7 +13,6 @@ export interface RealismConfig {
   renderer: PhotoWarpRenderer;
 }
 
-/** What a canvas is handed once the shell knows there is something to draw. */
 export interface CanvasContext {
   imageUrl: string;
   space: [number, number];
@@ -35,22 +34,10 @@ interface Props<T extends RealismConfig> {
   previewUrl: string | null;
   jobs: PreviewJob[];
   onApprove?: () => void;
-  /** What the design-box toggle says. One box or twelve changes the wording,
-   * not the control. */
   outlineLabel?: string;
-  /** The calibration canvas. A function, not a node, because everything it
-   * needs is decided here: the toggle that says whether outlines are drawn
-   * lives in this bar, and the image and the space it is in are only known to
-   * exist inside the guard below -- handing them over is what lets a kind's
-   * canvas take them as plain non-null values. */
   canvas: (ctx: CanvasContext) => ReactNode;
-  /** Extra controls in the view bar, shown on the Calibrate tab only --
-   * a colour-matrix set's colour selector is the only one so far. */
   barExtras?: ReactNode;
-  /** Extra controls at the top of the inspector, above the design picker. */
   controls?: ReactNode;
-  /** Shown under the canvas on the Calibrate tab -- a chart's "boxes with no
-   * colour" warning. */
   footer?: ReactNode;
 }
 
@@ -95,8 +82,6 @@ export function EditorShell<T extends RealismConfig>({
     <main className="app__main">
       <div className="app__preview">
         <div className="app__preview-bar">
-          {/* Two views of the same template: one to adjust in, one to judge
-              in. Shared by all three kinds -- see ViewTabs. */}
           <ViewTabs value={tab} onChange={setTab} />
           <TestDesignPicker compact value={design} onChange={onDesignChange} />
           {calibrating && barExtras}
@@ -114,8 +99,6 @@ export function EditorShell<T extends RealismConfig>({
             <p className="app__loading">Loading preview…</p>
           ))}
 
-        {/* Mounted either way, so flicking back to Calibrate and returning
-            does not throw away renders that cost real seconds. */}
         <PreviewPanel
           templateName={templateName}
           jobs={jobs}
@@ -153,13 +136,6 @@ export function EditorShell<T extends RealismConfig>({
   );
 }
 
-/**
- * The canvas for a kind with exactly one box: `colour-matrix` and `single`.
- *
- * They differ in which photo is underneath -- twelve colours of one garment,
- * or one scene -- and the geometry is identical, which is why one box is
- * always selected and selection is a no-op.
- */
 export function OneBoxCanvas({
   imageUrl,
   space,

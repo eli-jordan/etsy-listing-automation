@@ -1,19 +1,6 @@
 import { useRef, useState } from "react";
 import { useIsPhone } from "../phone/usePhone";
 
-/**
- * The listing editor's page-head title, in both states a listing can have a
- * name in: one it already has (double-click to rename) and one it has not been
- * given yet (opens waiting, because there is nothing to double-click).
- *
- * It lives in `components/` rather than under `pages/editor/` for the reason
- * `StatusTag` and `OpenInMenu` do -- head chrome that no single page owns.
- *
- * Nothing here validates. What makes a legal listing name is what makes a legal
- * *directory* name, and only `workspace` knows that, so a refusal arrives
- * from the server as `error` and is shown beside the field.
- */
-
 export interface NameRefusal {
   /** The name that was refused. Carried so the message can disappear on its
    * own once the text has moved on -- a refusal is about a particular name, and
@@ -30,8 +17,6 @@ export interface EditableNameProps {
    * double-click you did not mean costs nothing. */
   onCommit: (next: string) => void;
   error?: NameRefusal | null;
-  /** A commit is in flight; the field stays open and read-only rather than
-   * closing over a name that may yet be refused. */
   busy?: boolean;
   placeholder?: string;
   label?: string;
@@ -41,8 +26,6 @@ export interface EditableNameProps {
    * the seller is part-way through typing -- which `value` cannot show,
    * because an uncommitted name is not the listing's name. */
   onDraftChange?: (text: string) => void;
-  /** The element the name reads as. A page's title is its `h1`; the calibrator
-   * shows the template's name in a breadcrumb beneath one. */
   as?: "h1" | "span";
   titleClassName?: string;
   inputClassName?: string;
@@ -67,8 +50,6 @@ export function EditableName({
   // the keydown either way -- so the key handler records what it decided and
   // the blur handler obeys it.
   const reverting = useRef(false);
-  // A finger cannot double-click: on a phone one tap opens the field, and a
-  // pencil says the name is editable.
   const isPhone = useIsPhone();
 
   // Adjusting state while rendering, rather than in an effect: the name landed
@@ -106,8 +87,6 @@ export function EditableName({
         tabIndex={0}
         onDoubleClick={() => setOpened(true)}
         onClick={isPhone ? () => setOpened(true) : undefined}
-        // Keyboard equivalents, because a rename reachable only with a mouse
-        // would be the one control in this editor that is.
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === "F2") setOpened(true);
         }}

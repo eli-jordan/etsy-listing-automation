@@ -53,8 +53,6 @@ export function TestDesignPicker({ value, onChange, compact = false }: Props) {
 
   return (
     <section className={compact ? "design-picker design-picker--compact" : "design-picker"}>
-      {/* The heading names the control, so the select carries the accessible
-          name rather than a second visible label repeating it. */}
       <h3 className="design-picker__heading">{compact ? "Design" : "Test design"}</h3>
 
       <select

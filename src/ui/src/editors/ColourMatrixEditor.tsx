@@ -17,18 +17,11 @@ interface Props {
    * `QuadEditor`'s `space`. */
   space: [number, number] | null;
   onChange: (config: ColourMatrixTemplate) => void;
-  /** Which test artwork the preview renders with. A way of looking at the
-   * template, not a property of it, so it lives above the config. */
   design: string;
   onDesignChange: (design: string) => void;
-  /** Approving from the Preview tab saves; there is no separate stored
-   * "approved" flag, because status is derived (see TemplateSummary.status). */
   onApprove: () => void;
 }
 
-/** One box that has to work in every colour of the set. What it adds to the
- * shell is the choice of which colour the canvas is showing, and a preview
- * that renders all of them. */
 function PhotoWarpColourMatrixEditor(props: Props) {
   const { templateName, config, colours, onChange, design, onApprove } = props;
   const [selectedColour, setSelectedColour] = useState<string | null>(null);
@@ -38,8 +31,6 @@ function PhotoWarpColourMatrixEditor(props: Props) {
   const colour =
     selectedColour && colours.includes(selectedColour) ? selectedColour : (colours[0] ?? "");
 
-  // No colour yet (an empty set, or a list that hasn't loaded) means there is
-  // no photo to composite over, so the hook is told to hold off entirely.
   const previewUrl = usePreview(
     templateName,
     useMemo(

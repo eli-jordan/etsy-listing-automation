@@ -17,8 +17,6 @@ export const PRELOAD_CONCURRENCY = 2;
  * preload. A new list (by content, not array identity) abandons the old one.
  */
 export function usePreloadedPictures(urls: readonly string[]): void {
-  // Joined, so an equal list in a new array (every render of a parent that
-  // derives it) does not restart the preload.
   const key = urls.join("\n");
   useEffect(() => {
     const controller = new AbortController();

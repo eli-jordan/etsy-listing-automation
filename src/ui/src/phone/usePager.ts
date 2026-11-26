@@ -4,35 +4,11 @@ import type { SwipeDirection } from "./swipe";
 import { useIsPhone } from "./usePhone";
 import { useSwipe } from "./useSwipe";
 
-/**
- * A sideways pager for the phone layout: a swipe left on `zone` picks the
- * item after `current`, a swipe right the one before, the way a native pager
- * reads. Every phone pager -- the editor's tabs, Admin's sections, the
- * template switcher -- goes through here, so they all feel the same (the
- * Lightbox's pictures sit side by side instead, through `useCarousel`):
- *
- * - The moving element follows the finger one to one while there is an item
- *   to go to, and resists past the first or the last (no wrap-around, so the
- *   ends read as ends).
- * - A swipe slides it out towards the finger in 110ms, then picks; whenever
- *   `current` changes, by a swipe or a tap elsewhere, the new item slides in
- *   from its side over 200ms. A release short of a swipe springs back.
- * - With `prefers-reduced-motion`, a swipe picks at once and nothing slides.
- *
- * Phone only, and a finger only: off the phone layout nothing listens and
- * nothing moves, so a desktop page that mounts it keeps its DOM and styles.
- * Anything inside that owns a sideways drag (a slider, a sideways scroller,
- * the field being typed in, `data-swipe-ignore`) keeps it.
- */
-
 export interface PagerOptions<T> {
-  /** Every item, in the order the swipes walk. */
   items: readonly T[];
   current: T;
   /** Shows `item`. The pager has already slid the old one out. */
   onPick: (item: T) => void;
-  /** Off for a while on the phone too (the Lightbox at 1:1, where a finger
-   * pans the picture). */
   enabled?: boolean;
   /** The element that moves, when it is not `zone` itself. */
   moves?: RefObject<HTMLElement | null>;
@@ -41,8 +17,6 @@ export interface PagerOptions<T> {
 }
 
 export interface Pager<T> {
-  /** The neighbours a swipe would pick, null at an end, for arrows beside
-   * the pager. */
   previous: T | null;
   next: T | null;
 }

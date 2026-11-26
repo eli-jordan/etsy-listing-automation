@@ -8,8 +8,6 @@ export const FAST_POLL_MS = 2000;
 export const SLOW_POLL_MS = 30000;
 
 export interface BackupStatusSource {
-  /** The last status read, as the app draws it. A failed read keeps the
-   * status it had; `error` shows only before any read has answered. */
   view: BackupView;
   /** When the view's status was read, for "2 hrs ago" without reading the clock in render. */
   readAt: number;
@@ -25,7 +23,6 @@ export const BackupStatusContext = createContext<BackupStatusSource>({
   refresh: () => Promise.resolve(null),
 });
 
-/** The shell's one backup status (`BackupStatusProvider`). */
 export function useBackupStatus(): BackupStatusSource {
   return useContext(BackupStatusContext);
 }

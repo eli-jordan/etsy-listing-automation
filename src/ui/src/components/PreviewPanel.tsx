@@ -5,27 +5,6 @@ import { Lightbox } from "./Lightbox";
 import { previewProgress, type PreviewResult } from "./previewProgress";
 
 /**
- * The Preview tab, for every template kind.
- *
- * The split it completes: the Calibrate tab renders *small* so that dragging
- * is instant, and this one renders at the photo's real size so there is
- * somewhere to actually judge the result. Both go through the same server-side
- * pipeline `apply` uses -- what changes between them is only how many pixels
- * the server is asked to spend.
- *
- * **Opening the tab renders; changing a box does not.** A full-size render of
- * a twelve-colour set is a lot of work, and it used to be kicked off by any
- * change to the config at all -- so nudging a box by a pixel re-rendered the
- * lot. Worse, the tiles could quietly become a picture of an older box than
- * the one on screen, which is the one thing a view you approve from must never
- * do. So the first look renders, and after that a changed config turns
- * Re-render red rather than silently re-running.
- *
- * The panel stays mounted while the Calibrate tab is in front, hidden rather
- * than unmounted. Otherwise every flick between tabs would throw the renders
- * away and start the set again -- and "there is none, so render" would fire on
- * a set that had just been rendered.
- *
  * Renders **sequentially**. Firing every colour at once does not make the set
  * arrive sooner -- the server runs the real pipeline for each -- it only makes
  * the *first* one arrive later, and buries the progress count.
@@ -51,9 +30,6 @@ interface Props {
   templateName: string;
   jobs: PreviewJob[];
   design: string;
-  /** Whether this tab is the one in front. Mounted either way -- see the note
-   * about tab flicks above -- so this both hides the panel and is what a first
-   * look keys off. */
   active: boolean;
   /** Colour-matrix's "Approve & mark calibrated", which is a save. Omitted by
    * the kinds whose only save is the header's -- there is nothing extra to
@@ -75,8 +51,6 @@ function requestKey(templateName: string, design: string, jobs: PreviewJob[]): s
   return `${templateName}|${design}|${JSON.stringify(jobs)}`;
 }
 
-/** A tile rendered for the run `key` names; a late answer for an older run
- * changes nothing. */
 function withRendered(current: PreviewResult | null, key: string, id: string, url: string) {
   if (current === null || current.key !== key) return current;
   return { ...current, rendered: { ...current.rendered, [id]: url }, done: current.done + 1 };
@@ -107,7 +81,6 @@ function runRequest(
         }
         report.onRendered(job.id, url);
       } catch {
-        // One unreadable photo costs you that tile, not the whole tab.
         if (cancelled) return;
         report.onFailed();
       }
@@ -119,8 +92,6 @@ function runRequest(
   };
 }
 
-/** How far the run is (`asked` jobs), or how many colours there are to
- * render before the first one. */
 function ProgressCount({
   asked,
   colours,
@@ -138,7 +109,6 @@ function ProgressCount({
   );
 }
 
-/** Why nothing can render yet, with the way out when there is one. */
 function BlockedNotice({
   blocked,
   prepareLabel,
@@ -188,7 +158,6 @@ function PreviewTile({
   );
 }
 
-/** Render's emphasis: danger when stale, quiet once approval is the next step. */
 function renderButtonClass(stale: boolean, approvable: boolean): string {
   if (stale) return "btn btn-danger";
   return approvable ? "btn btn-secondary" : "btn btn-primary";
@@ -213,7 +182,6 @@ export function PreviewPanel({
   const [open, setOpen] = useState<string | null>(null);
   const [actualSize, setActualSize] = useState(false);
   const urlsRef = useRef<string[]>([]);
-  // A finger taps; the copy says so on a phone.
   const verb = useIsPhone() ? "Tap" : "Click";
 
   // Every blob this panel has made. Revoked wholesale when a run is replaced
@@ -232,10 +200,6 @@ export function PreviewPanel({
     setRequest({ key, templateName, design, jobs });
   }, [key, templateName, design, jobs, revokeAll]);
 
-  // The first look renders itself. Only ever the *first*: once a request
-  // exists this is inert, so returning to the tab shows what was rendered
-  // rather than spending the set again.
-  //
   // Adjusted during render rather than from an effect. React re-renders
   // immediately and throws the intermediate output away, so the panel never
   // paints a "nothing yet" state it is about to replace -- where an effect
@@ -320,8 +284,6 @@ export function PreviewPanel({
       {request === null ? (
         <p className="preview-grid__empty">
           Full-size renders, through the same pipeline <code>apply</code>
-          {/* One text node, as before the phone layout: node boundaries
-              decide kerning, and the desktop sentence stays pixel-equal. */}
           {` uses — a few seconds each, which is why they are asked for rather than assumed. ${verb} one to see it large.`}
         </p>
       ) : (

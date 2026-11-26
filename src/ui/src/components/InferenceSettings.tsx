@@ -1,4 +1,3 @@
-// Settings stay in a modal draft until applied to the template editor.
 import { useEffect, useRef, useState } from "react";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";

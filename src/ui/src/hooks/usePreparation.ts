@@ -13,10 +13,6 @@ function eventCursor(event: PreparationEvent): number | undefined {
   return "sequence" in event ? event.sequence : event.last_event_sequence;
 }
 
-/** Reattach to server work, including CPU rebuilds after save. Reconnection reads
- * status and resumes events; it never submits another preparation job. Automatic
- * reads pause while the editor composite is pending, then resume with a fresh
- * snapshot so progress validation does not compete with the visible edit. */
 export function usePreparation(name: string | null, version: number, previewPending = false) {
   const [entry, setEntry] = useState<{ name: string; value: Preparation } | null>(null);
   const [error, setError] = useState("");
@@ -32,8 +28,6 @@ export function usePreparation(name: string | null, version: number, previewPend
     let cursor: number | undefined;
     let followedId: string | undefined;
     let reading = false;
-    /** Streams the active job's events, resuming where the last stream for
-     * the same job stopped, and reads again when the stream says so. */
     function follow(id: string) {
       if (followedId !== id) cursor = undefined;
       followedId = id;

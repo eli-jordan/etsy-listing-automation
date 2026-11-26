@@ -43,7 +43,6 @@ export function useAutosave(
   initial: ListingDetail,
   options: {
     onNamed?: (name: string, fresh: ListingDetail) => void;
-    /** The listing's by default. */
     transport?: AutosaveTransport;
   } = {},
 ): UseAutosave {

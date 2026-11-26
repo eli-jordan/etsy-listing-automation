@@ -1,15 +1,5 @@
 import type { BackupStatus, BackupWarning, DestinationStatus } from "../api/backup";
 
-/**
- * What a warning asks of the seller on Status and history: the banner
- * actions in workspace-backup interactions, *Warnings*.
- * - `connect`: the repository is missing; Create a new repository or
- *   Connect an existing repository.
- * - `repair`: a destination holds changed or unexpected files; Repair that
- *   copy.
- * - `retry`: every other warning (stale, failed, behind), answered together
- *   by one Try again.
- */
 export type Attention =
   | { action: "connect"; warning: BackupWarning }
   | { action: "repair"; warning: BackupWarning; destination: DestinationStatus }
@@ -30,7 +20,6 @@ interface Activity {
   restoring: boolean;
 }
 
-/** Backups as set up, with what needs attention. */
 export interface BackupsOn extends Activity {
   state: "on";
   status: BackupStatus;
@@ -40,10 +29,7 @@ export interface BackupsOn extends Activity {
   /** Every warning that shows beyond the Backup page (all but `off`), in the
    * server's order. */
   warnings: BackupWarning[];
-  /** The page's banners, in the order they show: a missing repository, each
-   * changed copy in destination order, then one Try again for the rest. */
   attention: Attention[];
-  /** Every destination, in settings order. */
   copies: Copy[];
 }
 

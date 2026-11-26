@@ -41,29 +41,16 @@ const router = createBrowserRouter(
       <Route path="/" element={<DashboardPage />} />
       <Route path="/listings" element={<ListingsPage />} />
       <Route path="/listings/deploy/:runId" element={<BatchDeployPage />} />
-      {/* Both routes, one component: /listings/new is the editor opened on
-          an empty draft, and naming it is what creates it. React Router
-          ranks the static segment above the dynamic one. */}
       <Route path="/listings/new" element={<ListingEditorPage />} />
       <Route path="/listings/:name" element={<ListingEditorPage />} />
-      {/* Its own route, not a mode of `ListingEditorPage` kept mounted
-          behind it (docs/features/deploy-20260917/spec.md decision 9) -- Back returns to
-          `/listings/:name`, which re-fetches `ListingDetail` fresh rather
-          than reusing state a deploy run may have changed server-side. */}
       <Route path="/listings/:name/deploy" element={<DeployPage />} />
-      {/* ADR-0047: listing templates. The same two-routes-one-component shape
-          as a listing: /new is the unsaved *name it* state (UI doc §1). */}
       <Route path="/listing-templates" element={<ListingTemplatesPage />} />
       <Route path="/listing-templates/new" element={<ListingTemplateEditorPage />} />
       <Route path="/listing-templates/:name" element={<ListingTemplateEditorPage />} />
-      {/* Batch creation (batch plan PR 2): choose and drop, review the
-          staged designs, then the batch the confirm made. */}
       <Route path="/batches/new" element={<NewBatchPage />} />
       <Route path="/batches/staging/:id" element={<StagingPage />} />
       <Route path="/batches/:id" element={<BatchSummaryPage />} />
-      {/* Admin plan, PR 3: shop.yaml's Shop tab; the section is page state. */}
       <Route path="/admin" element={<AdminPage />} />
-      {/* The calibrator, unmounted -- mounted here unchanged. */}
       <Route path="/templates" element={<App />} />
     </Route>,
   ),

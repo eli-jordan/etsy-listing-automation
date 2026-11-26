@@ -10,12 +10,10 @@
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** `3 Sep`, in local time. */
 export function dayMonth(when: Date): string {
   return `${when.getDate()} ${MONTHS[when.getMonth()]}`;
 }
 
-/** `11:42`, 24-hour, in local time. */
 export function clock(when: Date): string {
   return when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }

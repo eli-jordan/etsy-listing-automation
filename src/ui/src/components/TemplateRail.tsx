@@ -25,10 +25,9 @@ const KIND_LABELS: Record<TemplateKind, string> = {
   single: "Single",
 };
 
+/** Rows shown per group before "+ N more", so a big workspace does not push
+ * the calibrate button off screen. */
 const VISIBLE_LIMIT = 5;
-/** Rows shown per group before "+ N more". The rail is a sidebar, not the
- * page: a 34-template workspace should not push the calibrate button off
- * screen. */
 
 type StatusFilter = "needs" | "all" | "done";
 
@@ -42,7 +41,6 @@ function countLabel(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-/** What the row says under the name: what is missing, or what it holds. */
 function describe(t: TemplateSummary): string {
   const kind = t.kind ? KIND_LABELS[t.kind] : null;
   if (t.renderer === "marigold") return kind ?? "Unknown";
@@ -53,18 +51,11 @@ function describe(t: TemplateSummary): string {
   return `${kind ?? "Unknown"} · ${countLabel(t.colours.length, "colour")}`;
 }
 
-/** The row's photo, or a blank tile when there isn't one.
- *
- * A template directory can exist before any photo is in it -- an interrupted
- * upload, or a folder made by hand -- and `/thumbnail` 404s for those. Without
- * this the browser draws its own broken-image icon, which reads as the rail
- * being broken rather than as the template being empty. */
 function mapsLabel(maps: TemplateSummary["maps"]): string {
   if (!maps) return "Checking maps";
   return marigoldMapsReady(maps) ? "Ready" : "Needs maps";
 }
 
-/** A template's place in the preparation queue, if it has one. */
 function queueStatus(jobs: PreparationJob[], name: string): string | null {
   const job = jobs.find((candidate) => candidate.template === name);
   if (!job) return null;
@@ -76,6 +67,8 @@ function jobLabel(job: PreparationJob): string {
   return job.kind === "rebuild" ? "Rebuilding maps" : "Preparing";
 }
 
+/** `/thumbnail` 404s for a template directory with no photo yet; a blank tile
+ * stops the browser drawing its broken-image icon. */
 function Thumb({ name }: { name: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <span className="template-rail__thumb template-rail__thumb--empty" />;
@@ -176,9 +169,6 @@ function Group({
   );
 }
 
-/** The templates the filters leave: one list for Marigold, which prepares
- * rather than calibrates, else what still needs calibrating above what is
- * done. */
 function RailGroups({
   shown,
   marigold,
@@ -250,12 +240,8 @@ export function TemplateRail({
   const isReady = (t: TemplateSummary) =>
     t.renderer === "marigold" ? marigoldMapsReady(t.maps) : !needsCalibration(t);
   const doneCount = templates.filter(isReady).length;
-  // Held separately so the banner's callback has something TypeScript can
-  // narrow -- `outstanding.length > 0` in JSX does not narrow `outstanding[0]`.
   const nextUp = outstanding.find((template) => template.renderer !== "marigold") ?? null;
 
-  // Status and kind apply first, so the box's labels and counts cover only what
-  // they leave (spec *Mockup Templates rail*).
   const filtered = useMemo(
     () =>
       templates.filter((t) => {

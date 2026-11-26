@@ -37,7 +37,6 @@ export type PreparationAction = "prepare" | "prepare_again" | "retry";
 
 export interface TemplateSession {
   load: TemplateLoad;
-  /** Why the template could not be read, when the server said. */
   loadError: string | null;
   /** The draft: the document as last read or saved, with every edit since. */
   config: TemplateConfigState | null;
@@ -47,13 +46,7 @@ export interface TemplateSession {
   save: TemplateSaveState;
   /** Mask strokes drawn but not yet committed by a save. */
   maskEdits: MaskEdit[];
-  /** The revision a preview's `calibration_revision` names: the one this
-   * session last read or wrote, or the one its own preparation completed at.
-   * A save that changed only labels leaves it where it is: nothing a preview
-   * draws moved, so asking for the frame again would be wasted work. */
   calibrationRevision: string;
-  /** The labels `calibrationRevision` was saved with, which a preview sends so
-   * the server can recognise that revision behind later label saves. */
   calibrationLabels: string[];
   /** The revisions label-only saves have moved the document to since
    * `calibrationRevision`. Preparation reporting one of them is up to date. */
@@ -62,17 +55,9 @@ export interface TemplateSession {
   preparationError: string;
   /** An explicit prepare or cancel request is outstanding. */
   preparing: boolean;
-  /** Replaces the draft and (re)arms the debounced autosave. */
   update: (config: TemplateConfigState) => void;
   setMaskEdits: (edits: MaskEdit[]) => void;
-  /** The Marigold editor's composite is in flight. A Marigold draft's
-   * autosave and the preparation reads both wait for it, so neither competes
-   * with the frame the seller is looking at; a save that fell due meanwhile
-   * goes the moment it lands. */
   setPreviewPending: (pending: boolean) => void;
-  /** Saves now, without waiting for the debounce. Never rejects: the outcome
-   * is in `save`, and in what it answers for a caller about to act on the
-   * file. */
   flush: () => Promise<Settled>;
   /** Writes the draft even when nothing changed. Approving from the Preview
    * tab is a save: calibration status is derived from template.yaml, so the
@@ -110,7 +95,6 @@ function sameLabels(left: TemplateConfigState, right: TemplateConfigState): bool
   return JSON.stringify(left.labels) === JSON.stringify(right.labels);
 }
 
-/** Whether going from `before` to `after` changes labels and nothing else. */
 function onlyLabelsDiffer(before: TemplateConfigState, after: TemplateConfigState): boolean {
   return !sameLabels(before, after) && sameConfig({ ...before, labels: after.labels }, after);
 }
@@ -132,14 +116,11 @@ interface Doc {
   maskEdits: MaskEdit[];
   save: TemplateSaveState;
   previewPending: boolean;
-  /** This opening's saves. The draft is what is sent, read when it goes, so
-   * what the loop holds is only whether one is owed. */
   loop: WriteLoop<SaveWanted>;
   /** The debounce ran out while held by a pending preview. */
   due: boolean;
 }
 
-/** `always` writes the draft even if nothing changed: an approval. */
 interface SaveWanted {
   always: boolean;
 }
@@ -172,8 +153,6 @@ const SAVING: TemplateSaveState = { kind: "saving" };
 const NO_EDITS: MaskEdit[] = [];
 const NO_LABELS: string[] = [];
 
-/** What a failed save says: a conflict asks for a reload, anything else is
- * a plain failure. */
 function saveFailure(e: unknown): Extract<TemplateSaveState, { message: string }> {
   if (e instanceof TemplateConflictError) return { kind: "conflict", message: e.message };
   return { kind: "failed", message: e instanceof Error ? e.message : "Save failed" };
@@ -204,8 +183,6 @@ function shownSave(doc: Doc): TemplateSaveState {
 class Session {
   private doc: Doc | null = null;
   private listeners = new Set<() => void>();
-  /** The saves of documents this session has left: a flush on switch can
-   * still be in flight when the next template is read, and must land first. */
   private leaving: Promise<unknown> = Promise.resolve();
   /** Operations are objects shared by successive draft snapshots, so an
    * editor handing back a list built before a save landed would otherwise
@@ -240,7 +217,6 @@ class Session {
     this.emit();
   }
 
-  /** Unmount: whatever is pending goes now, as on a switch. */
   close() {
     if (this.doc) this.detach(this.doc);
   }
@@ -402,8 +378,6 @@ class Session {
       }),
       due: false,
     };
-    // After any save still in flight, or the read could describe the file
-    // from before it.
     void this.leaving
       .then(() => getTemplateConfig(name))
       .then(
@@ -443,13 +417,10 @@ class Session {
     this.leave(doc);
   }
 
-  /** The next read waits for `doc`'s writes. */
   private leave(doc: Doc) {
     this.leaving = Promise.all([this.leaving, doc.loop.flush()]);
   }
 
-  /** Reads the draft now, not when the save was asked for, so it goes as the
-   * one request the latest draft needs, and an edit undone sends nothing. */
   private async send(doc: Doc, always: boolean): Promise<Settled> {
     if (doc.load !== "ready" || doc.draft === null || (!always && !isDirty(doc))) return WRITTEN;
     const config = doc.draft;
@@ -474,8 +445,6 @@ class Session {
     else this.fence(doc, doc.revision);
     doc.save = { kind: "saved", savedAt: Date.now() };
     const current = this.doc === doc;
-    // A save rebuilds CPU-side maps, so preparation is read again. A label
-    // save rebuilds nothing.
     if (current && !relabelling) this.version += 1;
     this.emit();
     // Whether the template still needs calibration may have changed, and
@@ -554,22 +523,6 @@ class Session {
   }
 }
 
-/**
- * The calibrator's authoring session for the selected template: reading its
- * template.yaml, the draft against what was saved, autosave, the revision
- * every save names, mask strokes awaiting commit, and the preparation that
- * follows a save.
- *
- * Saves go through the {@link WriteLoop} the listing editor's use too: a
- * debounce from the last edit, one request in flight at a time, and pending
- * edits flushed -- not dropped -- on a template switch and on unmount. What
- * stays here is what differs: this PUTs a whole document over a revision, where
- * a listing merges patches and moves through create and rename, and a preview
- * can hold it.
- *
- * `onCatalogChanged` is told when a save or a queued preparation may have
- * changed the template list's facts, with the name to keep selected.
- */
 export function useTemplateSession(
   name: string | null,
   options: { onCatalogChanged?: (select?: string) => void } = {},

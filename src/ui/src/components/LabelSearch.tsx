@@ -1,6 +1,3 @@
-// The search box both pages share: labels are pills inside it, and plain text
-// narrows what they leave by title. The caller owns both values, and applies
-// them to its own list.
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Fragment, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
@@ -10,7 +7,6 @@ import "./LabelSearch.css";
 interface Option {
   tag: string;
   count: number;
-  /** Adding it would leave nothing, so taking it replaces the pills. */
   swap: boolean;
 }
 
@@ -32,9 +28,6 @@ function distinctTags(items: string[][]): string[] {
   return [...spellings.values()];
 }
 
-/** Labels the typed text could mean, in their groups A to Z with plain tags last.
- * Within a group: narrowing ones first, then those starting with it, as a whole or
- * after the colon, then by count. */
 function optionsFor(items: string[][], term: string, on: string[]): Option[] {
   const starts = (tag: string) => {
     const text = tag.toLowerCase();
@@ -65,7 +58,6 @@ function stepped(active: number, count: number, step: 1 | -1): number {
   return (active + step + count) % count;
 }
 
-/** The label with the typed part in bold. */
 function Marked({ tag, term }: { tag: string; term: string }) {
   const at = term ? tag.toLowerCase().indexOf(term) : -1;
   if (at < 0) return <span>{tag}</span>;
@@ -117,13 +109,10 @@ export function LabelSearch({
   const menuId = `${id}-menu`;
   const optionId = (index: number) => `${id}-option-${index}`;
 
-  // The menu scrolls, and arrow keys walk past what it shows.
   useEffect(() => {
     activeRow.current?.scrollIntoView({ block: "nearest" });
   }, [active, menuOpen]);
 
-  // Nothing stays highlighted through a close: Enter must keep meaning "title
-  // search" until the seller presses an arrow key again (spec *Search*).
   const close = () => {
     setMenu(false);
     setActive(-1);
@@ -151,7 +140,6 @@ export function LabelSearch({
     ArrowUp: (event) => move(event, -1),
     Enter: confirm,
     Escape: close,
-    // An open menu would otherwise stay over the rail once focus has moved on.
     Tab: close,
     Backspace: () => {
       if (query !== "" || on.length === 0) return;

@@ -11,7 +11,6 @@ export type Settled = { written: true } | { written: false; message: string };
 
 export const WRITTEN: Settled = { written: true };
 
-/** Time, for the debounce. `after` answers how to cancel. */
 export interface Clock {
   after: (ms: number, run: () => void) => () => void;
 }
@@ -38,20 +37,6 @@ export interface WriteLoopOptions<Edit> {
   clock?: Clock;
 }
 
-/**
- * The one way an edit reaches the disk, for any editor that autosaves. It owns
- * the order of writes, the collapsing of edits into one write, keeping an edit
- * that was not written, and what a caller is told when the writing stops. What
- * an edit is, what a write sends and what the page shows about it are the
- * owner's, through {@link WriteLoopOptions}.
- *
- * - One write at a time, in order: whichever of two concurrent requests resolved
- *   last would win, regardless of which held the newer edit.
- * - An edit is held until it is written. A failure does not retry on its own: a
- *   metered or broken server must not see a loop. The next flush or edit does.
- * - {@link flush} sends now, resolves only when no write is out, and never
- *   rejects, because nothing on a timer or a blur could catch it.
- */
 export class WriteLoop<Edit> {
   private waiting: Edit | null = null;
   private cancelDebounce: (() => void) | null = null;
@@ -79,12 +64,10 @@ export class WriteLoop<Edit> {
     return this.waiting;
   }
 
-  /** The debounce is running. */
   get armed(): boolean {
     return this.cancelDebounce !== null;
   }
 
-  /** Holds `edit` and restarts the debounce. */
   edit(edit: Edit) {
     this.waiting = this.waiting === null ? edit : this.merge(this.waiting, edit);
     this.disarm();

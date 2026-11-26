@@ -75,7 +75,6 @@ export function PlacementOverlay({
     setStroke(null);
     if (next) onStroke(next);
   }
-  /** The stroke's own pointer ended; any other pointer's end is ignored. */
   function finishFrom(event: React.PointerEvent<SVGRectElement>) {
     if (owner.current !== null && event.pointerId !== owner.current) return;
     finish();

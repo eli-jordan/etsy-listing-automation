@@ -92,8 +92,6 @@ function PreviewBar({
   );
 }
 
-/** Each placement's artwork and mask, with the brush on the one being
- * edited. */
 function PlacementOverlays({
   placements,
   multiple,
@@ -292,8 +290,6 @@ export function MarigoldEditor({
       },
     };
   }
-  /** The calibrate view's canvas: the photo (or its live preview) with
-   * every placement's box, artwork and mask. */
   function calibrationCanvas(space: [number, number]) {
     return (
       <QuadEditor

@@ -34,7 +34,6 @@ export function moved(start: BoundingBox, origin: Point, pointer: Point): Boundi
   return translated(start, pointer.x - origin.x, pointer.y - origin.y);
 }
 
-/** The box an arrow key moves `box` to, or `null` for any other key. */
 export function nudged(box: BoundingBox, key: string, fast: boolean): BoundingBox | null {
   const step = fast ? NUDGE_PX_FAST : NUDGE_PX;
   if (key === "ArrowLeft") return translated(box, -step, 0);
@@ -95,7 +94,6 @@ export function cornerDragged(
   return start.map((p, i) => (i === pointIndex ? pointer : p)) as BoundingBox;
 }
 
-/** Where a box's caption hangs: centred under its lowest edge. */
 export function labelAnchor(box: BoundingBox): Point {
   const xs = box.map((p) => p.x);
   const ys = box.map((p) => p.y);

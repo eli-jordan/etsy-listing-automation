@@ -8,7 +8,6 @@
  * repeat templates. No wrap-around either, so the ends read as ends.
  */
 
-/** "3 of 23", or nothing when the open template is not in the list. */
 export function stepPosition(names: readonly string[], current: string | null): string | null {
   const index = current === null ? -1 : names.indexOf(current);
   return index < 0 ? null : `${index + 1} of ${names.length}`;

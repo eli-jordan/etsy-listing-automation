@@ -42,20 +42,12 @@ function ListingCard({ listing }: { listing: ListingSummary }) {
   );
 }
 
-/**
- * A listing's name in a table -- its thumbnail, the name itself (`children`,
- * the caller's link or button styled `listing-row__link`) and the hover card
- * -- the same on every table that lists listings: the Listings page and a
- * batch summary. Without a `listing` summary (not loaded yet) it is the
- * thumbnail and the name alone.
- */
 export function ListingHover({
   listing,
   thumb,
   children,
 }: {
   listing: ListingSummary | null;
-  /** The thumbnail when there is no summary to draw it from. */
   thumb?: ReactNode;
   children: ReactNode;
 }) {

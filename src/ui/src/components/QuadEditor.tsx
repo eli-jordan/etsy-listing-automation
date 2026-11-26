@@ -23,26 +23,13 @@ interface Props {
   overlay?: ReactNode;
   interactive?: boolean;
   imageUrl: string;
-  /** The template photo's **true** `[width, height]`, from the API.
-   *
-   * Not measured off `imageUrl`. The editor renders at a downscale, so the
-   * image on screen is smaller than the photo -- but `template.yaml` stores
-   * boxes at the photo's true size, and so does everything in this component.
-   * Reading `naturalWidth` instead (which is what this used to do) would put
-   * the overlay in the *preview's* space and silently save every box a few
-   * times too small.
-   *
-   * Nothing breaks visually if it is a little wrong, which is exactly why it
-   * is a required prop rather than an optional override: the failure is in the
-   * saved file, not on the screen. */
+  /** The template photo's **true** `[width, height]`, from the API, not
+   * `naturalWidth`: the editor shows a downscale (docs/architecture.md). */
   space: [number, number];
   boxes: BoundingBox[];
   selectedIndex: number;
   onSelect: (index: number) => void;
   onChangeBox: (index: number, box: BoundingBox) => void;
-  /** `multiple`-kind only. Given these, the canvas grows the box-editing
-   * affordances 2a puts *on* it -- add, delete, and a right-click menu -- so
-   * you never have to leave the photo to change what you are looking at. */
   onAddBox?: () => void;
   onDeleteSelected?: () => void;
   onDuplicateSelected?: () => void;
@@ -65,45 +52,8 @@ interface Props {
   labels?: (string | undefined)[];
   onLabelChange?: (index: number, value: string) => void;
   labelPlaceholder?: string;
-  /** Offered in the label input's datalist. Suggestions, not a closed list. */
   labelSuggestions?: string[];
 }
-
-/**
- * Draggable four-corner box overlaid on the (already-rendered) preview
- * image -- one or more of them. The selected box gets live drag handles; the
- * rest render dimmed and click-to-select (`multiple`-kind templates only
- * ever have more than one; `colour-matrix`/`single` pass a single-element
- * array and never show the selection chrome). The SVG's viewBox is set to
- * the image's natural pixel size, so screen-to-image coordinate mapping goes
- * through the SVG's own CTM rather than a hand-rolled scale factor --
- * correct regardless of how the browser scales the displayed image.
- *
- * A box moves as a whole in two ways -- dragging its interior, or the arrow
- * keys -- and deforms only by its corner handles. Both apply to every kind:
- * getting a box to the right *place* is the common move, and before this the
- * only way to do it was to drag four corners the same distance by eye.
- *
- * A corner handle does three things, chosen by modifier:
- *
- * | gesture | effect |
- * |---|---|
- * | drag | moves that corner alone -- the quad deforms, which is what makes it a *perspective* placement and not a rectangle |
- * | shift-drag | scales the whole box about the opposite corner, shape preserved |
- * | alt-drag | scales it about its own centre |
- *
- * Nothing on the canvas announces that, and nothing labels the selected box
- * either. Both used to sit in a pill over the photo, and both were in the way
- * of the one thing this view exists for -- looking at the render. The selected
- * box is the one wearing handles, which is the answer already.
- *
- * Free-corner is the unmodified gesture because it is the one only this
- * control can do. But "same shape, bigger" is the far more common wish -- a
- * print that is placed right and simply too small -- and doing it by hand
- * means dragging four corners by four different amounts and re-checking the
- * skew after each. Scaling keeps the corners' offsets from the anchor exactly
- * proportional, so an already-skewed quad stays exactly as skewed.
- */
 
 interface Menu {
   /** Where the menu opens, in `.quad-editor` px. */
@@ -111,20 +61,11 @@ interface Menu {
   y: number;
 }
 
-/** What a pointer is currently doing: working one corner of the selected box,
- * or sliding a whole box (which need not be the selected one -- pressing on a
- * dimmed box selects and drags it in one gesture).
- *
- * Both carry the box as it was when the gesture started. A corner drag needs
- * it because scaling is defined against the *original* offsets: derived from
- * the live box instead, every mouse move would compound on the last one and
- * the box would race away from the pointer. */
 type Drag = { pointerId: number } & (
   | { kind: "corner"; pointIndex: number; start: BoundingBox }
   | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox }
 );
 
-/** What a finger lands on when it means to drag rather than scroll. */
 const DRAG_TARGETS = ".quad-editor__polygon, .quad-editor__handle, .quad-editor__grip";
 
 /** On a phone, a finger that lands on a box or a corner keeps the whole touch.
@@ -153,8 +94,6 @@ function useTouchClaim(
   }, [svg, enabled, dragging]);
 }
 
-/** The phone grip's radius in image units, kept at a finger's width on screen
- * as the photo resizes. */
 function useGripRadius(svg: SVGSVGElement | null, imageWidth: number, dotRadius: number): number {
   const [shownWidth, setShownWidth] = useState(0);
   useLayoutEffect(() => {
@@ -253,6 +192,8 @@ function BoxActions({
   );
 }
 
+/** The SVG's viewBox is the photo's true size, so screen-to-image mapping
+ * goes through the SVG's own CTM, whatever the browser's display scale. */
 export function QuadEditor({
   overlay,
   interactive = true,
@@ -327,15 +268,12 @@ export function QuadEditor({
   function handleCornerPointerDown(pointIndex: number) {
     return (event: React.PointerEvent<SVGCircleElement>) => {
       const start = boxes[selectedIndex];
-      // One finger drags; a second one landing meanwhile is not a new drag.
       if (!start || !interactive || drag) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       setDrag({ kind: "corner", pointIndex, start, pointerId: event.pointerId });
     };
   }
 
-  /** Pressing inside a box selects it and starts sliding it. The whole box
-   * moves; the corners keep their offsets, so a skewed quad stays skewed. */
   function handleBoxPointerDown(boxIndex: number) {
     return (event: React.PointerEvent<SVGPolygonElement>) => {
       if (event.button !== 0 || !interactive || drag) return;
@@ -368,10 +306,6 @@ export function QuadEditor({
     );
   }
 
-  /** The drag ends when its own pointer lifts, or when the browser takes it
-   * away: a cancelled touch (the page rotating, a gesture the browser claims)
-   * sends no pointerup, and a drag left behind would move the box under the
-   * next touch anywhere on the photo. */
   function handlePointerEnd(event: React.PointerEvent<SVGSVGElement>) {
     if (drag && event.pointerId !== drag.pointerId) return;
     setDrag(null);
@@ -397,8 +331,6 @@ export function QuadEditor({
 
   const hasBoxMenu = Boolean(onDuplicateSelected || onBringSelectedToFront || onDeleteSelected);
 
-  /** One rule for both the outline and the caption: chrome is drawn for a box
-   * when all outlines are on, or when it is the selected one. */
   const chromeVisible = (index: number): boolean =>
     outlines === "all" || (outlines === "selected" && index === selectedIndex);
 
@@ -463,11 +395,6 @@ export function QuadEditor({
                       onPointerDown={handleCornerPointerDown(pointIndex)}
                     />
                   ))}
-                {/* A finger-sized grip over each drawn dot, phone only: an
-                    invisible filled circle 22 screen pixels in radius at
-                    the photo's current scale, so it stays ~44px across at
-                    any photo size while the dot keeps its look. Pulled in
-                    from the photo's edge so it is never clipped to half. */}
                 {active &&
                   phone &&
                   interactive &&

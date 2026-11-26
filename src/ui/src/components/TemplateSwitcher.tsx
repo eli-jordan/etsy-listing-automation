@@ -51,7 +51,6 @@ function Thumb({ name }: { name: string }) {
 export function TemplateSwitcher({ names, selected, onSelect, onOpen, chip, meta }: SwitcherProps) {
   const zone = useRef<HTMLDivElement>(null);
   const current = useRef<HTMLButtonElement>(null);
-  // The catalog's own order, not the rail's grouping (see templateStep).
   const { previous, next } = usePager(zone, {
     items: names,
     current: selected,

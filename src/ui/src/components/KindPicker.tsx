@@ -2,20 +2,8 @@ import { useEffect, useState } from "react";
 import { assignKind, getColourReport } from "../api/calibrator";
 import type { ColourReportRow, TemplateKind } from "../types";
 
-/**
- * The first calibration step: what kind of template is this?
- *
- * Wireframe 2a makes this a takeover rather than a field in the inspector --
- * "the workspace is replaced by a single choice, so nothing else can be
- * touched yet". That is not decoration: kind decides the whole shape of
- * template.yaml, so every other control on the page is either
- * meaningless or actively wrong until it is answered.
- *
- * For a colour-matrix candidate it also shows what colour each filename will
- * be taken as. ADR-0004 makes the filename the source of truth, so this reports
- * the rule rather than offering a mapping to edit -- the fix for a bad name is
- * to rename the file.
- */
+/** A takeover rather than an inspector field: kind decides the whole shape of
+ * template.yaml, so every other control is meaningless until it is answered. */
 
 const KINDS: { kind: TemplateKind; label: string; blurb: string }[] = [
   { kind: "colour-matrix", label: "Colour Matrix", blurb: "one photo per colour" },
@@ -29,17 +17,11 @@ interface Props {
 }
 
 export function KindPicker({ templateName, onAssigned }: Props) {
-  // Null until the user actually picks, so the default can follow the photo
-  // count once it arrives. Derived rather than synced through an effect: the
-  // report is fetched, so a `setKind` in an effect would render the wrong
-  // default first and then correct it.
   const [chosen, setChosen] = useState<TemplateKind | null>(null);
   const [report, setReport] = useState<ColourReportRow[]>([]);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    // A failed report is not fatal: it only informs the colour-matrix choice,
-    // and the kind still has to be assignable without it.
     getColourReport(templateName)
       .then(setReport)
       .catch(() => setReport([]));

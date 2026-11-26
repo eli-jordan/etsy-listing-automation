@@ -36,13 +36,6 @@ import type { MediaEntry, TemplateSummary } from "./types";
  * per endpoint, and this is the domain question layered over them.
  */
 
-/** How big a picture the caller is asking for.
- *
- * `tile` is the 160px-capped thumbnail a row of them is picked from; `full` is
- * the photo's own resolution, for the one image being *judged* -- a preview
- * pane or a lightbox. They are different endpoints, not a query parameter, so
- * this is the one place the choice is made.
- */
 export type PictureSize = "tile" | "full";
 
 /** A shared asset's name, from the bare ref a listing stores.
@@ -64,7 +57,6 @@ function sharedName(ref: string): string {
   return ref.startsWith(prefix) ? ref.slice(prefix.length) : ref;
 }
 
-/** A listing's own file (ADR-0046's `./` root) rather than a workspace one. */
 function isListingLocal(ref: string): boolean {
   return ref.startsWith("./");
 }
@@ -82,21 +74,6 @@ export function mediaKind(entry: MediaEntry): "image" | "video" {
   return /\.(mp4|mov)$/i.test(entry) ? "video" : "image";
 }
 
-/**
- * Which saved listing a scene render resolves its artwork from, and a
- * signature of that listing's saved design (A35).
- *
- * Every layer of a scene prints the file its colour resolves to -- a
- * light/dark pair shows both files in one multi-colour scene -- so a picture
- * is asked of the listing, not of one design name. It is the *saved* listing
- * the server reads (multi-artwork plan, *Editor previews*), which is why the
- * signature is `design_content_hash`: it comes from the last server response,
- * so it changes when a design edit has landed rather than when it was made,
- * and a URL is never cached holding the picture from before the save.
- *
- * `null` for an unnamed draft, which has no saved listing to resolve from,
- * and for a listing with no design, which would only print nothing.
- */
 export interface SceneSource {
   listing: string;
   version: string;
@@ -116,7 +93,6 @@ export function sceneSource(
     : { listing, version: designVersion, positions };
 }
 
-/** What to call one entry, in a tile label, a lightbox caption or an aria-label. */
 export function mediaLabel(entry: MediaEntry): string {
   if (typeof entry === "string") return refName(entry);
   return entry.colour ? `${entry.template} · ${entry.colour}` : entry.template;
@@ -152,22 +128,6 @@ export function missingColours(
   return colors.filter((c) => !isInMedia(media, template, c));
 }
 
-/**
- * The picture for one thing `media:` can hold.
- *
- * A template entry is a *render*: each layer printing the file its colour
- * resolves to, composited onto the template's saved geometry -- or, for a
- * listing template, its preview design on every layer. With no `artwork` it is
- * the bare inkless photo. A shared asset is
- * already exactly the file Etsy would receive, so it is served as-is.
- *
- * At `tile` size a template entry is always the bare thumbnail, never a render:
- * a tile is picked out of a row, and running the real pipeline once per tile
- * would cost a render per listing image just to open the tab. The thumbnail
- * still takes the colour -- without it a colour-matrix set answers with the
- * same photo every time, and a reel of eight identical tiles under eight
- * different colour labels is worse than no picture at all.
- */
 export function pictureFor(
   entry: MediaEntry,
   artwork: Artwork | null,
@@ -205,16 +165,6 @@ function ownerOf(owner: MediaOwner | string | null): MediaOwner | null {
   return typeof owner === "string" ? { kind: "listing", name: owner } : owner;
 }
 
-/**
- * The picture for a file ref, from whichever of ADR-0046's two roots it names.
- *
- * A `./` ref is one of `owner`'s own files; with no owner -- the editor's
- * unnamed draft, which has no directory -- it names nothing, and the answer is
- * the empty string rather than a URL that would `404`. A video is served as
- * its file at either size: the thumbnail endpoint answers `415` for one,
- * because a muted `<video preload="metadata">` draws its own first frame.
- */
-/** One of `owner`'s own files, `name` relative to its directory. */
 function ownFilePicture(owner: MediaOwner, name: string, tile: boolean): string {
   if (owner.kind === "listing-template") {
     return tile
@@ -224,6 +174,8 @@ function ownFilePicture(owner: MediaOwner, name: string, tile: boolean): string 
   return tile ? listingMediaThumbnailUrl(owner.name, name) : listingMediaFileUrl(owner.name, name);
 }
 
+/** A `./` ref with no owner (an unnamed draft has no directory) names nothing:
+ * the empty string, not a URL that would 404. */
 function filePicture(ref: string, size: PictureSize, owner: MediaOwner | null): string {
   const tile = size === "tile" && mediaKind(ref) === "image";
   if (isListingLocal(ref)) {
@@ -234,14 +186,10 @@ function filePicture(ref: string, size: PictureSize, owner: MediaOwner | null): 
   return tile ? commonMediaThumbnailUrl(name) : commonMediaFileUrl(name);
 }
 
-/** A tile-sized picture of one gallery entry, for a listing-template card:
- * {@link pictureFor} at `tile` size, whoever owns the `./` files. */
 export function ownedTile(entry: MediaEntry, owner: MediaOwner): string {
   return pictureFor(entry, null, "tile", owner);
 }
 
-/** The same, for a template/colour the locator is offering but the listing has
- * not taken yet -- there is no `MediaEntry` for it to be asked about. */
 export function templatePicture(
   template: string,
   colour: string | null,

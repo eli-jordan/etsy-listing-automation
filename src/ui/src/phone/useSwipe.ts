@@ -41,7 +41,6 @@ function typingInto(target: Element): boolean {
   return field !== null && field === document.activeElement;
 }
 
-/** Whether the page is pinch-zoomed in. */
 export function pinchZoomed(): boolean {
   const viewport = window.visualViewport;
   return viewport != null && viewport.scale > 1.01;
@@ -105,7 +104,6 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
       if (!track || event.pointerId !== track.id) return;
       const { x, y, at, axis: locked, ignored } = track;
       track = null;
-      // A move along the other axis was never ours, so it has nothing to end.
       if (ignored) return;
       ended(
         cancelled

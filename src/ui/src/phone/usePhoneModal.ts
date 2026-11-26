@@ -2,21 +2,6 @@ import { type RefObject, useEffect, useEffectEvent } from "react";
 import { pushSheetEntry } from "./sheetHistory";
 import { useIsPhone } from "./usePhone";
 
-/**
- * What makes a phone sheet modal, the way a native sheet is, for every sheet
- * at once: `SheetGrabber` calls it, so each dialog that has a grab bar has
- * this too. Phone only; off the phone it does nothing, so a desktop dialog
- * keeps its own focus and scroll behaviour exactly.
- *
- * While the sheet is open:
- * - the page behind it does not scroll (the sheet's own body still does),
- *   and it is back where it was when the sheet closes;
- * - focus moves into the sheet (unless something in it already took it),
- *   Tab stays inside, and focus goes back to the opener on close;
- * - Back closes the sheet rather than leaving the page (`sheetHistory`),
- *   when the sheet can be dismissed (`onClose` not null).
- */
-
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
 
@@ -56,7 +41,6 @@ export function usePhoneModal(
   const dismissible = onClose !== null;
   const close = useEffectEvent(() => onClose?.());
 
-  // Scroll lock and focus, for as long as the sheet is up.
   useEffect(() => {
     const element = box.current;
     if (!isPhone || element === null) return;
@@ -106,7 +90,6 @@ export function usePhoneModal(
     };
   }, [isPhone, box]);
 
-  // Back closes it.
   useEffect(() => {
     if (!isPhone || !dismissible) return;
     return pushSheetEntry(close);

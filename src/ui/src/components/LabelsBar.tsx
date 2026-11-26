@@ -92,14 +92,6 @@ function AddLabel({
   );
 }
 
-/**
- * The open template's labels, above its photo.
- *
- * Chips show `saved`, so one appears or goes only when the save lands (spec
- * *Saving*); until then the app's save status reports progress. Every edit
- * builds on `draft`, so quick edits land together and a failed one rides the
- * next save.
- */
 export function LabelsBar({
   saved,
   draft,

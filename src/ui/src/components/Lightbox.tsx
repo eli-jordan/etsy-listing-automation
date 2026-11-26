@@ -4,26 +4,13 @@ import { useCarousel } from "../phone/useCarousel";
 import { useIsPhone } from "../phone/usePhone";
 import { useSheetDrag } from "../phone/useSheetDrag";
 
-/**
- * One preview, as large as the screen allows, over everything else.
- *
- * The Preview tab exists to be *judged* from, and a 140px tile cannot answer
- * the questions calibration is actually about -- whether the print's edge is
- * following a fold, whether the shading has gone muddy, whether the artwork
- * sits a few millimetres high. So a tile opens here, and here has a 1:1 view:
- * at fit-to-screen a 4000px render is being downsampled by the browser, which
- * is the one thing guaranteed to hide a resampling artefact.
- *
- * Arrow keys walk the set. That is the whole point for a colour matrix -- the
- * fault you are looking for is usually "this one colour is wrong", and finding
- * it means comparing neighbours, not opening and closing twelve times.
- */
+/** Has a 1:1 view because at fit-to-screen the browser downsamples a 4000px
+ * render, which hides exactly the resampling artefacts calibration looks for. */
 
 export interface LightboxItem {
   id: string;
   label: string;
   url: string;
-  /** A video plays with the browser's own controls instead. */
   kind?: "image" | "video";
 }
 
@@ -95,8 +82,6 @@ export function Lightbox({
 
   if (!item) return null;
 
-  // The neighbours sit either side of the picture, so a swipe drags the next
-  // one in beside it. Off the phone, and at 1:1, there is only the one.
   const slides: { at: SlidePlace; position: number }[] = [{ at: "current", position: index }];
   if (carousel && index > 0) slides.unshift({ at: "previous", position: index - 1 });
   if (carousel && index < items.length - 1) slides.push({ at: "next", position: index + 1 });
@@ -108,9 +93,6 @@ export function Lightbox({
       role="dialog"
       aria-modal="true"
       aria-label={`${item.label}, preview ${index + 1} of ${items.length}`}
-      // Only a press that both starts and ends on the backdrop closes it:
-      // releasing a drag from inside the image happens to land on the backdrop
-      // and would otherwise shut the thing you are studying.
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -173,7 +155,6 @@ export function Lightbox({
       </div>
     </div>
   );
-  // On the body on a phone, out of the editor's swiping tab content.
   return isPhone ? createPortal(box, document.body) : box;
 }
 
@@ -196,7 +177,6 @@ function Picture({ item }: { item: LightboxItem }) {
   );
 }
 
-/** How many pictures either side of the shown one load ahead of a step. */
 const PRELOAD_REACH = 2;
 
 /**

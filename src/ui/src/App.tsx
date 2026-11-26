@@ -28,16 +28,6 @@ import { SavedAgo } from "./pages/editor/SavedAgo";
 import { useIsPhone } from "./phone/usePhone";
 import type { Renderer, TemplateConfigState, TemplateKind, TemplateSummary } from "./types";
 
-/** A thin router: picks the template, hands it to an authoring session
- * (`useTemplateSession`, which reads, saves and prepares it) and picks an
- * editor by `kind` -- a template.yaml is exactly one of three shapes, never a
- * mix.
- *
- * Wireframe 2a turns the page into a workbench: the rail on the left picks the
- * template (replacing the dropdown that used to sit in the header), and the
- * header becomes a breadcrumb saying what is open, whether it is finished, and
- * what it holds. */
-
 const KIND_LABELS: Record<TemplateKind, string> = {
   "colour-matrix": "Colour Matrix",
   multiple: "Multiple",
@@ -63,8 +53,6 @@ function fallbackRenderer(
   };
 }
 
-/** The inference limits the runtime reports, or none while it is unknown --
- * the settings form then keeps its own defaults. */
 function runtimeLimits(runtime: Runtime | null) {
   if (!runtime) return {};
   return {
@@ -89,8 +77,6 @@ function templateMeta(selected: TemplateSummary, config: TemplateConfigState | n
   return `${kindLabel ?? "Unknown"} · ${colours} colour${colours === 1 ? "" : "s"}`;
 }
 
-/** Whether the open template is finished: calibrated, or its Marigold maps
- * preparation state. */
 function StatusChip({
   selected,
   config,
@@ -196,8 +182,6 @@ interface HeaderProps {
   rename: TemplateRename;
 }
 
-/** The phone's header: the template switcher, then what the rename said and
- * the conflict's way out. */
 function PhoneHeader({
   selected,
   names,
@@ -265,8 +249,6 @@ function labelFailure({ save, config, saved }: TemplateSession): string | null {
   return waiting ? save.message : null;
 }
 
-/** The workspace with no template open. Templates are folders in the
- * workspace, not something this page creates: the calibrator calibrates. */
 function CatalogStatus({ catalogState }: { catalogState: CatalogState }) {
   if (catalogState === "loading") return <p role="status">Loading templates...</p>;
   if (catalogState === "error") {
@@ -287,7 +269,6 @@ interface TemplateEditorProps {
   rendererControls: ReactNode;
 }
 
-/** The editor for the template's renderer and kind. */
 function TemplateEditor({
   templateName,
   config,
@@ -345,10 +326,6 @@ export function App() {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [catalogState, setCatalogState] = useState<CatalogState>("loading");
   const [templateName, setTemplateName] = useState<string | null>(null);
-  // Which test artwork the previews render with. A way of looking at a
-  // template rather than a property of one, so it lives here and never enters
-  // template.yaml -- and it deliberately survives switching template, since
-  // "show me all of these against my real artwork" is the point of changing it.
   const [design, setDesign] = useState("bundled-grid");
   const isPhone = useIsPhone();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -499,10 +476,6 @@ export function App() {
     />
   );
 
-  // The photo's true pixel size, which is the coordinate space every bounding
-  // box in template.yaml is written in. It has to come from the API: the
-  // editors' canvas renders a downscale now, so measuring the image on screen
-  // would put the boxes in the preview's space and save them several times too
   // small. `null` for a directory with no readable photo -- there is nothing
   // to calibrate against, and the editors say so rather than guessing.
   const space: [number, number] | null =
@@ -523,8 +496,6 @@ export function App() {
       />
 
       <div className="app__workbench">
-        {/* A phone has no room for the rail beside the canvas: it opens in a
-            sheet from the header's template name instead. */}
         {!isPhone && rail(setTemplateName)}
         {isPhone && sheetOpen && templateName && (
           <TemplateSheet selected={templateName} rename={rename} onClose={closeSheet}>
@@ -536,10 +507,6 @@ export function App() {
         )}
 
         <div className="app__workspace">
-          {/* 2a: an uncalibrated template replaces the workspace with a single
-              choice, so nothing else can be touched yet. Kind decides the
-              whole shape of template.yaml (ADR-0014) -- every other control is
-              meaningless or wrong until it is answered. */}
           {!templateName && <CatalogStatus catalogState={catalogState} />}
           {templateName && session.load !== "ready" && (
             <p role={session.load === "error" ? "alert" : "status"}>

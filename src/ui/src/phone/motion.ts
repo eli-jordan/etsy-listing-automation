@@ -6,7 +6,6 @@
 const SPRING_MS = 180;
 const SPRING = `transform ${SPRING_MS}ms ease-out, opacity ${SPRING_MS}ms ease-out`;
 
-/** Whether the seller asked for less motion: then a swipe acts at once. */
 export function prefersReducedMotion(): boolean {
   return (
     typeof window.matchMedia === "function" &&

@@ -25,7 +25,6 @@ export function PhoneScreen({
 }: {
   title: string;
   onClose: () => void;
-  /** Extra class on the screen, for an area's own look. */
   className?: string;
   children: ReactNode;
 }) {

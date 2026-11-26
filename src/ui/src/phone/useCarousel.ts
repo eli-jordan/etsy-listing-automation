@@ -27,10 +27,8 @@ export interface CarouselOptions {
   onIndexChange: (index: number) => void;
 }
 
-/** How long a released swipe takes to bring the neighbour to the centre. */
 const SETTLE_MS = 220;
 
-/** Where the strip ends up when the neighbour on that side is centred. */
 function centring(direction: SwipeDirection): string {
   return direction === "left"
     ? "translateX(calc(-100% - var(--lightbox-gap)))"

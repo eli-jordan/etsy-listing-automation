@@ -1,8 +1,6 @@
 /**
- * A typed `text/event-stream` reader over `fetch`, shared by the two run
- * resources: plan/apply runs (`pages/deploy/runStream.ts`) and AI runs
- * (`api/aiRuns.ts`). Both servers write the same frame,
- * `id: <n>\nevent: <type>\ndata: <json>\n\n`, and both end the stream after
+ * A typed `text/event-stream` reader over `fetch`. The server writes
+ * `id: <n>\nevent: <type>\ndata: <json>\n\n` frames and ends the stream after
  * the run's last event.
  *
  * **Why a hand-rolled `fetch` reader and not the browser's `EventSource`.**
@@ -20,8 +18,6 @@
  */
 
 export interface EventStreamOptions<Event> {
-  /** The last event id already known -- `undefined` asks the server for
-   * everything, which is what a caller that has seen nothing wants. */
   lastEventId?: number;
   onEvent: (event: Event) => void;
   /** The stream closed because the run reached its last event -- there is
@@ -48,8 +44,6 @@ function parseFrame<Event>(block: string): Event | null {
   return JSON.parse(data) as Event;
 }
 
-/** Reads the stream to its end, handing each complete frame's event over as
- * it arrives. */
 async function readFrames<Event>(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   onEvent: (event: Event) => void,

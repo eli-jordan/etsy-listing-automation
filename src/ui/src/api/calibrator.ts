@@ -85,10 +85,6 @@ export interface SavedTemplateConfig {
   revision: string;
 }
 
-/** Writes the whole template.yaml, plus any mask edits, over `revision`.
- * Stateless: the caller holds the revision it read and the one this returns
- * (`useTemplateSession` does), and decides which mask operations still need
- * sending. */
 export async function saveTemplateConfig(
   name: string,
   config: TemplateConfigState,
@@ -110,8 +106,6 @@ export async function saveTemplateConfig(
   return { config: data as unknown as TemplateConfigState, revision: revisionOf(response) };
 }
 
-/** What each photo will be taken as if this becomes a colour-matrix set.
- * Reporting only -- ADR-0004 makes the filename the source of truth. */
 /** What followed a rename, as workspace-relative files. `unresolved` could not
  * be read or written, and may still name the old template. */
 export interface TemplateRenameResult {
@@ -120,8 +114,6 @@ export interface TemplateRenameResult {
   unresolved: string[];
 }
 
-/** Rejects with the server's sentence: a taken name, an unusable one, or a
- * deploy or preparation that has to finish first. */
 export async function renameTemplate(name: string, newName: string): Promise<TemplateRenameResult> {
   const { data, error } = await api.POST("/api/templates/{name}/rename", {
     params: { path: { name } },
@@ -140,9 +132,6 @@ export async function getColourReport(name: string): Promise<ColourReportRow[]> 
   return data;
 }
 
-/** The first calibration step. Writes the starting template.yaml for that
- * shape; refused if one already exists, since kind decides the whole file
- * shape (ADR-0014) and changing it would discard the old shape's calibration. */
 export async function assignKind(name: string, kind: TemplateKind): Promise<TemplateConfigState> {
   const { data, error } = await api.POST("/api/templates/{name}/kind", {
     params: { path: { name } },
@@ -152,8 +141,6 @@ export async function assignKind(name: string, kind: TemplateKind): Promise<Temp
   return data as unknown as TemplateConfigState;
 }
 
-/** The calibrator's test-design library: three bundled targets plus whatever
- * the user has uploaded into the workspace. */
 export async function listDesigns(): Promise<DesignSummary[]> {
   const { data, error } = await api.GET("/api/designs");
   if (error || !data) throw new CalibratorApiError("failed to list test designs");
@@ -187,32 +174,15 @@ export function templateThumbnailUrl(name: string, colour?: string | null): stri
   return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
 }
 
-/**
- * The same bare, inkless photo as {@link templateThumbnailUrl}, at its own
- * resolution rather than downscaled to list size. For the large preview
- * stages (the listing editor's Variants and Listing Images tabs) when there
- * is no design yet to composite -- {@link templateThumbnailUrl}'s 160px cap
- * is sized for a row of tiles, not a hero image.
- */
 export function templatePhotoUrl(name: string, colour?: string | null): string {
   const base = `/api/templates/${encodeURIComponent(name)}/photo`;
   return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
 }
 
-/** A test design, small -- the listing-template editor's preview row. */
 export function designThumbnailUrl(id: string): string {
   return `/api/designs/${encodeURIComponent(id)}/thumbnail`;
 }
 
-/**
- * One design on every layer of this template's *saved* geometry -- the
- * listing-template editor's preview (UI doc §3). A listing's own scenes use
- * `listingScenePreviewUrl` instead, which resolves each layer's file (A35).
- * Unlike {@link templateThumbnailUrl}/{@link templatePhotoUrl}, which are
- * a bare, inkless photo, or {@link renderPreview}, which composites a
- * calibrator test design against *unsaved* geometry. A plain URL for the
- * same reason those are: the browser owns loading and caching it.
- */
 export function templateDesignPreviewUrl(
   name: string,
   design: string | { testDesign: string },
@@ -227,8 +197,6 @@ export function templateDesignPreviewUrl(
   return `/api/templates/${encodeURIComponent(name)}/design-preview?${params.toString()}`;
 }
 
-/** A colour-matrix colour's real garment shade, sampled off its own scene
- * photo -- for a quick-glance swatch dot next to the colour's name. */
 export async function getTemplateSwatch(name: string, colour: string): Promise<string> {
   const { data, error } = await api.GET("/api/templates/{name}/swatch", {
     params: { path: { name }, query: { colour } },
@@ -245,8 +213,6 @@ export interface PositionedListing {
   placements: string[];
 }
 
-/** The listings a recalibration of `name` may put outside the position limits
- * (spec, *Recalibration*). The calibrator only names them; it never edits one. */
 export async function getPositionedListings(name: string): Promise<PositionedListing[]> {
   const { data, error } = await api.GET("/api/templates/{name}/positioned-listings", {
     params: { path: { name } },
@@ -266,17 +232,6 @@ type PreviewBody = {
   | { bounding_box: BoundingBox; renderer: Renderer }
 );
 
-/** Which of the server's two preview sizes to ask for.
- *
- * `editor` is the downscale the canvas drags against -- capped at a fixed
- * longest edge the server owns, and encoded as WebP, because a frame produced
- * five times a second is looked at once and thrown away. `full` is the photo's
- * own resolution as a PNG: the thing you approve.
- *
- * Boxes are in the template's true pixel space either way. A scaled preview
- * does not change the coordinates -- only how many pixels the server spends
- * drawing them.
- */
 export type PreviewScale = "editor" | "full";
 
 /**

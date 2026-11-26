@@ -3,15 +3,7 @@ import { type Clock, type Settled, WRITTEN, WriteLoop } from "./writeLoop";
 
 export type Patch = Record<string, unknown>;
 
-/** Where the listing stands with the disk, as the page head reports it.
- *
- * `unsaved` is the state where the listing has a name but the server would
- * not write the document: since ADR-0043 that means the document contradicts
- * itself (a price in the wrong currency, a title over Etsy's limit), never
- * that it is merely incomplete. `field_errors` names the field; this says
- * the consequence is a file that does not exist.
- *
- * A new object each time a save lands, so an observer can tell two saves
+/** A new object each time a save lands, so an observer can tell two saves
  * apart even when `modified_at` does not move. */
 export type SaveState =
   | { kind: "unnamed" }
@@ -29,11 +21,6 @@ export type SaveOutcome =
   | { saved: true; detail: ListingDetail }
   | { saved: false; issues: Issue[] | null; field_errors: Record<string, string> };
 
-/** How a document reaches the disk. The editor's three states (see
- * {@link ListingAutosave}) are the same for a listing and a listing template;
- * what differs is the endpoints and the document, so that is what a
- * transport supplies. `describe` is `null` where an unnamed draft has
- * nothing to ask the server. */
 export interface AutosaveTransport {
   /** The stored document, out of what the editor shows. */
   document: (detail: ListingDetail) => Patch;
@@ -45,7 +32,6 @@ export interface AutosaveTransport {
   rename: (from: string, to: string) => Promise<ListingDetail>;
 }
 
-/** What {@link ListingAutosave} shows. */
 export interface AutosaveView {
   /** The server's last response, with any not-yet-saved edits merged in. */
   detail: ListingDetail;
@@ -54,18 +40,12 @@ export interface AutosaveView {
 
 const SAVING: SaveState = { kind: "saving" };
 
-/** An unnamed draft has no file for an edit to be in. */
 const NOT_ON_DISK: Settled = { written: false, message: "This listing has no name yet" };
 
-/** A `{ kind: "saved" }` stamped with when. Successful writes use the browser
- * clock; the initial state can instead use `listing.yaml`'s mtime supplied by
- * the server. */
 function saved(savedAt = Date.now()): SaveState {
   return { kind: "saved", savedAt };
 }
 
-/** Where a listing's save state starts: unnamed, or saved at its file's
- * mtime (now, when the server has none). */
 function initialSave(name: string | null, modifiedAt: string | null): SaveState {
   if (name === null) return { kind: "unnamed" };
   return saved(modifiedAt === null ? Date.now() : Date.parse(modifiedAt));
@@ -75,10 +55,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The same one-level-deep merge `core/application/listing_edits.py`'s `_merge` applies
- * server-side, mirrored here so the optimistic local state -- and the
- * accumulation of several edits made before the debounce fires -- agrees
- * with what the server will actually end up storing. */
 function mergePatch(base: Patch, patch: Patch): Patch {
   const merged: Patch = { ...base };
   for (const [key, value] of Object.entries(patch)) {
@@ -115,31 +91,9 @@ function refusalMessage(fieldErrors: Record<string, string>): string {
   );
 }
 
-/**
- * A listing's document in the editor, and how it gets to disk. The listing
- * template editor uses it too, through its own transport. Order, debounce and
- * what happens to an unwritten edit are the {@link WriteLoop}'s; this adds the
- * editor's three states, because the editor is also the create form and a
- * listing passes through all three in one sitting:
- *
- * | on disk | named | sends |
- * |---|---|---|
- * | no | no | `POST /api/listing-draft` -- writes nothing, refreshes issues |
- * | no | yes | `POST /api/listings` -- writes it, if the document will validate |
- * | yes | -- | `PATCH /api/listings/{name}` -- the delta |
- *
- * The state is chosen when a write goes rather than when the edit is made, so
- * an edit made while a create or rename is out goes under the name it settled
- * on: the name is exactly what that request is deciding.
- *
- * Outside React, so a save reads what is on screen now rather than what a
- * render closed over, and an edit arriving after the editor unmounted (a
- * flush on the way out, a nudge saved as its tab closes) is still sent.
- */
 export class ListingAutosave {
   private view: AutosaveView;
   private listeners = new Set<() => void>();
-  /** The name this listing is on disk under, or `null` while it is not. */
   private name: string | null;
   /** A name typed for a listing that is not on disk yet. It outlives a refused
    * create, which is what lets the next edit retry it rather than asking the
@@ -185,8 +139,6 @@ export class ListingAutosave {
     this.onNamed = onNamed;
   }
 
-  /** Applies a partial `listing.yaml` patch: shows it at once and schedules
-   * (or extends) the debounced save. */
   update = (patch: Patch) => {
     this.show({ detail: this.merged(patch) });
     this.loop.edit(patch);
@@ -202,17 +154,11 @@ export class ListingAutosave {
     this.show({ detail: this.merged(patch) });
   };
 
-  /** Sends whatever is pending right now, without waiting for the debounce,
-   * and answers once no write is out. A caller about to act on the file reads
-   * the answer: it is what says the file holds what is on screen. */
   flush = async (): Promise<Settled> => {
     const settled = await this.loop.flush();
     return settled.written && this.name === null ? NOT_ON_DISK : settled;
   };
 
-  /** Names an unnamed listing (creating it) or renames one that exists. Both
-   * end at the same place -- a listing on disk under a new name -- which is
-   * why they are one function and one `onNamed` callback. */
   commitName = (next: string) => {
     if (next === this.name || this.naming) return;
     this.naming = true;
@@ -230,10 +176,6 @@ export class ListingAutosave {
     return this.loop.flush();
   }
 
-  /** Drain first: the old name still exists, so an edit already made has
-   * somewhere to go, and one it cannot write stops the rename rather than
-   * reporting a saved listing without it. Anything typed from here is sent
-   * under the new name -- two fates, and no third. */
   private moveTo(next: string): Promise<Settled> {
     return this.loop.afterWrite(async () => {
       const from = this.name;
@@ -290,7 +232,6 @@ export class ListingAutosave {
     return NOT_ON_DISK;
   }
 
-  /** The whole document with `patch` applied. */
   private candidate(patch: Patch): Patch {
     return mergePatch(this.transport.document(this.view.detail), patch);
   }
@@ -326,8 +267,6 @@ export class ListingAutosave {
     return coerceDesign(mergePatch(fresh, overlay)) as ListingDetail;
   }
 
-  /** A write the server refused: the edits stay on screen, and so does
-   * everything else, with what the refusal said about them laid over. */
   private refused(outcome: SaveOutcome & { saved: false }): Settled {
     // A contradiction no single field owns has no field to highlight, so
     // the page head is the only place left to say what it is.

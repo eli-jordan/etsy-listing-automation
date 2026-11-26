@@ -19,7 +19,6 @@ interface Props {
   onDesignChange: (design: string) => void;
 }
 
-/** One placement over one photo, with the shared preview and realism controls. */
 function PhotoWarpSingleEditor(props: Props) {
   const { templateName, config, onChange, design } = props;
   const body = useMemo(
@@ -32,9 +31,6 @@ function PhotoWarpSingleEditor(props: Props) {
 
   const previewUrl = usePreview(templateName, body, design);
 
-  // One output, so one job -- but the same on-demand full-size render a
-  // colour set gets, because the reason for it (the canvas draws a downscale)
-  // has nothing to do with how many photos a kind has.
   const jobs: PreviewJob[] = useMemo(
     () => [{ id: templateName, label: config.colour ?? templateName, body }],
     [templateName, config.colour, body],

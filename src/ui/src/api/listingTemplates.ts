@@ -7,11 +7,6 @@ import type {
   ListingTemplateSummary,
 } from "../types";
 
-/**
- * The listing-templates resource (ADR-0047, template completeness): typed wrappers over
- * `/api/listing-templates`, in `api/listings.ts`'s shape.
- */
-
 export class ListingTemplatesApiError extends Error {}
 
 /** A name the server will not take: already a listing template's (409), or
@@ -36,9 +31,6 @@ function sourceQuery(source: ListingTemplateSource) {
   return source.kind === "listing" ? { from_listing: source.name } : { from_template: source.name };
 }
 
-/** The template Save as listing template (or Clone) would write, written
- * nowhere. Rejects with the server's sentence for a source that cannot
- * become one -- a `./` file that cannot be read names the file. */
 export async function getListingTemplateDraft(
   source: ListingTemplateSource,
 ): Promise<ListingTemplateDetail> {
@@ -74,7 +66,6 @@ export async function createListingTemplate(
   return data;
 }
 
-/** The editor's load of a saved listing template. */
 export async function getListingTemplate(name: string): Promise<ListingTemplateDetail> {
   const { data, error } = await api.GET("/api/listing-templates/{name}", {
     params: { path: { name } },
@@ -83,8 +74,6 @@ export async function getListingTemplate(name: string): Promise<ListingTemplateD
   return data;
 }
 
-/** valid-only save: resolves `saved: false` with the issues or field
- * errors, and the file untouched, for a document that is not complete. */
 export async function putListingTemplate(
   name: string,
   document: Record<string, unknown>,
@@ -97,8 +86,6 @@ export async function putListingTemplate(
   return data;
 }
 
-/** Double-click the name (UI doc §3). Rejects with
- * {@link ListingTemplateNameRefused} for a name it will not take. */
 export async function renameListingTemplate(
   name: string,
   newName: string,
@@ -121,8 +108,6 @@ export async function deleteListingTemplate(name: string): Promise<void> {
   if (response.status !== 204) throw new ListingTemplatesApiError(`could not delete ${name}`);
 }
 
-/** The Images tab's *This template* group: the files under the template's
- * `assets/`, each with the `./` ref `template.yaml` names it by. */
 export async function listListingTemplateMediaFiles(name: string): Promise<MediaFileSummary[]> {
   const { data, error } = await api.GET("/api/listing-templates/{template}/media-files", {
     params: { path: { template: name } },
@@ -139,7 +124,6 @@ export function listingTemplateMediaThumbnailUrl(template: string, path: string)
   return `/api/listing-templates/${encodeURIComponent(template)}/media-files/${escaped}/thumbnail`;
 }
 
-/** The same file at its own size, for the preview pane and the lightbox. */
 export function listingTemplateMediaFileUrl(template: string, path: string): string {
   const escaped = path.split("/").map(encodeURIComponent).join("/");
   return `/api/listing-templates/${encodeURIComponent(template)}/media-files/${escaped}/file`;

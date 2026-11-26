@@ -27,7 +27,6 @@ export function lockAxis(dx: number, dy: number): "x" | "y" | null {
   return null;
 }
 
-/** The swipe a finished move was, if it was one at all. */
 export function classifySwipe(
   dx: number,
   dy: number,

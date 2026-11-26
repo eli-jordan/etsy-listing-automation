@@ -13,12 +13,6 @@ import type {
   WorkspaceSummary,
 } from "../types";
 
-/**
- * The listings UI's whole HTTP surface (phase 5). Mirrors `api/calibrator.ts`'s
- * shape exactly: typed wrapper functions over `openapi-fetch`, the only thing
- * pages/components import.
- */
-
 export class ListingsApiError extends Error {}
 
 // openapi-fetch's Readable widens the nested bounding_box tuples to arrays.
@@ -51,11 +45,6 @@ export async function tryGetListing(name: string): Promise<ListingDetail | null>
   return data as ListingDetail;
 }
 
-/** A partial `listing.yaml` document -- merged server-side, one level deep on
- * `etsy:` (see `core/application/listing_edits.py`'s `_merge`). Always resolves: an invalid
- * candidate comes back as a 200 with `field_errors` populated and nothing
- * written, so the caller never has to branch on the HTTP status to render
- * inline validation. */
 export async function patchListing(
   name: string,
   patch: Record<string, unknown>,
@@ -68,20 +57,12 @@ export async function patchListing(
   return data as ListingDetail;
 }
 
-/** The empty document `+ New listing` opens the editor on: nothing chosen, an
- * empty `name`, and a block issue for each thing still to pick. Built
- * server-side so the starting shape of a listing is not also invented here.
- * See `server/api/listings.py`'s `listing_draft`. */
 export async function getListingDraft(): Promise<ListingDetail> {
   const { data, error } = await api.GET("/api/listing-draft");
   if (error || !data) throw new ListingsApiError("could not start a new listing");
   return data as ListingDetail;
 }
 
-/** The same, for a candidate the editor has since edited -- recomputed issues
- * and field errors, still written nowhere. This is what keeps the issues banner
- * true while the listing has no name, which is the only channel an unsaved
- * listing has for being told what it is missing. */
 export async function describeListingDraft(
   document: Record<string, unknown>,
 ): Promise<ListingDetail> {
@@ -101,15 +82,6 @@ export async function createListing(body: CreateListingRequest): Promise<Listing
   return data as ListingDetail;
 }
 
-/** Move a listing to a new name, directory and render cache together.
- *
- * Rejects where `patchListing` resolves, and the asymmetry is the point: a
- * *document* the server will not write is answered with `field_errors` on a
- * 200, because the editor shows those inline and keeps going. A *name* it will
- * not take is a 400 or a 409, because there is nothing to show inline and the
- * only useful answer is to say so beside the name field. */
-/** Wipe a never-pushed listing, or mark one with remotes ``lifecycle: deleted``.
- * 204 means the files are gone; 200 is the still-listed pending-delete row. */
 export async function deleteListing(name: string): Promise<ListingSummary | null> {
   const { data, error, response } = await api.DELETE("/api/listings/{name}", {
     params: { path: { name } },
@@ -134,11 +106,6 @@ export async function listGarmentProfiles(): Promise<GarmentProfileSummary[]> {
   return data;
 }
 
-/** Every plan, each flagged for whether it was built for *this* garment.
- * `garmentProfile` is empty for a listing that has not chosen one yet: there is
- * then nothing to be compatible with, and the editor drops the "different
- * garment" note rather than claiming every plan differs from a garment nobody
- * picked. */
 export async function listPricingPlans(garmentProfile: string): Promise<PricingPlanSummary[]> {
   const { data, error } = await api.GET("/api/pricing-plans", {
     params: { query: { garment_profile: garmentProfile } },
@@ -147,16 +114,12 @@ export async function listPricingPlans(garmentProfile: string): Promise<PricingP
   return data;
 }
 
-/** The file locator's *Shared* group: every image and video under
- * `common-media/`, each with its `kind` and the ref `media:` stores. */
 export async function listCommonMedia(): Promise<MediaFileSummary[]> {
   const { data, error } = await api.GET("/api/common-media");
   if (error || !data) throw new ListingsApiError("could not load shared files");
   return data;
 }
 
-/** The *This listing* group: the listing's own files, each ref spelled
- * `./…` (ADR-0046). */
 export async function listListingMediaFiles(listing: string): Promise<MediaFileSummary[]> {
   const { data, error } = await api.GET("/api/listings/{listing}/media-files", {
     params: { path: { listing } },
@@ -177,8 +140,6 @@ export function listingMediaThumbnailUrl(listing: string, name: string): string 
   return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/thumbnail`;
 }
 
-/** The same file as-is -- a picture at its own size, or a video `<video>`
- * can seek in (the endpoint answers `Range`). */
 export function listingMediaFileUrl(listing: string, name: string): string {
   return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/file`;
 }
@@ -199,8 +160,6 @@ export function listingScenePreviewUrl(
   return `/api/listings/${encodeURIComponent(listing)}/scene-preview?${params.toString()}`;
 }
 
-/** The file one layer of a listing's scene prints, with its transparency and
- * small enough to draw live. `version` is a cache-buster, as above. */
 export function listingSceneArtworkUrl(
   listing: string,
   template: string,
@@ -214,16 +173,10 @@ export function listingSceneArtworkUrl(
   return `/api/listings/${encodeURIComponent(listing)}/scene-artwork?${params.toString()}`;
 }
 
-/** The shared asset's own picture, downscaled for a list. A URL, like the two
- * thumbnails above. `name` is its path under `common-media/`, extension and
- * all -- `MediaFileSummary.name`. */
 export function commonMediaThumbnailUrl(name: string): string {
   return `/api/common-media/${mediaPath(name)}/thumbnail`;
 }
 
-/** The same asset at its own size -- what the preview pane shows and what the
- * lightbox opens. The thumbnail is 160px on its longest edge, which is a
- * picture to *pick* rather than one to judge. */
 export function commonMediaFileUrl(name: string): string {
   return `/api/common-media/${mediaPath(name)}/file`;
 }
@@ -250,8 +203,6 @@ export async function getWorkspace(): Promise<WorkspaceSummary> {
   return data;
 }
 
-/** A URL, not a fetch -- the browser loads it as an `<img src>`, the same
- * shape `templateThumbnailUrl` already uses for the calibrator's rail. */
 export function listingDesignThumbnailUrl(name: string): string {
   return `/api/listing-designs/${encodeURIComponent(name)}/thumbnail`;
 }
@@ -278,10 +229,6 @@ export async function uploadListingDesign(file: File): Promise<ListingDesignSumm
   return (await response.json()) as ListingDesignSummary;
 }
 
-/** The live shop's sections, for the Details tab's Section dropdown.
- * `available: false` (never a rejected promise) means the workspace has no
- * usable Etsy connection and the caller should retain the text fallback;
- * an available empty list can create the shop's first section. */
 export async function listEtsySections(): Promise<EtsySectionsResponse> {
   try {
     const { data, error } = await api.GET("/api/etsy/sections");
@@ -292,10 +239,6 @@ export async function listEtsySections(): Promise<EtsySectionsResponse> {
   }
 }
 
-/** Create a live Etsy shop section. Unlike the list above, this needs the
- * workspace's signed-in Etsy connection because Etsy requires `shops_w`.
- * The caller adds the returned row to its picker and saves its title into the
- * listing through normal autosave. */
 export async function createEtsySection(title: string): Promise<EtsySectionSummary> {
   const { data, error } = await api.POST("/api/etsy/sections", {
     body: { title },
