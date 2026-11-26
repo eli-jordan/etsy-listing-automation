@@ -1,0 +1,345 @@
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a ranked pitch board. Each idea is a card with its style reference pinned beside it, best bet first. Colours come from garment-dyed shirts: pepper, moss, berry, butter, blue jean. */
+:root {
+  --bg: #f1f3ec; --panel: #fbfcf8; --ink: #23262a; --muted: #5a615b; --line: #d6dacf;
+  --moss: #3f5d35; --moss-soft: #e0e9d8; --on-moss: #ffffff;
+  --berry: #8a2a4d; --berry-soft: #f3dfe6; --on-berry: #ffffff;
+  --butter: #7a5a0c; --butter-soft: #f5e8bf; --jean: #2f5372; --jean-soft: #dde7ef;
+  --display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+  --body: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161917; --panel: #1f2320; --ink: #e9ece6; --muted: #a6aea7; --line: #363c37;
+  --moss: #9cc58a; --moss-soft: #2a3a26; --on-moss: #142011;
+  --berry: #eb9ab6; --berry-soft: #43222f; --on-berry: #2c0f1b;
+  --butter: #e6c76f; --butter-soft: #3d331a; --jean: #9cc0dd; --jean-soft: #223341; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #161917; --panel: #1f2320; --ink: #e9ece6; --muted: #a6aea7; --line: #363c37;
+  --moss: #9cc58a; --moss-soft: #2a3a26; --on-moss: #142011;
+  --berry: #eb9ab6; --berry-soft: #43222f; --on-berry: #2c0f1b;
+  --butter: #e6c76f; --butter-soft: #3d331a; --jean: #9cc0dd; --jean-soft: #223341; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5 }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg) }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px }
+h1, h2, h3, h4 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); font-weight: 700 }
+h2 { font-size: 1.5rem; font-weight: 700 }
+h3 { font-size: 1.35rem; font-weight: 700 }
+h4 { font-size: .78rem; font-family: var(--body); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
+p { margin: 0 }
+a { color: var(--jean) }
+.lede { max-width: 68ch; font-size: 1.1rem; margin-top: 12px }
+.meta { color: var(--muted); font-size: .9rem; margin-top: 8px }
+.panel { margin-top: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px }
+.find { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; max-width: 76ch; font-size: .95rem }
+.legend dl { margin: 12px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px }
+.legend dl div { display: grid; gap: 3px; min-width: 0 }
+.legend dt, .legend dd { margin: 0 } .legend dt { font-weight: 600 } .legend dd { font-size: .9rem; color: var(--muted) }
+details.notes { margin-top: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px }
+details.notes summary { cursor: pointer; font-weight: 600 }
+details.notes ul { margin: 10px 0 4px; padding-left: 20px; display: grid; gap: 6px; max-width: 76ch }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); margin-top: 24px; padding-block: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+.progress { min-width: 0; flex: 1 1 220px }
+.progress .txt { font-size: .9rem; font-variant-numeric: tabular-nums }
+.track { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 4px; display: flex; gap: 2px }
+.track i { display: block; height: 100%; width: 0 }
+.track .g { background: var(--moss) } .track .s { background: var(--berry) }
+.filters { display: flex; flex-wrap: wrap; gap: 6px }
+button { font: inherit; color: inherit; cursor: pointer }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--jean); outline-offset: 2px }
+.chip { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: .86rem }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.copy { background: var(--ink); color: var(--bg); border: 1px solid var(--ink); border-radius: 6px; padding: 6px 14px; font-size: .9rem; font-weight: 600 }
+.saved { width: 100%; font-size: .8rem; color: var(--muted) }
+.idea { margin-top: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
+.idea[data-d="generate"] { border-color: var(--moss) }
+.idea[data-d="skip"] .ibody { opacity: .55 }
+.ihead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line) }
+.idea[data-d="generate"] .ihead { background: var(--moss-soft) }
+.idea[data-d="skip"] .ihead { background: var(--berry-soft) }
+.rank { font-family: var(--display); font-weight: 700; font-size: 2rem; line-height: 1; min-width: 1.6em; text-align: center; font-variant-numeric: tabular-nums }
+.ihead .sub { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .86rem; color: var(--muted) }
+.pill { display: inline-block; font-size: .74rem; letter-spacing: .02em; font-weight: 600; padding: 1px 8px; border-radius: 3px; white-space: nowrap }
+.f-strong { background: var(--moss); color: var(--on-moss) } .f-good { background: var(--jean-soft); color: var(--jean) } .f-long { background: var(--butter-soft); color: var(--butter) }
+.p-fresh { background: var(--moss-soft); color: var(--moss) } .p-some { background: var(--butter-soft); color: var(--butter) } .p-taken { background: var(--berry-soft); color: var(--berry) }
+.p-gap { background: transparent; color: var(--moss); border: 1px solid var(--moss) }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
+.seg button { background: var(--panel); border: 0; padding: 7px 14px; font-size: .9rem; font-weight: 600 }
+.seg button + button { border-left: 1px solid var(--line) }
+.seg .yes[aria-pressed="true"] { background: var(--moss); color: var(--on-moss) }
+.seg .no[aria-pressed="true"] { background: var(--berry); color: var(--on-berry) }
+.ibody { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 20px; padding: 16px }
+figure { margin: 0; display: grid; gap: 8px; align-content: start; min-width: 0 }
+figure img { width: 100%; height: auto; border-radius: 4px; display: block; background: var(--bg) }
+figcaption { font-size: .86rem; display: grid; gap: 4px }
+figcaption .src { color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere }
+.content { display: grid; gap: 16px; min-width: 0 }
+.print { font-family: var(--mono); font-size: 1.05rem; font-weight: 500; background: var(--bg); border: 1px dashed var(--line); border-radius: 4px; padding: 10px 12px; overflow-wrap: anywhere }
+.print .labels { display: block; font-size: .82rem; font-weight: 400; color: var(--muted); margin-top: 6px }
+.block { display: grid; gap: 4px; max-width: 72ch }
+.block p { font-size: .96rem }
+.why { background: var(--jean-soft); border-radius: 4px; padding: 10px 12px }
+.why h4 { color: var(--jean) }
+.sat { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
+.stat { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; min-width: 0 }
+.stat b { font-family: var(--display); font-size: 1.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; margin-right: 6px }
+.stat .q { display: block; font-size: .8rem; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere }
+.stat .q code { font-family: var(--mono); font-size: .78rem }
+.scroll { overflow-x: auto }
+table.tags { border-collapse: collapse; width: 100%; font-size: .88rem; font-variant-numeric: tabular-nums }
+table.tags th { text-align: left; font-weight: 600; font-size: .76rem; color: var(--muted); padding: 4px 10px 4px 0; border-bottom: 1px solid var(--line); white-space: nowrap }
+table.tags td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top }
+table.tags td.n { text-align: right; white-space: nowrap } table.tags th.n { text-align: right }
+table.tags .fld { color: var(--muted); font-size: .8rem }
+table.tags tr.side td { font-weight: 600; font-size: .78rem; color: var(--muted); padding-top: 10px }
+.dim { color: var(--muted) }
+ul.ex { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: .88rem }
+ul.ex .src { color: var(--muted); font-variant-numeric: tabular-nums }
+.path { font-family: var(--mono); font-size: .78rem; color: var(--muted); overflow-wrap: anywhere }
+.empty { margin-top: 28px; color: var(--muted) }
+@media (max-width: 760px) {
+  .legend dl { grid-template-columns: minmax(0, 1fr) }
+  .ibody { grid-template-columns: minmax(0, 1fr) }
+  figure img { max-width: 360px }
+  .ihead { grid-template-columns: auto minmax(0, 1fr) }
+  .ihead .seg { grid-column: 1 / -1; justify-self: start }
+  .bar { position: static }
+}
+@media (max-width: 460px) { .sat { grid-template-columns: minmax(0, 1fr) } }
+@media (prefers-reduced-motion: no-preference) { .ihead { transition: background-color .15s } }
+</style>
+
+<div class="wrap">
+  <h1>__HEADING__</h1>
+  <p class="meta">__META__</p>
+  <p class="lede">__LEDE__</p>
+
+  <div class="panel">
+    <h2>What the research shows</h2>
+    <ul class="find">__FINDINGS__</ul>
+  </div>
+
+  <div class="panel legend">
+    <h2>How to read each idea</h2>
+    <dl>
+      <div><dt>Rank and bet</dt><dd>My forecast of how well it will sell on Etsy, best first. Strong and good bets have proven demand and room to compete; long shots are missing one of the two.</dd></div>
+      <div><dt>Weight and shops</dt><dd>How strongly a tag shows up on the top-selling listings, scored by favourites, views and Bestseller or Popular-now badges. A shop's best listing counts in full, its others a quarter. Shops is how many shops use the tag.</dd></div>
+      <div><dt>Gap</dt><dd>Strong among general best-sellers and missing from the niche: the opening each idea is built on.</dd></div>
+      <div><dt>Phrase and template</dt><dd>Active Etsy listings matching the idea's exact words, and matching its phrase pattern in the niche. A fresh phrase on an open template is the best case.</dd></div>
+    </dl>
+  </div>
+
+  <details class="notes">
+    <summary>Where the numbers came from, and their limits</summary>
+    <ul>__NOTES__</ul>
+  </details>
+
+  <div class="bar">
+    <div class="progress">
+      <div class="txt" id="ptxt"></div>
+      <div class="track" aria-hidden="true"><i class="g" id="pg"></i><i class="s" id="ps"></i></div>
+    </div>
+    <div class="filters" role="group" aria-label="Filter ideas">
+      <button class="chip" id="f-all" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" id="f-open" data-f="open" aria-pressed="false">Undecided</button>
+      <button class="chip" id="f-generate" data-f="generate" aria-pressed="false">Generate</button>
+      <button class="chip" id="f-skip" data-f="skip" aria-pressed="false">Skipped</button>
+    </div>
+    <button class="copy" id="copy" type="button">Copy picks</button>
+    <div class="saved" id="saved" role="status">Connecting to saved choices.</div>
+  </div>
+
+  <div id="list"></div>
+  <p class="empty" id="empty" hidden>No ideas in this view.</p>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(function () {
+  var D = JSON.parse(document.getElementById('data').textContent);
+  var I = D.ideas;
+  var KEY = '__KEY__';
+  var state = {}, filter = 'all', col = null;
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
+
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function fmt(n) { return Number(n).toLocaleString('en-US'); }
+  function link(href, text) { var a = el('a', null, text); if (/^https:\/\//.test(href || '')) { a.href = href; a.target = '_blank'; a.rel = 'noopener'; } return a; }
+  var BETS = { strong: ['Strong bet', 'f-strong'], good: ['Good bet', 'f-good'], 'long shot': ['Long shot', 'f-long'] };
+  function phraseTier(n) { return n <= D.freshPhrase ? ['Fresh', 'p-fresh'] : n <= D.takenPhrase ? ['Some sellers', 'p-some'] : ['Taken', 'p-taken']; }
+  function templateTier(n) { return n <= D.openTemplate ? ['Open', 'p-fresh'] : n <= D.crowdedTemplate ? ['Busy', 'p-some'] : ['Crowded', 'p-taken']; }
+  function src(l) {
+    var b = (l.badges || []).join(', ');
+    return l.shop + ' · ' + fmt(l.favs) + ' favourites · score ' + l.score + (b ? ' · ' + b : '');
+  }
+
+  function seg(slug) {
+    var w = el('div', 'seg'); w.setAttribute('role', 'group'); w.setAttribute('aria-label', 'Generate this design?');
+    var y = el('button', 'yes', 'Generate'), n = el('button', 'no', 'Skip');
+    y.type = n.type = 'button'; y.id = 'g-' + slug; n.id = 's-' + slug;
+    y.addEventListener('click', function () { decide(slug, state[slug] === 'generate' ? null : 'generate'); });
+    n.addEventListener('click', function () { decide(slug, state[slug] === 'skip' ? null : 'skip'); });
+    w.appendChild(y); w.appendChild(n); return w;
+  }
+  function block(title, text, cls) {
+    var b = el('div', 'block' + (cls ? ' ' + cls : '')); b.appendChild(el('h4', null, title)); b.appendChild(el('p', null, text)); return b;
+  }
+  function stat(label, c, tier) {
+    var s = el('div', 'stat'); s.appendChild(el('h4', null, label));
+    var row = el('div'); row.appendChild(el('b', null, fmt(c.count))); var t = tier(c.count); row.appendChild(el('span', 'pill ' + t[1], t[0])); s.appendChild(row);
+    var q = el('span', 'q', 'listings for '); q.appendChild(el('code', null, '"' + c.query + '"')); s.appendChild(q); return s;
+  }
+  function cell(v) { return v ? v.w + ' · ' + v.s + (v.s === 1 ? ' shop' : ' shops') : '–'; }
+  function tagTable(tags) {
+    var wrap = el('div', 'scroll'), t = el('table', 'tags'), head = el('tr');
+    ['Tag', 'Field', 'General', 'Niche'].forEach(function (h, k) { head.appendChild(el('th', k > 1 ? 'n' : null, h)); });
+    var thead = el('thead'); thead.appendChild(head); t.appendChild(thead);
+    var body = el('tbody');
+    [['general', 'Borrowed from general best-sellers'], ['niche', 'Proven in the niche']].forEach(function (side) {
+      var rows = tags.filter(function (x) { return x.side === side[0]; });
+      if (!rows.length) return;
+      var sr = el('tr', 'side'), sc = el('td', null, side[1]); sc.colSpan = 4; sr.appendChild(sc); body.appendChild(sr);
+      rows.forEach(function (x) {
+        var tr = el('tr'), name = el('td', null, x.tag);
+        if (x.gap) { name.appendChild(document.createTextNode(' ')); name.appendChild(el('span', 'pill p-gap', 'gap')); }
+        tr.appendChild(name); tr.appendChild(el('td', 'fld', x.field));
+        tr.appendChild(el('td', 'n' + (x.g ? '' : ' dim'), cell(x.g))); tr.appendChild(el('td', 'n' + (x.n ? '' : ' dim'), cell(x.n)));
+        body.appendChild(tr);
+      });
+    });
+    t.appendChild(body); wrap.appendChild(t); return wrap;
+  }
+
+  var cards = [];
+  function render() {
+    var root = document.getElementById('list');
+    I.forEach(function (d, k) {
+      var a = el('article', 'idea'); a.id = 'i-' + d.slug;
+      var h = el('header', 'ihead');
+      h.appendChild(el('span', 'rank', String(k + 1)));
+      var mid = el('div'); mid.appendChild(el('h3', null, d.name));
+      var sub = el('div', 'sub'), bet = BETS[d.forecast];
+      sub.appendChild(el('span', 'pill ' + bet[1], bet[0]));
+      sub.appendChild(document.createTextNode('on a ' + d.garment + ' shirt'));
+      mid.appendChild(sub); h.appendChild(mid); h.appendChild(seg(d.slug)); a.appendChild(h);
+
+      var body = el('div', 'ibody');
+      var fig = el('figure'), img = el('img');
+      img.src = d.ref.img; img.alt = 'Style reference: listing ' + d.ref.id + ' by ' + d.ref.shop; img.loading = 'lazy'; fig.appendChild(img);
+      var cap = el('figcaption'); cap.appendChild(el('h4', null, 'Style reference'));
+      cap.appendChild(el('p', null, 'Take ' + d.ref.take.replace(/\.$/, '') + '.'));
+      cap.appendChild(el('span', 'src', src(d.ref) + ' · ' + d.ref.run + ' run'));
+      cap.appendChild(link(d.ref.url, 'Open listing ' + d.ref.id));
+      fig.appendChild(cap); body.appendChild(fig);
+
+      var c = el('div', 'content');
+      var pr = el('div', 'print');
+      pr.appendChild(document.createTextNode(d.text ? d.text.split(' / ').join('\n') : 'No text: image only'));
+      pr.style.whiteSpace = 'pre-line';
+      if (d.labels && d.labels.length) pr.appendChild(el('span', 'labels', 'Labels: ' + d.labels.join(' · ')));
+      c.appendChild(pr);
+      c.appendChild(block('The design', d.concept));
+      c.appendChild(block('The hook', d.hook));
+      c.appendChild(block('Look', d.direction.replace(/\s*Also save .*$/, '') + '. Palette: ' + d.palette + '.'));
+      c.appendChild(block('Why it ranks #' + (k + 1), d.why, 'why'));
+      var sat = el('div', 'sat');
+      sat.appendChild(stat('Exact phrase on Etsy', d.phrase, phraseTier));
+      sat.appendChild(stat('Phrase pattern in the niche', d.template, templateTier));
+      c.appendChild(sat);
+      var tb = el('div', 'block'); tb.style.maxWidth = 'none'; tb.appendChild(el('h4', null, 'The crossover, in numbers')); tb.appendChild(tagTable(d.tags)); c.appendChild(tb);
+      if (d.examples && d.examples.length) {
+        var eb = el('div', 'block'); eb.appendChild(el('h4', null, 'Listings that prove it'));
+        var ul = el('ul', 'ex');
+        d.examples.forEach(function (l) {
+          var li = el('li'); li.appendChild(link(l.url, l.title.length > 70 ? l.title.slice(0, 68) + '…' : l.title));
+          li.appendChild(el('span', 'src', ' · ' + l.run + ' · ' + src(l))); ul.appendChild(li);
+        });
+        eb.appendChild(ul); c.appendChild(eb);
+      }
+      c.appendChild(el('p', 'path', 'Brief: ' + d.brief));
+      body.appendChild(c); a.appendChild(body); root.appendChild(a);
+      cards.push({ slug: d.slug, node: a });
+    });
+  }
+
+  function paint() {
+    var g = 0, s = 0, any = false;
+    cards.forEach(function (c) {
+      var d = state[c.slug] || '';
+      if (d) c.node.dataset.d = d; else delete c.node.dataset.d;
+      document.getElementById('g-' + c.slug).setAttribute('aria-pressed', d === 'generate');
+      document.getElementById('s-' + c.slug).setAttribute('aria-pressed', d === 'skip');
+      if (d === 'generate') g++; else if (d === 'skip') s++;
+      var show = filter === 'all' || (filter === 'open' && !d) || filter === d;
+      c.node.hidden = !show; any = any || show;
+    });
+    document.getElementById('empty').hidden = any;
+    var n = cards.length;
+    document.getElementById('ptxt').textContent = (g + s) + ' of ' + n + ' decided: ' + g + ' to generate, ' + s + ' skipped';
+    document.getElementById('pg').style.width = (g / n * 100) + '%';
+    document.getElementById('ps').style.width = (s / n * 100) + '%';
+  }
+
+  function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function note(t) { document.getElementById('saved').textContent = t; }
+  var queue = Promise.resolve();
+  function write(slug, d) {
+    if (!col) return;
+    queue = queue.then(function () {
+      var ref = col.doc(slug);
+      return d ? ref.set({ decision: d, at: new Date().toISOString() }) : ref.delete();
+    }).then(function () { note('Choices saved. Tell Claude when you are done and it will generate the picks.'); })
+      .catch(function (e) { note('Could not save that choice (' + (e && e.code || 'error') + '). It is kept in this browser only. Use Copy picks as a backup.'); });
+  }
+  function decide(slug, d) {
+    if (d) state[slug] = d; else delete state[slug];
+    saveLocal(); paint(); write(slug, d);
+  }
+
+  document.getElementById('copy').addEventListener('click', function () {
+    var b = this, picks = I.filter(function (d) { return state[d.slug] === 'generate'; });
+    var text = picks.length ? 'Generate these designs:\n' + picks.map(function (d) { return '- ' + d.name + ' (' + d.slug + ')'; }).join('\n') : 'Nothing marked Generate yet.';
+    function done(t) { b.textContent = t; setTimeout(function () { b.textContent = 'Copy picks'; }, 1800); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done('Copied'); }, function () { done('Copy failed'); });
+    else done('Copy failed');
+  });
+  document.querySelectorAll('.chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      filter = c.dataset.f;
+      document.querySelectorAll('.chip').forEach(function (o) { o.setAttribute('aria-pressed', o === c); });
+      paint();
+    });
+  });
+
+  render(); paint();
+
+  (async function connect() {
+    var db = null;
+    try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+    if (!db) { note('Choices are saved in this browser only. Use Copy picks to pass them on.'); return; }
+    col = db.collection('decisions');
+    var timer = setTimeout(function () { note('Saved choices can\'t be reached yet. You can keep choosing.'); }, 10000);
+    var seeded = false;
+    col.onSnapshot(function (snap) {
+      if (!snap.metadata.fromCache) clearTimeout(timer);
+      var remote = {};
+      snap.docs.forEach(function (d) { var b = d.data(); if (b && b.decision) remote[d.id] = b.decision; });
+      if (!seeded && !snap.metadata.fromCache) {
+        seeded = true;
+        Object.keys(state).forEach(function (id) { if (!remote[id]) { write(id, state[id]); remote[id] = state[id]; } });
+        note('Choices save automatically. Tell Claude when you are done and it will generate the picks.');
+      }
+      if (seeded || Object.keys(remote).length) { state = remote; saveLocal(); paint(); }
+    }, function (e) {
+      clearTimeout(timer); col = null;
+      note('Saved choices are unavailable (' + (e && e.code || 'error') + '). Your choices stay in this browser. Use Copy picks as a backup.');
+    });
+  })();
+})();
+</script>

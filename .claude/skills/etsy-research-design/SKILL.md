@@ -1,6 +1,6 @@
 ---
 name: etsy-research-design
-description: Design research for a niche on Etsy, ending in 20 new t-shirt (or other print) design ideas. Samples Star Seller and Bestseller search results for the general product category and for the niche, analyses the designs on the top listings (themes, tone, style, layout, typography, elements, colours, phrase templates), and crosses what wins in the general category with what wins in the niche. Use when the user wants design ideas for a niche, or asks what designs, styles or phrases sell in a category.
+description: Design research for a niche on Etsy, ending in 20 ranked t-shirt (or other print) design ideas in a report where the seller picks which ones to generate. Samples Star Seller and Bestseller search results for the general product category and for the niche, analyses the designs on the top listings (themes, tone, style, layout, typography, elements, colours, phrase templates), and crosses what wins in the general category with what wins in the niche. Use when the user wants design ideas for a niche, asks what designs, styles or phrases sell in a category, or says they've finished picking ideas in such a report.
 ---
 
 # Design research on Etsy
@@ -10,7 +10,7 @@ The signal: designs on listings that Etsy marks as Star Seller or Bestseller are
 - **general**: the whole product category ("t-shirt", "funny t-shirt"), where the strongest styles and phrase templates in the market show up;
 - **niche**: the user's niche ("teacher shirts", "dog mom tee").
 
-It annotates each set's top designs into tags, weighs the tags by listing performance, and looks for **crossovers**: patterns proven in the general category that the niche hasn't used yet, applied to the niche's own subjects. The output is **20 design ideas**, each one a crossover with evidence behind it.
+It annotates each set's top designs into tags, weighs the tags by listing performance, and looks for **crossovers**: patterns proven in the general category that the niche hasn't used yet, applied to the niche's own subjects. The output is **20 design ideas**, each one a crossover with evidence behind it, ranked in an interactive report where the seller picks which ones Codex generates. A seller who has finished picking starts at step 10.
 
 Follow the [etsy-research](../etsy-research/SKILL.md) skill for the mechanics this builds on: loading the Claude in Chrome tools, pacing, and the API script. If the Chrome tools aren't in the session, stop and tell the user; this research needs the Star Seller and Bestseller filters, which only etsy.com has.
 
@@ -107,37 +107,67 @@ Every idea passes these checks:
 - **Clean**: no trademarked names, characters, logos, lyrics or brands (Disney, sports teams, bands, film quotes).
 - **Printable**: one or two print colours where the style allows, readable at chest size. Render an embroidered or glitter-puff winner as a print that suggests the finish (stitched outline, faux glitter texture).
 
-Each idea carries:
+Write the ideas to `NICHE_DIR\ideas.json`, an object with the report's copy and the `ideas` list:
 
-- a short name
-- the exact text, if any
-- the visual: style, layout, typography, elements, print colours, garment colour
-- the crossover: which general tags and which niche tags it combines, with their weights from `tally.json`, and one or two example listing IDs from each run
-- the phrase and template counts
+- `title` (a short page name), `heading`, `meta`, `lede`: plain text for the top of the report.
+- `findings`: HTML strings, one per point: what wins in the general set, what wins in the niche, its proven sub-themes, and the gaps, each with weights.
+- `notes`: HTML strings on where the numbers came from: the runs, their dates and queries, what was dropped as off topic, and any season caveat.
+- `ideas`: the 20, **ordered by how well you expect each to sell on Etsy**, best first. Weigh proven niche demand for the idea's angle first, then how fresh the phrase and template counts are, then how far its look is from what niche sellers already make.
+
+Each idea:
+
+```json
+{"slug": "anatomy-of-a-situationship", "name": "Anatomy Of A Situationship",
+ "text": "Anatomy Of A Situationship", "labels": ["Mixed Signals", "Left On Read"],
+ "concept": "What the design shows, in one or two sentences.",
+ "hook": "How it ties to the niche: the joke or the appeal, and who buys it.",
+ "direction": "style, layout, typography, elements", "palette": "print colours", "garment": "pepper",
+ "ref": {"listing": 4524891354, "image": 1, "take": "the quality to borrow from it"},
+ "general_tags": ["museum specimen chart", "spaced caps"], "niche_tags": ["anti-valentine", "sarcastic"],
+ "examples": [4527778406, 1848331380],
+ "phrase": {"query": "anatomy of a situationship", "count": 1},
+ "template": {"query": "anatomy heart valentine shirt", "count": 314},
+ "forecast": "strong", "why": "Why it ranks here, naming the numbers that decide it."}
+```
+
+- `text`: the exact printed words, `" / "` for a line break, null for an image-only design. `labels` (small captions) and `text_note` (how the text sits, e.g. one letter per character) are optional.
+- `general_tags`, `niche_tags`: the crossover, spelled as `tally` prints them; `field:tag` picks the field when a tag is in two (`style:distressed`). The report pulls their weights from `tally.json`.
+- `ref`: the idea's one style reference (step 8). `examples`: two to four other listing IDs from either run that prove the crossover.
+- `forecast`: `strong`, `good` or `long shot`. `why`: one to three sentences on what earns the rank and what holds it back.
 
 ## 8. Codex briefs
 
-Each idea gets a hand-off folder, `NICHE_DIR\ideas\NN-slug\`, for a Codex agent that generates the artwork with ChatGPT Image 2.
+Each idea gets a hand-off folder, `NICHE_DIR\ideas\<slug>\`, for a Codex agent that generates **one** design with ChatGPT Image 2.
 
-1. **Pick 1–3 style references** per idea from the listings its crossover cites: the images that best show the look the idea borrows (rendering, layout, lettering), not its subject. Use `ID:2` when the first image is a size chart or a mockup that hides the design.
-2. **Download them** at full size:
+1. **Pick exactly one style reference** per idea from the listings its crossover cites: the image that best shows the look the idea borrows (rendering, layout, lettering), not its subject. Set `"image": 2` when the first image is a size chart or a mockup that hides the design. Its `take` names the one quality to borrow.
+2. **Build the folders**:
 
    ```bash
-   uv run python .claude/skills/etsy-research-design/design_sheets.py refs NICHE_DIR/ideas/NN-slug/refs ID[:RANK] ... --runs GENERAL_DIR NICHE_DIR
+   uv run python .claude/skills/etsy-research-design/design_ideas.py briefs NICHE_DIR --general GENERAL_DIR
    ```
 
-   Tile all the refs into one image and look at it. Every reference should show the design, not a chart, a collage of colour options or a crowded flat lay.
-3. **Write `prompt.md`** from [codex-brief.md](codex-brief.md), one line per reference saying which quality to take from it. Fill every `{…}`; the requirements and checks stay as written. The brief asks for 3 distinctly different designs as transparent 4500×5400 PNGs.
+   It downloads each reference at full size into `refs\`, fills [codex-brief.md](codex-brief.md) into `prompt.md` and makes an empty `out\`. Look at `ideas\refs-overview.jpg`: every reference must show the design, not a chart, a collage of colour options or a crowded flat lay. Change the pick in `ideas.json` and run `briefs` again for any that don't.
 
 ## 9. Report
 
-Write `NICHE_DIR\ideas.md`:
+```bash
+uv run python .claude/skills/etsy-research-design/design_ideas.py report NICHE_DIR --general GENERAL_DIR
+```
 
-1. **General category**: the top 5 tags per field, with weights and shop counts.
-2. **Niche**: the same.
-3. **Gaps**: the flagged tags, with the general listings that show them.
-4. **Ideas**: the 20, ranked by how strongly the evidence backs them.
+It writes `NICHE_DIR\report.html`: one card per idea in rank order, with its concept, hook, reference image, crossover weights, phrase and template counts, example listings, and a Generate / Skip choice. Run `findings`, `notes`, `hook` and `why` past the `unslop` skill first.
 
-End `ideas.md` with a **Codex hand-off** table linking each idea's `prompt.md` and listing its reference IDs.
+Publish `report.html` with the Artifact tool, declaring `capabilities: {"db": {}, "user": {}}`, and check the `decisions` collection with one probe write, read and delete. Reply with the link, a 3–5 line summary of what wins in each set, and the top five ideas with their forecasts. Embed the two most useful sheets, one per run, with Markdown image syntax and absolute paths. Then stop: the seller picks next.
 
-Reply to the user with the folder path, a 3–5 line summary of what wins in each set, and the 20 ideas as a table (name, text, visual in one line, crossover). Embed the two most useful sheets, one per run, with Markdown image syntax and absolute paths.
+## 10. Generate the picks
+
+When the seller says they've finished picking, save their choices and list the picks:
+
+```
+ArtifactData action=list, url=REPORT, collection=decisions, query={"limit": 100}, out_dir=NICHE_DIR/dec
+```
+
+```bash
+uv run python .claude/skills/etsy-research-design/design_ideas.py picked NICHE_DIR NICHE_DIR/dec
+```
+
+Call `orchestrator_capabilities`, then start one Codex delegate per picked idea with `delegate_task` (provider `codex`), each with the task `Read <idea folder>\prompt.md and follow it. Its refs\ and out\ folders are beside it.` Done when every picked idea has `out\<slug>.png`; tell the seller which ones are ready and which failed.
