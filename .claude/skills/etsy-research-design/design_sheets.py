@@ -3,7 +3,6 @@
     uv run python design_sheets.py sheets RUN_DIR [--top 60] [--per-sheet 6] [--match a,b]
         [--exclude a,b]
     uv run python design_sheets.py tally GENERAL_RUN NICHE_RUN
-    uv run python design_sheets.py refs OUT_DIR LISTING_ID[:RANK] ... --runs RUN_DIR ...
 
 `sheets` ranks the listings that fetch_listings.py wrote to RUN_DIR by
 performance score (after --match keeps only listings whose title contains
@@ -20,9 +19,6 @@ performance-weighted support in each run. Each shop counts its best listing
 in full and its other listings a quarter. The first run is the general
 category; tags strong there but absent from the others are flagged `gap`.
 Writes tally.json into the last (niche) run.
-
-`refs` downloads full-size listing images (rank 1 unless given) from the
-runs' images.json into OUT_DIR as ref-N-<listing>.jpg, for style references.
 """
 
 from __future__ import annotations
@@ -37,7 +33,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-import httpx
 from PIL import Image, ImageDraw, ImageFont
 
 # Same listing score as etsy-research-proven-mockups/cluster_mockups.py.
@@ -301,30 +296,6 @@ def tally(runs: list[Path]) -> None:
     sys.stdout.write(f"\nwrote {out}\n")
 
 
-def _image_records(runs: list[Path]) -> dict[tuple[int, int], dict[str, Any]]:
-    records: dict[tuple[int, int], dict[str, Any]] = {}
-    for run in runs:
-        for image in _read_json(run / "images.json"):
-            records.setdefault((image["listing_id"], image["rank"]), image)
-    return records
-
-
-def refs(out: Path, runs: list[Path], picks: list[str]) -> None:
-    records = _image_records(runs)
-    out.mkdir(parents=True, exist_ok=True)
-    with httpx.Client(timeout=60, follow_redirects=True) as client:
-        for number, pick in enumerate(picks, 1):
-            listing_id, _, rank = pick.partition(":")
-            key = (int(listing_id), int(rank or 1))
-            if key not in records:
-                sys.exit(f"no image {pick} in {', '.join(r.name for r in runs)}")
-            response = client.get(records[key]["url_full"])
-            response.raise_for_status()
-            dest = out / f"ref-{number}-{key[0]}.jpg"
-            dest.write_bytes(response.content)
-            sys.stdout.write(f"{dest}\n")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
@@ -346,14 +317,8 @@ def main() -> None:
     )
     count = sub.add_parser("tally")
     count.add_argument("runs", type=Path, nargs="+", help="general run first, then the niche run")
-    grab = sub.add_parser("refs")
-    grab.add_argument("out", type=Path, help="folder to save the reference images in")
-    grab.add_argument("--runs", type=Path, nargs="+", required=True)
-    grab.add_argument("picks", nargs="+", help="LISTING_ID or LISTING_ID:IMAGE_RANK")
     args = parser.parse_args()
-    if args.command == "refs":
-        refs(args.out, args.runs, args.picks)
-    elif args.command == "sheets":
+    if args.command == "sheets":
         words = [w.strip().lower() for w in args.match.split(",") if w.strip()]
         exclude = [w.strip().lower() for w in args.exclude.split(",") if w.strip()]
         sheets(args.run, args.top, args.per_sheet, words, exclude)
