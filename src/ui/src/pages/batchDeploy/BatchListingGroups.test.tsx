@@ -37,18 +37,21 @@ describe("BatchListingGroups", () => {
       listing: "new-shirt",
       is_live: false,
       etsy_listing_id: null,
+      publishable: false,
       stage_plans: [stage("publish", { will_run: true })],
     };
     const change: PlanDTO = {
       listing: "changed-shirt",
       is_live: true,
       etsy_listing_id: 42,
+      publishable: false,
       stage_plans: [stage("publish", { will_run: true })],
     };
     const remove: PlanDTO = {
       listing: "removed-shirt",
       is_live: true,
       etsy_listing_id: 43,
+      publishable: false,
       stage_plans: [stage("retract", { will_run: true })],
     };
     const onOpenListing = vi.fn();

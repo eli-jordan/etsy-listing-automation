@@ -18,6 +18,12 @@ two never disagree about who activates).
 The stage declares ``needs_every_earlier_stage``: ``build_plan`` blocks it
 when any stage before it is blocked, because publishing a listing whose
 images could not be uploaded would put Printify's mockups in front of buyers.
+
+It also declares ``chosen_at_apply``: the seller opts in when applying, not
+when planning, so a review is planned without it and the ADR-0039
+fingerprint leaves its plan out. The review shows ``Plan.publishable``
+instead -- which listings an opt-in would activate -- and the apply that
+opts in plans again, with this stage, as every apply does.
 """
 
 from __future__ import annotations
@@ -63,6 +69,7 @@ class EtsyActivateStage(Stage[EtsyActivateDesired, EtsyActivateApplied, etsy_mod
     group: str | None = None
     applied_model = EtsyActivateApplied
     needs_every_earlier_stage = True
+    chosen_at_apply = True
 
     @override
     def desired(

@@ -214,6 +214,13 @@ class Stage(Protocol[D, A, L]):
     # without asking it, while any earlier stage in the walk is blocked.
     # `etsy_activate` declares it: a listing goes live only once everything
     # before it can run.
+    #
+    # A `chosen_at_apply` attribute set to True marks a stage the apply adds
+    # by the seller's choice, without a review having planned it: `build_plan`
+    # stamps it on the stage's `StagePlan`, and the ADR-0039 fingerprint
+    # leaves that plan out, so adding or dropping the stage never stales a
+    # review. `etsy_activate` declares it; `Plan.publishable` is what the
+    # review shows for it instead.
 
 
 AnyStage = Stage[Any, Any, Any]

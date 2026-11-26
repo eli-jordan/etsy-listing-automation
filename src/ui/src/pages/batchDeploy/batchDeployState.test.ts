@@ -24,6 +24,7 @@ function plan(listing: string): PlanDTO {
     listing,
     is_live: true,
     etsy_listing_id: 42,
+    publishable: false,
     stage_plans: [stage("render", true), stage("publish")],
   };
 }

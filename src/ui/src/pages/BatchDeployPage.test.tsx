@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +52,7 @@ function plan(overrides: Partial<PlanDTO> = {}): PlanDTO {
     listing: "take-a-hike",
     is_live: true,
     etsy_listing_id: 42,
+    publishable: false,
     stage_plans: [stage("render", { will_run: true, reason: "new preview" })],
     ...overrides,
   };
@@ -714,33 +715,29 @@ describe("BatchDeployPage", () => {
     expect(opened).not.toHaveBeenCalledWith("apply-1", expect.anything());
   });
 
-  it("plans again with publish when the seller opts in, and applies with the plan's choice", async () => {
-    const reviewed = (publish: boolean, id: string) =>
-      runDetail({
-        id,
-        phase: "ready",
-        publish,
-        listings: ["alpha"],
-        events: [
-          { type: "phase", id: 1, phase: "queued" },
-          {
-            type: "listing_planned",
-            id: 2,
-            listing: "alpha",
-            plan: plan({ listing: "alpha" }),
-            fingerprint: "fp-alpha",
-          },
-          { type: "phase", id: 3, phase: "ready" },
-        ],
-      });
-    vi.spyOn(runsApi, "getRun").mockImplementation(async (id) => reviewed(id === "plan-2", id));
-    const create = vi
-      .spyOn(runsApi, "createRun")
-      .mockResolvedValueOnce({ kind: "created", run: reviewed(true, "plan-2") })
-      .mockResolvedValueOnce({ kind: "created", run: reviewed(true, "apply-1") });
-    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary("alpha")]);
-    streamStub();
+  function publishReview(plans: PlanDTO[]) {
+    return runDetail({
+      id: "plan-1",
+      phase: "ready",
+      listings: plans.map((p) => p.listing),
+      events: [
+        { type: "phase", id: 1, phase: "queued" },
+        ...plans.map((p, index) => ({
+          type: "listing_planned" as const,
+          id: index + 2,
+          listing: p.listing,
+          plan: p,
+          fingerprint: `fp-${p.listing}`,
+        })),
+        { type: "phase", id: plans.length + 2, phase: "ready" },
+      ],
+    });
+  }
 
+  function renderReview(plans: PlanDTO[]) {
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(publishReview(plans));
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue(plans.map((p) => summary(p.listing)));
+    streamStub();
     render(
       <MemoryRouter initialEntries={["/listings/deploy/plan-1"]}>
         <Routes>
@@ -748,24 +745,64 @@ describe("BatchDeployPage", () => {
         </Routes>
       </MemoryRouter>,
     );
+  }
+
+  it("opts in to publishing without planning again, naming what goes live", async () => {
+    const create = vi
+      .spyOn(runsApi, "createRun")
+      .mockResolvedValue({ kind: "created", run: runDetail({ id: "apply-1", kind: "apply" }) });
+    renderReview([
+      plan({ listing: "alpha", is_live: false, publishable: true }),
+      plan({ listing: "beta", is_live: true, publishable: false }),
+    ]);
 
     const toggle = await screen.findByRole("checkbox", { name: /Publish new listings on Etsy/ });
     expect(toggle).not.toBeChecked();
+    expect(screen.getByText(/On, 1 would go live/)).toBeInTheDocument();
     await userEvent.click(toggle);
 
-    await waitFor(() =>
-      expect(create).toHaveBeenCalledWith({ kind: "plan", scope: "workspace", publish: true }),
-    );
-    await waitFor(() =>
-      expect(screen.getByRole("checkbox", { name: /Publish new listings on Etsy/ })).toBeChecked(),
-    );
+    expect(toggle).toBeChecked();
+    expect(create).not.toHaveBeenCalled();
+    const live = screen.getByRole("list", { name: "Listings that go live" });
+    expect(within(live).getByText("alpha")).toBeInTheDocument();
+    expect(within(live).queryByText("beta")).toBeNull();
 
-    await userEvent.click(await screen.findByRole("button", { name: /Apply 1 listing/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Apply 2 listings/ }));
 
+    // The review's own fingerprints: the publish step is left out of them.
     await waitFor(() =>
-      expect(create).toHaveBeenLastCalledWith(
-        expect.objectContaining({ kind: "apply", reviewed_run_id: "plan-2", publish: true }),
-      ),
+      expect(create).toHaveBeenLastCalledWith({
+        kind: "apply",
+        scope: "workspace",
+        listings: ["alpha", "beta"],
+        expect: { alpha: "fp-alpha", beta: "fp-beta" },
+        reviewed_run_id: "plan-1",
+        publish: true,
+      }),
     );
+  });
+
+  it("does not offer publishing when nothing would go live", async () => {
+    renderReview([plan({ listing: "alpha", is_live: true, publishable: false })]);
+
+    await screen.findByRole("button", { name: /Apply 1 listing/ });
+    expect(screen.queryByRole("checkbox", { name: /Publish new listings on Etsy/ })).toBeNull();
+  });
+
+  it("can apply a set of drafts with nothing else to change, once publishing is on", async () => {
+    renderReview([
+      plan({
+        listing: "alpha",
+        is_live: false,
+        publishable: true,
+        stage_plans: [stage("render", { will_run: false })],
+      }),
+    ]);
+
+    expect(await screen.findByText("Everything is up to date.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Publish new listings on Etsy/ }));
+
+    expect(screen.queryByText("Everything is up to date.")).toBeNull();
+    expect(screen.getByRole("button", { name: /Apply 1 listing/ })).toBeEnabled();
   });
 });
