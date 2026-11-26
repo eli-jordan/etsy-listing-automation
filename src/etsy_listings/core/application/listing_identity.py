@@ -44,16 +44,6 @@ def rename_listing(
     batches: BatchStore,
     ai_runs: AiRunRegistry,
 ) -> None:
-    """Move listing ``old``, whole, to ``new`` (``listing_artifacts.move_listing``).
-    Every batch row naming ``old`` follows, and ``old``'s finished AI run is
-    forgotten.
-
-    Renaming to the same name changes nothing, since the editor commits an
-    unchanged name on every blur. Refusals: :class:`ListingMissingError` (also
-    after waiting for the lock), ``InvalidNameError`` for a ``new`` that is
-    not a path segment, and :class:`ListingNameTakenError` for a directory already
-    at ``new``.
-    """
     documents = ListingDocuments(workspace)
     if not documents.exists(old):
         raise ListingMissingError(old)

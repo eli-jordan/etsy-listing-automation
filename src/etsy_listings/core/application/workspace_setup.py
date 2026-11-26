@@ -1,18 +1,3 @@
-"""Configuring a workspace: what ``setup`` writes, and the rules it writes by.
-
-The directories a workspace needs, the packaged prompts it is seeded with,
-and ``shop.yaml`` -- read raw, merged with what ``setup`` asked, and saved
-after the token that goes with it: rendered with a comment per field when
-new, edited in place when the seller already has one (ADR-0055). Finding
-the shops those answers name is :mod:`shop_discovery`'s; asking the questions
-is the CLI's (``cli/setup.py``), the one part no test can drive cheaply.
-
-The one rule that shapes all of it: **`setup` fills gaps, it does not
-correct answers.** Re-running it on a configured workspace must be safe, so an
-existing value always wins over a freshly collected one, and the ids Phase 3
-fills in are never dropped. Prompts are the one opt-in exception (ADR-0044).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -59,11 +44,6 @@ def missing_directories(root: Path) -> tuple[str, ...]:
 
 
 def create_directories(root: Path) -> tuple[str, ...]:
-    """Create what is missing; return what was actually created.
-
-    Returning the difference rather than the whole list is what lets a re-run
-    say "nothing to do" honestly instead of reporting work it did not do.
-    """
     created = missing_directories(root)
     for name in created:
         (root / name).mkdir(parents=True, exist_ok=True)
@@ -323,8 +303,6 @@ def _dotted_path(line: str, indent: int, ancestors: list[tuple[int, str]]) -> st
     return path
 
 
-# ------------------------------------------------------------ packaged prompts
-
 PACKAGED_PROMPTS: tuple[tuple[str, Callable[[], str], str], ...] = (
     (layout.SEO_PROMPT_FILE, default_seo_prompt_text, "AI SEO"),
     (layout.BRIEF_PROMPT_FILE, default_brief_prompt_text, "design brief"),
@@ -337,8 +315,6 @@ here is the seller's own and `setup` never touches it."""
 
 @dataclass(frozen=True)
 class PackagedPrompt:
-    """What syncing one packaged prompt did, in workspace-relative terms."""
-
     where: str
     label: str
     backup: str
@@ -348,13 +324,6 @@ class PackagedPrompt:
 
 
 def sync_packaged_prompts(root: Path, *, replace: bool) -> tuple[PackagedPrompt, ...]:
-    """Seed, check or replace each packaged prompt.
-
-    `setup` fills gaps and does not correct answers; prompts are the one
-    opt-in exception, because a workspace would otherwise never receive new
-    instructions such as `seo.md`'s market-data rules. Without ``replace``, a
-    prompt that differs from its default is left byte for byte (ADR-0044).
-    """
     outcomes: list[PackagedPrompt] = []
     for filename, default_text, label in PACKAGED_PROMPTS:
         path = root / layout.PROMPTS_DIR / filename
@@ -367,9 +336,6 @@ def sync_packaged_prompts(root: Path, *, replace: bool) -> tuple[PackagedPrompt,
             )
         )
     return tuple(outcomes)
-
-
-# ----------------------------------------------------------- reading and saving
 
 
 def read_shop_document(root: Path) -> dict[str, Any] | None:

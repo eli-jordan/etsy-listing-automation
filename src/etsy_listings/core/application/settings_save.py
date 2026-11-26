@@ -1,33 +1,3 @@
-"""The settings save: a revision-checked ``settings.yaml`` edit and what it
-sets off (Admin plan, PR 4; ADR-0048, ADR-0052, ADR-0058).
-
-``workspace_settings`` reads, checks and writes the file. This module is
-the save every owner of a settings change goes through, the Admin page's
-``PATCH`` and backup provisioning alike, and it decides what the change sets
-off, so no caller repeats a rule:
-
-- **Destinations.** A ``backup.destinations`` the save adds, or each one a
-  whole new ``backup:`` block names, is refused unless it can be created
-  (its parent folder exists, it is not a file, it overlaps nothing), and is
-  created after the write. A destination folder that does not exist counts
-  as unreachable when a run copies (spec, *Checking a destination*), so
-  only a save makes one, and only inside a folder that is there: a missing
-  parent is a drive, share or sync folder that is offline.
-- **The AI queue** is woken when ``batch_ai.concurrency`` changes, as the
-  queue reads it afresh on its next dispatch (ADR-0048). Waking never stops
-  runs already going when the limit was lowered.
-- **Backups** are woken when any backup key changes: a shorter interval can
-  make a backup due now.
-- **Position coverage** is queued when the template position limits widen
-  (option B, ADR-0058); narrowing queues nothing.
-
-**The coordinators** are handed in (:class:`SettingsCoordinators`); the
-host builds them and keeps owning their lifetimes (ADR-0052). One left out
-is not told: backup provisioning passes none, because the backup coordinator
-that called it starts or wakes backups itself, and ``backup init`` runs with
-no server at all.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -55,8 +25,6 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 class Wakes(Protocol):
-    """A coordinator that looks again when told something changed."""
-
     def wake(self) -> None: ...
 
 
@@ -70,8 +38,6 @@ class CoversPositions(Protocol):
 
 @dataclass(frozen=True)
 class SettingsCoordinators:
-    """The coordinators a save may need to tell; any left None is not told."""
-
     ai_queue: Wakes | None = None
     backups: Wakes | None = None
     coverage: CoversPositions | None = None
@@ -144,11 +110,7 @@ def _saved_limits(workspace: Workspace, changes: Mapping[str, object]) -> Positi
     return saved.template_positions if saved is not None else None
 
 
-# ----------------------------------------------------------- destinations
-
-
 def _added_destinations(workspace: Workspace, changes: Mapping[str, object]) -> tuple[Path, ...]:
-    """The destinations this save adds, refused unless each can be created."""
     edited = _edited_destinations(changes)
     if edited is None:
         return ()

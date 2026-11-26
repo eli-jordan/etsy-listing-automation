@@ -1,33 +1,3 @@
-"""The Admin page's Settings tab: ``settings.yaml`` read and edited.
-
-Admin plan, PR 4, *Settings*. :func:`read_settings` and :func:`edit_settings`
-follow ``shop_settings``' save rule with the file's own revision: the
-candidate document is validated as a whole ``Settings`` before anything is
-written, a stale revision is a conflict, and an edit that changes nothing
-leaves the file byte-identical (``workspace.revisions``, ADR-0055).
-
-``settings.yaml`` is optional. A missing file reads as every default at
-``ABSENT_REVISION`` and the first save creates it holding only the edited
-key. A file that does not load is refused naming the file and the dotted
-key; nothing here repairs it or falls back to defaults.
-
-``ai.providers`` captures order and per-provider preferences for future runs
-(ADR-0056); ``ai.step_limit_minutes`` and ``ai.run_limit_minutes`` bound them
-(ADR-0057). A running AI job keeps the configuration it captured at start.
-``batch_ai.concurrency`` is read afresh by the batch queue's next dispatch
-(ADR-0048), so ``settings_save`` wakes the queue after a save. ``market_seo.weights``
-arrives as the page shows it: whole percentages for all six metrics
-totalling exactly 100. The file may still hold relative weights written by
-hand; the page normalises those for display only, and they are rewritten as
-percentages when the seller next edits a share.
-
-``template_positions`` (ADR-0058) arrives as the whole limits section the
-page's draft holds, saved only from its confirmation (template positions PR 5).
-Each leaf is written only where it differs from what the file reads as now, so
-a default stays implicit and an untouched spelling stays as the seller wrote
-it (ADR-0055).
-"""
-
 from __future__ import annotations
 
 import copy
@@ -111,8 +81,6 @@ def default_weights() -> dict[str, int]:
 
 
 def read_settings(workspace: Workspace) -> SettingsView:
-    """``settings.yaml`` as it is now. A file that does not load raises
-    ``ConfigLoadError`` naming it and the dotted key."""
     path = workspace.settings_file()
     data, revision = read_revisioned(path, absent_ok=True)
     return SettingsView(revision, Settings.from_text(path, data.decode("utf-8-sig")))
@@ -179,7 +147,6 @@ def _refuse_shape(changes: Mapping[str, object], editable: tuple[str, ...]) -> N
 
 
 def _edited(path: Path, source: bytes, changes: Mapping[str, object]) -> tuple[bytes, Settings]:
-    """``source`` with ``changes`` applied, and the settings it then holds."""
     raw = _document(path, source)
     original = _validated(raw)
     candidate: dict[str, Any] = copy.deepcopy(raw)
@@ -223,7 +190,6 @@ def _leaf_changes(changes: Mapping[str, object], original: Settings) -> dict[str
 
 
 def _leaves(mapping: Mapping[str, object], prefix: str = "") -> list[tuple[str, object]]:
-    """Each non-mapping value under ``mapping``, by dotted path."""
     leaves: list[tuple[str, object]] = []
     for key, value in mapping.items():
         path = f"{prefix}{key}"
@@ -238,7 +204,6 @@ _MISSING = object()
 
 
 def _at(document: object, path: str) -> object:
-    """The value at dotted ``path``, or a sentinel equal to nothing."""
     for part in path.split("."):
         if not isinstance(document, Mapping) or part not in document:
             return _MISSING
@@ -266,7 +231,6 @@ def _retain_provider_source(
 def _retain_row(
     row: dict[str, Any], source: dict[str, Any], *, before: object, after: object
 ) -> None:
-    """``row`` with each unchanged preference spelled, or left out, as ``source`` had it."""
     for key in ("enabled", "model", "effort"):
         if getattr(before, key) != getattr(after, key):
             continue
@@ -291,7 +255,6 @@ def _percentage_problem(weights: object) -> str | None:
 
 
 def _document(path: Path, source: bytes) -> dict[str, Any]:
-    """``settings.yaml``'s mapping; an empty file is an empty one."""
     try:
         raw = parse_yaml(path, source.decode("utf-8-sig"))
     except ConfigLoadError as exc:

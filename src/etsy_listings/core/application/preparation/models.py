@@ -29,8 +29,6 @@ class Event(Record):
 
 
 class Publication(Record):
-    """The generation a completed job published."""
-
     generation_id: str
     content_digest: str
 

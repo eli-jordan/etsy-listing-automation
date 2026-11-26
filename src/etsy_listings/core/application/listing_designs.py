@@ -24,11 +24,6 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 def save_listing_design(workspace: Workspace, filename: str, payload: bytes) -> str:
-    """Add an upload to ``designs/`` and answer the design name it landed
-    under. Refuses with :class:`ListingDesignUploadRefusedError`, writing nothing,
-    unless ``filename`` is a plain filename and ``payload`` decodes as a PNG
-    -- ``designs/`` holds PNGs only, and a design is resolved by name to
-    ``<name>.png``."""
     if not filename:
         raise ListingDesignUploadRefusedError("the upload needs a filename")
     if filename != Path(filename).name:

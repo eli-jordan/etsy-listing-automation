@@ -1,30 +1,3 @@
-"""Give me this scene at this size: the one question every picture of a mockup
-template asks, for either renderer, saved or drawn.
-
-:func:`saved_scene` answers it for what is on disk and :func:`draft_scene` for
-the geometry under the seller's cursor. Each picks the renderer, composes, and
-answers with a finished picture, so a host only encodes and serves it. A
-:class:`RenderedScene` is the PNG the render stage writes, with the identity
-that names it; a :class:`SceneFrame` is a transient editor-size image with no
-identity, which the host encodes as it likes. A prepared scene composes through
-:func:`~etsy_listings.core.preparation.scenes.lease_scene`, the render stage's
-own path, so a preview's identity is the rendered file's. Whether a draft still
-matches what is saved, and what a failure to use prepared files means, are
-answered here too: a refusal arrives as ``PreparationRequiredError``.
-
-A full-size scene of either renderer is kept in
-:class:`~etsy_listings.core.preparation.scene_cache.SceneCache`. Viewing it
-again finds it there without decoding the photo or a design, when
-:data:`~etsy_listings.core.preparation.scene_cache.PIXEL_DIGESTS` still knows
-every file's pixels.
-
-Decoding is the one thing a caller supplies, as :class:`SceneImages`: the
-server's memo between the frames of a drag (``server/api/imagecache.py``, which
-is request-serving state and stays there) or :data:`DISK_IMAGES`, for a caller
-with no memo. Marigold's full-size scenes always decode through
-``PIXEL_DIGESTS``, as the render stage's do.
-"""
-
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -93,8 +66,6 @@ a canvas being dragged against. A Marigold scene already saved has one size."""
 
 @dataclass(frozen=True)
 class RenderedScene:
-    """A finished full-size picture and what names it."""
-
     png: bytes
     """The composed scene, encoded as the render stage writes it."""
     render_identity: str
@@ -129,17 +100,11 @@ class EditorCanvas:
 class SceneImages(Protocol):
     """How a scene's files become arrays. A fake needs no files at all."""
 
-    def photo(self, path: Path) -> RGB:
-        """The whole photo at its true size."""
-        ...
+    def photo(self, path: Path) -> RGB: ...
 
-    def design(self, path: Path) -> RGBA:
-        """A design file, whole."""
-        ...
+    def design(self, path: Path) -> RGBA: ...
 
-    def canvas(self, scene: PreviewScene) -> EditorCanvas:
-        """``scene``'s photo as an editor frame draws on it."""
-        ...
+    def canvas(self, scene: PreviewScene) -> EditorCanvas: ...
 
     def artwork(self, path: Path) -> tuple[RGBA, FloatMap]:
         """A design as a Marigold editor frame prints it, with its linear samples."""
@@ -344,8 +309,6 @@ def _full_photo_warp(
 def _cached_photo_warp(
     cache: SceneCache, scene: PreviewScene, painted: list[tuple[RenderConfig, Path]]
 ) -> RenderedScene | None:
-    """The cached scene, without decoding, when every file's pixel digest is
-    still known."""
     photo_pixels = PIXEL_DIGESTS.photo(scene.photo.path)
     known = [digest for _, path in painted if (digest := PIXEL_DIGESTS.design(path)) is not None]
     if photo_pixels is None or len(known) != len(painted):
@@ -461,8 +424,6 @@ def _cached(
 def _layer_sources(
     config: AnyTemplate, colour: str | None, design: LayerDesign
 ) -> list[tuple[Path, str | None]]:
-    """``(design file, placement id)`` per printed layer, in paint order. A
-    layer with no file is left bare."""
     sources = []
     for depicted, placement in scene_colours(config, colour):
         path = design(depicted)

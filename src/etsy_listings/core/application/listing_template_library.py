@@ -1,22 +1,7 @@
-"""The Listing templates page and editor: the index, the *name it* draft,
-create (Save as listing template, Clone), read, the valid-only edit, rename
-and delete (ADR-0047, template completeness; spec *Listing templates*;
-module-structure plan, PR 7).
-
-The conversion and completeness rules are ``listing_templates``'
-(``from_listing``, ``from_template``, ``save``, ``template_issues``); this
-module coordinates them with the template's write lock and with the records
-that name a template. Every write takes the template's write lock and
-re-checks the template once it holds it, so a create and a rename to one
-name cannot both win, and an edit waiting behind a rename finds the template
-gone rather than recreating it under the old name.
-
-Two kinds of "no", as for a listing (``refusals``): a *name* or a *source*
-the operation cannot take is raised, with nothing written; a *document* it
-will not write -- malformed, or complete but for a blocking issue -- is
-answered as a :class:`TemplateSave` with ``saved`` false, leaving
-``template.yaml`` byte-for-byte as it was so the server always holds the
-last complete version.
+"""Every write takes the listing template's write lock and re-checks the
+template once it holds it, so a create and a rename to one name cannot both
+win, and an edit waiting behind a rename finds the template gone rather than
+recreating it under the old name.
 """
 
 from __future__ import annotations
@@ -64,8 +49,6 @@ RESERVED_NAME = "draft"
 
 @dataclass(frozen=True)
 class TemplateSource:
-    """What a draft is made from: Save as listing template, or Clone."""
-
     kind: Literal["listing", "listing-template"]
     name: str
 
@@ -102,8 +85,6 @@ class ListingTemplateView:
 
 @dataclass(frozen=True)
 class ListingTemplateCard:
-    """One card on the Listing templates page (UI doc §2)."""
-
     name: str
     template: ListingTemplate
     garment: str
@@ -128,9 +109,6 @@ class TemplateSave:
     issues: list[Issue]
     field_errors: dict[str, str] = field(default_factory=dict)
     template: ListingTemplateView | None = None
-
-
-# -------------------------------------------------------------------- reads
 
 
 def list_listing_templates(
@@ -177,8 +155,6 @@ class DraftOrigin:
 
 
 def draft_listing_template(workspace: Workspace, origin: DraftOrigin) -> ListingTemplateView:
-    """The template Save as listing template or Clone would write, written
-    nowhere -- what the *name it* page shows before a name is committed."""
     source, draft = _draft(workspace, origin)
     facts = WorkspaceFacts.gather(workspace)
     return _view(
@@ -196,9 +172,6 @@ def draft_listing_template(workspace: Workspace, origin: DraftOrigin) -> Listing
             assets=draft.assets,
         ),
     )
-
-
-# ------------------------------------------------------------------- writes
 
 
 def create_listing_template(
@@ -290,15 +263,9 @@ def rename_listing_template(
 
 
 def delete_listing_template(workspace: Workspace, name: str) -> None:
-    """Allowed whatever was made from it: batches keep their own frozen
-    copy, and a listing never had a link to it (spec, *Completeness and
-    editing*)."""
     with locks.hold(workspace, "listing-template", name):
         _require(workspace, name)
         workspace.remove_listing_template(name)
-
-
-# ------------------------------------------------------------------ helpers
 
 
 def _require(workspace: Workspace, name: str) -> Path:
@@ -325,8 +292,6 @@ def _garment(profile: GarmentProfile | None) -> str | None:
 
 
 def _plan_name(template: ListingTemplate) -> str | None:
-    """The plan ref's stem, read off the ref: a name to show, which needs no
-    plan to load."""
     return PurePosixPath(template.pricing_plan).stem if template.pricing_plan else None
 
 

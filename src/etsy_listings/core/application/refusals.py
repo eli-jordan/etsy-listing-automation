@@ -1,19 +1,9 @@
-"""What a listing operation answers instead of doing what it was asked.
-
-Application meaning only, no status codes (module-structure spec,
-*Responsibility and dependency rules*): each refusal inherits a category from
-``core/errors.py`` -- missing, conflict, stale or refused -- and an adapter
-decides once what each category becomes (the HTTP app's ``REFUSAL_STATUS``).
-:class:`InvalidListing` stays an ordinary answer carrying field errors
-(``ListingDetail.field_errors``).
-
-Two shapes, because there are two kinds of "no". A refusal that ends the
+"""Two shapes, because there are two kinds of "no". A refusal that ends the
 operation is raised: nothing was written, and the caller has nothing else to
 report. A malformed document is *returned*, because the caller still has a
-listing (or an empty draft) to describe alongside it -- the contract the
-editor has always relied on, where invalid input is a 200 with the listing
-unchanged. Incompleteness is neither: ADR-0043 writes an incomplete listing
-and leaves its gaps to ``config/listing_validation.py``.
+listing (or an empty draft) to describe alongside it: invalid input is a 200
+with the listing unchanged. Incompleteness is neither: ADR-0043 writes an
+incomplete listing and leaves its gaps to ``config/listing_validation.py``.
 """
 
 from __future__ import annotations
@@ -53,10 +43,6 @@ class PublishedListingDeletionError(ConflictError, ValueError):
 
 @dataclass(frozen=True)
 class InvalidListing:
-    """A candidate document that does not structurally validate as a
-    ``Listing``: each failed field, dotted, to pydantic's message. Nothing was
-    written."""
-
     field_errors: dict[str, str]
 
     @classmethod
@@ -65,8 +51,6 @@ class InvalidListing:
 
 
 def field_errors_of(exc: ValidationError) -> dict[str, str]:
-    """Each failed field, dotted, to pydantic's message -- for a listing, and
-    for a listing template's refused save."""
     result: dict[str, str] = {}
     for error in exc.errors():
         loc = ".".join(str(part) for part in error["loc"]) or "__root__"
@@ -74,16 +58,7 @@ def field_errors_of(exc: ValidationError) -> dict[str, str]:
     return result
 
 
-# ---------------------------------------------------------- mockup templates
-#
-# The calibrator's (module-structure plan, PR 7). A mockup template is a
-# folder of photos the seller put in the workspace; nothing creates one, so
-# every operation names one that must already exist.
-
-
 class TemplateMissingError(MissingError):
-    """No ``mockup-templates/{name}/`` directory."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"no template {name!r}")
         self.name = name
@@ -107,8 +82,7 @@ class TemplateNameTakenError(ConflictError, ValueError):
         self.name = name
 
 
-class TemplateInUseError(ConflictError):
-    """Something is reading or writing the template, so it cannot move yet."""
+class TemplateInUseError(ConflictError): ...
 
 
 class TemplateKindRefusedError(RefusedError):
@@ -327,15 +301,7 @@ class ReviewedPlanRefusedError(ConflictError, ValueError):
     queued. The message says which part did not hold."""
 
 
-# --------------------------------------------------------------------- shop
-#
-# The Admin page's Shop tab (Admin plan, PR 3). Both are raised: nothing was
-# written, and the page keeps the seller's edit visible with the reason.
-
-
 class ShopRevisionConflictError(StaleError, RuntimeError):
-    """``shop.yaml`` changed since the page read it; the seller reloads."""
-
     def __init__(self) -> None:
         super().__init__("shop.yaml changed on disk since this page loaded it. Reload to continue.")
 
@@ -349,15 +315,7 @@ class InvalidShopEditError(RefusedError):
         self.field_errors = field_errors
 
 
-# ----------------------------------------------------------------- settings
-#
-# The Admin page's Settings tab (Admin plan, PR 4): the same two refusals for
-# settings.yaml, which has its own revision.
-
-
 class SettingsRevisionConflictError(StaleError, RuntimeError):
-    """``settings.yaml`` changed since the page read it; the seller reloads."""
-
     def __init__(self) -> None:
         super().__init__(
             "settings.yaml changed on disk since this page loaded it. Reload to continue."
@@ -365,9 +323,6 @@ class SettingsRevisionConflictError(StaleError, RuntimeError):
 
 
 class InvalidSettingsEditError(RefusedError):
-    """The edited ``settings.yaml`` would not load: each refused dotted key
-    to the reason."""
-
     def __init__(self, field_errors: dict[str, str]) -> None:
         super().__init__("; ".join(f"{key}: {message}" for key, message in field_errors.items()))
         self.field_errors = field_errors

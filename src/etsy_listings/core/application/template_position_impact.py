@@ -1,18 +1,5 @@
-"""What saving candidate template position limits would change, before it is
-saved: the question Settings' confirmation answers (template positions PR 5;
-interactions, *Settings: Template rendering*; option B, spec *Marigold*).
-
-Two lists, read off the workspace as it is now and writing nothing:
-
-- ``outside``: each listing whose saved positions the candidate limits would
-  refuse on scale, offset or rotation, with the refused keys
-  (``listing_validation.positions_outside_limits``). Listings already blocked
-  for another reason, or that do not load, are not listed.
-- ``templates_needing_inference``: the Marigold templates whose preparation
-  evidence would need model inference to cover the wider limits: those a
-  listing positions whose evidence misses the candidate padded quad
-  (``position_coverage.templates_needing_coverage``, PR 7b). Saving them
-  queues that inference; narrowing never adds to it.
+"""Listings already blocked for another reason, or that do not load, are not
+listed as ``outside`` the candidate limits.
 """
 
 from __future__ import annotations
@@ -88,8 +75,6 @@ def template_position_impact(
 
 
 class _TemplateCache:
-    """Template configs loaded once each, only for templates a listing names."""
-
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
         self._available = set(workspace.template_names())

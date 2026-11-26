@@ -1,26 +1,6 @@
-"""Calibrating a mockup template: what the calibrator's rail lists, the kind
-a folder of photos is given, ``template.yaml`` read and saved, the listings
-a save may affect, and the scene a preview composites (module-structure
-plan, PR 7).
-
-Nothing here creates a template. A template is a folder of photos the
-seller puts in the workspace, so every operation names one that exists and
-refuses with :class:`~etsy_listings.core.application.refusals.TemplateMissingError`
-otherwise. Every path comes from ``Workspace``: template names arrive from
-URLs, and its accessors are where "stays inside the root" is enforced
-(ADR-0013, ADR-0046) -- an unusable name is its ``InvalidNameError``.
-
-A template is exactly one of three kinds; its config shape and a preview's
-geometry both follow which kind is in play.
-
-Previews are the real renderer, not an approximation (architecture, *The
-calibrator*): :func:`saved_preview` and :func:`unsaved_preview` say which
-photo, which derived maps and which layers a preview composites, from the
-saved ``template.yaml`` or from the unsaved geometry under the seller's
-cursor; :func:`compose_preview` composites them through ``render_scene``.
-The decoded images are the caller's to supply; this module takes images and
-geometry, and asks for a derived map only when a layer uses it. A finished
-picture of a scene is :mod:`~etsy_listings.core.application.scene_previews`'s.
+"""Every path comes from ``Workspace``: template names arrive from URLs, and
+its accessors are where "stays inside the root" is enforced (ADR-0013,
+ADR-0046) -- an unusable name is its ``InvalidNameError``.
 """
 
 from __future__ import annotations
@@ -78,9 +58,6 @@ from etsy_listings.core.workspace.workspace import (
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
 
-# ----------------------------------------------------------------- the rail
-
-
 @dataclass(frozen=True)
 class TemplatePhoto:
     """One scene photo: which colour it is (``None`` for a fixed scene) and
@@ -117,14 +94,11 @@ class TemplateOverview:
 
 
 def require_template(workspace: Workspace, name: str) -> None:
-    """Refuse a template that is not there: :class:`TemplateMissingError`."""
     if not workspace.has_template(name):
         raise TemplateMissingError(name)
 
 
 def list_templates(workspace: Workspace) -> list[TemplateOverview]:
-    """Every template, calibrated or not -- the calibrator is what writes
-    ``template.yaml``, so the folders with none are the ones it is for."""
     return [
         _overview(workspace, name) for name in workspace.template_names(include_uncalibrated=True)
     ]
@@ -169,7 +143,6 @@ def _colours(workspace: Workspace, name: str, config: AnyTemplate) -> list[str]:
 
 
 def _not_loaded_reason(state: TemplateState) -> str | None:
-    """The rail's words for a template with no config to describe it."""
     if isinstance(state, TemplateAbsent):
         return "no kind set"
     if isinstance(state, TemplateNeedsRepair):
@@ -219,9 +192,6 @@ def _status_reason(config: AnyTemplate) -> str | None:
 
 
 def _photos(workspace: Workspace, name: str, config: AnyTemplate) -> list[TemplatePhoto]:
-    """Asked of ``Workspace.scene_photo`` rather than composed from
-    ADR-0004's convention, which cannot express its own trailing-segment
-    fallback. An ambiguous colour is skipped rather than guessed at."""
     if not isinstance(config, ColourMatrixTemplate):
         scene = workspace.template_scene_image(name)
         return [TemplatePhoto(colour=None, file=workspace.relative_path(scene))]
@@ -253,9 +223,6 @@ def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
         wanted = f"{name!r}" if colour is None else f"{name!r} colour {colour!r}"
         raise TemplatePhotoMissingError(f"no photo for {wanted}")
     return source
-
-
-# ---------------------------------------------------------- kind and colours
 
 
 @dataclass(frozen=True)
@@ -372,9 +339,6 @@ def _rename_photos_to_slugs(workspace: Workspace, photos: list[Path]) -> list[Pa
     return sorted(renamed)
 
 
-# --------------------------------------------------------------- the config
-
-
 @dataclass(frozen=True)
 class SavedConfig:
     config: AnyTemplate
@@ -397,8 +361,6 @@ def read_config(workspace: Workspace, name: str) -> SavedConfig:
 
 
 def save_config(workspace: Workspace, name: str, config: AnyTemplate) -> None:
-    """Write ``config`` as the template's ``template.yaml``. The calibrator
-    saves the whole document, whichever kind it is."""
     require_template(workspace, name)
     CalibrationStore(workspace).write_config(name, config)
 
@@ -417,12 +379,8 @@ class CalibrationSave:
 
 @dataclass(frozen=True)
 class SavedCalibration:
-    """A committed calibrator save. ``labels_only`` says it changed labels and
-    nothing else, so no preparation work follows from it: a positioned
-    template short of coverage waits for a save that asks for inference, and
-    stale maps for a save that touches what they were built from (spec
-    *Keeping labels out of rendering*). A retry of such a save changes nothing
-    and answers False, as any save with no change does."""
+    """A retry of a labels-only save changes nothing and answers False, as any
+    save with no change does."""
 
     config: AnyTemplate
     revision: str
@@ -470,17 +428,6 @@ class PositionedListing:
 
 
 def positioned_listings(workspace: Workspace, template: str) -> list[PositionedListing]:
-    """The listings whose positions a recalibration of ``template`` may put
-    outside the limits (spec, *Recalibration*). Positions are absolute, so a
-    new box never moves them; the next ``plan`` re-checks each one. This only
-    reads: the calibrator never edits listings.
-
-    Each document is read raw through :class:`ListingDocuments`, not
-    validated: a listing with some unrelated problem still holds its
-    position, and one unreadable file must not hide the rest. A listing
-    marked ``lifecycle: deleted`` never renders again, so it is left out, as
-    is a document that cannot be parsed or a position of no known shape.
-    """
     require_template(workspace, template)
     documents = ListingDocuments(workspace)
     found: list[PositionedListing] = []
@@ -513,9 +460,6 @@ def _held_position(document: dict[str, object], template: str) -> tuple[str, ...
 def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
     require_template(workspace, name)
     return CalibrationStore(workspace).state(name).require()
-
-
-# ---------------------------------------------------------------- previews
 
 
 @dataclass(frozen=True)

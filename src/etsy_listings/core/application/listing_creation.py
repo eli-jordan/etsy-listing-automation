@@ -28,20 +28,6 @@ from etsy_listings.core.workspace.workspace import Workspace
 def create_listing(
     workspace: Workspace, name: str, document: Mapping[str, Any]
 ) -> InvalidListing | None:
-    """Write ``document`` as listing ``name``. Returns ``None`` once written.
-
-    Holds ``name``'s lock, so a create and a rename to the same name cannot
-    both win. Refusals, in order:
-
-    * :class:`~etsy_listings.core.workspace.workspace.InvalidNameError`:
-      ``name`` is not a single path segment (ADR-0013). Nothing is locked.
-    * :class:`ListingNameTakenError`: the **directory** exists, not just
-      ``listing.yaml``. A ``listings/{name}/`` left with a lockfile and no
-      document would hand the new listing another listing's remote ids.
-    * :class:`InvalidListing`, returned rather than raised: ``document`` does
-      not validate structurally. An *incomplete* document validates and is
-      written (ADR-0043).
-    """
     try:
         ListingDocuments(workspace).create(name, document)
     except ValidationError as exc:
@@ -60,20 +46,6 @@ def load_template_kind(workspace: Workspace, template: str) -> str:
 
 
 def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list[dict[str, str]]:
-    """The stub's ``media:``, which depends on the referenced template's kind.
-
-    ``colour-matrix`` gets one entry per colour, each naming its colour --
-    but capped at Etsy's 20-image limit, because a print provider can offer
-    far more colours than Etsy accepts photos: Comfort Colors 1717 / Monster
-    Digital offers 33, and one entry each is a listing Etsy will reject.
-    Which 20 is genuinely arbitrary, so it is the first 20 in offer order and
-    ``new`` says that it truncated. Every colour still appears in ``colors:``
-    -- that decides which Printify variants sell, not which photos get
-    rendered.
-
-    ``multiple`` and ``single`` get exactly one entry and **no** ``colour``:
-    each produces one output, so there is nothing to disambiguate.
-    """
     if kind == "colour-matrix":
         return [{"template": template, "colour": colour} for colour in colours[:MAX_IMAGES]]
     return [{"template": template}]
@@ -81,9 +53,6 @@ def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list
 
 @dataclass(frozen=True)
 class ListingStub:
-    """What a new listing starts from: its garment, design, colours, pricing
-    plan, brief, and the media entries :func:`build_media_entries` decided."""
-
     garment_profile_slug: str
     design_ref: str
     colours: list[str]
@@ -92,10 +61,6 @@ class ListingStub:
     media: list[dict[str, str]]
 
     def document(self) -> dict[str, Any]:
-        """A starting ``listing.yaml`` document: prices come from the referenced
-        pricing plan (per-size/per-colour adjustment is a manual edit), and the
-        title, description and tags are blank -- ordinary editable values,
-        nothing invented."""
         return {
             "garment_profile": self.garment_profile_slug,
             "design": {"default": self.design_ref},

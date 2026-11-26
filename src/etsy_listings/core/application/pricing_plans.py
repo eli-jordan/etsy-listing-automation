@@ -100,9 +100,6 @@ MARGIN_MULTIPLIER = Decimal("1.10")
 
 @dataclass(frozen=True)
 class LiveCosts:
-    """Today's figures a starting plan is priced from. Each is fail-soft:
-    an empty cost table or a missing rate prices the sizes it affects at 0."""
-
     variant_costs: dict[int, int]
     """Manufacturing cost in cents, by Printify variant id."""
     shipping: ShippingRates
@@ -142,8 +139,6 @@ def compute_starting_prices(
 def _size_totals(
     size: str, variant_set: VariantSet, costs: LiveCosts
 ) -> tuple[dict[str, int], list[str]]:
-    """Manufacturing + first-item shipping in cents by colour for ``size``,
-    and the colours missing either figure."""
     totals_cents: dict[str, int] = {}
     missing_colours: list[str] = []
     for variant in variant_set.variants:
@@ -161,7 +156,6 @@ def _size_totals(
 def _price_size(
     size: str, variant_set: VariantSet, costs: LiveCosts, target_currency: str
 ) -> tuple[Money, list[str]]:
-    """One size's starting price and the note lines explaining it."""
     fx_rate, margin_multiplier = costs.fx_rate, MARGIN_MULTIPLIER
     totals_cents, missing_colours = _size_totals(size, variant_set, costs)
     notes: list[str] = []
@@ -246,9 +240,6 @@ class StartingPricingPlan:
 
 @dataclass(frozen=True)
 class GarmentOffer:
-    """The garment a starting plan prices: its profile, the blueprint and
-    print provider behind it, their variants, and the sizes the plan lists."""
-
     garment_profile_slug: str
     blueprint: Blueprint
     provider: PrintProvider
@@ -285,14 +276,6 @@ def create_starting_pricing_plan(
     name: str,
     offer: GarmentOffer,
 ) -> StartingPricingPlan:
-    """Write ``pricing-plans/{slugify(name)}.yaml`` priced from today's costs.
-
-    Manufacturing costs come from Printify's undocumented endpoint and the
-    rate from a one-off FX fetch; both are fail-soft, so a plan is always
-    written and :attr:`StartingPricingPlan.complete` says whether it is all
-    real numbers. Shipping comes from the documented catalog. Refuses with
-    ``FileExistsError`` to overwrite a plan.
-    """
     currency = workspace.defaults.etsy.currency
     costs = sources.fetch(offer, currency)
     prices, notes = compute_starting_prices(

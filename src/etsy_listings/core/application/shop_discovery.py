@@ -21,8 +21,6 @@ from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.core.clients.etsy.shops import EtsyShopClient
 from etsy_listings.core.clients.printify.models import Shop
 
-# ------------------------------------------------------------------- Printify
-
 
 @dataclass(frozen=True)
 class ShopSelection:
@@ -50,9 +48,6 @@ def select_shop(shops: Sequence[Shop]) -> ShopSelection:
     if len(shops) == 1:
         return ShopSelection(shop=shops[0])
     return ShopSelection(needs_choice=True)
-
-
-# ----------------------------------------------------------------------- Etsy
 
 
 @dataclass(frozen=True)
@@ -150,8 +145,6 @@ def lookup_etsy_shop(client: EtsyShopClient, name: str) -> ShopLookup:
 
 
 def policy_terms(policy: ReturnPolicy) -> dict[str, Any]:
-    """The three terms a return policy is addressed by in ``shop.yaml``,
-    since Etsy gives the resource no title."""
     return {
         "accepts_returns": bool(policy.accepts_returns),
         "accepts_exchanges": bool(policy.accepts_exchanges),
@@ -172,12 +165,6 @@ class ReturnPolicyOptions:
 def return_policy_options(
     client: EtsyShopClient, shop: EtsyShop, current: dict[str, Any] | None
 ) -> ReturnPolicyOptions:
-    """The shop's return policies, for a caller deciding whether to ask.
-
-    None means listings are drafted without one; exactly one needs no
-    reference at all -- the stages resolve it live the same way. Only two or
-    more make it a question, answered by the policy's *terms*.
-    """
     policies = client.return_policies(shop.shop_id)
     options = ReturnPolicyOptions(policies=(), current=current)
     ordered = sorted(policies, key=lambda policy: not options.is_current(policy))

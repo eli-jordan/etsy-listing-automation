@@ -81,7 +81,6 @@ class WorkerSlot:
         *,
         cache_root: Path,
     ) -> InferenceWorker:
-        """The worker for this engine and installation, replacing any other."""
         selection = (engine_version, installation_id)
         if self.selection != selection:
             if self.worker:
@@ -186,8 +185,6 @@ class Execution:
             )
 
     def _work(self, identity: str, lane: str, job: Job) -> None:
-        """The lane's phase of ``job``: inference on the GPU lane, fitting and
-        publication on the CPU lane; a coverage job only infers."""
         if lane == "gpu" and job.kind == "coverage":
             self.cover(identity)
         elif lane == "gpu":
@@ -333,8 +330,6 @@ class Execution:
     def _predict(
         self, run: _InferenceRun, selected: CropEvidence, role: _Role, crop_path: Path
     ) -> CropEvidence:
-        """Run one model call for ``role`` on the crop; the evidence with its
-        validated prediction, recorded on the job."""
         job = run.job
         identity = job.id
         self.safe(identity, role)
@@ -428,8 +423,6 @@ class Execution:
                 for p in job.snapshot.placements
             )
             allowed = job.snapshot.model_copy(update={"placements": proposed})
-            # A save may have committed some planned masks before the job record.
-            # Accept only those exact bytes, and only with unchanged photo/geometry.
             reconciled = []
             for placement in current.placements:
                 original = next((p for p in job.snapshot.placements if p.id == placement.id), None)
@@ -551,7 +544,6 @@ class Execution:
         )
 
     def _checkpointed_maps(self, job: Job, placement: PlacementInput) -> MaterialMaps | None:
-        """Maps an earlier attempt already fitted and checkpointed, if valid."""
         record = job.cpu_checkpoints.get(placement_key(placement.id))
         if record is None:
             return None
@@ -566,8 +558,6 @@ class Execution:
     def _fit_maps(
         self, job: Job, placement: PlacementInput, base: NDArray[np.uint8], mask: FloatMap
     ) -> MaterialMaps:
-        """Fit the placement from its accepted evidence and write the
-        read-only maps to the job's checkpoint archive."""
         identity = job.id
         value = next(
             v for v in job.evidence if v.id == job.placement_evidence[placement_key(placement.id)]
@@ -676,5 +666,4 @@ class _InferenceRun:
             self.values.append(value)
 
     def replace(self, value: CropEvidence) -> None:
-        """Put ``value`` last, in place of any earlier version of it."""
         self.values = [v for v in self.values if v.id != value.id] + [value]

@@ -1,14 +1,3 @@
-"""Workspace-owned durable preparation queue (ADR-0054).
-
-Async hosts offload synchronous request operations. GPU and CPU work each own a
-single executor lane; installation inspection never runs on their event loop.
-
-A backup's pause (workspace-backup spec, *Pausing jobs*) dispatches nothing:
-queued jobs, and a job waiting for the CPU lane, stay as they are and report
-waiting for backup until resume schedules them again. Each job's turn on a
-lane runs inside its gate ticket, which a backup's wait for quiet counts.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -301,7 +290,6 @@ class Preparations:
         )
 
     def reconcile_saved(self, template: str) -> Job | None:
-        """CPU work only. Missing complete evidence never authorizes inference."""
         with self.calibration.lock(template):
             rebuild = self._planned_rebuild(template)
             if rebuild is None:
@@ -375,14 +363,6 @@ class Preparations:
         return self.store.write(job), True
 
     def cover(self, template: str, limits: PositionLimits) -> Job | None:
-        """Queue background inference so ``template``'s evidence covers every
-        listing position ``limits`` allow (spec *Rendering -> Marigold (option
-        B)*, *Evidence coverage*): the job already doing so, a new one, or
-        None when it is covered, not Marigold, or no worker is installed.
-
-        Callers queue it for an explicit seller action -- saving a position on
-        the template, widening the limits, or saving its geometry -- which
-        ADR-0058 records as authority for this inference (ADR-0054)."""
         with self.calibration.lock(template), self.store.condition:
             planned = self._planned_coverage(template, limits)
             if planned is None or isinstance(planned, Job):
@@ -535,8 +515,6 @@ class Preparations:
                     self._dispatch(job, lane)
 
     def _runnable(self, job: Job, lane: str) -> bool:
-        """Whether idle ``lane`` may start ``job``: queued rebuilds and CPU
-        steps run on the CPU lane, other queued jobs on the GPU lane."""
         if job.id in self._active or job.phase in TERMINAL:
             return False
         cpu_work = (job.kind == "rebuild" and job.phase == "queued") or job.step == "cpu_queued"
@@ -565,8 +543,6 @@ class Preparations:
         self._futures.append(future)
 
     def _run(self, identity: str, lane: str, ticket: Ticket) -> None:
-        """``identity``'s turn on ``lane``, and what it leaves to do, under
-        the gate's ``ticket``."""
         with ticket:
             try:
                 self.execution.run(identity, lane)
@@ -590,17 +566,11 @@ class Preparations:
             self._cover_prepared(job.template)
 
     def waiting_for_backup(self, job: Job) -> bool:
-        """Whether ``job`` is held by a backup's pause (plan decision P4):
-        queued, or waiting for the CPU lane, while the gate is paused.
-        Never stored in the journal."""
         return self.gate.holds(queued=job.phase == "queued" or job.step == "cpu_queued")
 
     def _cover_prepared(self, template: str) -> None:
-        """Queue ``template``'s coverage now its preparation has finished, so
-        a seller's first position does not wait on inference (ADR-0058,
-        amendment *coverage belongs to preparation*). Queued while closing
-        too: the job is durable and runs on the next start. A failure leaves
-        saving a position to queue it."""
+        """Queued while closing too: the job is durable and runs on the next
+        start."""
         settings = self.workspace.settings_if_readable(
             skipping=f"covering prepared template {template!r}"
         )
@@ -632,8 +602,6 @@ class Preparations:
         with self.calibration.lock(template):
             jobs = self.store.jobs()
             current, replacement_order = self._replacement(template)
-            # Completed and superseded jobs cease holding obsolete complete sets.
-            # Retire those references in their authoritative records before deletion.
             with self.store.condition:
                 self._retire_references(template, jobs, replacement_order)
                 jobs = self.store.jobs()
@@ -694,7 +662,6 @@ class Preparations:
     def _remove_work(
         self, template: str, jobs: list[Job], replacement_order: int, referenced_paths: list[Path]
     ) -> list[str]:
-        """Remove retired jobs' work directories, then any no job owns."""
         removed = []
         for job in jobs:
             directory = self.workspace.preparation_work(job.id)
@@ -717,9 +684,6 @@ class Preparations:
 
 @dataclass(frozen=True)
 class _Rebuild:
-    """What a planned CPU rebuild fits: the calibration revision it read, the
-    saved inputs with accepted evidence identity, and that evidence."""
-
     config_revision: str
     inputs: PreparationInputs
     evidence: dict[str, CropEvidence]

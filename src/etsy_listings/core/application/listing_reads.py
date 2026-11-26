@@ -61,8 +61,6 @@ from etsy_listings.core.workspace.workspace import DescriptionResolution, Invali
 
 @dataclass(frozen=True)
 class PricedSize:
-    """One size's resolved price."""
-
     size: str
     amount: Money
 
@@ -124,8 +122,6 @@ class ListingRow:
 
 
 def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) -> ListingView:
-    """Listing ``name`` as the editor reads it. Raises :class:`ListingMissingError`
-    when it has no ``listing.yaml``."""
     if not ListingDocuments(workspace).exists(name):
         raise ListingMissingError(name)
     listing = workspace.load_listing(name)
@@ -143,8 +139,6 @@ def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) ->
             status=workspace_listing_status(
                 workspace, name, live=published, lifecycle=listing.lifecycle, etsy_state=etsy_state
             ),
-            # The table's row gestures, so the editor's action row offers the
-            # same lifecycle actions without deciding them itself.
             gestures=listing_gestures(
                 lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
             ),
@@ -159,22 +153,15 @@ def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) ->
 
 @dataclass(frozen=True)
 class ListingScenes:
-    """What a listing's saved scene previews read from the listing, loaded
-    once: which file each layer prints and where it prints (A35, ADR-0058)."""
-
     artwork: Callable[[str | None], Path | None]
     """:func:`scene_artwork`'s answer."""
     positions: TemplatePositions | None
 
     def boxes(self, template: str) -> LayerBoxes:
-        """The listing's saved boxes for ``template``'s layers -- the preview
-        shows the *saved* position, as the render stage renders it."""
         return layer_boxes(self.positions, template)
 
 
 def listing_scenes(workspace: Workspace, name: str) -> ListingScenes:
-    """Listing ``name`` as *saved*, for its scene previews. Refusals are
-    :func:`scene_artwork`'s."""
     if not ListingDocuments(workspace).exists(name):
         raise ListingMissingError(name)
     listing = workspace.load_listing(name)
@@ -184,16 +171,6 @@ def listing_scenes(workspace: Workspace, name: str) -> ListingScenes:
 
 
 def scene_artwork(workspace: Workspace, name: str) -> Callable[[str | None], Path | None]:
-    """Which file a scene layer depicting a colour prints, in listing
-    ``name`` as *saved* (A35) -- the editor's scene preview, so the editor
-    cannot show one file while Printify prints another.
-
-    The answer is ``None`` -- the layer is left bare rather than failing the
-    picture -- for an empty slot, an unclassified colour, a ref outside its
-    root or a file since deleted: the issues banner already says why, and the
-    rest of the scene is still worth judging. Raises :class:`ListingMissingError`
-    without a ``listing.yaml``, and ``ConfigLoadError`` when it does not load.
-    """
     return listing_scenes(workspace, name).artwork
 
 
@@ -273,8 +250,6 @@ class PhaseTimer:
 def list_listings(
     workspace: Workspace, *, etsy_states: EtsyStates, timer: PhaseTimer | None = None
 ) -> list[ListingRow]:
-    """Every listing, with Etsy asked **once** for the whole table rather
-    than once per row. ``timer``, when given, is told where the time went."""
     timer = timer if timer is not None else PhaseTimer()
     with timer.phase("catalogue"):
         facts = WorkspaceFacts.gather(workspace)
@@ -303,8 +278,6 @@ def listing_row(
     facts: WorkspaceFacts | None = None,
     timer: PhaseTimer | None = None,
 ) -> ListingRow:
-    """One table row, for a caller that already knows the listing's Etsy
-    state -- the table, and a delete answering with the row it left."""
     facts = facts if facts is not None else WorkspaceFacts.gather(workspace)
     timer = timer if timer is not None else PhaseTimer()
     etsy_listing_id, printify_product_id = remote_ids(workspace, name)
@@ -391,9 +364,6 @@ def _etsy_state(etsy_states: EtsyStates, etsy_listing_id: int | None) -> str | N
 
 @dataclass(frozen=True)
 class _ListingContext:
-    """What the caller of :func:`_describe` knows about a listing that its
-    document does not say: where it lives, how it stands, and its remote ids."""
-
     name: str
     listing_dir: Path
     published: bool
@@ -453,8 +423,6 @@ def _check_inputs(
     *,
     name: str,
 ) -> CheckInputs:
-    """``listing``'s check inputs; ``description`` is the one resolution the
-    caller also shows, so its ref is read once."""
     inputs = CheckInputs(
         garment_profile=facts.garment_profile(listing.garment_profile),
         garment_profile_names=facts.garment_profile_names,
@@ -463,8 +431,6 @@ def _check_inputs(
         videos=facts.videos(listing, listing_dir),
         listing_name=name,
     )
-    # Settings are read only for a positioned listing; a broken file becomes
-    # the listing's issue rather than a failed read.
     if not listing.template_positions:
         return inputs
     settings = facts.settings()

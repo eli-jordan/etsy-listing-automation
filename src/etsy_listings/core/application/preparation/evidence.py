@@ -109,7 +109,6 @@ class EvidenceStore(EvidenceReader):
     @staticmethod
     @contextmanager
     def _publisher(directory: Path) -> Iterator[None]:
-        """Mark ``directory`` as being written, for :meth:`publishing`."""
         key = str(directory.resolve()).casefold()
         with _PUBLISHER_LOCK:
             _PUBLISHERS.add(key)

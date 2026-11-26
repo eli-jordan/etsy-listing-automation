@@ -94,8 +94,6 @@ def _drawn_against(
 def _previewable_renderer(
     store: CalibrationStore, name: str, saved: Calibration, draft: EditorDraft
 ) -> MarigoldRenderer:
-    """The draft's Marigold renderer; refuses a draft the saved calibration
-    has moved past, or one whose renderer or inference is not yet saved."""
     config = draft.config
     if not _drawn_against(store, name, saved, draft):
         raise PreparationRequiredError("Calibration changed; refresh the editor preview")
@@ -110,8 +108,6 @@ def _previewable_renderer(
 
 
 def prepared_renderer(saved: AnyTemplate, requested: AnyTemplate) -> MarigoldRenderer:
-    """The renderer of ``requested`` at full size: one with ``saved``'s kind,
-    and Marigold both as asked for and as saved."""
     if requested.kind != saved.kind:
         raise TemplatePreviewKindMismatchError(saved.kind)
     if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
