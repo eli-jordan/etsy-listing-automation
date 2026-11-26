@@ -14,14 +14,10 @@ export interface BatchListingState extends ListingRunState {
 export interface BatchDeployState {
   phase: RunPhase;
   applyStarted: boolean;
-  /** Phase timestamps are copied verbatim from the event log, never generated
-   * while folding, so replay and live delivery produce the same state. */
   phaseTimes: Partial<Record<RunPhase, string>>;
   generatedAt: string | null;
   resultAt: string | null;
-  /** The event order the backend used for the reviewed apply set. A Record's
-   * property order is not enough here: integer-like listing names are sorted
-   * numerically by JavaScript, while the API validates the ordered set. */
+  /** Not `Object.keys(listings)`: JavaScript sorts integer-like names numerically. */
   reviewedListingOrder: string[];
   listings: Record<string, BatchListingState>;
   previewsRendered: Set<string>;
