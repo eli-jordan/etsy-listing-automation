@@ -180,6 +180,8 @@ A comment says what the code cannot. Write one only for:
 
 Say everything else in code: a name, an extracted function or constant, a stronger type, an assertion, a test.
 
+- A function that must run with a lock held is named `*_locked`, never documented "caller holds the lock". `tests/test_lock_naming.py` checks each call is inside a `with` on a lock or condition, or in another `*_locked` function. Comment only a lock order whose reason is not obvious.
+
 - Decision rationale lives in ADRs and [docs/architecture.md](docs/architecture.md). Cite `ADR-NNNN` only where the reader needs the pointer at that spot.
 - Describe the code as it is. History ("used to", "no longer", "for now") and plan, PR, phase, decision or `docs/history/` ids stay out of code.
 - A comment that defends a workaround is a reason to fix the design, not to keep the comment.

@@ -296,9 +296,7 @@ class BatchStore(_Store[Batch]):
         # Lock order: every batch's lock, then the listing write locks, as creating a row
         # takes them; the rows follow only if the body (the move) returns.
         ids = sorted(self._workspace.batch_ids())
-        with ExitStack() as held:
-            for batch_id in ids:
-                held.enter_context(self.lock(batch_id))
+        with self._every_lock(ids):
             yield
             for batch_id in ids:
                 self._change_rows_locked(
@@ -306,6 +304,13 @@ class BatchStore(_Store[Batch]):
                     lambda row: row.name == old and not row.deleted,
                     lambda _: {"name": new},
                 )
+
+    @contextmanager
+    def _every_lock(self, ids: list[str]) -> Iterator[None]:
+        with ExitStack() as held:
+            for batch_id in ids:
+                held.enter_context(self.lock(batch_id))
+            yield
 
     def mark_deployed(self, listing: str) -> None:
         self._each_row(

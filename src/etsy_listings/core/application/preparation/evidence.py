@@ -69,8 +69,7 @@ class EvidenceStore(EvidenceReader):
             checkpoint("predictions_pointer")
             return tuple(retained)
 
-    def rehome(self, old: str, new: str) -> Callable[[CropEvidence], CropEvidence]:
-        """Caller holds both templates' locks."""
+    def rehome_locked(self, old: str, new: str) -> Callable[[CropEvidence], CropEvidence]:
         source = self.workspace.preparation_predictions_dir(old)
         target = self.workspace.preparation_predictions_dir(new)
         prefix = f"{source.relative_to(self.root).as_posix()}/"
