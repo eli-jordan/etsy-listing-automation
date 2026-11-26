@@ -43,7 +43,7 @@ scripts/ agent_lint.py (lint hook) + agent_lint_gate.py and agent_lint_rules.txt
 .githooks/ pre-commit (the lint backstop for every commit)
 ```
 
-Every package's `__init__.py` states what it exports and deliberately withholds. Read that before reaching into a submodule.
+Each package's `__all__` lists its exports, and its `__init__.py` docstring states its purpose and what it deliberately withholds. Read both before reaching into a submodule.
 
 The tool lives here; user data (`shop.yaml`, `designs/`, `listings/`, `mockup-templates/`, `.cache/`) lives in a separate workspace directory found by walking up from cwd for `shop.yaml` (`ADR-0013`). Never write user data into this repo or assume cwd is the workspace.
 
@@ -108,8 +108,8 @@ override that feature's spec where they differ. The frozen documents under
 `docs/history/` are context, not current authority.
 
 Change an unworkable ADR explicitly, in its own documentation commit before
-implementation. Cite `ADR-NNNN` when a choice needs its rationale; keep a
-self-contained comment when it already explains the rule. New feature folders
+implementation. Rationale stays in the ADR or architecture; code cites
+`ADR-NNNN` only where the reader needs the pointer at that spot. New feature folders
 use the date their first document was created; shipped plans stay beside the
 feature with delivery PR links. See the [documentation authority rules](docs/README.md#documentation-authority).
 </important>
@@ -170,6 +170,24 @@ Before merging, run it on GitHub Actions, not locally: once CI is green and the 
 `uv run poe check` fails under 85% **branch** coverage (`fail_under` in `pyproject.toml`); the frontend has the same floor via `npm run test:coverage`. Write the test — never lower the threshold or add `# pragma: no cover` (only genuinely unreachable code like `__main__` guards, already configured). `poe check` runs `npm run format` (writes); CI runs `format:check`. `poe check` skips the frontend gate when `npm` is absent.
 </important>
 
+<important if="you are writing or editing code comments or docstrings">
+
+A comment says what the code cannot. Write one only for:
+
+- an external constraint: Etsy, Printify or library behaviour, the OS, cygwin, a shell or a browser;
+- a hazard: lock or thread ordering, a race, data loss, a security boundary;
+- a non-obvious numeric or geometric convention.
+
+Say everything else in code: a name, an extracted function or constant, a stronger type, an assertion, a test.
+
+- Decision rationale lives in ADRs and [docs/architecture.md](docs/architecture.md). Cite `ADR-NNNN` only where the reader needs the pointer at that spot.
+- Describe the code as it is. History ("used to", "no longer", "for now") and plan, PR, phase, decision or `docs/history/` ids stay out of code.
+- A comment that defends a workaround is a reason to fix the design, not to keep the comment.
+- Consumer-facing text stays, accurate and short: Typer command and option docstrings and `help=` strings (they are `--help`), FastAPI route and model docstrings (they are OpenAPI), lint suppression reasons.
+- In a package `__init__.py`, `__all__` is the export list. The docstring states the package's purpose and what it deliberately withholds, with no hand-kept module index.
+- When you change code, update or delete the comments it touches. A stale comment is a defect.
+</important>
+
 <important if="you are editing code, or the lint hook reports findings after an edit">
 
 [`scripts/agent_lint.py`](scripts/agent_lint.py) runs after every edit and every shell command you run in Claude, Grok or Codex ([static analysis spec](docs/features/static-analysis-20261031/spec.md), S06). After a shell command it checks each source file whose content changed since its last check, so a `sed`, a script or a formatter is checked like an edit; a read-only command (by `scripts/agent_lint_rules.txt`) costs about 0.1s. It applies safe fixes to the changed files, then reports what is left (ruff, complexipy, mypy through a warm dmypy daemon, ESLint); exit 2 means its stderr lists findings you must deal with before moving on, even when they arrive after a shell command rather than an edit. mypy findings appear only once the daemon has finished its first check, about 30s into a session. The `.githooks/pre-commit` hook runs the same checks, except mypy, on what you stage and refuses the commit on a finding: fix it and commit again.
@@ -189,7 +207,7 @@ Before merging, run it on GitHub Actions, not locally: once CI is green and the 
 
 <important if="you are measuring or reducing code size">
 
-Physical line count overstates code here, because this codebase is deliberately heavy on rationale in comments and docstrings. Extracting a shared abstraction is usually LOC-neutral (the props type or protocol costs what the duplication did); judge by whether there is now one place to change the thing.
+Count code, not physical lines: comments and docstrings inflate the line count. Extracting a shared abstraction is usually LOC-neutral (the props type or protocol costs what the duplication did); judge by whether there is now one place to change the thing.
 </important>
 
 <important if="you are editing docs/history/prd.md, docs/history/implementation-plan.md or other docs">
