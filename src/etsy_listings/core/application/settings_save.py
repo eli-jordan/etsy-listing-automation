@@ -29,10 +29,6 @@ class Wakes(Protocol):
 
 
 class CoversPositions(Protocol):
-    """Queues coverage inference for the positioned templates whose evidence
-    misses ``limits``, which widened ``saved``. The host decides when the
-    jobs are queued (the server, after it has answered)."""
-
     def cover_widened(self, saved: PositionLimits, limits: PositionLimits) -> None: ...
 
 
@@ -51,10 +47,6 @@ def save_settings(
     editable: tuple[str, ...] = EDITABLE_KEYS,
     coordinators: SettingsCoordinators | None = None,
 ) -> SettingsView:
-    """Apply ``changes`` as :func:`workspace_settings.edit_settings` does,
-    then set off what they call for; the saved view. Refused with
-    ``SettingsRevisionConflictError`` or ``InvalidSettingsEditError`` before
-    anything is written, and then nothing is told."""
     told = coordinators or SettingsCoordinators()
     before = _saved_limits(workspace, changes) if told.coverage is not None else None
     added = _added_destinations(workspace, changes)
@@ -73,9 +65,6 @@ def check_settings_save(
     changes: Mapping[str, object],
     editable: tuple[str, ...] = EDITABLE_KEYS,
 ) -> None:
-    """What :func:`save_settings` would refuse for the same changes now,
-    writing nothing: for an owner that saves only after a long step, such as
-    backup provisioning's copy."""
     _added_destinations(workspace, changes)
     workspace_settings.check_settings_edit(
         workspace, expected_revision=expected_revision, changes=changes, editable=editable
@@ -102,8 +91,6 @@ def _is_backup(key: str) -> bool:
 
 
 def _saved_limits(workspace: Workspace, changes: Mapping[str, object]) -> PositionLimits | None:
-    """The limits as saved before this edit, when it edits them; None when
-    it does not, or the file does not load (the edit itself refuses that)."""
     if TEMPLATE_POSITIONS not in changes:
         return None
     saved = workspace.settings_if_readable(skipping="comparing saved position limits")
@@ -125,8 +112,6 @@ def _added_destinations(workspace: Workspace, changes: Mapping[str, object]) -> 
 
 
 def _edited_destinations(changes: Mapping[str, object]) -> Sequence[object] | None:
-    """The destinations list this save writes: Setup's own key, or the one
-    in a whole new ``backup:`` block."""
     edited = changes.get(BACKUP_DESTINATIONS)
     block = changes.get(BACKUP)
     if edited is None and isinstance(block, Mapping):
@@ -148,8 +133,6 @@ def _refuse_overlapping(
 
 
 def _refuse_unreachable(destinations: Sequence[Path]) -> None:
-    """``create_destination``'s own refusal, made before anything is
-    written, naming the field the form shows it under."""
     for path in destinations:
         _refuse_invalid_folder(path)
     missing = [path for path in destinations if not path.is_dir() and not path.parent.is_dir()]
@@ -173,7 +156,5 @@ def _refuse_invalid_folder(path: Path) -> None:
 
 
 def _create_folders(destinations: Sequence[Path]) -> None:
-    """Through the copy's own ``create_destination``, the one place a
-    destination folder is made."""
     for path in destinations:
         create_destination(path)

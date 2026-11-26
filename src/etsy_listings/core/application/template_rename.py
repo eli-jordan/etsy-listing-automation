@@ -45,9 +45,6 @@ class RenameHosts:
 
 @dataclass(frozen=True)
 class TemplateRename:
-    """What followed a rename, as workspace-relative files. ``unresolved`` may
-    still name the old template, and the seller has to look at them."""
-
     updated: tuple[str, ...] = ()
     unresolved: tuple[str, ...] = ()
 
@@ -77,8 +74,8 @@ def rename_template(workspace: Workspace, old: str, new: str, hosts: RenameHosts
 
 
 def _move(workspace: Workspace, old: str, new: str, destination: Path) -> None:
-    """Under both templates' locks. A name Windows will not take surfaces only
-    here, as an ``OSError`` that is not about permissions."""
+    """Caller holds both templates' locks. A name Windows refuses surfaces
+    only here, as a non-permission ``OSError``."""
     require_template(workspace, old)
     if destination.exists():
         raise TemplateNameTakenError(new)
@@ -112,8 +109,7 @@ def _follow_garment_profiles(workspace: Workspace, old: str, new: str, outcome: 
 
 
 def _follow_file(workspace: Workspace, path: Path, change: Change, outcome: _Outcome) -> None:
-    """``path``'s references, edited in place (ADR-0055). The caller holds
-    whatever lock guards it."""
+    """ADR-0055. The caller holds whatever lock guards ``path``."""
     relative = workspace.relative_path(path)
     try:
         document = yaml.safe_load(read_bytes_retrying(path))
@@ -144,8 +140,7 @@ def _follow_listings(workspace: Workspace, old: str, new: str, outcome: _Outcome
 def _follow_listing(
     workspace: Workspace, documents: ListingDocuments, listing: str, old: str, new: str
 ) -> bool:
-    """Under the listing's lock; whether ``listing.yaml`` changed. A listing
-    awaiting retraction may have only a lockfile, which follows all the same."""
+    """Caller holds the listing's lock. A listing awaiting retraction may be only a lockfile."""
     written = None
     if documents.exists(listing):
         written = documents.edit(listing, lambda document: rename_template_refs(document, old, new))

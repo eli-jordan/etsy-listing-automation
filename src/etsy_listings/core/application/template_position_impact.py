@@ -38,8 +38,6 @@ class LimitsImpact:
 
 
 def candidate_limits(limits: Mapping[str, object]) -> TemplatePositionLimits:
-    """``limits`` validated as the save would validate them, refused naming
-    the same ``template_positions.*`` keys."""
     try:
         return Settings.model_validate({"template_positions": dict(limits)}).template_positions
     except ValidationError as exc:
@@ -49,8 +47,6 @@ def candidate_limits(limits: Mapping[str, object]) -> TemplatePositionLimits:
 def template_position_impact(
     workspace: Workspace, limits: TemplatePositionLimits
 ) -> LimitsImpact | SettingsProblem:
-    """Who ``limits`` would block, and which templates would need inference, or
-    why that cannot be said: the saved ``settings.yaml`` they widen does not load."""
     settings = workspace.settings_or_problem()
     if isinstance(settings, SettingsProblem):
         return settings

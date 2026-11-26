@@ -74,8 +74,6 @@ class SettingsView:
 
 
 def default_weights() -> dict[str, int]:
-    """``MarketWeights``' defaults as the page's percentages: what Reset
-    writes. They already total 100; ``int`` only drops the float type."""
     defaults = MarketWeights()
     return {metric: int(defaults.of(metric)) for metric in METRICS}
 
@@ -93,13 +91,7 @@ def edit_settings(
     changes: Mapping[str, object],
     editable: tuple[str, ...] = EDITABLE_KEYS,
 ) -> SettingsView:
-    """Apply ``changes`` (dotted key to value) if ``settings.yaml`` is still
-    at ``expected_revision``. ``editable`` widens what may change for an
-    owner other than the Admin page, such as backup set-up.
-
-    Refuses with :class:`SettingsRevisionConflictError` or
-    :class:`InvalidSettingsEditError`, writing nothing either way.
-    """
+    """``editable`` widens what may change, for an owner other than the Admin page."""
     _refuse_shape(changes, editable)
     path = workspace.settings_file()
     adopted: list[Settings] = []
@@ -124,10 +116,6 @@ def check_settings_edit(
     changes: Mapping[str, object],
     editable: tuple[str, ...] = EDITABLE_KEYS,
 ) -> None:
-    """What :func:`edit_settings` would refuse for the same edit now,
-    refused with the same errors, writing nothing: for an owner that saves
-    only after a long step, such as backup provisioning's copy. The save
-    still checks the revision again."""
     _refuse_shape(changes, editable)
     path = workspace.settings_file()
     source, revision = read_revisioned(path, absent_ok=True)
@@ -172,11 +160,7 @@ _SEQUENCE_KEYS: dict[tuple[str, ...], str] = {
 
 
 def _leaf_changes(changes: Mapping[str, object], original: Settings) -> dict[str, object]:
-    """``changes`` with the limits section split into the leaves it changes.
-
-    Every other key is written whole, as before. A leaf the file does not
-    hold yet is unknown here and written, so validation can name it.
-    """
+    """A limits leaf the file does not hold yet is written, so validation can name it."""
     result = {key: value for key, value in changes.items() if key != TEMPLATE_POSITIONS}
     section = changes.get(TEMPLATE_POSITIONS)
     if isinstance(section, Mapping):
@@ -241,9 +225,7 @@ def _retain_row(
 
 
 def _percentage_problem(weights: object) -> str | None:
-    """Why ``weights`` is not the page's six whole percentages totalling 100.
-    Negatives and an all-zero total are left to ``MarketWeights``, which
-    names the metric, so a hand edit and a page edit read the same."""
+    """Negatives and an all-zero total are left to ``MarketWeights``, which names the metric."""
     if not isinstance(weights, Mapping) or set(weights) != set(METRICS):
         return f"give a percentage for each of {', '.join(METRICS)}, and nothing else"
     values = list(weights.values())
@@ -267,9 +249,6 @@ def _document(path: Path, source: bytes) -> dict[str, Any]:
 
 
 def _validated(document: dict[str, Any]) -> Settings:
-    """``document`` as ``Settings``, or refused naming each field. An invalid
-    hand edit must be corrected in the file, never repaired implicitly by a
-    page patch (Admin plan, config-validation rule)."""
     try:
         return Settings.model_validate(document)
     except ValidationError as exc:
