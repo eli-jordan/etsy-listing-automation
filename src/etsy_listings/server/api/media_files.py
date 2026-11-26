@@ -142,18 +142,15 @@ def _existing(path: Path, name: str) -> Path:
 
 
 def _thumbnail(path: Path) -> Response:
-    """A picture to pick an image by. A video answers ``415``: the locator
-    draws its own poster from the first frame with a ``<video>`` element, and
-    a still would be a second rendition of the same frame to keep in step."""
+    """A picture to pick an image by; a video answers ``415`` because the
+    locator draws its own poster with ``<video>``."""
     if media_kind(path.name) == "video":
         raise HTTPException(status_code=415, detail="a video has no thumbnail; use /file")
     return thumbnail_response(path)
 
 
 def _file(path: Path) -> FileResponse:
-    """The file as-is, through `FileResponse` so a ``Range`` request is
-    answered ``206`` -- which is how ``<video>`` seeks. ``no-cache`` means
-    revalidate, so a replaced file shows without a hard refresh."""
+    """The file as-is; `FileResponse` answers ``Range`` with ``206`` for ``<video>`` seeking."""
     return FileResponse(
         path,
         media_type=_MEDIA_TYPES[path.suffix.lower()],
