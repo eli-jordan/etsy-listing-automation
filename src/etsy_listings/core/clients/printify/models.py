@@ -5,7 +5,11 @@ Every model ignores keys it does not name: Printify adds fields without warning.
 
 from __future__ import annotations
 
+from typing import NewType
+
 from pydantic import BaseModel, ConfigDict, model_validator
+
+UsdCents = NewType("UsdCents", int)
 
 
 class Blueprint(BaseModel):
@@ -94,8 +98,8 @@ class ShippingCost(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     currency: str
-    cost: int
-    """US cents, as Printify sends it: a raw catalog figure, not a workspace-currency ``Money``."""
+    cost: UsdCents
+    """A raw catalog figure, not a workspace-currency ``Money``."""
 
 
 class ShippingProfile(BaseModel):
@@ -111,7 +115,7 @@ class ShippingRates(BaseModel):
 
     profiles: tuple[ShippingProfile, ...]
 
-    def first_item_cost_cents(self, variant_id: int) -> int | None:
+    def first_item_cost_cents(self, variant_id: int) -> UsdCents | None:
         for profile in self.profiles:
             if variant_id in profile.variant_ids:
                 return profile.first_item.cost
@@ -172,9 +176,9 @@ class ProductVariant(BaseModel):
     id: int
     price: int
     is_enabled: bool = False
-    cost: int = 0
-    """Printify's per-variant manufacturing cost in US cents; read only, never compared. The publish
-    stage checks the retail price clears it (ADR-0020)."""
+    cost: UsdCents = UsdCents(0)
+    """Printify's manufacturing cost; read only, never compared. The publish stage checks the retail
+    price clears it (ADR-0020)."""
     is_available: bool = True
 
 
