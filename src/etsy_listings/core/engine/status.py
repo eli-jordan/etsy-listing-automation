@@ -95,17 +95,10 @@ def edited_since_apply(listing_file: Path, lock_file: Path) -> bool:
 class StatusInputs:
     """The facts a listing's badge is decided from (:func:`listing_status`).
 
-    ``lifecycle`` / ``etsy_state`` / ``last_applied_lifecycle`` are optional
-    so the original four-state table still answers from the two facts it
-    always had. When they *are* passed, delete/retire win over
-    ``live``/``dirty``: calling a paused listing ``live`` would lie.
-
-    ``incomplete`` is ADR-0037's marker -- a stage raised mid-``apply`` and left
-    the lockfile recording only what ran before it. A per-stage write makes
-    ``state.lock.json`` newer than ``listing.yaml`` partway through that
-    failed run, so ``edited`` alone would read the listing as clean. The
-    marker is folded into the same branch ``edited`` already decides: it
-    invents no status of its own, and delete/retire still win over both.
+    A ``lifecycle`` verb or a paused ``etsy_state`` wins over ``live``/``dirty``:
+    calling a paused listing ``live`` would lie. ``incomplete`` (ADR-0037) reads
+    like ``edited``, because a per-stage lockfile write leaves the lockfile
+    newer than ``listing.yaml`` partway through a failed apply.
     """
 
     applied: bool
