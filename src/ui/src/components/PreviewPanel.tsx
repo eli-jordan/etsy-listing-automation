@@ -13,8 +13,7 @@ import { previewProgress, type PreviewResult } from "./previewProgress";
 type PreviewBody = Parameters<typeof renderPreview>[1];
 
 export interface PreviewJob {
-  /** Stable across renders; also the lightbox's key. A colour name for a
-   * colour matrix, the template name for the kinds with one output. */
+  /** The colour for a colour matrix, else the template name; the lightbox keys on it. */
   id: string;
   label: string;
   body: PreviewBody;
@@ -31,9 +30,6 @@ interface Props {
   jobs: PreviewJob[];
   design: string;
   active: boolean;
-  /** Colour-matrix's "Approve & mark calibrated", which is a save. Omitted by
-   * the kinds whose only save is the header's -- there is nothing extra to
-   * approve when the tab shows one image. */
   onApprove?: () => void;
 }
 
@@ -59,13 +55,12 @@ function withFailure(current: PreviewResult | null, key: string) {
   return { ...current, failed: current.failed + 1 };
 }
 
-/** Renders a request's jobs one at a time, reporting each outcome. The
- * returned function cancels: nothing is reported after it, and a render that
- * lands afterwards is revoked rather than handed over. */
+type Cancel = () => void;
+
 function runRequest(
   request: Request,
   report: { onRendered: (id: string, url: string) => void; onFailed: () => void },
-): () => void {
+): Cancel {
   let cancelled = false;
 
   void (async () => {
@@ -184,9 +179,7 @@ export function PreviewPanel({
   const urlsRef = useRef<string[]>([]);
   const verb = useIsPhone() ? "Tap" : "Click";
 
-  // Every blob this panel has made. Revoked wholesale when a run is replaced
-  // or the tab goes away -- never per tile, which would pull an image out from
-  // under one still on screen.
+  // Never per tile: that would pull an image out from under one still on screen.
   const revokeAll = useCallback(() => {
     for (const url of urlsRef.current) URL.revokeObjectURL(url);
     urlsRef.current = [];
