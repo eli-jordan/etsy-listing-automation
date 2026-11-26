@@ -82,9 +82,7 @@ class TemplatePhoto(BaseModel):
     ``Workspace.scene_photo`` -- the same rule the renderer uses, including the
     trailing-segment fallback for a vendor pack delivered as
     ``{template}-{colour}.png``. The listings editor shows it under its preview
-    so the user knows which file to go and edit, and it used to *derive* that
-    caption from ADR-0004's convention in TypeScript, which named a file that was
-    not there for exactly the pack the fallback exists for.
+    so the user knows which file to go and edit.
 
     ``colour`` is ``None`` for a ``multiple``/``single`` template's fixed
     ``scene.png``: there is no per-colour name to derive one from.

@@ -168,25 +168,9 @@ def confirm(message: str, *, default: bool = False, host: PromptHost | None = No
     return typed.startswith("y")
 
 
-# --------------------------------------------------------------- asking, for real
-#
-# The three functions above answer ``None`` for "the user cancelled", which is
-# the honest shape for a backend: a prompt that was declined has no answer, and
-# a caller might legitimately carry on without one.
-#
-# No caller does. Both wizards treat a cancelled question as the end of the
-# run, and each was writing that out per question -- fourteen `if answer is
-# None: raise _cancelled()` between them, plus a `_cancelled()` defined twice
-# with two different behaviours (one printed "cancelled", the other exited
-# silently). A rule applied at every call site is a rule that will eventually
-# be missed at one, and a missed one here means a wizard that reads a `None`
-# as an answer and writes it to a file.
-#
-# So cancellation is an exception, raised once, caught once in `cli/app.py`.
-
-
 class Cancelled(Exception):  # noqa: N818 -- a decision, not an error condition
-    ...
+    """The user declined to answer: raised by ``ask_*`` and ``pick``, caught
+    once in ``cli/app.py``."""
 
 
 def ask_choice(
@@ -206,13 +190,7 @@ def pick[T](
     marker_hint: str = "",
     host: PromptHost | None = None,
 ) -> T:
-    """Choose one of ``options``, offered by the label ``label`` gives it.
-
-    The dance every picker was writing out: build a ``{label: option}`` dict,
-    offer its keys, map the answer back. Doing it here means the caller says
-    what it wants chosen rather than how choosing works -- and ``options``
-    arrives in the order it should be offered, which every backend preserves.
-    """
+    """Choose one of ``options``, offered by the label ``label`` gives it."""
     by_label = {label(option): option for option in options}
     return by_label[ask_choice(message, list(by_label), marker_hint=marker_hint, host=host)]
 

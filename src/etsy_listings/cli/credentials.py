@@ -1,27 +1,9 @@
 """Capturing one credential at the terminal: what to say, how to ask, and how
-to refuse.
+to refuse. Where a credential lives, how it is proved and how it is stored are
+core's (:mod:`etsy_listings.core.application.credentials`).
 
-``setup`` and ``auth`` both need a Printify token before they can do anything,
-and both used to write the step out longhand -- the same four lines of blurb,
-the same URL, the same ``prompts.ask_text`` label, the same ``.shops()``
-verification, and a refusal differing from the other by one word. The Etsy key
-pair and the Anthropic key are the same shape again.
-
-Where a credential already lives, how it is proved and how it is stored are
-core's (:mod:`etsy_listings.core.application.credentials`). What remains here
-is the terminal half of a step:
-
-1. **What to say before asking.** Where to get one, and what it needs to be
-   able to do.
-2. **How to ask.** One prompt per variable; a key *pair* is two prompts and
-   one step.
-3. **What to say when it works.** The proof, in one line.
-4. **What to do when it does not.** Refuse, naming the command to re-run, and
-   write nothing.
-
-**Capturing is not storing** -- see core's module for why ``auth`` stores as
-it goes and ``setup`` only at the end. :func:`capture` never writes;
-:func:`store` is the separate call each wizard makes when it is right to.
+:func:`capture` never writes; :func:`store` is the separate call each wizard
+makes when it is right to.
 """
 
 from __future__ import annotations
@@ -210,11 +192,7 @@ def store[T](root: Path, prompt: CredentialPrompt, capture: Capture[T]) -> None:
 
 
 def refuse(message: str, *, command: str) -> NoReturn:
-    """Report a credential that did not verify, and stop having written nothing.
-
-    The sentence differed by one word between the two commands, which is one
-    word of difference and two places to update when the advice changes.
-    """
+    """Report a credential that did not verify, and stop having written nothing."""
     typer.echo("", err=True)
     typer.echo(message, err=True)
     typer.echo(f"Nothing was written -- re-run `{command}` with a working credential.", err=True)

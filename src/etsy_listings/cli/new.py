@@ -86,11 +86,8 @@ def _report_print_area_choice(variant_set: VariantSet) -> None:
 def _pick_design(workspace: Workspace) -> str:
     """Pick the design from what is in ``designs/``, newest first.
 
-    ``new`` is a wizard, and the design was the one answer it still demanded
-    up front on the command line -- which meant knowing the exact stem of a
-    file you had just exported. Everything the picker needs is on disk, so it
-    asks like it asks everything else. The argument still works, for scripting
-    and for naming artwork that does not exist yet.
+    The ``new`` argument still works, for scripting and for naming artwork
+    that does not exist yet.
     """
     choices = build_design_choices(workspace.design_files(), set(workspace.listing_names()))
     if not choices:
@@ -107,13 +104,6 @@ def _pick_design(workspace: Workspace) -> str:
 
 
 def _pick_template(workspace: Workspace) -> str:
-    """Pick from the templates that exist, rather than typing a name.
-
-    A typo used to be accepted silently and produce a listing that failed
-    much later at render time, with nothing pointing back at `new`. Reading
-    the template is not optional anyway -- its kind decides the shape of a
-    valid `media` entry -- so it may as well be picked from the list.
-    """
     names = workspace.template_names()
     if not names:
         typer.echo(

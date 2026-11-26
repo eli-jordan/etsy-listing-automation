@@ -80,10 +80,6 @@ def _root_callback() -> None:
     and patches the resulting Etsy listing's copy and media. Idempotent:
     re-running against unchanged inputs makes no remote changes.
     """
-    # A no-op callback keeps `plan` addressed as a subcommand (`etsy-listings
-    # plan...`) -- Typer otherwise collapses a single-command app so its
-    # command name is invisible, which would silently change the CLI surface
-    # the moment a second command is added.
 
 
 SWATCH_GLYPH = "██"
@@ -174,15 +170,7 @@ def _exit_for(report: RunReport) -> None:
 
 @contextmanager
 def _wizard() -> Iterator[None]:
-    """Run an interactive command, and leave quietly if the user does.
-
-    Ctrl-C out of a picker is an ordinary way to abandon a wizard, not a
-    crash, so it earns a line and a non-zero exit rather than a traceback.
-    Caught here because it is the same answer for both wizards, and because
-    every question inside them used to check for it individually -- fourteen
-    checks, and two `_cancelled()` helpers that disagreed about whether to
-    print anything.
-    """
+    """Run an interactive command, and leave quietly if the user does."""
     try:
         yield
     except prompts.Cancelled as exc:

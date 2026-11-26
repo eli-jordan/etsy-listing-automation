@@ -114,12 +114,7 @@ def _actions_suffix(count: int) -> str:
 
 
 def _format_actions(stage_plan: StagePlan) -> list[str]:
-    """One block per action: what it does, what it reads, what it writes.
-
-    ``plan`` answering only "the render stage will run" left the obvious next
-    question -- over which scenes, from which files, onto which files -- to be
-    answered by reading the config by hand.
-    """
+    """One block per action: what it does, what it reads, what it writes."""
     return [line for action in stage_plan.actions for line in _action_lines(action)]
 
 

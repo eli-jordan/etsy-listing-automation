@@ -22,14 +22,7 @@ MARKER_WIDTH = 2
 
 @dataclass(frozen=True)
 class Choice[T]:
-    """One row of a picker: the thing itself, and the text offered for it.
-
-    Three of these existed -- ``BlueprintChoice``, ``DesignChoice``,
-    ``PricingPlanChoice`` -- each holding a domain object, a flag, and a
-    rendered label, and each with its own builder doing the same three steps.
-    The picker only ever reads ``label`` (to offer it) and ``value`` (to act on
-    the answer), so the per-type fields were paid for and never spent.
-    """
+    """One row of a picker: the thing itself, and the text offered for it."""
 
     value: T
     label: str
@@ -87,17 +80,6 @@ def build_blueprint_choices(
         label=lambda b: f"{b.brand.ljust(brand_width)}  {b.model.ljust(model_width)}  {b.title}",
         marker=marker,
     )
-
-
-# ----------------------------------------------------------------------
-# The design picker's rows.
-#
-# `new` is a wizard, so the design it builds a listing for is picked from
-# what is on disk rather than typed -- the same reasoning that moved the
-# mockup template off a typed name. Ordering is by modification time,
-# newest first: artwork is made minutes before the listing that ships it, so
-# the design you want is nearly always the one you just saved.
-# ----------------------------------------------------------------------
 
 
 def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Choice[Path]]:
