@@ -218,6 +218,12 @@ def ask_confirm(message: str, *, default: bool = False, host: PromptHost | None 
     return answer
 
 
+FZF_NO_MATCH = 1
+FZF_INTERRUPTED = 130
+FZF_DECLINED = frozenset({FZF_NO_MATCH, FZF_INTERRUPTED})
+"""fzf's exit statuses that mean "no answer"; any other non-zero one is an error."""
+
+
 def _choose_with_fzf(
     host: PromptHost, command: list[str], message: str, rows: list[str]
 ) -> str | None:
@@ -246,9 +252,9 @@ def _choose_with_fzf(
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise _FzfFailedError(f"could not run fzf ({exc})") from exc
-    if result.returncode in {1, 130}:  # 1 = no match, 130 = cancelled
+    if result.returncode in FZF_DECLINED:
         return None
-    if result.returncode != 0:  # 2 = error, and anything else is one too
+    if result.returncode != 0:
         raise _FzfFailedError(f"fzf exited with status {result.returncode}")
     picked = result.stdout.strip("\n")
     return picked or None

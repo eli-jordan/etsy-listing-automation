@@ -89,30 +89,15 @@ SWATCH_FALLBACK = "##"
 def _swatch_glyph() -> str | None:
     """The block to print per colour, or ``None`` when swatches are off.
 
-    A swatch carries its meaning entirely in its colour, so it is only worth
-    printing where it will actually be coloured. Three things can turn it off
-    or change it:
-
-    - ``NO_COLOR``, the cross-tool convention, suppresses it outright.
-    - A non-terminal stdout suppresses it: a redirected run would otherwise
-      collect a column of identical, meaningless blocks. ``FORCE_COLOR``
-      overrides that, which is not just symmetry -- a cygwin pty is a named
-      pipe, and native-Windows Python reports ``isatty()`` false inside one
-      even though the terminal on the other end renders colour perfectly.
-    - A stdout that cannot encode the block glyph (a redirected stdout on
-      Windows is cp1252, which cannot -- it used to abort ``apply`` with a
-      ``UnicodeEncodeError``) falls back to ASCII rather than losing the
-      colour, which is the part that carries the information.
+    ``FORCE_COLOR`` overrides a non-terminal stdout because a cygwin pty is a
+    named pipe: native-Windows Python reports ``isatty()`` false inside one
+    even though the terminal on the other end renders colour.
     """
     if os.environ.get("NO_COLOR"):
         return None
     if not (os.environ.get("FORCE_COLOR") or sys.stdout.isatty()):
         return None
-    try:
-        SWATCH_GLYPH.encode(sys.stdout.encoding or "utf-8")
-    except (UnicodeEncodeError, LookupError):
-        return SWATCH_FALLBACK
-    return SWATCH_GLYPH
+    return terminal.choose(SWATCH_GLYPH, SWATCH_FALLBACK)
 
 
 def _echo_event(event: Event) -> None:
