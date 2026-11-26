@@ -112,9 +112,7 @@ replaced it."""
 
 
 def _matches(path: Path, text: str) -> bool:
-    """Whether ``path`` holds ``text``, reading line endings the way a seller
-    means them: a prompt an editor saved with CRLF says the same thing. A
-    file that is not UTF-8 is not the packaged default, whatever it says."""
+    """Whether ``path`` holds ``text``, CRLF or not; a non-UTF-8 file never does."""
     try:
         return path.read_text(encoding="utf-8") == text
     except UnicodeDecodeError:
@@ -122,17 +120,9 @@ def _matches(path: Path, text: str) -> bool:
 
 
 def sync_prompt(path: Path, text: str, *, replace: bool) -> PromptSync:
-    """Bring one prompt file into line with its packaged default ``text`` --
-    as far as the seller has allowed (features/market-seo-20260924/spec.md, *Prompts and
-    `setup --replace-prompts`*; ADR-0044).
-
-    A missing file is seeded ( :func:`seed_prompt`). An existing file equal to
-    ``text`` is left alone either way: replacing it would change nothing, and
-    its ``.bak`` would overwrite the one holding the seller's last real edit.
-    An existing file that differs is left byte for byte unless ``replace``;
-    then it is moved to ``<name>.md.bak`` -- replacing any older backup,
-    which the spec settles -- and ``text`` written in its place.
-    """
+    """Bring one prompt file into line with its packaged default ``text``, as
+    far as ``replace`` allows (ADR-0044). A file already equal to ``text`` is
+    never replaced, so its ``.bak`` keeps the seller's last real edit."""
     if seed_prompt(path, text).created:
         return "created"
     if _matches(path, text):

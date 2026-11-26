@@ -89,12 +89,8 @@ class ProposalValidationError(OutputValidationError): ...
 
 
 def _normalize_text(value: str) -> str:
-    """Trim, drop one wrapping pair of matching quote characters, and
-    collapse interior whitespace runs (including newlines a model sometimes
-    inserts mid-sentence) to a single space. Applied only to the short,
-    single-line fields (titles, tags, leads, rationale phrase/reason,
-    warnings) -- never to ``observed_text``, whose own line breaks are part
-    of what it is disclosing."""
+    """Trim, drop one wrapping pair of matching quotes, and collapse
+    whitespace runs, newlines included, to one space."""
     trimmed = value.strip()
     if len(trimmed) >= _QUOTE_PAIR_LENGTH and _WRAPPING_QUOTE_PAIRS.get(trimmed[0]) == trimmed[-1]:
         trimmed = trimmed[1:-1].strip()
@@ -120,11 +116,7 @@ def _normalize_rationale_item(item: Any) -> Any:
 
 def normalize_raw_proposal(raw: Mapping[str, Any]) -> dict[str, Any]:
     """A new dict with harmless formatting fixed; ``raw`` itself is untouched.
-
-    Never raises, and never changes list lengths or enum-like values --
-    anything that needs a structural decision is hard validation's job, not
-    this pass's.
-    """
+    Never raises, and leaves list lengths and enum-like values to validation."""
     normalized: dict[str, Any] = dict(raw)
     for field_name in ("titles", "tags", "description_leads", "warnings"):
         normalized[field_name] = _normalize_string_list(normalized.get(field_name))
@@ -252,7 +244,6 @@ def _entry_affiliations(field_name: str, values: list[Any]) -> list[str]:
 
 
 def _tag_affiliations(tags: list[Any]) -> list[str]:
-    """One reason for every tag hit together: tags are words already."""
     tag_hits: set[str] = set()
     for item in tags:
         if isinstance(item, str):

@@ -85,9 +85,7 @@ _QUOTA_MARKERS: tuple[str, ...] = (
     "billing",
     "usage limit",
     "credit balance",
-    # Claude Code's subscription-window sentences. They do not say "usage
-    # limit" or "rate limit" -- "You've hit your weekly limit" is the one a
-    # spent Claude subscription actually prints.
+    # Claude Code's subscription limits ("You've hit your weekly limit").
     "weekly limit",
     "session limit",
     "spend limit",
@@ -155,20 +153,9 @@ width of that one unbreakable string and paints over the brief."""
 def classify_process_failure(
     provider: str, *, returncode: int | None, stdout: str, stderr: str
 ) -> ProviderUnavailableError | ProviderGenerationError:
-    """Sort one nonzero-exit CLI invocation into the two failure categories
-    the settled plan distinguishes: a recognised availability failure (falls
-    through to the next provider), or anything else (surfaces as "Try
-    again"). Never raises; the caller decides whether/when to raise the
-    result.
-
-    The text classified -- and the text the seller is shown -- is the CLI's
-    own sentence, not its raw stdout. Claude's ``--output-format json``
-    exits 1 with a result envelope whose ``result`` is that sentence
-    ("You've hit your weekly limit · resets …") and whose other fields are
-    telemetry. Codex prints a transcript (banner, session id, the echoed
-    prompt) and then the failure as an ``ERROR:`` line; that line is the
-    sentence, and a word in the prompt is not.
-    """
+    """Sort one failed CLI invocation into a recognised availability failure
+    (the next provider is tried) or anything else ("Try again"), judged on the
+    CLI's own sentence rather than its raw output. Returns, never raises."""
     shown, status, model_missing = _seller_text(stdout, stderr)
     shown = _clip(shown)
     if (
@@ -203,8 +190,7 @@ def _envelope_text(envelope: dict[str, Any], primary: str) -> tuple[str, int | N
     sentence = _sentence(envelope)
     status = _api_status(envelope)
     error = envelope.get("error")
-    # Only the vendor's error object is trusted. Generated text and
-    # unrelated telemetry may legitimately mention this code.
+    # Only the vendor's error object: generated text may mention this code.
     model_missing = isinstance(error, dict) and any(
         error.get(key) == "model_not_found" for key in ("type", "code")
     )
@@ -219,12 +205,7 @@ def _envelope_text(envelope: dict[str, Any], primary: str) -> tuple[str, int | N
 
 def _failure_lines(text: str) -> str | None:
     """The ``ERROR:`` lines in a CLI transcript, in order, duplicates dropped.
-
-    Codex exits 1 with the whole turn on stderr: a banner, the session id,
-    the prompt it was given, then ``ERROR: You've hit your usage limit. …``
-    twice. The line is the failure. Anything above it, including a prompt
-    that happens to contain the word "quota", is not.
-    """
+    Codex exits 1 with its whole turn, echoed prompt included, on stderr."""
     seen: list[str] = []
     for raw in text.splitlines():
         line = raw.strip()
@@ -242,12 +223,8 @@ _MIN_JSONL_LINES = 2  # one line is a single object, which _parse_object already
 
 
 def _envelope(text: str) -> dict[str, Any] | None:
-    """One JSON object, or the last JSONL object that carries a sentence.
-
-    Mixed prose is not an envelope: one log line beside a JSON object must
-    stay the log line. A JSONL stream is an envelope only when every
-    non-empty line is itself an object.
-    """
+    """One JSON object, or the last JSONL object that carries a sentence;
+    ``None`` when any line is not an object."""
     whole = _parse_object(text)
     if whole is not None:
         return whole
