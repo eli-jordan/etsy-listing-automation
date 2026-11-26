@@ -7,6 +7,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 
 from etsy_listings.core.application import credentials, workspace_settings
@@ -34,9 +35,8 @@ class BackupOffError(ConflictError):
 
 
 class RepositoryNotEmptyError(ConflictError):
-    """A new backup storage folder that already holds files: restic would
-    put a repository beside them, and a later restore or copy would treat
-    them as part of it."""
+    """restic would put a repository beside the files already there, and a
+    later restore or copy would treat them as its own."""
 
 
 LIVE_WORKSPACE = "That's your live workspace. Choose a new, empty folder."
@@ -62,21 +62,23 @@ def overlaps(first: Path, second: Path) -> bool:
     return inside(first, second) or inside(second, first)
 
 
+def seller_today(now: datetime) -> date:
+    return now.astimezone().date()
+
+
 def holds_files(folder: Path) -> bool:
     return folder.exists() and (not folder.is_dir() or any(folder.iterdir()))
 
 
 def has_repository(folder: Path) -> bool:
-    """Whether ``folder`` holds restic's ``config``, so a repository is
-    present. Runs no restic, so the coordinator asks it on every status read."""
+    """Whether ``folder`` holds restic's ``config``. Runs no restic."""
     return (folder / "config").is_file()
 
 
 def check_backup_paths(
     workspace: Workspace, repository: Path | None, destinations: Sequence[Path]
 ) -> None:
-    """Keep the backup output outside the workspace and each other. A
-    relative destination is left to the copy, which reports it unreachable."""
+    """Keep the backup output outside the workspace and each other."""
     if repository is not None and not repository.is_absolute():
         raise RefusedError(f"{repository} is not a full backup storage folder path.")
     folders = destinations if repository is None else (repository, *destinations)
@@ -153,8 +155,6 @@ class ConfiguredBackup:
         return self.store.load(self.storage)
 
     def check_new_storage(self, password: str) -> None:
-        """May the storage folder become a new repository with ``password``?
-        Its separation was checked when this value was built."""
         check_new_storage(self.storage, password)
 
     def check_restore_target(self, target: Path, *, now: BackupSettings | None = None) -> Path:
@@ -189,11 +189,8 @@ class ConfiguredBackup:
         self, *, folder: Path | None = None, password: str | None = None, install: bool = False
     ) -> Repository:
         """The repository in the storage folder, or in ``folder`` (a
-        connect's staging copy), opened with the stored password or
-        ``password``. ``install`` downloads the pinned restic when none is
-        found; without it, a missing restic is
-        :class:`ResticNotInstalledError`. Whether a repository is there is
-        restic's to say on the first command."""
+        connect's staging copy). ``install`` downloads the pinned restic when
+        none is found."""
         password = password or self.secrets.require_backup_password()
         binary = self.binaries.ensure(self.settings.restic_binary) if install else self.binary
         if binary is None:
@@ -261,14 +258,8 @@ def workspace_id_for(snapshots: Sequence[Snapshot]) -> WorkspaceId:
 
 
 def ensure_workspace_id(workspace: Workspace, snapshots: Sequence[Snapshot] = ()) -> WorkspaceId:
-    """The workspace ID in ``backup.workspace_id``, kept whenever there is
-    one. A block with none, as written by hand, gets
-    :func:`workspace_id_for` ``snapshots`` (the repository's, read without
-    the lock), written there first.
-
-    Provisioning (``backup_provisioning``) writes the ID with the block it
-    saves; a run calls this for a block written by hand. Another write that
-    lands first is read again, so two callers end with the one ID."""
+    """The workspace ID in ``backup.workspace_id``, writing
+    :func:`workspace_id_for` ``snapshots`` there for a block without one."""
     chosen = workspace_id_for(snapshots)
     for _ in range(3):
         current = workspace_settings.read_settings(workspace)
@@ -291,8 +282,7 @@ def ensure_workspace_id(workspace: Workspace, snapshots: Sequence[Snapshot] = ()
 
 
 def stored_password(workspace: Workspace) -> str | None:
-    """The password this machine has, the environment first, read without
-    resolving the rest of the configuration."""
+    """The password this machine has, without resolving the configuration."""
     return credentials.stored(workspace.root, credentials.BACKUP_PASSWORD.variables[0])
 
 
@@ -324,8 +314,7 @@ class BackupStatus:
 def backup_status(
     workspace: Workspace, *, binaries: ResticBinaries, restic: OpenRepository | None = None
 ) -> BackupStatus:
-    """Read without writing or taking a lock, so it answers while a backup
-    runs. A configuration that would be refused is the problem it reports."""
+    """Takes no repository lock, so it answers while a backup runs."""
     settings = workspace.capture_settings().backup
     if settings is None:
         return BackupStatus(settings=None)
