@@ -148,6 +148,14 @@ class SwatchResponse(BaseModel):
     hex: str
 
 
+class SceneCheckResponse(BaseModel):
+    """Whether the Listing Images preview showed the wrong scene: one found
+    under a pixel digest remembered from before a restart that no longer
+    names the file's pixels. The digest is corrected either way."""
+
+    changed: bool
+
+
 class PositionedListingResponse(BaseModel):
     """A listing holding its own position for a template (ADR-0058), which a
     recalibration may put outside the limits. ``placements`` lists the

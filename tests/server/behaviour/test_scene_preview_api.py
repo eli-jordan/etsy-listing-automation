@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from PIL import Image
 
+from etsy_listings.core.preparation.scene_cache import PIXEL_DIGESTS
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 from etsy_listings.server.api.imagecache import LIVE_ARTWORK_EDGE
@@ -275,3 +276,20 @@ class TestSceneArtwork:
         response = self._get(client, template="colour-chart-01", placement="nowhere")
 
         assert response.status_code == 404
+
+
+class TestCheckingARememberedScene:
+    """``GET .../scene-preview/check``: after a restart the preview may be
+    found under remembered pixel digests; the editor asks whether it was the
+    right one."""
+
+    def test_a_scene_shown_from_true_digests_has_not_changed(self, client: TestClient) -> None:
+        params = {"template": "flat-lay-01", "colour": "black"}
+        _get(client, **params)
+        PIXEL_DIGESTS.clear()
+        _get(client, **params)
+
+        response = client.get(f"/api/listings/{LISTING}/scene-preview/check", params=params)
+
+        assert response.status_code == 200, response.text
+        assert response.json() == {"changed": False}
