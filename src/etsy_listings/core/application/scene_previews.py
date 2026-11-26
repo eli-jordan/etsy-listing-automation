@@ -58,7 +58,11 @@ from etsy_listings.core.preparation.position_fits import (
 )
 from etsy_listings.core.preparation.predictions import PredictionError
 from etsy_listings.core.preparation.readiness import template_readiness
-from etsy_listings.core.preparation.scene_cache import PIXEL_DIGESTS, SceneCache
+from etsy_listings.core.preparation.scene_cache import (
+    PIXEL_DIGESTS,
+    RememberedDigests,
+    SceneCache,
+)
 from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, lease_scene
 from etsy_listings.core.render import (
     AnyTemplate,
@@ -102,6 +106,9 @@ class RenderedScene:
     """The map generation a prepared scene was composed from, for promotion."""
     config_revision: str | None = None
     """The calibration revision a prepared scene was composed against."""
+    remembered: bool = False
+    """Found under a digest read from :class:`RememberedDigests` rather than
+    one this process computed: likely right, but not yet checked."""
 
 
 @dataclass(frozen=True)
@@ -218,14 +225,54 @@ def saved_scene(
     fitted (option B). Refusals: :class:`TemplateMissingError`, the template
     state's own, :class:`TemplatePhotoMissingError`,
     :class:`PreparationRequiredError`."""
+    return _saved_scene(workspace, name, layers, _Asked(size, images, remembered=False))
+
+
+def remembered_scene(
+    workspace: Workspace, name: str, layers: SceneLayers, *, images: SceneImages
+) -> ScenePicture:
+    """:func:`saved_scene` at full size, found under digests kept from before
+    a restart (:class:`RememberedDigests`) when this process has not computed
+    them yet -- for a viewer that checks the answer with
+    :func:`remembered_scene_was_wrong`. Nothing that renders or deploys asks
+    this."""
+    return _saved_scene(workspace, name, layers, _Asked("full", images, remembered=True))
+
+
+def remembered_scene_was_wrong(
+    workspace: Workspace, name: str, layers: SceneLayers, *, images: SceneImages
+) -> bool:
+    """Whether :func:`remembered_scene` shows a different scene from the one
+    the files' pixels name. Computing the true one also corrects the
+    remembered digests, so a wrong answer is given once."""
+    shown = remembered_scene(workspace, name, layers, images=images)
+    if not isinstance(shown, RenderedScene) or not shown.remembered:
+        return False
+    actual = saved_scene(workspace, name, layers, size="full", images=images)
+    return isinstance(actual, RenderedScene) and actual.render_identity != shown.render_identity
+
+
+@dataclass(frozen=True)
+class _Asked:
+    """How a saved scene is asked for: its size, how its files decode, and
+    whether remembered digests may find it."""
+
+    size: SceneSize
+    images: SceneImages
+    remembered: bool
+
+
+def _saved_scene(
+    workspace: Workspace, name: str, layers: SceneLayers, asked: _Asked
+) -> ScenePicture:
     require_template(workspace, name)
     config = CalibrationStore(workspace).state(name).require()
     if isinstance(config.renderer, MarigoldRenderer):
-        return _prepared_preview(workspace, name, None, layers)
+        return _prepared_preview(workspace, name, None, layers, remembered=asked.remembered)
     scene = saved_preview(
         workspace, name, colour=layers.colour, design=layers.design, boxes=layers.boxes
     )
-    return _photo_warp(workspace, scene, size, images)
+    return _photo_warp(workspace, scene, asked.size, asked.images, remembered=asked.remembered)
 
 
 def layer_artwork(
@@ -287,10 +334,15 @@ def _editor_frame(
 
 
 def _photo_warp(
-    workspace: Workspace, scene: PreviewScene, size: SceneSize, images: SceneImages
+    workspace: Workspace,
+    scene: PreviewScene,
+    size: SceneSize,
+    images: SceneImages,
+    *,
+    remembered: bool = False,
 ) -> ScenePicture:
     if size == "full":
-        return _full_photo_warp(workspace, scene, images)
+        return _full_photo_warp(workspace, scene, images, remembered=remembered)
     canvas = images.canvas(scene)
     return SceneFrame(
         compose_preview(
@@ -299,8 +351,40 @@ def _photo_warp(
     )
 
 
+@dataclass
+class _Recall:
+    """Each file's digest as this process computed it, else -- for a viewer
+    that will check -- as :class:`RememberedDigests` kept it. ``used`` says
+    whether any answer came from the latter."""
+
+    remembered: RememberedDigests | None
+    used: bool = False
+
+    def photo(self, path: Path) -> str | None:
+        return self._recall("photo", path, PIXEL_DIGESTS.photo(path))
+
+    def design(self, path: Path) -> str | None:
+        return self._recall("design", path, PIXEL_DIGESTS.design(path))
+
+    def _recall(self, kind: str, path: Path, computed: str | None) -> str | None:
+        if computed is not None or self.remembered is None:
+            return computed
+        digest = self.remembered.recall(kind, path)
+        self.used = self.used or digest is not None
+        return digest
+
+
+def _remember(workspace: Workspace, photo: Path, designs: list[Path]) -> None:
+    """Keep the digests just computed for a scene's files, for the next
+    restart's first view."""
+    store = RememberedDigests(workspace)
+    store.remember("photo", photo)
+    for path in designs:
+        store.remember("design", path)
+
+
 def _full_photo_warp(
-    workspace: Workspace, scene: PreviewScene, images: SceneImages
+    workspace: Workspace, scene: PreviewScene, images: SceneImages, *, remembered: bool
 ) -> RenderedScene:
     """``scene`` at full size, from the cache when every file's pixel digest
     is still known, else composed from ``images`` and stored. The composition
@@ -311,7 +395,8 @@ def _full_photo_warp(
         if path is not None
     ]
     cache = SceneCache(workspace)
-    cached = _cached_photo_warp(cache, scene, painted)
+    recall = _Recall(RememberedDigests(workspace) if remembered else None)
+    cached = _cached_photo_warp(cache, scene, painted, recall)
     if cached is not None:
         return cached
 
@@ -320,6 +405,7 @@ def _full_photo_warp(
     for _, path in painted:
         if path not in decoded:
             decoded[path] = PIXEL_DIGESTS.decode_design(path, images.design)
+    _remember(workspace, scene.photo.path, list(decoded))
     identity = photo_warp_scene_identity(
         photo_pixels=photo_pixels, layers=[(cfg, decoded[path][1]) for cfg, path in painted]
     )
@@ -342,12 +428,15 @@ def _full_photo_warp(
 
 
 def _cached_photo_warp(
-    cache: SceneCache, scene: PreviewScene, painted: list[tuple[RenderConfig, Path]]
+    cache: SceneCache,
+    scene: PreviewScene,
+    painted: list[tuple[RenderConfig, Path]],
+    recall: _Recall,
 ) -> RenderedScene | None:
     """The cached scene, without decoding, when every file's pixel digest is
     still known."""
-    photo_pixels = PIXEL_DIGESTS.photo(scene.photo.path)
-    known = [digest for _, path in painted if (digest := PIXEL_DIGESTS.design(path)) is not None]
+    photo_pixels = recall.photo(scene.photo.path)
+    known = [digest for _, path in painted if (digest := recall.design(path)) is not None]
     if photo_pixels is None or len(known) != len(painted):
         return None
     identity = photo_warp_scene_identity(
@@ -355,11 +444,16 @@ def _cached_photo_warp(
         layers=[(cfg, digest) for (cfg, _), digest in zip(painted, known, strict=True)],
     )
     png = cache.read(identity)
-    return None if png is None else RenderedScene(png, identity)
+    return None if png is None else RenderedScene(png, identity, remembered=recall.used)
 
 
 def _prepared_preview(
-    workspace: Workspace, name: str, config: AnyTemplate | None, painted: SceneLayers
+    workspace: Workspace,
+    name: str,
+    config: AnyTemplate | None,
+    painted: SceneLayers,
+    *,
+    remembered: bool = False,
 ) -> RenderedScene:
     colour, design, boxes = painted.colour, painted.design, painted.boxes
     require_template(workspace, name)
@@ -387,16 +481,20 @@ def _prepared_preview(
             fits = PositionFits(workspace).requests(
                 name, inputs, positioned_quads(saved.config, boxes)
             )
+            recall = _Recall(RememberedDigests(workspace) if remembered else None)
             cached = _cached(
-                workspace, name, inputs, cache, _SceneFiles(path, sources, appearance, fits)
+                workspace, name, inputs, _SceneFiles(path, sources, appearance, fits), recall
             )
         except ArtifactError as exc:
             raise PreparationRequiredError(str(exc)) from exc
         if cached is not None:
             png, identity, generation_id = cached
-            return RenderedScene(png, identity, generation_id, saved.revision)
+            return RenderedScene(
+                png, identity, generation_id, saved.revision, remembered=recall.used
+            )
         base, photo_pixels = PIXEL_DIGESTS.decode_photo(path)
         layers = _layers(sources)
+        _remember(workspace, path, [source for source, _ in sources])
     try:
         with lease_scene(
             workspace,
@@ -428,16 +526,16 @@ def _cached(
     workspace: Workspace,
     name: str,
     inputs: PreparationInputs,
-    cache: SceneCache,
     files: _SceneFiles,
+    recall: _Recall,
 ) -> tuple[bytes, str, str] | None:
     """The cached scene, without decoding, when every file's pixel digest is
     still known: ``(png, identity, generation_id)``, else ``None``. The
     identity is the one :func:`lease_scene` would compute from the decoded
     pixels, so an entry found under it is exactly that composition."""
     sources = files.sources
-    photo_pixels = PIXEL_DIGESTS.photo(files.photo)
-    artwork = [PIXEL_DIGESTS.design(path) for path, _ in sources]
+    photo_pixels = recall.photo(files.photo)
+    artwork = [recall.design(path) for path, _ in sources]
     if photo_pixels is None or None in artwork:
         return None
     stored = PositionFits(workspace)
@@ -454,7 +552,7 @@ def _cached(
         photo_pixels=photo_pixels,
         appearance=files.appearance,
     )
-    png = cache.read(identity)
+    png = SceneCache(workspace).read(identity)
     return None if png is None else (png, identity, manifest.generation_id)
 
 

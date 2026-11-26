@@ -1400,8 +1400,34 @@ export interface paths {
      *     (ADR-0058), so a landed position save is the composite the render writes.
      *     ``v`` is ignored; the editor sends a signature of the saved design so a
      *     landed save is a new URL and the browser fetches it again.
+     *
+     *     A full-size scene may be found under pixel digests remembered from before
+     *     a restart, which saves seconds of decoding; the editor then asks
+     *     :func:`check_scene_preview` whether that was the right one.
      */
     get: operations["scene_preview_api_listings__name__scene_preview_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/scene-preview/check": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Check Scene Preview
+     * @description Whether :func:`scene_preview` showed a scene found under a remembered
+     *     digest that no longer names its file's pixels, so the editor should
+     *     fetch the picture again. Computes the digests, which corrects them.
+     */
+    get: operations["check_scene_preview_api_listings__name__scene_preview_check_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -5340,6 +5366,16 @@ export interface components {
       waiting_since?: string | null;
     };
     /**
+     * SceneCheckResponse
+     * @description Whether the Listing Images preview showed the wrong scene: one found
+     *     under a pixel digest remembered from before a restart that no longer
+     *     names the file's pixels. The digest is corrected either way.
+     */
+    SceneCheckResponse: {
+      /** Changed */
+      changed: boolean;
+    };
+    /**
      * ScoredListing
      * @description One of the (at most) twenty listings scored, with everything the top
      *     listings panel shows (features/market-seo-20260924/interactions.md, *Where the data
@@ -8641,6 +8677,42 @@ export interface operations {
         };
         content: {
           "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  check_scene_preview_api_listings__name__scene_preview_check_get: {
+    parameters: {
+      query: {
+        template: string;
+        colour?: string | null;
+        scale?: "editor" | "full";
+        v?: string | null;
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SceneCheckResponse"];
         };
       };
       /** @description Validation Error */

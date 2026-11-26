@@ -4,6 +4,7 @@ import { listCommonMedia, listListingMediaFiles, listingSceneArtworkUrl } from "
 import { listListingTemplateMediaFiles } from "../../api/listingTemplates";
 import { maskUrl } from "../../api/preparation";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
+import { useCheckedPicture } from "../../hooks/useCheckedPicture";
 import {
   type Artwork,
   type MediaOwner,
@@ -198,7 +199,9 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
     pointed ??
     restoreFocus(remembered, templates, files) ??
     opening(upright, detail, templates, files);
-  const view = focus === null ? null : viewFocus(focus, detail, templates, scene, listing);
+  const view = useCheckedView(
+    focus === null ? null : viewFocus(focus, detail, templates, scene, listing),
+  );
   // The reel highlights whatever the stage is showing, wherever the pointing
   // came from.
   const selectedIndex = view !== null && view.reelIndex >= 0 ? view.reelIndex : null;
@@ -319,6 +322,13 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
       )}
     </div>
   );
+}
+
+/** `view` with its picture checked behind it: a scene the server found under
+ * remembered digests is asked for again if they turn out stale. */
+function useCheckedView(view: FocusView | null): FocusView | null {
+  const picture = useCheckedPicture(view?.picture ?? "");
+  return view === null ? null : { ...view, picture };
 }
 
 /** Adjust, on an upright phone: whether its screen is open, and its way in
