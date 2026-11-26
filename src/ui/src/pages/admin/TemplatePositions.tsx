@@ -39,7 +39,6 @@ export function TemplatePositions({
       setSaved(next);
       setDraft(next);
       setReviewing(false);
-      // Review and save is disabled now; keep focus in the panel.
       queueMicrotask(() => title.current?.focus());
       return null;
     }

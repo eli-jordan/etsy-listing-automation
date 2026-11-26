@@ -8,8 +8,6 @@ export function BackupDialog({
   children,
 }: {
   labelledBy: string;
-  /** What a swipe down does: the dialog's own Cancel or Close, or
-   * null while the dialog must not be dismissed (a step still working). */
   onDismiss: (() => void) | null;
   children: ReactNode;
 }) {
