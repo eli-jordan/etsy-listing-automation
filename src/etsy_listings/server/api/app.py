@@ -65,6 +65,7 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     preparation_runtime: PreparationRuntime | None = None,
     clients: ClientFactories = DEFAULT_CLIENTS,
     backup: BackupEnvironment | None = None,
+    model_discovery: ModelDiscovery | None = None,
 ) -> FastAPI:
     # One of each per process, so their locks mean something: the cache
     # records' stores. Listing, mockup-template and listing-template locks need
@@ -85,12 +86,11 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     deployments = Deployments(workspace, context_factory, ai=ai, gate=job_gate)
     scene_warmer = SceneWarmer(workspace, gate=job_gate)
     backups = BackupCoordinator(workspace, gate=job_gate, environment=backup)
+    discovery = ModelDiscovery() if model_discovery is None else model_discovery
 
     @asynccontextmanager
-    async def lifespan(running: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await run_in_threadpool(preparations.start)
-        # Read from app.state, so a test can put its own discovery there first.
-        discovery: ModelDiscovery = running.state.model_discovery
         discovery.start()
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
@@ -111,7 +111,7 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
     app.state.preparations = preparations
     app.state.workspace = workspace
-    app.state.model_discovery = ModelDiscovery()
+    app.state.model_discovery = discovery
     app.state.deployments = deployments
     app.state.job_gate = job_gate
     app.state.backups = backups
