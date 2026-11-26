@@ -4,8 +4,6 @@ import { type CSSProperties, type RefObject, useLayoutEffect, useRef, useState }
 import { useIsPhone } from "../../phone/usePhone";
 import { INFO } from "./shopFields";
 
-/** The field one open info card belongs to, owned by the page so opening
- * another closes the first (interactions, *Listing defaults, info cards*). */
 export interface InfoState {
   open: string | null;
   toggle: (field: string) => void;
@@ -43,7 +41,6 @@ function usePhoneCardPlacement(
   return active ? style : undefined;
 }
 
-/** An info button and, while open, its card. Cards explain; they never save. */
 export function Info({ field, info }: { field: string; info: InfoState }) {
   const copy = INFO[field];
   const isPhone = useIsPhone();

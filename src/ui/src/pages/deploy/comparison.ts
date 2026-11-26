@@ -8,56 +8,18 @@ import {
   type StagePlanDTO,
 } from "../../types";
 
-/**
- * Pure: `Plan` snapshots + `Change`s -> before/after blocks, impact tags,
- * price rows, image badges (docs/features/deploy-20260917/spec.md decisions 3/4, spec's
- * "Comparison"/"Price table" elements).
- *
- * This is the frontend half of ADR-0038: each stage exposed a snapshot of its own
- * domain facts so the comparison could be composed here instead of on the
- * server, and ADR-0008 still holds one level up -- every `changed` flag below
- * traces to a `Change` object the engine already emitted, never to this
- * module comparing two snapshot values itself. A block's *content* (the
- * unchanged context alongside a change) comes from the snapshot; whether it
- * is *tinted* comes only from the work outcome's changes.
- *
- * Follows the mock and the spec's own reading order -- gallery first, down
- * through tags and materials -- because that is a buyer's reading order on
- * an Etsy listing page, and matching it is what makes the comparison quick
- * to check by eye (decision 3's "the blocks follow a buyer's reading order").
- * Description and materials were not in the original five (the mock never
- * had a block for either); added once their absence let a pending edit reach
- * Apply with no before/after shown for it at all.
- */
-
 export type ImpactTag =
   "Images" | "Videos" | "Title" | "Description" | "Prices" | "Colours" | "Tags" | "Materials";
 
-export interface TitleBlock {
+/** The title or the description. */
+export interface TextBlock {
   before: string | null;
   after: string;
   changed: boolean;
 }
 
-/** Same shape as `TitleBlock` -- kept as its own type because "description"
- * reading as a `TitleBlock` at a call site would be confusing, not because
- * the two ever need to diverge. */
-export interface DescriptionBlock {
-  before: string | null;
-  after: string;
-  changed: boolean;
-}
-
-export interface TagsBlock {
-  before: string[];
-  after: string[];
-  added: string[];
-  removed: string[];
-  changed: boolean;
-}
-
-/** Same shape as `TagsBlock`, same reasoning. */
-export interface MaterialsBlock {
+/** The tags or the materials. */
+export interface StringListBlock {
   before: string[];
   after: string[];
   added: string[];
@@ -90,10 +52,9 @@ export interface AfterImageTile {
   ref: string;
   badge: ImageBadge;
   movedFrom?: number;
-  /** New bytes for an image already on Etsy -- a re-rendered mockup, which
-   * the stage reports as a media change whose ref is the same before and
-   * after. Independent of `badge`: a re-rendered image can also move. */
-  replaced: boolean;
+  /** The stage reports a re-render as a media change whose ref is the same
+   * before and after. Independent of `badge`: a re-rendered image can also move. */
+  reRendered: boolean;
 }
 
 export interface BeforeImageTile {
@@ -101,8 +62,7 @@ export interface BeforeImageTile {
   ref: string | null;
   url: string | null;
   badge: ImageBadge;
-  /** This image is on Etsy and about to be swapped for its re-render. */
-  replaced: boolean;
+  reRendered: boolean;
 }
 
 export interface ImagesBlock {
@@ -111,8 +71,6 @@ export interface ImagesBlock {
   changed: boolean;
 }
 
-/** One video as this run will place it. `featured` is position 2; the
- * second sits after `afterImages` images (decision 9). */
 export interface AfterVideoTile {
   ref: string;
   slot: "featured" | "second";
@@ -120,8 +78,6 @@ export interface AfterVideoTile {
   badge: "new" | null;
 }
 
-/** One video Etsy has now, drawn from its own `thumbnail_url`. `ref` is
- * `null` for one this tool never uploaded. */
 export interface BeforeVideoTile {
   videoId: number;
   ref: string | null;
@@ -144,44 +100,31 @@ export interface PriceRow {
   belowCost: boolean;
 }
 
-/** One field that differs from the last apply, ready to show. */
+type DriftSource = "etsy" | "printify";
+
 export interface DriftedField {
-  /** `etsy:title`: stable across renders, and names the page anchor. */
-  key: string;
+  key: `${DriftSource}:${string}`;
   path: string;
   label: string;
-  source: "etsy" | "printify";
+  source: DriftSource;
   live: string;
   after: string;
-  /** Long copy opens a comparison; anything else fits in its row. */
   expandable: boolean;
 }
 
 export interface Comparison {
-  /** Which of the parts of the listing the plan touches, for the headline's
-   * tags -- in reading order, not the order `Change`s happened to be emitted
-   * in. */
   impacts: ImpactTag[];
-  /** Every field that changed outside this tool since the last apply. */
   drifted: DriftedField[];
-  /** Whether `plan.etsy_listing_id` names a real listing -- `false` gets a
-   * single "After apply" column with a *Not on Etsy yet* note (decision 3),
-   * never an empty "On Etsy now" one. */
   hasEtsyListing: boolean;
-  title: TitleBlock | null;
-  description: DescriptionBlock | null;
-  tags: TagsBlock | null;
-  materials: MaterialsBlock | null;
+  title: TextBlock | null;
+  description: TextBlock | null;
+  tags: StringListBlock | null;
+  materials: StringListBlock | null;
   colours: ColoursBlock | null;
   price: PriceBlock | null;
   images: ImagesBlock | null;
-  /** `etsy_videos`, shown under Etsy media; `null` when neither
-   * side has a video. */
   videos: VideosBlock | null;
   priceRows: PriceRow[];
-  /** `publish`'s own below-cost rows, verbatim -- never re-derived by
-   * comparing a row's price against its cost here, which is exactly the
-   * second copy of the rule ADR-0038 exists to prevent. */
   belowCost: BelowCostRow[];
 }
 
@@ -203,11 +146,15 @@ function asStrings(values: unknown[]): string[] {
   return values.filter((v): v is string => typeof v === "string");
 }
 
-/** `"349 NOK"` -> `349`. Parses only the leading amount -- callers already
- * know the currency is the listing's own from context, and this exists
- * purely to compare two `Money` strings' magnitudes for a min/max range. */
-function moneyAmount(rendered: string): number {
+function leadingAmount(rendered: string): number {
   return Number.parseFloat(rendered);
+}
+
+export function formatPriceRange(range: PriceRange | null): string {
+  if (range === null) return "—";
+  if (range.min === range.max) return range.min;
+  const minAmount = range.min.split(" ")[0] ?? range.min;
+  return `${minAmount}–${range.max}`;
 }
 
 function priceRange(rows: readonly { price: string }[]): PriceRange | null {
@@ -216,13 +163,13 @@ function priceRange(rows: readonly { price: string }[]): PriceRange | null {
   let min = first;
   let max = first;
   for (const row of rest) {
-    if (moneyAmount(row.price) < moneyAmount(min.price)) min = row;
-    if (moneyAmount(row.price) > moneyAmount(max.price)) max = row;
+    if (leadingAmount(row.price) < leadingAmount(min.price)) min = row;
+    if (leadingAmount(row.price) > leadingAmount(max.price)) max = row;
   }
   return { min: min.price, max: max.price };
 }
 
-function buildTitle(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TitleBlock | null {
+function buildTitle(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TextBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   return {
@@ -232,9 +179,7 @@ function buildTitle(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TitleB
   };
 }
 
-function buildDescription(
-  stagePlan: StagePlanFor<"etsy_listing"> | undefined,
-): DescriptionBlock | null {
+function buildDescription(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TextBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   return {
@@ -248,7 +193,7 @@ function buildDescription(
 function buildStringList(
   stagePlan: StagePlanFor<"etsy_listing"> | undefined,
   field: "tags" | "materials",
-): TagsBlock | null {
+): StringListBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === field);
@@ -323,9 +268,9 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
 
   const after: AfterImageTile[] = snapshot.desired.map((entry) => {
     const previousRank = wasRankByRef.get(entry.ref);
-    const tile = { rank: entry.rank, ref: entry.ref, replaced: replaced.has(entry.ref) };
+    const tile = { rank: entry.rank, ref: entry.ref, reRendered: replaced.has(entry.ref) };
     if (previousRank === undefined) {
-      return { ...tile, badge: "new", replaced: false };
+      return { ...tile, badge: "new", reRendered: false };
     }
     if (previousRank !== entry.rank) {
       return { ...tile, badge: "moved", movedFrom: previousRank };
@@ -341,7 +286,7 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
       ref,
       url: image.url ?? null,
       badge: ref !== null && !used ? "removed" : null,
-      replaced: used && replaced.has(ref),
+      reRendered: used && replaced.has(ref),
     };
   });
 
@@ -350,14 +295,6 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
 
 const VIDEO_SLOTS = ["videos.featured", "videos.second"] as const;
 
-/**
- * The videos block. Every badge reads the stage's own changes: a slot
- * change names the ref before and after (`etsy_videos._changes`), so a ref
- * that arrives in a slot without leaving another is new, and one that leaves
- * without arriving is removed -- a swap is neither. New bytes on the same ref
- * (`.contents`) replace its upload, so it is both. A video this tool never
- * uploaded is swept whenever the stage runs, which the outcome says.
- */
 function buildVideos(stagePlan: StagePlanFor<"etsy_videos"> | undefined): VideosBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!stagePlan || !snapshot) return null;
@@ -433,8 +370,6 @@ function displayValue(value: unknown): string {
   return Array.isArray(value) ? value.join(", ") : String(value);
 }
 
-/** What apply leaves in this field: the plan's named setting, its own change
- * to the field, or, with neither, the last-applied value it re-asserts. */
 function driftAfter(drift: DriftDTO, stagePlan: StagePlanDTO): string {
   const desired = stagePlan.stage === "etsy_listing" ? stagePlan.snapshot?.desired : undefined;
   const setting = NAMED_SETTINGS[drift.path];
@@ -445,9 +380,7 @@ function driftAfter(drift: DriftDTO, stagePlan: StagePlanDTO): string {
   return drift.last_applied_label ?? displayValue(drift.last_applied);
 }
 
-/** Printify republishes linked copy onto Etsy, so the same external edit can
- * appear in both stages. Show that event once, preferring the buyer-facing
- * Etsy observation when both sides are byte-for-byte identical. */
+/** Printify republishes linked copy onto Etsy, so one external edit can drift in both stages. */
 function uniqueDrifts(plan: PlanDTO): { drift: DriftDTO; stagePlan: StagePlanDTO }[] {
   const found = new Map<string, { drift: DriftDTO; stagePlan: StagePlanDTO }>();
   for (const stagePlan of plan.stage_plans) {
@@ -485,15 +418,14 @@ function buildDrifted(plan: PlanDTO): DriftedField[] {
 
 function impactsFor(
   colours: ColoursBlock | null,
-  title: TitleBlock | null,
-  description: DescriptionBlock | null,
+  title: TextBlock | null,
+  description: TextBlock | null,
   price: PriceBlock | null,
-  tags: TagsBlock | null,
-  materials: MaterialsBlock | null,
+  tags: StringListBlock | null,
+  materials: StringListBlock | null,
   images: ImagesBlock | null,
   videos: VideosBlock | null,
 ): ImpactTag[] {
-  // Reading order (decision 3's gallery-first order), not emission order.
   const impacts: ImpactTag[] = [];
   if (images?.changed) impacts.push("Images");
   if (videos?.changed) impacts.push("Videos");
@@ -524,7 +456,6 @@ export function buildComparison(plan: PlanDTO): Comparison {
   const videos = buildVideos(findStage(plan, "etsy_videos"));
   const drifted = buildDrifted(plan);
 
-  // Setting drifted copy back changes what buyers read as much as an edit does.
   const orDrifted = <Block extends { changed: boolean }>(block: Block | null, key: string) =>
     block && { ...block, changed: block.changed || drifted.some((d) => d.key === key) };
 

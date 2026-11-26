@@ -6,13 +6,6 @@ import type { Gesture } from "../listingLifecycle";
 import { ActionSheet } from "./ActionSheet";
 import { rowActions } from "./rowActions";
 
-/**
- * The Listings table as a phone list: one row per listing, the whole row a
- * tap target that opens it, and what the table's row carries inline (the
- * Open in menu, the lifecycle gestures, Undo mark for delete) behind a
- * trailing ⋯ that opens an action sheet. Rendered only by the phone layout.
- */
-
 function IssueBadge({ row }: { row: ListingSummary }) {
   if (row.issue_counts.block > 0) {
     return <span className="tab-badge tab-badge--block">{row.issue_counts.block}</span>;
@@ -78,11 +71,6 @@ export function PhoneListingList({
   );
 }
 
-/**
- * The status filter as a row of chips, one tap each instead of a select:
- * All, then every state that some listing is in (plus the chosen one, so
- * a filter that empties never strands its own chip), each with its count.
- */
 export function PhoneStatusChips<F extends "all" | ListingStatus>({
   listings,
   value,

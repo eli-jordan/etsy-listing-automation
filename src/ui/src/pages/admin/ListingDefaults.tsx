@@ -26,23 +26,11 @@ import type { RefusedValue } from "./useSaveQueue";
 
 type Lookups = ReturnType<typeof useShopLookups>;
 type Save = (changes: ShopChanges) => Promise<SaveOutcome | null>;
-/** How a field's intent was answered: written, already held by the file,
- * refused by validation, or not known to have reached the file. */
-type Answer = "saved" | "unchanged" | "refused" | "failed";
+type Answer = "saved" | "unchanged" | "refused" | "unconfirmed";
 type CommitOptions = { unchanged?: boolean };
 type Commit = (changes: ShopChanges, options?: CommitOptions) => Promise<Answer>;
 type Refusal = (value: string) => number | null;
 
-/**
- * Listing defaults (interactions, *Listing defaults, info cards and
- * external lists*). Print on demand is derived from three saved values and
- * writes all three in one save; Custom shows their selectors and changes
- * nothing by itself. Every selector saves on blur, once, and only a change.
- * Lists come from live lookups; saved and draft choices they lack stay visible.
- * Mounted afresh for each loaded file, so a reload drops local drafts.
- * Shows `shop` with the queue's pending values over it: what the file will
- * hold once sent saves land, which a newer choice is compared against.
- */
 export function ListingDefaults({
   shop: saved,
   pending,
@@ -73,7 +61,7 @@ export function ListingDefaults({
       discard(changes);
       return Promise.resolve("unchanged");
     }
-    return save(changes).then(answerFor, (): Answer => "failed");
+    return save(changes).then(answerFor, (): Answer => "unconfirmed");
   };
 
   const choosePod = () => {
@@ -81,8 +69,6 @@ export function ListingDefaults({
     void commit(PRINT_ON_DEMAND, { unchanged: isPrintOnDemand(defaults) });
   };
   const customCommit: Commit = (changes, options) => {
-    // Editing one of the three keeps Custom open even if the values come
-    // to match Print on demand; reopening the page derives it again.
     setCustomChosen(true);
     return commit(changes, options);
   };
@@ -216,8 +202,6 @@ export function ListingDefaults({
           <span>
             Your defaults have not changed. Retry to load available choices. You can still edit
             renewal and how your items are made.
-            {/* The server's reasons can name files and setup steps; they are
-                for whoever wants them, not the sentence everyone reads. */}
             {lookups.problems.length > 0 && (
               <details className="sp-problems">
                 <summary>Details</summary>
@@ -320,7 +304,7 @@ function held(shop: ShopSettings, pending: ShopChanges): ShopSettings {
 
 function answerFor(outcome: SaveOutcome | null): Answer {
   if (outcome?.kind === "saved") return "saved";
-  return outcome?.kind === "refused" ? "refused" : "failed";
+  return outcome?.kind === "refused" ? "refused" : "unconfirmed";
 }
 
 function lookupStatus(lookups: Lookups): string {
@@ -423,9 +407,6 @@ function ListField({
   if (missing) options.push({ value: saved, label: savedLabel });
   if (saved === "") options.unshift({ value: "", label: empty });
   const where = CREATE_LINKS[field].where;
-  // Use it is a choice in this field like any other: it goes through the
-  // field's draft, so it supersedes an older draft and a newer one survives
-  // its answer.
   const draft = useDraft(saved, pending, refusal, (value, options) => {
     if (found?.value === value) lookups.dismiss(field);
     return save(toChange(value), options);
@@ -446,7 +427,7 @@ function ListField({
             type="button"
             className="sp-use"
             disabled={locked}
-            onClick={() => draft.choose(found.value, found.label)}
+            onClick={() => draft.chooseAndSend(found.value, found.label)}
           >
             Use it
           </button>
@@ -459,27 +440,11 @@ function ListField({
 type Draft = {
   shown: string;
   label: string | null;
-  /** The seller changed the select; nothing is sent yet. */
-  change: (value: string, label: string) => void;
-  /** The seller left the select: send its draft if it changes the file. */
-  leave: () => void;
-  /** A choice made and sent at once, such as Use it. */
-  choose: (value: string, label: string) => void;
+  editLocally: (value: string, label: string) => void;
+  sendOnLeave: () => void;
+  chooseAndSend: (value: string, label: string) => void;
 };
 
-/**
- * One field's local edit and the identity of the saves made from it.
- *
- * `saved` is what the file will hold once sent saves land, so a draft is
- * sent only when it differs from that. Each save carries the edit it was
- * made from, and only its own answer drops the draft, and only if nothing
- * was chosen since: an older answer never replaces a newer choice, focused
- * or already queued. A failed save keeps the draft to be sent again on the
- * next leave; a refused one stays shown with its error until the seller
- * picks another or reloads. Every writer of the field (the select and
- * Use it) goes through here, so a newer choice from either supersedes an
- * older draft.
- */
 function useDraft(
   saved: string,
   pending: boolean,
@@ -489,8 +454,6 @@ function useDraft(
   const [draft, setDraft] = useState<Option | null>(null);
   const edits = useRef(0);
   const sent = useRef<{ value: string; edit: number } | null>(null);
-  // Editing may retry a refusal already seen; a later refusal still blocks
-  // automatic blur, even when Retry (rather than this draft) received it.
   const refusalAtEdit = useRef<number | null>(null);
 
   const edit = (value: string, label: string) => {
@@ -499,14 +462,11 @@ function useDraft(
     setDraft({ value, label });
   };
   const send = (value: string) => {
-    // Matching an unanswered write is not acknowledgement of this draft.
-    // Keep its save identity until the real outcome, without writing twice.
     const refusedAt = refusal(value);
     if ((refusedAt !== null && refusedAt !== refusalAtEdit.current) || (pending && value === saved))
       return;
     const mine = { value, edit: edits.current };
     sent.current = mine;
-    // An unchanged choice still abandons an older failed patch in the queue.
     void onCommit(value, { unchanged: value === saved }).then((answer) => {
       if (sent.current !== mine) return;
       sent.current = null;
@@ -517,18 +477,17 @@ function useDraft(
   return {
     shown: draft?.value ?? saved,
     label: draft?.label ?? null,
-    change: edit,
-    leave: () => {
+    editLocally: edit,
+    sendOnLeave: () => {
       if (draft !== null) send(draft.value);
     },
-    choose: (value, label) => {
+    chooseAndSend: (value, label) => {
       edit(value, label);
       send(value);
     },
   };
 }
 
-/** A select that saves on blur, for a field with no other writer. */
 function BlurSelect({
   label,
   saved,
@@ -550,7 +509,6 @@ function BlurSelect({
   return <DraftSelect label={label} options={options} disabled={disabled} draft={draft} />;
 }
 
-/** Changing the select only changes what it shows; leaving it saves. */
 function DraftSelect({
   label,
   options,
@@ -562,8 +520,6 @@ function DraftSelect({
   disabled: boolean;
   draft: Draft;
 }) {
-  // Lookup refresh may remove a refused or unanswered choice. Its captured
-  // label keeps the actual draft visible without exposing a policy's key.
   const visible = draft.label === null ? options : withSaved(options, draft.shown, draft.label);
   return (
     <select
@@ -573,9 +529,9 @@ function DraftSelect({
       value={draft.shown}
       onChange={(e) => {
         const select = e.currentTarget;
-        draft.change(select.value, select.selectedOptions[0]?.label ?? select.value);
+        draft.editLocally(select.value, select.selectedOptions[0]?.label ?? select.value);
       }}
-      onBlur={draft.leave}
+      onBlur={draft.sendOnLeave}
     >
       {visible.map((o) => (
         <option key={o.value} value={o.value}>

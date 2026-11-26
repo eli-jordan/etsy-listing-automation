@@ -1,21 +1,6 @@
 import type { Comparison, DriftedField } from "./comparison";
 import { stageBlocked, stageWillRun, type PlanDTO } from "../../types";
 
-/**
- * The headline, impact tags, and the blocked/drift/ok callouts above the
- * comparison (spec's "Summary and warnings" elements).
- *
- * **A stage that is blocked never disables the stages that are not.** The
- * mock's own demo script always hid the whole comparison behind a single
- * blocked/not-blocked switch, but the doc is explicit that a plan can be
- * part blocked and part runnable, and *that* is what decides Apply, not
- * "is anything blocked at all" (docs/features/deploy-20260917/spec.md, the note under the
- * control-states table). So the negative headline -- "This deploy can't go
- * ahead yet", no impact tags -- is reserved for the case nothing at all can
- * run; a plan that will do *something* gets the positive headline and its
- * tags, with the blocked stage's callout still shown underneath it.
- */
-
 function OkIcon() {
   return (
     <svg
@@ -62,8 +47,6 @@ function DriftIcon() {
   );
 }
 
-/** One line above the comparison: the values themselves live on each field's
- * own row, where a long description can be read and compared. */
 function DriftWarning({
   drifted,
   onReveal,
@@ -113,11 +96,7 @@ export function Callouts({
 }: {
   plan: PlanDTO;
   comparison: Comparison;
-  /** True once this run's outcome is "applied" -- the summary becomes a
-   * single "Deployed" callout, per the spec's Applied element. */
   applied: boolean;
-  /** Links the warning to each field's row, while the comparison is on the
-   * page. */
   onRevealDrift?: (field: DriftedField) => void;
 }) {
   const hasWork = plan.stage_plans.some(stageWillRun);

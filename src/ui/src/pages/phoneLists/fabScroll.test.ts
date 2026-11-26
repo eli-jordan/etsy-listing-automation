@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FAB_SCROLL_SLOP, fabAfterScroll } from "./fabScroll";
 
 function run(offsets: number[]) {
-  let state = { hidden: false, anchor: 0 };
+  let state = { hidden: false, measuredFrom: 0 };
   return offsets.map((y) => {
     state = fabAfterScroll(state, y);
     return state.hidden;

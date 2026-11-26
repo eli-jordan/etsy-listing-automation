@@ -1,24 +1,23 @@
 import type { TemplatePositionLimits } from "../../api/workspaceSettings";
 
-/** The sliders' whole-number view of the limits: percentages and degrees. */
 export interface LimitDraft {
-  smallest: number;
-  largest: number;
-  offset: number;
-  tilt: number;
+  smallestPercent: number;
+  largestPercent: number;
+  offsetPercent: number;
+  tiltDegrees: number;
 }
 
 export const toDraft = (limits: TemplatePositionLimits): LimitDraft => ({
-  smallest: Math.round((limits.scale?.min ?? 0.8) * 100),
-  largest: Math.round((limits.scale?.max ?? 1.1) * 100),
-  offset: Math.round(limits.offset * 100),
-  tilt: Math.round(limits.rotation),
+  smallestPercent: Math.round((limits.scale?.min ?? 0.8) * 100),
+  largestPercent: Math.round((limits.scale?.max ?? 1.1) * 100),
+  offsetPercent: Math.round(limits.offset * 100),
+  tiltDegrees: Math.round(limits.rotation),
 });
 
 export const toLimits = (draft: LimitDraft): TemplatePositionLimits => ({
-  scale: { min: draft.smallest / 100, max: draft.largest / 100 },
-  offset: draft.offset / 100,
-  rotation: draft.tilt,
+  scale: { min: draft.smallestPercent / 100, max: draft.largestPercent / 100 },
+  offset: draft.offsetPercent / 100,
+  rotation: draft.tiltDegrees,
 });
 
 /** The interactions table, *Settings: Template rendering*. */
@@ -32,7 +31,7 @@ export const ROWS: {
   unit: string;
 }[] = [
   {
-    key: "smallest",
+    key: "smallestPercent",
     label: "Smallest",
     hint: "of the template's box",
     min: 50,
@@ -41,7 +40,7 @@ export const ROWS: {
     unit: "%",
   },
   {
-    key: "largest",
+    key: "largestPercent",
     label: "Largest",
     hint: "of the template's box",
     min: 100,
@@ -50,7 +49,7 @@ export const ROWS: {
     unit: "%",
   },
   {
-    key: "offset",
+    key: "offsetPercent",
     label: "Move",
     hint: "of box width or height, each way",
     min: 0,
@@ -58,5 +57,5 @@ export const ROWS: {
     step: 1,
     unit: "%",
   },
-  { key: "tilt", label: "Tilt", hint: "each way", min: 0, max: 30, step: 1, unit: "°" },
+  { key: "tiltDegrees", label: "Tilt", hint: "each way", min: 0, max: 30, step: 1, unit: "°" },
 ];

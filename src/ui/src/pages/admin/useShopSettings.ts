@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import {
   getShop,
   saveShop,
@@ -20,25 +20,14 @@ const send = (revision: string, changes: ShopChanges) =>
   saveShop(revision, changes).then((outcome) =>
     outcome.kind === "saved" ? { ...outcome, revision: outcome.shop.revision } : outcome,
   );
-const clears = (field: string, changes: ShopChanges) => field in changes;
+const answersError = (field: string, changes: ShopChanges) => field in changes;
 
-/**
- * `shop.yaml` as the page sees it, over the file's save queue
- * (`useSaveQueue`): serialized revisioned saves, failures kept per field
- * until that field succeeds or its failed choice is abandoned, and a conflict that stops editing
- * until the seller reloads. Saved appears only after the server says so.
- *
- * `loadedVersion` changes only when a file is (re)loaded: the explicit
- * signal for controls to drop local drafts. A save's response updates
- * `shop` without it, so a newer local edit survives an older answer.
- */
 export function useShopSettings() {
   const [shop, setShop] = useState<ShopSettings | null>(null);
   const queue = useSaveQueue({
     send,
-    clears,
-    fallback: "could not save shop.yaml",
-    // Every successful answer, a field save's or Retry's, is adopted here.
+    answersError,
+    fallbackMessage: "could not save shop.yaml",
     onSaved: (outcome) => setShop(outcome.shop),
   });
   const { loadedVersion, loadError, reload } = useQueuedFile({
@@ -48,9 +37,7 @@ export function useShopSettings() {
     fallback: "could not read shop.yaml",
   });
 
-  const { save, retry: resend } = queue;
-  // The queue owns failure status, so an event handler need not catch.
-  const retry = useCallback(() => void resend().catch(() => undefined), [resend]);
+  const { save } = queue;
 
   return {
     shop,
@@ -65,7 +52,7 @@ export function useShopSettings() {
       changes: ShopChanges,
       options?: { retain?: boolean },
     ) => Promise<SaveOutcome | null>,
-    retry,
+    retry: queue.queueRetry,
     reload,
     locked: queue.locked,
   };

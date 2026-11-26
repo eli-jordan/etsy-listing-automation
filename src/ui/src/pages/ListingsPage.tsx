@@ -25,19 +25,12 @@ import {
 import { useFabHiddenOnScroll } from "./phoneLists/fabScroll";
 import { PhoneListingList, PhoneStatusChips } from "./phoneLists/PhoneListingList";
 
-/** The listings list (phase 5): table + search + status filter, from
- * the design mockup's listings section, backed by `GET /api/listings`. */
-
 type Filter = "all" | ListingStatus;
 
-/** One option per state the server can report, plus All -- derived from
- * `STATUS_LABELS` rather than listed again, so a fifth state cannot arrive
- * with a badge and no way to filter for it. */
 const FILTERS: Filter[] = ["all", ...(Object.keys(STATUS_LABELS) as ListingStatus[])];
 
 const FILTER_LABELS: Record<Filter, string> = { all: "All statuses", ...STATUS_LABELS };
 
-/** `?status=`, which the phone Dashboard's counts link to; anything else is All. */
 function filterFrom(param: string | null): Filter {
   return FILTERS.find((f) => f === param) ?? "all";
 }
@@ -61,7 +54,6 @@ function UndoMarkIcon() {
   );
 }
 
-/** The desktop layout's listings table. */
 function ListingsTable({
   rows,
   onGesture,
@@ -150,14 +142,7 @@ function ListingsTable({
   );
 }
 
-export function ListingsPage() {
-  /** `null` until the first load answers, so the empty-table message cannot
-   * flash before there is anything to say it about. */
-  const [listings, setListings] = useState<ListingSummary[] | null>(lastLoadedListings);
-  const [workspaceRun, setWorkspaceRun] =
-    useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
-  const [status, setStatus] = useState("");
-  const isPhone = useIsPhone();
+function useListFilters(isPhone: boolean) {
   // On a phone the filter and the search live in the address (`?status=`,
   // `?q=`, both replaced rather than pushed), so Back from a listing comes
   // back to the same list, and a Dashboard count or the Listings tab (which
@@ -166,10 +151,7 @@ export function ListingsPage() {
   const [query, setQuery] = useState(() => (isPhone ? (params.get("q") ?? "") : ""));
   const [desktopFilter, setDesktopFilter] = useState<Filter>("all");
   const filter = isPhone ? filterFrom(params.get("status")) : desktopFilter;
-  // Each edit starts from the last address this page asked for, not from
-  // `params`: the router answers a render later, so a chip tapped and a
-  // search typed before it does would each rebuild the address from the old
-  // one, and the second would put the first one's filter back.
+  // `params` lags a render behind setParams, so each edit builds on the last address asked for.
   const latestParams = useRef(params);
   useLayoutEffect(() => {
     latestParams.current = params;
@@ -188,19 +170,26 @@ export function ListingsPage() {
     (next: Filter) => replaceParam("status", next === "all" ? "" : next),
     [replaceParam],
   );
-  // The search box stays local state, since the address answers a step
-  // behind each keystroke, and is copied there whenever the two differ.
   const addressQuery = params.get("q") ?? "";
-  useEffect(() => {
-    if (!isPhone || addressQuery === query) return;
-    replaceParam("q", query);
-  }, [isPhone, addressQuery, query, replaceParam]);
-  // New listing floats over the list on a phone held upright. Held sideways
-  // the head has room for it, and so few rows show that a floating button
-  // would sit on one.
+  useEffect(
+    function copySearchToAddress() {
+      if (!isPhone || addressQuery === query) return;
+      replaceParam("q", query);
+    },
+    [isPhone, addressQuery, query, replaceParam],
+  );
+  return { filter, setPhoneFilter, setDesktopFilter, query, setQuery };
+}
+
+export function ListingsPage() {
+  const [listings, setListings] = useState<ListingSummary[] | null>(lastLoadedListings);
+  const [workspaceRun, setWorkspaceRun] =
+    useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
+  const [status, setStatus] = useState("");
+  const isPhone = useIsPhone();
+  const { filter, setPhoneFilter, setDesktopFilter, query, setQuery } = useListFilters(isPhone);
   const isPhoneSideways = useIsPhoneLandscape();
   const floatingNew = isPhone && !isPhoneSideways;
-  // It steps aside while the list scrolls down, off the rows' ⋯ buttons.
   const fabHidden = useFabHiddenOnScroll(floatingNew);
   const [pendingDelete, setPendingDelete] = useState<ListingSummary | null>(null);
   const navigate = useNavigate();

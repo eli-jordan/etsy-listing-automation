@@ -4,17 +4,6 @@ import { listBatches, type BatchIndexEntry, type BatchStatus } from "../api/batc
 import { clock, dayMonth } from "../dates";
 import { useIsPhone } from "../phone/usePhone";
 
-/**
- * Recent batches (UI doc §2; the `templates` frame): every batch and every
- * unconfirmed staging session, each with a status the server derives from
- * its rows (`batches.standing`) and never set by hand. A Staging row
- * reopens staging; every other row opens the batch summary.
- *
- * Failures are not a status: they are the red *N need retry* beside the
- * progress, so a batch with one failed row still reads as Drafting or In
- * review.
- */
-
 const STATUS: Record<BatchStatus, { label: string; className: string }> = {
   staging: { label: "Staging", className: "tag tag-neutral" },
   drafting: { label: "Drafting", className: "tag tag-accent" },
@@ -50,7 +39,6 @@ function created(iso: string): string {
   return day(iso);
 }
 
-/** The Progress column, in the frame's words for each status. */
 function batchProgress(entry: BatchIndexEntry): string {
   const reviewed = `${entry.reviewed} of ${entry.listings} reviewed`;
   switch (entry.status) {
@@ -83,8 +71,6 @@ function Failures({ entry, style }: { entry: BatchIndexEntry; style?: CSSPropert
   );
 }
 
-/** The phone layout's batches: one tappable row each, the label and status
- * on top and the progress, template and date as quiet lines beneath. */
 function PhoneBatchList({ entries }: { entries: BatchIndexEntry[] }) {
   return (
     <ul className="m-list" aria-label="Recent batches">
@@ -118,8 +104,6 @@ export function RecentBatches() {
     let current = true;
     listBatches()
       .then((loaded) => current && setEntries(loaded))
-      // The cards above are the page; a batch index that will not load
-      // leaves them usable rather than replacing them with an error.
       .catch(() => {});
     return () => {
       current = false;

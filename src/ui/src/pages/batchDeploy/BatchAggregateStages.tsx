@@ -62,8 +62,6 @@ function stageWhy(progress: StageProgress, state: ReturnType<typeof stageState>)
   return `${progress.total} listing${progress.total === 1 ? "" : "s"} will run`;
 }
 
-/** The listing a stage tile points at -- the one running it, else one that
- * needs attention -- or why it points at none. */
 function StageFocus({
   running,
   exception,
@@ -134,8 +132,6 @@ function AggregateStage({
   );
 }
 
-/** Run-level progress. It reads only the PR2 projections, so a stage tile
- * cannot accidentally grow a second definition of runnable or completed. */
 export function BatchAggregateStages({
   plans,
   listings,

@@ -6,9 +6,6 @@ export interface ReviewRunAction {
   prefix: string;
 }
 
-/** The way back to a workspace or batch deploy run, for the toolbar that
- * started it: its progress while it runs, then its outcome until it has been
- * seen. */
 export function reviewRunAction(run: RunSummary | null): ReviewRunAction | null {
   if (run === null) return null;
   if (!TERMINAL_PHASES.has(run.phase)) {

@@ -77,8 +77,6 @@ export function MarketWeights({
     if (pending.index === null) {
       const dx = event.clientX - pending.x;
       if (Math.abs(dx) < 2) return;
-      // Stacked zero shares: either outward direction restores a neighbor.
-      // Every divider remains separately reachable with Tab and arrow keys.
       pending.index = dx < 0 ? Math.min(...pending.stack) : Math.max(...pending.stack);
       setActive(pending.index);
     }

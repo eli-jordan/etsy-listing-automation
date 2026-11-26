@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PlanDTO, RunEvent, StagePlanDTO } from "../../types";
 import { stagePlan } from "../../test/helpers";
 import {
@@ -80,6 +80,10 @@ function reviewedEvents(): RunEvent[] {
   ];
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("batchDeployState", () => {
   it("keeps reviewed plans and previews scoped to their listing", () => {
     const state = batchDeployState(reviewedEvents());
@@ -129,6 +133,17 @@ describe("batchDeployState", () => {
     );
 
     expect(live).toEqual(replayed);
+  });
+
+  it("takes phase times from the event log, never from the clock while folding", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
+    const state = batchDeployState([
+      { type: "phase", id: 1, phase: "planning", occurred_at: "2026-09-21T09:59:00.000Z" },
+      { type: "phase", id: 2, phase: "planned" },
+    ]);
+
+    expect(state.phaseTimes).toEqual({ planning: "2026-09-21T09:59:00.000Z" });
   });
 
   it("overlays sequential apply progress without replacing the reviewed plan", () => {

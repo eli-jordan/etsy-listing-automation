@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildComparison } from "./comparison";
+import { buildComparison, formatPriceRange } from "./comparison";
 import type {
   EtsyListingSnapshot,
   EtsyMediaSnapshot,
@@ -378,9 +378,9 @@ describe("buildComparison: images", () => {
     const { images } = buildComparison(fullPlan());
 
     expect(images?.after).toEqual([
-      { rank: 1, ref: "lifestyle-02:moss", badge: "new", replaced: false },
-      { rank: 2, ref: "lifestyle-02:black", badge: "moved", movedFrom: 1, replaced: false },
-      { rank: 3, ref: "flat-lay-01:ivory", badge: "moved", movedFrom: 2, replaced: false },
+      { rank: 1, ref: "lifestyle-02:moss", badge: "new", reRendered: false },
+      { rank: 2, ref: "lifestyle-02:black", badge: "moved", movedFrom: 1, reRendered: false },
+      { rank: 3, ref: "flat-lay-01:ivory", badge: "moved", movedFrom: 2, reRendered: false },
     ]);
     expect(images?.before).toEqual([
       {
@@ -388,21 +388,21 @@ describe("buildComparison: images", () => {
         ref: "lifestyle-02:black",
         url: "https://etsy.cdn/1.jpg",
         badge: null,
-        replaced: false,
+        reRendered: false,
       },
       {
         rank: 2,
         ref: "flat-lay-01:ivory",
         url: "https://etsy.cdn/2.jpg",
         badge: null,
-        replaced: false,
+        reRendered: false,
       },
       {
         rank: 3,
         ref: "closeup-01:black",
         url: "https://etsy.cdn/3.jpg",
         badge: "removed",
-        replaced: false,
+        reRendered: false,
       },
     ]);
     expect(images?.changed).toBe(true);
@@ -435,8 +435,8 @@ describe("buildComparison: images", () => {
 
     const { images, impacts } = buildComparison(rerendered);
 
-    expect(images?.after.map((t) => t.replaced)).toEqual([true, false]);
-    expect(images?.before.map((t) => t.replaced)).toEqual([true, false]);
+    expect(images?.after.map((t) => t.reRendered)).toEqual([true, false]);
+    expect(images?.before.map((t) => t.reRendered)).toEqual([true, false]);
     expect(images?.after[0]?.badge).toBe("moved");
     expect(images?.changed).toBe(true);
     expect(impacts).toContain("Images");
@@ -696,5 +696,13 @@ describe("buildComparison: videos", () => {
 
   it("is null when the stage was not in the plan", () => {
     expect(buildComparison(fullPlan()).videos).toBeNull();
+  });
+});
+
+describe("formatPriceRange", () => {
+  it("shows one price alone, and a range as the low amount then the high price", () => {
+    expect(formatPriceRange({ min: "349 NOK", max: "349 NOK" })).toBe("349 NOK");
+    expect(formatPriceRange({ min: "349 NOK", max: "399 NOK" })).toBe("349–399 NOK");
+    expect(formatPriceRange(null)).toBe("—");
   });
 });

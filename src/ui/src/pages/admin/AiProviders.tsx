@@ -29,9 +29,6 @@ const complete = (initial: ProviderPreference[]): ProviderPreference[] => [
     .map((name) => ({ name, enabled: false })),
 ];
 
-/** A whole ordered-list edit shares settings.yaml's existing save queue.
- * AiSettingsSections couples an enable with its run floor (ADR-0057).
- */
 export function AiProviders({
   initial,
   onSave,
@@ -119,7 +116,6 @@ export function AiProviders({
   };
   const count = rows.filter((p) => p.enabled !== false).length;
   const failed = problem || Object.values(catalogs?.providers ?? {}).some((p) => p?.problem);
-  // One notice when nothing could be read; per-row problems only when some CLIs answered.
   const allFailed = problem || (!!catalogs && names.every((n) => catalogs.providers?.[n]?.problem));
   let number = 0;
   return (
@@ -221,7 +217,6 @@ type Choices = {
   staleEffort: boolean;
 };
 
-/** What a row offers, and whether its saved choices are still among them. */
 function choicesFor(
   p: ProviderPreference,
   catalog: ProviderCatalog | undefined,
@@ -248,13 +243,10 @@ type RowDrag = {
   drop: () => void;
   active: () => boolean;
   move: (by: number) => void;
-  /** At the top or bottom of the chain, where a move that way does nothing. */
   first: boolean;
   last: boolean;
 };
 
-/** How the chain is worked: a finger cannot hover, drag a native handle or
- * press arrow keys, so on a phone it taps and uses arrow buttons. */
 function ProvidersLede() {
   const isPhone = useIsPhone();
   if (isPhone) {
@@ -275,22 +267,17 @@ function ProvidersLede() {
   );
 }
 
-/** The row's reorder control: the desktop's drag handle (arrow keys too), or
- * on a phone, where native drag and drop does not answer a finger, Up and
- * Down buttons. */
 function ReorderControl({
   label,
-  dataName,
   locked,
   drag,
 }: {
   label: string;
-  /** What a native drag carries: the provider's name. */
-  dataName: string;
   locked: boolean;
   drag: RowDrag;
 }) {
   const isPhone = useIsPhone();
+  // Native drag and drop does not answer a finger.
   if (isPhone) {
     return (
       <span className="adm-reorder">
@@ -324,7 +311,7 @@ function ReorderControl({
       onDragStart={(event) => {
         drag.start();
         event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", dataName);
+        event.dataTransfer.setData("text/plain", label);
       }}
       onDragEnd={drag.end}
       onKeyDown={(event) => {
@@ -394,7 +381,7 @@ function ProviderRow({
       </button>
       <div className="b-step__body">
         <div className="b-step__top">
-          <ReorderControl label={label} dataName={p.name} locked={locked} drag={drag} />
+          <ReorderControl label={label} locked={locked} drag={drag} />
           <span className="b-step__name">{label}</span>
           <span className="b-step__spacer" />
           {!enabled && <span className="b-step__off-note">Off — runs skip it</span>}
@@ -454,7 +441,6 @@ function ProviderRow({
   );
 }
 
-/** One model or reasoning picker. A saved value the list no longer offers stays selectable. */
 function ChoiceSelect({
   id,
   label,

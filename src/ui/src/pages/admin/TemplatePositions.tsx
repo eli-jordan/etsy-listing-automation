@@ -11,22 +11,13 @@ import { ROWS, toDraft, toLimits } from "./templateLimits";
 
 type Confirmed = Promise<(SettingsOutcome & { revision?: string }) | null>;
 
-/**
- * Settings > Template rendering (template positions PR 5; ADR-0058). Unlike
- * the rest of Admin these limits never save on blur: a change can block saved
- * listing positions and, for Marigold templates, may need preparation to run
- * again (option B), so edits stay a draft until the confirmation's Save. The
- * draft lives while the page stays mounted and drops on reload, when
- * `SettingsPanel` remounts this with the reloaded file.
- */
 export function TemplatePositions({
   limits,
-  active,
+  shown,
   onConfirm,
 }: {
   limits: TemplatePositionLimits;
-  /** Whether this subsection is shown; hidden, it keeps its draft. */
-  active: boolean;
+  shown: boolean;
   onConfirm: (changes: SettingsChanges) => Confirmed;
 }) {
   const [saved, setSaved] = useState(() => toDraft(limits));
@@ -48,16 +39,15 @@ export function TemplatePositions({
       setSaved(next);
       setDraft(next);
       setReviewing(false);
-      // Review and save is disabled now; keep focus in the panel.
       queueMicrotask(() => title.current?.focus());
-      return;
+      return null;
     }
     if (outcome === null || outcome.kind === "stale")
-      throw new Error(
+      return (
         "settings.yaml changed on disk since this page loaded it. Nothing was overwritten. " +
-          "Reload settings, then make your change again.",
+        "Reload settings, then make your change again."
       );
-    throw new Error(Object.values(outcome.fieldErrors).join(" ") || outcome.message);
+    return Object.values(outcome.fieldErrors).join(" ") || outcome.message;
   };
 
   return (
@@ -73,7 +63,7 @@ export function TemplatePositions({
             photo stays honest.
           </p>
         </div>
-        {active && !changed && (
+        {shown && !changed && (
           <span className="adm-save adm-save--ok">
             <CheckCircleIcon size={14} /> Saved
           </span>
