@@ -44,7 +44,7 @@ def save_listing_design(workspace: Workspace, filename: str, payload: bytes) -> 
             f"designs must be PNG files, and {filename} is a {kind or 'different'} image"
         )
 
-    name = _free_name(workspace, stem, payload)
+    name = _name_free_or_holding(workspace, stem, payload)
     destination = workspace.design_file(name)
     if not destination.is_file():
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -52,9 +52,7 @@ def save_listing_design(workspace: Workspace, filename: str, payload: bytes) -> 
     return name
 
 
-def _free_name(workspace: Workspace, stem: str, payload: bytes) -> str:
-    """``stem``, or the first ``stem-N`` that is free or already holds these
-    exact bytes."""
+def _name_free_or_holding(workspace: Workspace, stem: str, payload: bytes) -> str:
     candidate, n = stem, 1
     while True:
         path = workspace.design_file(candidate)
