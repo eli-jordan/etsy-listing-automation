@@ -189,7 +189,7 @@ export function AdminPage() {
         <CurrencyDialog
           current={shop.currency}
           currencies={shop.supported_currencies}
-          shopCurrency={connections?.etsy.shop_currency ?? null}
+          etsyShopCurrency={connections?.etsy.shop_currency ?? null}
           onCancel={closeCurrency}
           onConfirm={changeCurrency}
         />
@@ -227,13 +227,6 @@ function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () =>
 
 const SAVED_TOAST_MS = 2500;
 
-/**
- * The phone's save indicator: the page head scrolls away under the sticky
- * section chips, so what a field's save did shows in a toast above the tab
- * bar instead, Retry and Reload with it. Saving and a failure stay until
- * they change; Saved goes after a moment. The toast's live region is always
- * there, so a screen reader hears each change.
- */
 function PhoneSaveToast({
   status,
   onRetry,

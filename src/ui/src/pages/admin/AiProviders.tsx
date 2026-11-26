@@ -267,9 +267,6 @@ function ProvidersLede() {
   );
 }
 
-/** The row's reorder control: the desktop's drag handle (arrow keys too), or
- * on a phone, where native drag and drop does not answer a finger, Up and
- * Down buttons. */
 function ReorderControl({
   label,
   locked,
@@ -280,6 +277,7 @@ function ReorderControl({
   drag: RowDrag;
 }) {
   const isPhone = useIsPhone();
+  // Native drag and drop does not answer a finger.
   if (isPhone) {
     return (
       <span className="adm-reorder">
