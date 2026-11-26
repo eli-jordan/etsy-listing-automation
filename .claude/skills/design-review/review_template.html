@@ -1,0 +1,405 @@
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a review desk. Sticky tally bar on top, then design cards grouped by round;
+   each card pairs the print (on its shirt colour) with its reference art. Viewer = full-screen split compare. */
+:root {
+  --bg: #e9ebef;
+  --surface: #ffffff;
+  --sunk: #dfe2e8;
+  --fg: #15171c;
+  --muted: #59606d;
+  --line: #cfd4dc;
+  --accent: #c0175d;
+  --publish: #17804f;
+  --iterate: #b86a00;
+  --drop: #b3261e;
+  --publish-bg: #dcf2e6;
+  --iterate-bg: #fbecd2;
+  --drop-bg: #f8dedb;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --surface: #1a1d23; --sunk: #23272f; --fg: #e9ebef; --muted: #9aa2af; --line: #2e333c;
+    --accent: #ff5c9d; --publish: #43d08f; --iterate: #ffb547; --drop: #ff6e64;
+    --publish-bg: #173326; --iterate-bg: #3a2b12; --drop-bg: #3d1c1a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --surface: #1a1d23; --sunk: #23272f; --fg: #e9ebef; --muted: #9aa2af; --line: #2e333c;
+  --accent: #ff5c9d; --publish: #43d08f; --iterate: #ffb547; --drop: #ff6e64;
+  --publish-bg: #173326; --iterate-bg: #3a2b12; --drop-bg: #3d1c1a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--surface); }
+.wrap { max-width: 1480px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.intro { padding-block: 28px 18px; }
+h1 { font: 700 clamp(28px, 4vw, 40px)/1.1 var(--display); margin: 0 0 8px; text-wrap: balance; letter-spacing: -0.01em; }
+.intro p { margin: 0; color: var(--muted); max-width: 70ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; font-size: 14px; }
+.legend b { font-weight: 600; }
+.legend .p b { color: var(--publish); } .legend .i b { color: var(--iterate); } .legend .d b { color: var(--drop); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-block: 10px; }
+.tally { display: flex; flex-direction: column; gap: 5px; min-width: 220px; flex: 1 1 260px; }
+.tally .nums { display: flex; gap: 14px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.tally .nums b { color: var(--fg); font-weight: 600; }
+.meter { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--sunk); }
+.meter span { display: block; height: 100%; transition: width .25s; }
+.meter .p { background: var(--publish); } .meter .i { background: var(--iterate); } .meter .d { background: var(--drop); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 13px/1 var(--body); padding: 7px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+.chip:focus-visible, button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sep { width: 1px; height: 22px; background: var(--line); }
+.save { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+section.group { padding-block: 26px 8px; }
+section.group > h2 { font: 700 24px/1.2 var(--display); margin: 0 0 4px; }
+section.group > .gsub { color: var(--muted); margin: 0 0 14px; font-size: 14px; max-width: 75ch; }
+h3.sub { font: 600 12px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 22px 0 10px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 620px), 1fr)); gap: 16px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.card[data-v="publish"] { border-color: var(--publish); box-shadow: inset 0 3px 0 var(--publish); }
+.card[data-v="iterate"] { border-color: var(--iterate); box-shadow: inset 0 3px 0 var(--iterate); }
+.card[data-v="drop"] { border-color: var(--drop); box-shadow: inset 0 3px 0 var(--drop); }
+.card[data-v="drop"] .pics { opacity: .55; }
+.pics { display: grid; grid-template-columns: 3fr 2fr; gap: 0; background: var(--sunk); }
+.shirt { position: relative; display: block; border: 0; padding: 14px; cursor: zoom-in; width: 100%; }
+.shirt img { display: block; width: 100%; height: auto; aspect-ratio: 5 / 6; object-fit: contain; }
+.swatch { position: absolute; left: 8px; bottom: 8px; font: 500 11px/1 var(--mono); padding: 4px 6px; border-radius: 4px; background: rgba(0,0,0,.55); color: #fff; }
+.refs { display: flex; flex-direction: column; gap: 1px; background: var(--line); min-width: 0; }
+.ref { flex: 1 1 0; display: flex; flex-direction: column; background: var(--sunk); border: 0; padding: 8px; cursor: zoom-in; text-align: left; color: var(--fg); min-height: 0; }
+.ref .ri { flex: 1 1 auto; min-height: 90px; display: flex; align-items: center; justify-content: center; }
+.ref img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.ref .k { font: 600 10px/1.2 var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.ref .c { font-size: 12px; line-height: 1.35; margin-top: 2px; }
+.body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.num { font: 500 12px/1 var(--mono); color: var(--muted); }
+.title { font: 700 19px/1.2 var(--display); margin: 0; text-wrap: balance; }
+.style { font-size: 13px; color: var(--muted); }
+.idea { margin: 0; max-width: 68ch; }
+.verdict { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: auto; }
+.vb { font: 600 14px/1 var(--body); padding: 11px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.vb .dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid currentColor; }
+.vb.publish { color: var(--publish); } .vb.iterate { color: var(--iterate); } .vb.drop { color: var(--drop); }
+.vb[aria-pressed="true"].publish { background: var(--publish-bg); border-color: var(--publish); }
+.vb[aria-pressed="true"].iterate { background: var(--iterate-bg); border-color: var(--iterate); }
+.vb[aria-pressed="true"].drop { background: var(--drop-bg); border-color: var(--drop); }
+.vb[aria-pressed="true"] .dot { background: currentColor; }
+.vb .lab { color: var(--fg); }
+textarea.note { width: 100%; min-height: 44px; resize: vertical; font: 14px/1.4 var(--body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; }
+.card[data-v="iterate"] textarea.note { border-color: var(--iterate); }
+.folder { font: 11px/1.3 var(--mono); color: var(--muted); word-break: break-all; }
+.empty { padding: 40px 0; color: var(--muted); }
+
+/* viewer */
+dialog.viewer { width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--bg); color: var(--fg); }
+dialog.viewer::backdrop { background: rgba(0,0,0,.6); }
+.vwrap { display: flex; flex-direction: column; height: 100%; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.vtop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--surface); border-bottom: 1px solid var(--line); }
+.vtitle { font: 700 17px/1.2 var(--display); flex: 1 1 220px; min-width: 0; }
+.vtitle .num { margin-right: 8px; }
+.tb { font: 500 13px/1 var(--body); padding: 8px 11px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.tb[aria-pressed="true"] { background: var(--fg); color: var(--surface); }
+.vverdict { display: flex; gap: 6px; }
+.vverdict .vb { padding: 8px 10px; font-size: 13px; }
+.panes { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); min-height: 0; }
+.pane { position: relative; overflow: auto; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto 1fr; }
+.pane .inner { display: flex; align-items: center; justify-content: center; padding: 16px; min-width: 100%; min-height: 100%; }
+.pane img { display: block; max-width: 100%; max-height: calc(100vh - 150px); object-fit: contain; cursor: zoom-in; }
+.panes.actual .pane .inner { display: block; }
+.panes.actual .pane img { max-width: none; max-height: none; cursor: zoom-out; }
+.plabel { position: sticky; top: 0; left: 0; z-index: 2; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: color-mix(in srgb, var(--surface) 92%, transparent); border-bottom: 1px solid var(--line); font-size: 13px; grid-row: 1; }
+.plabel .k { font: 600 10px/1 var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.plabel a { color: var(--accent); }
+.vnote { padding: 8px 16px 10px; background: var(--surface); border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.vnote b { color: var(--fg); font-weight: 600; }
+kbd { font: 11px/1 var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; }
+
+@media (max-width: 720px) {
+  .pics { grid-template-columns: 1fr; }
+  .refs { flex-direction: row; }
+  .ref .ri { min-height: 120px; max-height: 200px; }
+  .panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .pane img { max-height: calc(50vh - 120px); }
+  .sep { display: none; }
+  .hide-sm { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="intro wrap">
+  <h1 id="pageTitle"></h1>
+  <p id="pageIntro"></p>
+  <div class="legend">
+    <span class="p"><b>Publish</b>: good as it is</span>
+    <span class="i"><b>Iterate</b>: needs work (say what in the note)</span>
+    <span class="d"><b>Drop</b>: won't use</span>
+  </div>
+</header>
+
+<div class="bar">
+  <div class="wrap">
+    <div class="tally" aria-live="polite">
+      <div class="nums"><span><b id="nP">0</b> publish</span><span><b id="nI">0</b> iterate</span><span><b id="nD">0</b> drop</span><span><b id="nU">0</b> untagged</span></div>
+      <div class="meter" aria-hidden="true"><span class="p" id="mP"></span><span class="i" id="mI"></span><span class="d" id="mD"></span></div>
+    </div>
+    <div class="filters" id="gFilters" role="group" aria-label="Round"></div>
+    <span class="sep"></span>
+    <div class="filters" id="vFilters" role="group" aria-label="Tag"></div>
+    <span class="save" id="saveState">Connecting…</span>
+  </div>
+</div>
+
+<main class="wrap" id="main"></main>
+
+<dialog class="viewer" id="viewer" aria-label="Compare design and reference">
+  <div class="vwrap">
+    <div class="vtop">
+      <button class="tb" id="vPrev" aria-label="Previous design">← Prev</button>
+      <button class="tb" id="vNext" aria-label="Next design">Next →</button>
+      <div class="vtitle" id="vTitle"></div>
+      <div class="vverdict" id="vVerdict"></div>
+      <button class="tb" id="vActual" aria-pressed="false">Actual size</button>
+      <button class="tb" id="vClose">Close</button>
+    </div>
+    <div class="panes" id="panes">
+      <div class="pane" id="paneD"></div>
+      <div class="pane" id="paneR"></div>
+    </div>
+    <div class="vnote" id="vNote"></div>
+  </div>
+</dialog>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const PAGE = JSON.parse(document.getElementById("data").textContent);
+const DESIGNS = PAGE.designs;
+const GROUPS = PAGE.groups;
+document.getElementById("pageTitle").textContent = PAGE.title;
+document.getElementById("pageIntro").textContent = PAGE.intro;
+const VERDICTS = [
+  { key: "publish", label: "Publish", n: "1" },
+  { key: "iterate", label: "Iterate", n: "2" },
+  { key: "drop", label: "Drop", n: "3" },
+];
+const LSKEY = PAGE.storageKey;
+const NO_REF = "This design's style was described in words, with no reference image.";
+let tags = {};          // id -> {verdict, note}
+let db = null;
+let gFilter = "all", vFilter = "all";
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k) e.append(k);
+  return e;
+};
+function lsGet() { try { return JSON.parse(localStorage.getItem(LSKEY) || "{}"); } catch { return {}; } }
+function lsSet() { try { localStorage.setItem(LSKEY, JSON.stringify(tags)); } catch {} }
+const tagOf = id => tags[id] || { verdict: null, note: "" };
+const label = d => `${d.groupName} ${d.n}`;
+
+/* ---------- filters + tally ---------- */
+function renderFilters() {
+  const g = $("#gFilters"); g.replaceChildren();
+  const gs = [{ key: "all", name: "All", count: DESIGNS.length }, ...GROUPS.map(x => ({ ...x, count: DESIGNS.filter(d => d.group === x.key).length }))];
+  for (const x of gs) g.append(el("button", { class: "chip", "aria-pressed": String(gFilter === x.key), onclick: () => { gFilter = x.key; renderFilters(); renderMain(); }, text: `${x.name} ${x.count}` }));
+  const v = $("#vFilters"); v.replaceChildren();
+  for (const x of [{ key: "all", label: "Any tag" }, { key: "none", label: "Untagged" }, ...VERDICTS]) {
+    v.append(el("button", { class: "chip", "aria-pressed": String(vFilter === x.key), onclick: () => { vFilter = x.key; renderFilters(); renderMain(); }, text: x.label }));
+  }
+}
+function renderTally() {
+  const c = { publish: 0, iterate: 0, drop: 0 };
+  for (const d of DESIGNS) { const v = tagOf(d.id).verdict; if (v) c[v]++; }
+  const u = DESIGNS.length - c.publish - c.iterate - c.drop;
+  $("#nP").textContent = c.publish; $("#nI").textContent = c.iterate; $("#nD").textContent = c.drop; $("#nU").textContent = u;
+  const pct = n => (100 * n / DESIGNS.length) + "%";
+  $("#mP").style.width = pct(c.publish); $("#mI").style.width = pct(c.iterate); $("#mD").style.width = pct(c.drop);
+}
+function visible(d) {
+  if (gFilter !== "all" && d.group !== gFilter) return false;
+  const v = tagOf(d.id).verdict;
+  if (vFilter === "none") return !v;
+  if (vFilter !== "all") return v === vFilter;
+  return true;
+}
+
+/* ---------- cards ---------- */
+function verdictButtons(d, compact) {
+  const wrap = el("div", { class: compact ? "vverdict" : "verdict", role: "group", "aria-label": "Tag " + d.title });
+  for (const v of VERDICTS) {
+    const on = tagOf(d.id).verdict === v.key;
+    wrap.append(el("button", { class: `vb ${v.key}`, "aria-pressed": String(on), title: `${v.label} (key ${v.n} in the viewer)`, onclick: () => setVerdict(d.id, on ? null : v.key) },
+      el("span", { class: "dot", "aria-hidden": "true" }), el("span", { class: "lab", text: v.label })));
+  }
+  return wrap;
+}
+function card(d) {
+  const t = tagOf(d.id);
+  const idx = DESIGNS.indexOf(d);
+  const refs = el("div", { class: "refs" });
+  d.refs.forEach((r, ri) => refs.append(el("button", { class: "ref", "aria-label": `Open ${r.kind}: ${r.caption}`, onclick: () => openViewer(idx, ri) },
+    el("div", { class: "ri" }, el("img", { src: r.thumb, alt: r.caption, loading: "lazy", width: String(r.w), height: String(r.h) })),
+    el("div", { class: "k", text: r.kind }), el("div", { class: "c", text: r.caption }))));
+  if (!d.refs.length) refs.append(el("div", { class: "ref" }, el("div", { class: "k", text: "No reference" }), el("div", { class: "c", text: NO_REF })));
+  const shirt = el("button", { class: "shirt", style: `background:${d.shirt}`, "aria-label": `Open ${d.title} full size`, onclick: () => openViewer(idx, 0) },
+    el("img", { src: d.thumb, alt: `${d.title} design`, loading: "lazy", width: String(d.w), height: String(d.h) }),
+    el("span", { class: "swatch", text: `${d.shirtName} ${d.shirt}` }));
+  const note = el("textarea", { class: "note", id: `note-${d.id}`, rows: "1", placeholder: "Note: what to change, or why", "aria-label": `Note for ${d.title}` });
+  note.value = t.note || "";
+  let timer = null;
+  note.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => setNote(d.id, note.value), 700); });
+  note.addEventListener("blur", () => { clearTimeout(timer); if ((tagOf(d.id).note || "") !== note.value) setNote(d.id, note.value); });
+  return el("article", { class: "card", id: `card-${d.id}`, "data-v": t.verdict || "" },
+    el("div", { class: "pics" }, shirt, refs),
+    el("div", { class: "body" },
+      el("div", { class: "head" }, el("span", { class: "num", text: d.n }), el("h4", { class: "title", text: d.title }), el("span", { class: "style", text: d.style })),
+      el("p", { class: "idea", text: d.idea }),
+      verdictButtons(d, false), note,
+      el("div", { class: "folder", text: d.folder })));
+}
+function renderMain() {
+  const main = $("#main"); main.replaceChildren();
+  let shown = 0;
+  for (const g of GROUPS) {
+    const ds = DESIGNS.filter(d => d.group === g.key && visible(d));
+    if (!ds.length) continue;
+    shown += ds.length;
+    const sec = el("section", { class: "group", id: `g-${g.key}` }, el("h2", { text: g.name }), el("p", { class: "gsub", text: g.blurb }));
+    const subs = [...new Set(ds.map(d => d.sub))];
+    for (const s of subs) {
+      if (s && (subs.length > 1 || s !== g.name)) sec.append(el("h3", { class: "sub", text: s }));
+      const grid = el("div", { class: "grid" });
+      ds.filter(d => d.sub === s).forEach(d => grid.append(card(d)));
+      sec.append(grid);
+    }
+    main.append(sec);
+  }
+  if (!shown) main.append(el("p", { class: "empty", text: "No designs match these filters. Choose All and Any tag to see everything." }));
+}
+function refreshCard(id) {
+  const old = document.getElementById(`card-${id}`);
+  const d = DESIGNS.find(x => x.id === id);
+  if (old && visible(d)) {
+    const ta = old.querySelector("textarea");
+    const focused = document.activeElement === ta;
+    const fresh = card(d);
+    const nt = fresh.querySelector("textarea");
+    if (focused) nt.value = ta.value;
+    old.replaceWith(fresh);
+    if (focused) nt.focus();
+  } else if (old || visible(d)) renderMain();
+}
+
+/* ---------- saving ---------- */
+async function save(id) {
+  const t = tagOf(id);
+  lsSet();
+  if (!db) { $("#saveState").textContent = "Saved in this browser only"; return; }
+  $("#saveState").textContent = "Saving…";
+  try {
+    const d = DESIGNS.find(x => x.id === id);
+    await db.doc(`reviews/${id}`).set({ verdict: t.verdict || null, note: t.note || "", design: `${d.groupName} ${d.n} ${d.title}`, folder: d.folder, at: new Date().toISOString() });
+    $("#saveState").textContent = "Saved";
+  } catch (e) {
+    $("#saveState").textContent = "Couldn't save. Check you're signed in, then tag again.";
+  }
+}
+function setVerdict(id, v) {
+  tags[id] = { ...tagOf(id), verdict: v };
+  renderTally(); refreshCard(id); if (viewerOpen()) renderViewer();
+  save(id);
+}
+function setNote(id, note) {
+  tags[id] = { ...tagOf(id), note };
+  save(id);
+}
+
+/* ---------- viewer ---------- */
+let vi = 0, vr = 0;
+const viewer = $("#viewer");
+const viewerOpen = () => viewer.open;
+function openViewer(i, ri) { vi = i; vr = ri; renderViewer(); if (!viewer.open) viewer.showModal(); }
+function pane(node, kind, caption, link, img, bg, extra) {
+  node.replaceChildren();
+  const lab = el("div", { class: "plabel" }, el("span", { class: "k", text: kind }), el("span", { text: caption }));
+  if (link) lab.append(el("a", { href: link, target: "_blank", rel: "noopener", text: "Source" }));
+  if (extra) lab.append(extra);
+  const im = el("img", { src: img, alt: caption });
+  im.addEventListener("click", () => toggleActual());
+  node.append(lab, el("div", { class: "inner", style: bg ? `background:${bg}` : "" }, im));
+}
+function renderViewer() {
+  const d = DESIGNS[vi];
+  const t = $("#vTitle"); t.replaceChildren(el("span", { class: "num", text: `${d.groupName} · ${d.n}` }), document.createTextNode(d.title));
+  $("#vVerdict").replaceChildren(verdictButtons(d, true));
+  pane($("#paneD"), "Design", `${d.style} · on ${d.shirtName.toLowerCase()} ${d.shirt}`, null, d.design, d.shirt);
+  const r = d.refs[vr] || d.refs[0];
+  if (!r) {
+    $("#paneR").replaceChildren(el("div", { class: "plabel" }, el("span", { class: "k", text: "No reference" }), el("span", { text: NO_REF })));
+    $("#vNote").replaceChildren(el("b", { text: "Idea: " }), document.createTextNode(d.idea));
+    return;
+  }
+  let sw = null;
+  if (d.refs.length > 1) {
+    sw = el("span", { class: "vverdict" });
+    d.refs.forEach((x, i) => sw.append(el("button", { class: "tb", "aria-pressed": String(i === vr), onclick: () => { vr = i; renderViewer(); }, text: i === 0 ? "Ref 1" : `Ref ${i + 1}` })));
+  }
+  pane($("#paneR"), r.kind, r.caption, r.link, r.img, null, sw);
+  $("#vNote").replaceChildren(el("b", { text: "Idea: " }), document.createTextNode(d.idea + " "),
+    el("span", { class: "hide-sm", text: "Keys: ← → move, 1 Publish, 2 Iterate, 3 Drop, A actual size, Esc close." }));
+}
+function toggleActual() {
+  const p = $("#panes"); const on = !p.classList.contains("actual");
+  p.classList.toggle("actual", on); $("#vActual").setAttribute("aria-pressed", String(on));
+  $("#vActual").textContent = on ? "Fit to screen" : "Actual size";
+}
+$("#vActual").addEventListener("click", toggleActual);
+$("#vClose").addEventListener("click", () => viewer.close());
+$("#vPrev").addEventListener("click", () => { vi = (vi - 1 + DESIGNS.length) % DESIGNS.length; vr = 0; renderViewer(); });
+$("#vNext").addEventListener("click", () => { vi = (vi + 1) % DESIGNS.length; vr = 0; renderViewer(); });
+viewer.addEventListener("keydown", e => {
+  if (e.target.tagName === "TEXTAREA") return;
+  if (e.key === "ArrowLeft") $("#vPrev").click();
+  else if (e.key === "ArrowRight") $("#vNext").click();
+  else if (e.key === "a" || e.key === "A") toggleActual();
+  else { const v = VERDICTS.find(x => x.n === e.key); if (v) { const id = DESIGNS[vi].id; setVerdict(id, tagOf(id).verdict === v.key ? null : v.key); } }
+});
+viewer.addEventListener("close", () => { const c = document.getElementById(`card-${DESIGNS[vi].id}`); if (c) c.scrollIntoView({ block: "nearest" }); });
+
+/* ---------- boot ---------- */
+tags = lsGet();
+renderFilters(); renderTally(); renderMain();
+(async () => {
+  const timer = setTimeout(() => { if (!db) $("#saveState").textContent = "Saved in this browser only"; }, 10000);
+  try { db = window.claude?.use ? await window.claude.use("db") : null; } catch { db = null; }
+  clearTimeout(timer);
+  if (!db) { $("#saveState").textContent = "Saved in this browser only"; return; }
+  db.collection("reviews").onSnapshot(snap => {
+    const next = {};
+    for (const doc of snap.docs) { const x = doc.data(); next[doc.id] = { verdict: x.verdict ?? null, note: x.note ?? "" }; }
+    const changed = DESIGNS.filter(d => JSON.stringify(tagOf(d.id)) !== JSON.stringify(next[d.id] || { verdict: null, note: "" })).map(d => d.id);
+    if (!snap.empty || !Object.keys(tags).length) { tags = next; lsSet(); }
+    renderTally();
+    for (const id of changed) refreshCard(id);
+    if (viewerOpen()) renderViewer();
+    $("#saveState").textContent = snap.empty ? "Ready. Nothing tagged yet" : "Saved";
+  }, () => { $("#saveState").textContent = "Couldn't load saved tags. Tags save in this browser only."; });
+})();
+</script>
