@@ -48,17 +48,12 @@ def prompt_toolkit_works() -> bool:
     return True
 
 
-def _read_line(prompt: str) -> str:
-    # Looked up per call, so a redirected ``builtins.input`` is still honoured.
-    return input(prompt)
-
-
 @dataclass(frozen=True, eq=False)
 class PromptHost:
     commands: CommandHost = LOCAL_CLI_HOST
     windows: bool = os.name == "nt"
     prompt_toolkit: Callable[[], bool] = prompt_toolkit_works
-    read_line: Callable[[str], str] = _read_line
+    read_line: Callable[[str], str] = input
 
 
 LOCAL_PROMPT_HOST = PromptHost()

@@ -307,11 +307,8 @@ def test_plain_prompts_treat_eof_as_cancellation() -> None:
     assert prompts.confirm("Sure?", host=host) is None
 
 
-def test_the_local_machine_reads_lines_through_input(monkeypatch) -> None:
-    # `builtins.input` is looked up per call, so wizard tests that redirect it
-    # still reach the plain backend through the default host.
-    monkeypatch.setattr("builtins.input", replies(["typed"]))
-    assert prompts.LOCAL_PROMPT_HOST.read_line("> ") == "typed"
+def test_the_local_machine_reads_lines_through_input() -> None:
+    assert prompts.LOCAL_PROMPT_HOST.read_line is input
 
 
 # --- declining, as the wizards see it ----------------------------------------
