@@ -6,9 +6,13 @@ reproduce or it blesses a broken media stage (features/etsy-listing-20260910/spe
 
 from __future__ import annotations
 
+import pytest
+
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.core.clients.etsy.listings import ImageUpload
 from etsy_listings.core.clients.etsy.models import VariationImageLink
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.config.media import MAX_IMAGES
 
 SHOP_ID = 67961328
 LISTING_ID = 4572550919
@@ -71,6 +75,37 @@ def test_image_ids_detaches_whatever_it_omits() -> None:
     listing = client.get_listing(LISTING_ID, include_images=True)
     assert listing is not None
     assert [i.listing_image_id for i in listing.images] == [ours.listing_image_id]
+
+
+def test_image_ids_cannot_empty_a_listing_of_images() -> None:
+    client = _seeded()
+    image = client.upload_listing_image(
+        SHOP_ID, LISTING_ID, ImageUpload(file_name="a.png", contents=b"a", rank=1)
+    )
+
+    with pytest.raises(ValueError, match="will not empty"):
+        client.update_listing(SHOP_ID, LISTING_ID, {"image_ids": []})
+
+    listing = client.get_listing(LISTING_ID, include_images=True)
+    assert listing is not None
+    assert [i.listing_image_id for i in listing.images] == [image.listing_image_id]
+
+
+def test_an_upload_past_the_image_limit_is_refused_and_changes_nothing() -> None:
+    client = _seeded()
+    for n in range(MAX_IMAGES):
+        client.upload_listing_image(
+            SHOP_ID, LISTING_ID, ImageUpload(file_name=f"{n}.png", contents=b"x", rank=n + 1)
+        )
+
+    with pytest.raises(EtsyApiError, match="only allowed"):
+        client.upload_listing_image(
+            SHOP_ID, LISTING_ID, ImageUpload(file_name="extra.png", contents=b"y", rank=1)
+        )
+
+    listing = client.get_listing(LISTING_ID, include_images=True)
+    assert listing is not None
+    assert len(listing.images) == MAX_IMAGES
 
 
 def test_overwrite_replaces_in_place_leaving_count_and_neighbours_untouched() -> None:

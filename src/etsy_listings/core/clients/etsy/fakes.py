@@ -83,12 +83,8 @@ class _FakeShopMetadata(ShopMetadataClient):
 
 
 class FakeEtsyShopClient(_FakeShopMetadata, EtsyShopClient):
-    """Every read `setup` makes, answered from a dict.
-
-    `find_shops` matches case-insensitively on the whole name rather than as a
-    substring: what it stands in for is Etsy's own search, and the caller's
-    job is to decide whether a result really is the shop it asked about.
-    """
+    """Every read `setup` makes, answered from a dict; `find_shops` matches
+    whole names, ignoring case."""
 
     def __init__(
         self,
@@ -171,10 +167,9 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         self._images.setdefault(listing_id, [])
 
     def seed_video(self, listing_id: int, *, video_state: str = "active") -> ListingVideo:
-        """A video already on the listing, placed as an attach now would be
-        but without spending the day's budget: a seller's own from Shop
-        Manager, or -- ``inactive`` -- one a legacy-mode upload switched off,
-        which the tool itself never causes (decision 9)."""
+        """A video already on the listing, placed as an attach would be but
+        spending no budget; ``inactive`` models one a legacy-mode upload
+        switched off."""
         video = self._new_video()
         attached = self._attach(listing_id, video.video_id)
         self._videos[listing_id][-1].state = video_state
@@ -207,13 +202,8 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         )
 
     def gallery(self, listing_id: int) -> tuple[GallerySlot, ...]:
-        """The listing's gallery as Shop Manager would show it (decision 9).
-
-        Read-only, and for tests: the real API has no such read, which is
-        exactly why the fake has to model one. Inactive videos do not show,
-        and neither does any video on a listing with no images: Etsy will not
-        publish one, and what Shop Manager shows then was not measured.
-        """
+        """The gallery as Shop Manager shows it, which the real API cannot read.
+        A listing with no images shows no video: that case was not measured."""
         images = self._images.get(listing_id, [])
         active = sorted(
             (a for a in self._videos.get(listing_id, []) if a.state == "active"),
@@ -229,10 +219,7 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
 
     @override
     def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
-        """Only the ids this fake has actually been seeded with, and only
-        those carrying a state -- the real batch read omits both, and a caller
-        that treats "absent" as "draft" should fail here rather than in
-        production."""
+        """Seeded ids that carry a state; like the real batch read, others are absent."""
         states: dict[int, str] = {}
         for listing_id in listing_ids:
             listing = self._listings.get(listing_id)
@@ -284,6 +271,8 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
 
     def _set_image_ids(self, listing_id: int, image_ids: list[int]) -> None:
         known = self._known_images.setdefault(listing_id, {})
+        if not image_ids and self._images.get(listing_id):
+            raise ValueError(f"Etsy will not empty listing {listing_id} of its images")
         if any(image_id not in known for image_id in image_ids):
             raise EtsyApiError(
                 400, error="There was a problem with /images : That ListingImage does not exist."
@@ -303,7 +292,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         listing_image_id = upload.listing_image_id
         replacing = overwrite and listing_image_id is not None
         if not replacing and len(self._images.get(listing_id, [])) >= MAX_IMAGES:
-            # Measured: a 21st upload is refused, nothing changed.
             raise EtsyApiError(
                 400,
                 error=(
@@ -373,9 +361,7 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         self._videos[listing_id] = [a for a in attached if a.video_id != video_id]
 
     def _admit_video(self, listing_id: int) -> None:
-        """Etsy's two refusals, in the order the fake checks them: a full
-        listing first, then the day's budget. Which Etsy checks first was not
-        measured; a refused attempt is not counted against the budget."""
+        """A full listing, then the day's budget; Etsy's own order is unmeasured."""
         attached = self._videos.get(listing_id, [])
         if sum(a.state == "active" for a in attached) >= VIDEO_SLOTS:
             raise VideoSlotsFullError
@@ -436,7 +422,7 @@ def server_error(status: int = 503) -> EtsyApiError:
 
 def network_error() -> httpx.TransportError:
     """What the real client lets through once a dropped connection has
-    outlasted the retries: the transport error itself, not a wrapper."""
+    outlasted the retries: the transport error itself."""
     return httpx.ConnectError("connection reset by peer")
 
 
@@ -449,16 +435,9 @@ class _Failure:
 
 
 class FakeEtsyMarketClient(EtsyMarketClient):
-    """The Etsy market, answered from what a test seeded.
-
-    Listings are seeded once with everything the batch returns; a search
-    answers the seeded ids in the order given, narrowed to the candidate
-    fields a real search carries. Every call -- failed ones included, since
-    they cost quota too -- lands in :attr:`calls`, the batch once per chunk
-    of a hundred as the real one is. Failures are injected as what the real
-    client raises *after* its retries, since the retries are the transport's
-    and are tested there. Thread-safe: research calls it from five threads.
-    """
+    """The Etsy market, answered from what a test seeded. Every call, failed
+    ones included, lands in :attr:`calls`; injected failures are what the
+    real client raises after its retries. Thread-safe."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -474,8 +453,7 @@ class FakeEtsyMarketClient(EtsyMarketClient):
             self._reviews[listing.listing_id] = reviews
 
     def seed_search(self, query: str, listing_ids: Sequence[int]) -> None:
-        """What ``query`` finds, best-ranked first. Every id must be seeded
-        with :meth:`seed_listing`, before or after."""
+        """What ``query`` finds, best first; seed each id with :meth:`seed_listing`."""
         with self._lock:
             self._searches[query] = list(listing_ids)
 
