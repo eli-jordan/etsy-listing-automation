@@ -2,10 +2,6 @@ import type { SeoRationaleEntry, SeoWarningEntry } from "../../../types";
 import { AiModeMark, AiSeoDisclosure, SuggestionHeading } from "./AiChoiceDrawer";
 import { canToggleTag, MAX_TAGS } from "./aiSeoTags";
 
-/** The tag drawer (`docs/features/ai-seo-20260922/interactions.md` section 4): 20
- * ranked candidates split into **Best 13** and **More options**, each a
- * toggle synchronized with the listing's real tag collection, plus
- * **Accept best 13** and **Close**. */
 export function AiTagsDrawer({
   tags,
   selected,
@@ -20,7 +16,6 @@ export function AiTagsDrawer({
 }: {
   tags: string[];
   selected: string[];
-  /** See `AiChoiceDrawer`'s: out of date, and still usable. */
   staleReason: string | null;
   rationale: SeoRationaleEntry[];
   warnings: SeoWarningEntry[];

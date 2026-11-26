@@ -35,19 +35,12 @@ export const MAX_IMAGES = 20;
 /** Etsy's ceiling on listing videos, `config/media.py`'s `MAX_VIDEOS`. */
 export const MAX_VIDEOS = 2;
 
-/** How many more images will fit before Etsy's ceiling. */
 export function roomLeft(media: readonly MediaEntry[]): number {
   return Math.max(0, MAX_IMAGES - count(media, "image"));
 }
 
 type Patch = Record<string, unknown>;
 
-/** Add a template/colour to the reel, or take it out again.
- *
- * A removal is allowed unless it would leave no image to be the thumbnail
- * (see {@link settleGallery}); an addition stops at the ceiling rather than
- * writing a twenty-first image the server would refuse.
- */
 export function toggleEntry(
   detail: MediaState,
   template: string,
@@ -64,18 +57,6 @@ export function toggleEntry(
   return { media: [...detail.media, { template, colour }] };
 }
 
-/**
- * Add a file ref -- shared or the listing's own, image or video -- or take it
- * out again. A file ref is a bare string in `media:`, not a `{template,
- * colour}` entry: the same list, two shapes (`config/listing.py`'s
- * `MediaEntry`).
- *
- * An image goes on the end. A video goes where ADR-0045's gallery rules put it:
- * the first one at position 2, where Etsy pins the featured video, and the
- * second on the end, since it may sit anywhere after that. A video with no
- * image yet to be the thumbnail, a third video and a twenty-first image are
- * all declined -- `_check_gallery` would refuse each write.
- */
 export function toggleFile(detail: MediaState, ref: string): Patch | null {
   if (detail.media.includes(ref)) {
     return settled(detail.media.filter((m) => m !== ref));
@@ -98,16 +79,6 @@ export function addEveryMissingColour(detail: MediaState, template: string): Pat
   return { media: [...detail.media, ...additions] };
 }
 
-/**
- * Point Etsy's colour swatches at this template, or turn them off.
- *
- * Turning it on also adds the colours it lacks: ADR-0030's gate
- * (`EtsyMediaStage.desired()`) refuses a `variation_images` template whose
- * colours the media does not carry, so naming one without filling it in would
- * write a listing the engine then refuses to apply. Switching *from* another
- * template is the same move -- there is one swatch source, so setting this one
- * clears that one by definition.
- */
 export function toggleSwatchSource(detail: MediaState, template: string): Patch {
   if (detail.etsy.variation_images === template) {
     return { etsy: { variation_images: null } };
@@ -122,25 +93,11 @@ export function removeAt(detail: MediaState, index: number): Patch | null {
   return settled(detail.media.filter((_, i) => i !== index));
 }
 
-/** Move a reel tile. The reel's order is the order Etsy shows the images in,
- * so this is a product decision the user makes by dragging, not a display
- * detail.
- *
- * Inside ADR-0045's gallery rules. The featured video holds position 2 while
- * images move around it, so an image dropped on the thumbnail becomes the
- * thumbnail without pushing the video to 3. The second video may go anywhere
- * after the featured one, and dropping it on position 2 swaps them. A move
- * the rules cannot take -- a video on the thumbnail, an image on the featured
- * slot, the featured video past an image -- is no move at all: `null`, and
- * the tile snaps back.
- */
 export function reorder(detail: MediaState, from: number, to: number): Patch | null {
   const next = moved(detail.media, from, to);
   return next === null ? null : { media: next };
 }
 
-/** Whether {@link reorder} would take this drag -- what the reel asks while a
- * tile is carried, so a refused drop target looks refused before the drop. */
 export function canReorder(media: readonly MediaEntry[], from: number, to: number): boolean {
   return moved(media, from, to) !== null;
 }
@@ -189,16 +146,6 @@ function count(media: readonly MediaEntry[], kind: "image" | "video"): number {
   return media.filter((m) => mediaKind(m) === kind).length;
 }
 
-/**
- * What is left after a removal, put back inside ADR-0045's gallery rules -- or
- * `null` when nothing can be.
- *
- * Removing the thumbnail brings the next image forward; removing the featured
- * video promotes the other one to position 2, which is what Etsy itself does
- * (decision 9). Everything else keeps its order. A gallery holding a video and
- * no image has no thumbnail to offer at all, so that removal is declined
- * rather than written and refused.
- */
 export function settleGallery(media: readonly MediaEntry[]): MediaEntry[] | null {
   const firstVideo = media.findIndex((m) => mediaKind(m) === "video");
   if (firstVideo === -1) return [...media];

@@ -1,10 +1,5 @@
 import type { SeoRationaleEntry, SeoWarningEntry } from "../../../types";
 
-/** The shared shape of the title and description-lead drawers
- * (`docs/features/ai-seo-20260922/interactions.md` sections 3 and 5): exactly three
- * options, one click both decides and applies, **Reject all** closes it
- * unchanged, and there is no default selection or separate Accept step. */
-
 type Field = "title" | "description lead";
 
 /** `SeoRationaleEntry.used_in` uses the wire's field keys; this drawer is
@@ -26,8 +21,6 @@ export function AiChoiceDrawer({
 }: {
   field: Field;
   options: string[];
-  /** Why the proposal no longer describes the saved listing, from the
-   * server, or `null` while it still does. */
   staleReason: string | null;
   rationale: SeoRationaleEntry[];
   warnings: SeoWarningEntry[];
@@ -77,10 +70,6 @@ export function AiChoiceDrawer({
   );
 }
 
-/** A drawer's heading: its own, or -- for an out-of-date proposal -- what
- * changed (UI doc §8; `features/ai-seo-20260922/interactions.md` §7). The choices
- * below stay clickable with no confirmation: the heading is the warning
- * (ADR-0047). */
 export function SuggestionHeading({
   staleReason,
   children,

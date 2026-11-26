@@ -99,15 +99,12 @@ export function firstFocus(
   return restoreFocus(ref, templates, files);
 }
 
-/** Everything the preview pane and its foot need, for one focus. */
 export interface FocusView {
   title: string;
   /** The file it would upload, or render from -- the same question either way,
    * and the reason the foot shows a path at all. */
   path: string;
   picture: string;
-  /** A video is previewed by a playable `<video>`, an image by an `<img>`
-   *. */
   kind: "image" | "video";
   /** What the listing's check says about this one file -- a video's sound
    * note, a clip too short -- so the pane showing it says it too. */

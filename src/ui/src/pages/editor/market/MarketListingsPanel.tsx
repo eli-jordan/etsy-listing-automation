@@ -12,23 +12,12 @@ import type { MarketSnapshot, PhraseScore, ScoredListing, ProposalChoices } from
 import { useNow } from "../../../hooks/useNow";
 import { timeAgo } from "../timeAgo";
 
-/**
- * The right-hand column of Listing Details (docs/features/market-seo-20260924/interactions.md,
- * section 2; features/market-seo-20260924/spec.md, *UI*): what the last market search found, read
- * from the snapshot so it survives a reload. Read-only by design.
- *
- * It has a second job: showing the seller *why* the suggestions read as they
- * do. The top eight are what the proposal saw verbatim; all of them fed the
- * phrase list.
- */
-
 export type MarketPanelState =
   | { kind: "loading"; queries: string[] | null }
   | { kind: "ready"; snapshot: MarketSnapshot }
   | { kind: "empty"; queries: string[] }
   | { kind: "failed"; reason: string };
 
-/** How many of the scored listings the proposal sees verbatim (features/market-seo-20260924/spec.md). */
 const EXAMPLES = 8;
 
 function compact(n: number): string {
@@ -52,8 +41,6 @@ function sentence(reason: string): string {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
-/** The Etsy searches AI Mode wrote from the brief, as a sentence rather than
- * chips, so they can't be taken for tags. */
 function Queries({ queries, searching }: { queries: string[]; searching?: boolean }) {
   return (
     <p className={searching ? "mkt-queries mkt-queries--searching" : "mkt-queries"}>
@@ -163,9 +150,6 @@ function ListingRow({
   );
 }
 
-/** The top eight -- what the proposal was shown verbatim -- then, on
- * request, the rest that only fed the phrase list. One row open at a time;
- * revealing the rest is one-way. */
 function Listings({ snapshot }: { snapshot: MarketSnapshot }) {
   const [open, setOpen] = useState<number | null>(null);
   const [all, setAll] = useState(false);
@@ -198,12 +182,8 @@ function Listings({ snapshot }: { snapshot: MarketSnapshot }) {
   );
 }
 
-/** What the phrase ticks are read from. */
 export type Suggestions = Pick<ProposalChoices, "titles" | "tags" | "description_leads">;
 
-/** The phrase-tick rule (docs/features/market-seo-20260924/interactions.md, *Phrases view*):
- * the phrase is one of the suggested tags, or a suggested title or lead
- * contains it, ignoring case. */
 function inSuggestions(phrase: string, suggestions: Suggestions): boolean {
   const wanted = phrase.toLowerCase();
   return (
@@ -254,7 +234,6 @@ function Phrases({
 
 type View = "listings" | "phrases";
 
-/** Listings | Phrases, as the app's one segmented control (`.seg`). */
 function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => void }) {
   return (
     <div className="seg mkt-seg" role="tablist" aria-label="Market view">
@@ -279,8 +258,6 @@ export function MarketListingsPanel({
   proposal,
 }: {
   state: MarketPanelState;
-  /** The pending proposal, whose words tick the phrases they share; `null`
-   * when there is none. */
   proposal: Suggestions | null;
 }) {
   const now = useNow();

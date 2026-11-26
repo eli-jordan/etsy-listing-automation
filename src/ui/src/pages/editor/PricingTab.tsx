@@ -3,14 +3,6 @@ import { listPricingPlans } from "../../api/listings";
 import { useIsPhone } from "../../phone/usePhone";
 import type { ListingDetail, PricingPlanSummary } from "../../types";
 
-/** Plan picker and per-size prices (phase 5).
- *
- * The same controls Listing Details used to hold. A plan is selectable
- * (`GET /api/pricing-plans`, already built for the "+ New listing" flow) and
- * each resolved size carries an editable price, written as a per-size
- * override into `Listing.prices` -- `resolved_price()` already prefers that
- * over the plan, so no new resolution rule is needed. */
-
 /** A `"<amount> <CURRENCY>"` string (a `PriceField`'s wire form), split for
  * an editable amount plus a fixed currency suffix -- the currency itself is
  * the workspace's, not something this field lets you change per size. */

@@ -24,7 +24,6 @@ type BoxEntry = { bounding_box: Quad };
 const isPlacements = (entry: Entry): entry is { placements: Record<string, BoxEntry> } =>
   "placements" in entry;
 
-/** The stored corners for a template, or one placement of a `multiple` one. */
 export function storedBox(
   positions: Positions | null | undefined,
   template: string,
@@ -57,9 +56,6 @@ export function withoutPosition(
   return finished(rest);
 }
 
-/** Micro-pixels keep `listing.yaml` readable. The rounding is kept only when
- * the stored box still fits the limits, since `plan` allows no slack beyond
- * round-off: a pose clamped to a limit must not round past it. */
 function storable(box: Quad, pose: Pose, limits: Limits): Quad {
   const exact = compose(box, pose);
   const rounded = exact.map((p) => ({
@@ -113,7 +109,6 @@ const POSE_REFUSAL =
 const PREFIX = "template_positions.";
 const PLACEMENTS = ".placements.";
 
-/** The key a banner row's *Remove* action deletes, or `null` when the row has none. */
 export function removablePosition(
   issue: Issue,
 ): { template: string; placement: string | null } | null {

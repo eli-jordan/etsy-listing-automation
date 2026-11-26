@@ -11,20 +11,6 @@ import type {
   ListingTemplateSource,
 } from "../../types";
 
-/**
- * A listing template as the listing editor's tabs read it, and back.
- *
- * The listing-template editor mounts the listing editor's own tabs (UI doc
- * §3), and they read a `ListingDetail`. A listing template is not a listing
- *, so this is the one place the two shapes meet: the design-specific
- * fields a template does not have are filled with a listing's empty values on
- * the way in -- no design, brief, title, tags or lead -- and are dropped on the
- * way out, along with everything the server computes. What the editor shows
- * as the preview design is never in either direction: it lives in the
- * shell's state, not the document (UI doc §3, "It is not saved with the
- * template").
- */
-
 export function templateAsListing(template: ListingTemplateDetail): ListingDetail {
   const etsy = template.etsy;
   return {
@@ -65,10 +51,6 @@ export function templateAsListing(template: ListingTemplateDetail): ListingDetai
   };
 }
 
-/** The fields of the editor's `ListingDetail` that are `template.yaml`:
- * `config/listing_template.py`'s `ListingTemplate`, which forbids every
- * other field. Listed positively, as `listingDocument` is, so a new computed
- * field can never start being written. */
 export function listingTemplateDocument(detail: ListingDetail): Record<string, unknown> {
   const etsy = detail.etsy;
   return {

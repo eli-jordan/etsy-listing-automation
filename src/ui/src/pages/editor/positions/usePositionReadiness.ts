@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getPositionReadiness, queueCoverage } from "../../../api/preparation";
 
-/** How often a template that is not ready is asked again. */
 export const READINESS_POLL_MS = 3000;
 
 const PREPARING = "This template is being prepared. Adjusting will be available soon.";
@@ -14,7 +13,6 @@ export interface PositionReadiness {
   note: string | null;
   /** Counts each time the template becomes ready, so a failed picture retries. */
   attempt: number;
-  /** A click on the switch while `waiting`: say why, and start what it waits for. */
   refuse: () => void;
   /** Ask now: a picture failed, which may mean preparation began since the last read. */
   recheck: () => void;

@@ -1,20 +1,10 @@
 import { type Matrix, type Quad, proportions, toPhoto, unitFrame } from "./pose";
 
 /**
- * The stage's picture while a position is ahead of its render, drawn on the
- * GPU so it keeps up with the pointer: the bare photo, then each layer's
- * artwork through the same homography the server warps it by.
- *
- * It stands in for a render that can take seconds. A Photo warp template's
- * shade is `passes.py`'s arithmetic, on the luminance of a photo assumed to span
- * the full range. A Marigold print approximates what the maps know: it picks up
- * the garment's light as the photo's luminance over the luminance around the
- * box, and is cut to the cloth by the template's mask. Neither displaces or fits
- * the print to the cloth, so the render that replaces it can move the ink a
- * little.
+ * A Photo warp template's shade is `passes.py`'s arithmetic, on the luminance
+ * of a photo assumed to span the full range.
  */
 
-/** How a template's print takes the garment's light. */
 export type LiveLook =
   | { kind: "marigold" }
   | { kind: "photo-warp"; blend: "multiply" | "soft-light" | "grey-pivot"; opacity: number };
@@ -257,7 +247,6 @@ function rendererOn(canvas: HTMLCanvasElement, gl: WebGL2RenderingContext): Live
   };
 }
 
-/** `null` where the browser has no WebGL 2, which the stage falls back from. */
 export function createLiveRenderer(canvas: HTMLCanvasElement): LiveRenderer | null {
   const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
   return gl === null ? null : rendererOn(canvas, gl);

@@ -3,9 +3,6 @@ import { isInMedia, missingColours } from "../../media";
 import type { ListingDetail, TemplateSummary } from "../../types";
 import type { Focus } from "./focus";
 
-/** One calibrated template in the locator: its head, and when open, how it
- * can join the listing's media. */
-
 interface TemplateActions {
   onToggleTemplate: (template: string, colour: string | null) => void;
   onAddMissingColours: (template: string) => void;
@@ -58,8 +55,6 @@ function swatchSubtitle(template: string, swatchTemplate: string | null): string
   return swatchTemplate ? `Currently using ${swatchTemplate}` : "Off — no swatch images sent";
 }
 
-/** How many of the listing's colours the swatch template has a photo for,
- * and which ones Etsy will leave empty. */
 function SwatchCoverage({ colours, uncovered }: { colours: number; uncovered: string[] }) {
   if (uncovered.length === 0) {
     return <span className="swatch-status swatch-status--ok">{`All ${colours} covered`}</span>;

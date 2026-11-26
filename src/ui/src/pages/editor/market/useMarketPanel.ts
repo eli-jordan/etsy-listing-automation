@@ -4,7 +4,6 @@ import type { MarketSnapshot } from "../../../types";
 import type { AiRun } from "../aiSeo/useAiRun";
 import type { MarketPanelState } from "./MarketListingsPanel";
 
-/** What the panel reads from the listing's AI run. */
 export type MarketRun = Pick<AiRun, "busy" | "steps" | "queries" | "market">;
 
 interface Known {
@@ -20,21 +19,6 @@ function shown(snapshot: MarketSnapshot): MarketPanelState {
     : { kind: "ready", snapshot };
 }
 
-/**
- * Which state the top listings panel is in, or `null` for no panel at all
- * (docs/features/market-seo-20260924/interactions.md, *Panel states*):
- *
- * - **loading** while the run's market node is active -- even over a saved
- *   snapshot, since a re-run drops to it straight away -- with the searches
- *   once the `queries` event has named them;
- * - **hidden** when the market node failed while this editor was watching
- *   the run. The reason is a toast, not a note in this column. The snapshot
- *   on disk is untouched, so a reload -- which only replays the failure --
- *   shows the previous results again;
- * - otherwise the newest search this editor knows of: the run's `market`
- *   event, or the snapshot `GET …/market` answered on mount. A search that
- *   found nothing is the **empty** note; no search at all is no panel.
- */
 export function useMarketPanel(listing: string, run: MarketRun): MarketPanelState | null {
   const [known, setKnown] = useState<Known>({ listing, snapshot: null, fromRun: false });
   const [seen, setSeen] = useState<MarketSnapshot | null>(null);
@@ -64,9 +48,6 @@ export function useMarketPanel(listing: string, run: MarketRun): MarketPanelStat
 
   const step = run.steps.find((s) => s.id === "market");
   if (step?.state === "active") return { kind: "loading", queries: run.queries };
-  // A failure the editor watched would otherwise become the panel's own
-  // error note. The reason is the toast; this column goes away until a
-  // reload brings the saved snapshot back.
   if (step?.state === "failed" && watched) return null;
   const snapshot = run.market ?? (known.listing === listing ? known.snapshot : null);
   return snapshot === null ? null : shown(snapshot);

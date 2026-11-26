@@ -1,16 +1,5 @@
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 
-/**
- * What the seller was looking at in an editor -- the tab, the colour on the
- * stage, the picture in the preview -- kept so a page refresh comes back to it.
- *
- * In `sessionStorage` rather than the URL: the preview follows the pointer
- * across the locator, and a router navigation per hover would re-render the
- * page and run past the template editor's unsaved-edits blocker. It is per
- * browser tab, so two listings side by side keep their own views, and it is
- * never part of the document, so nothing here reaches a save.
- */
-
 /** Which editor's view this is, or `null` for one with nothing to come back
  * to: a refresh of an unnamed draft starts a new draft. */
 export type ViewScope = string | null;

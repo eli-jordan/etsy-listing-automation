@@ -45,8 +45,6 @@ interface Props {
   onRemove: (index: number) => void;
   onReorder: (from: number, to: number) => void;
   onFocus: (focus: Focus) => void;
-  /** Templates this listing positions (`template_positions:`): their tiles
-   * wear the badge, every colour of a colour-matrix one included. */
   positioned?: ReadonlySet<string>;
   /** Opens Add media, when the reel carries the button for it: on a phone,
    * where the locator is a sheet rather than a column beside the reel. */
@@ -79,7 +77,6 @@ export function MediaReel({
   const phone = useIsPhone();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  // Images are what Etsy caps at twenty; videos are counted apart.
   const images = media.filter((entry) => mediaKind(entry) === "image").length;
   const videos = media.length - images;
 
@@ -330,8 +327,6 @@ interface TileProps {
   onRemove: () => void;
 }
 
-/** One tile. Its own component so a video's clip has somewhere to keep the
- * element its hover plays. */
 function ReelTile({
   entry,
   index,

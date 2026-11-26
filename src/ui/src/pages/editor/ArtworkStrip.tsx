@@ -29,37 +29,13 @@ import {
 import { ChooseBaseDialog } from "./ChooseBaseDialog";
 import { ShirtThumb } from "./ShirtThumb";
 
-/**
- * The design strip above the tabs: which artwork each shirt prints.
- *
- * One design (`design.default`) is the default and shows as one selector
- * beside a light and a dark shirt wearing it. **Use different designs on
- * light & dark shirts** splits it into two selectors, `on-light` and
- * `on-dark`, each beside the one shirt it prints on; going back to one design
- * asks which file to keep when there are two. Every change is one `onChange`
- * with the whole new map, built by `artwork.ts`'s transitions.
- *
- * A PNG dropped on a selector is uploaded into `designs/` and picked for that
- * selector. The drop targets are the selectors on show: dropping never
- * changes the mode, so a listing on one design is only ever given another
- * one design.
- *
- * Which Recent designs panel is open is the shell's state, not the strip's,
- * so the card under the Variants stage can open a slot's panel too.
- */
-
 interface Props {
   design: DesignMap;
-  /** The colours the listing sells -- which ones each slot prints on. */
   colours: readonly string[];
   garmentProfile: string;
   open: SlotTarget | null;
   onOpen: (target: SlotTarget | null) => void;
-  /** The new `design:` map. What it sets off beyond the edit -- naming a
-   * draft, arming AI -- is decided from the map, not from which control made
-   * it (spec: *Representative artwork*). */
   onChange: (next: DesignMap) => void;
-  /** Previews a colour on the Variants stage: the own-design line's names. */
   onPreview: (colour: string) => void;
 }
 
@@ -100,7 +76,6 @@ function useDragDepth(onChange: (holding: boolean) => void) {
   };
 }
 
-/** A tone slot's "Prints on …" line, or `null` when no colour uses it. */
 function tonePrintsOn(users: string[]): string | null {
   return users.length === 0 ? null : `Prints on ${listNames(users)}`;
 }
@@ -191,7 +166,6 @@ export function ArtworkStrip({
       ? "Prints on every colour without its own design"
       : "Prints on every colour you sell";
 
-  /** What a slot shows; its handlers are written where it is rendered. */
   const view = (target: SlotTarget) => {
     const file = slotFile(design, target);
     const tone = target.kind === "slot" ? target.tone : null;
@@ -308,8 +282,6 @@ export function ArtworkStrip({
                     ? "template-card template-card--active"
                     : "template-card"
                 }
-                // PRD 73: a ref with no prefix is the workspace root, so the
-                // design's workspace-relative path is already the ref.
                 onClick={() => pick(open, d.file)}
               >
                 <span className="template-card__name">{d.name}</span>
@@ -375,7 +347,6 @@ export function ArtworkStrip({
   );
 }
 
-/** The file a slot holds, the one uploading into it, or what it is for. */
 function SlotName({
   uploading,
   file,
@@ -413,17 +384,13 @@ function Slot({
   title: string;
   target: SlotTarget;
   file: string | null;
-  /** The shirts drawn beside it: both for one design, else its own. */
   tones: readonly Tone[];
-  /** The "Prints on …" line; `null` when the slot is unused. */
   usedBy: string | null;
   open: boolean;
   /** Empty, and a colour the listing sells needs it. */
   missing: boolean;
   emptyText: string;
-  /** A file is being held over the strip: every slot shows it is a target. */
   holding: boolean;
-  /** The name of the file uploading into this slot. */
   uploading: string | null;
   onChange: () => void;
   onFile: (file: File) => void;

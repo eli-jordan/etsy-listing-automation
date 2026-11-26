@@ -1,13 +1,6 @@
 import type { ReactNode } from "react";
 import type { Positioning } from "./usePositioning";
 
-/**
- * The preview foot's right-hand group in Position mode: Fit within limits,
- * the Reset link and the Adjust position switch (`_panes.tsx`'s `Foot` and
- * `PositionSwitch` in the prototype). `children` is the pane's own action
- * (Add / Remove from listing), shown only while the switch is off so the
- * group matches the approved frames while adjusting.
- */
 export function PositionControls({
   positioning,
   children,
@@ -62,14 +55,11 @@ function switchClass(on: boolean, unavailable: boolean): string {
   return unavailable ? "switch tp-switch--unavailable" : "switch";
 }
 
-/** The foot's note line: the colour-matrix scope, the placement hint, or
- * why a stored position is refused. */
 export function PositionNote({ note }: { note: Positioning["note"] }) {
   if (note === null) return null;
   return <span className={note.warn ? "tp-note tp-note--warn" : "tp-note"}>{note.text}</span>;
 }
 
-/** Four-way move arrows (the prototype's `PositionGlyph`), for the reel badge. */
 export function PositionGlyph() {
   return (
     <svg

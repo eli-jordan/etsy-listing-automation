@@ -31,17 +31,6 @@ import { useListingBatch } from "./editor/useListingBatch";
 import { VariantsTab } from "./editor/VariantsTab";
 import { isNullableString, useViewScroll, useViewState, viewScope } from "./editor/editorView";
 
-/** Tabs container + issues banner + page head (phase 5).
- *
- * The editor is also the *create* form, and one route component serves both:
- * `/listings/new` is this page with no `:name`, opened on an empty draft from
- * `GET /api/listing-draft`. A second component for the unsaved case was tried
- * and is exactly what broke creating a listing -- it grew its own copy of the
- * patch merge, the create and the loading state, and each copy drifted. What is
- * genuinely different about an unnamed listing is only that it cannot be
- * *saved*, and that difference lives in one place: `useAutosave`, which picks
- * its transport from what exists (see its docstring). */
-
 type Tab = IssueTab;
 
 /** `lead` is the part of a label the phone's one-row tab strip drops
@@ -70,7 +59,6 @@ function badgeFor(issues: Issue[], tab: Tab): { block: number; warn: number } {
 export function ListingEditorPage() {
   const { name } = useParams<{ name?: string }>();
   const navigate = useNavigate();
-  /** `null` at `/listings/new`: the listing this page is for does not exist. */
   const routeName = name ?? null;
 
   // The listing as the editor that just named it already had it. Naming one
@@ -171,14 +159,8 @@ function ListingEditorPageContent({
     onNamed,
   });
   const navigate = useNavigate();
-  /** The batch summary this editor was opened from (`?batch=`, UI doc §8):
-   * a query parameter, so it survives a reload. */
   const fromBatch = useSearchParams()[0].get("batch");
   const [member, setMember] = useListingBatch(detail.name);
-  // AI Mode, and the AI run behind it, live here rather than inside a tab: a
-  // run outlives the tab that was showing when it started, and the chain
-  // that begins one begins at the design strip, above the tab strip. Living here rather than in `ListingEditorShell` is what lets the
-  // page head report it beside the autosave line.
   /** A name the design pick chose, before the listing exists under it. */
   const [pickedName, setPickedName] = useState("");
   /** A name the seller has started typing but not committed. `detail.name` is
@@ -188,47 +170,15 @@ function ListingEditorPageContent({
   const aiSeo = useAiSeoMode(detail, update, flush, save, adopt);
   const phone = useIsPhone();
 
-  /** Everything a design strip change sets off, in the one handler. Only a
-   * change to the **representative** artwork -- the first non-null of
-   * `default`, `on-light`, `on-dark` -- names a draft or arms the AI chain
-   * (spec: *Representative artwork*; interactions Part 1 §2-§5, Part 2 §3).
-   * It is the one image the brief and SEO workflow is sent, so it is the
-   * listing's concept; the alternate slot and a colour's own design are print
-   * treatment. So Unlink (the file moves to `on-light`) and a dark-slot pick
-   * beside a filled light slot set nothing off, and a Link that keeps the
-   * dark-shirt file does. Decided from the map, not from which control made
-   * it, so a new control cannot get the rule wrong; a colour's own design
-   * never reaches here at all (it is a Variants edit through `update`).
-   *
-   * The name is here rather than in `ListingEditorShell` because naming is
-   * `useAutosave`'s (`commitName`), and only a draft that has none gets one:
-   * a listing already called something is called that on purpose, and the
-   * artwork changing is not a reason to rename its directory. The design's
-   * own filename is the name a seller would type anyway -- it is what `new
-   * <design>` already derives on the CLI -- and it is what finally writes the
-   * file, so the ordinary create flow becomes "pick a design" with nothing
-   * else required. A name already taken is refused exactly as a typed one is,
-   * and the page head says so. */
   function changeDesign(next: DesignMap) {
-    // The whole map, always: `update` replaces `design` rather than merging
-    // into it, and the map is the one written form (multi-artwork plan).
     update({ design: next });
     const chosen = representative(next);
     if (chosen === null || chosen === representative(detail.design)) return;
     if (detail.name === "" && typedName.trim() === "") {
       const named = refName(chosen);
-      // Shown as the name immediately, not only once the file exists. A
-      // create is refused until the document will validate (no price source,
-      // usually), and `useAutosave` holds the name for the edit that retries
-      // it -- so without this the seller would pick a design, see the name
-      // field stay empty, pick a pricing plan, and find the listing suddenly
-      // called something nobody typed. The head already says why it is not
-      // saved yet.
       setPickedName(named);
       commitName(named);
     }
-    // ADR-0003: armed while the brief is empty, fired by the first save that
-    // can run it (`useAiRun`).
     aiSeo.run.arm();
   }
 
@@ -264,8 +214,6 @@ function ListingEditorPageContent({
             )
           }
           actions={
-            // Nothing to act on until the listing exists: an unnamed draft
-            // has no file to make a template from, and no lifecycle.
             detail.name !== "" && (
               <ListingActions
                 detail={detail}
@@ -275,8 +223,6 @@ function ListingEditorPageContent({
                 adopt={adopt}
                 flush={flush}
                 onCreateTemplate={() => whenWritten(saveAsUrl(detail.name))}
-                // Back where the seller came from: a batch's listing opened
-                // from its summary returns to it, as Back to batch does.
                 onDeleted={() => navigate(afterDelete(fromBatch), { replace: true })}
               />
             )
@@ -307,8 +253,6 @@ function ListingEditorPageContent({
   );
 }
 
-/** Where the editor goes once its listing is deleted: the batch it was
- * opened from (`?batch=`), else Listings. */
 function afterDelete(fromBatch: string | null): string {
   return fromBatch === null ? "/listings" : `/batches/${encodeURIComponent(fromBatch)}`;
 }
@@ -318,23 +262,6 @@ function saveAsUrl(listing: string): string {
   return `/listing-templates/new?from_listing=${encodeURIComponent(listing)}`;
 }
 
-/** The page head both flows share (UI doc, *The editor head*): an identity
- * row over an action row.
- *
- * - **The identity row**: the breadcrumb (or `crumb`, Back to batch in its
- * place), the title node, the status pill, the meta -- the save sentence,
- * or once saved the auto-save chip with its file card -- what the editor is
- * doing on its own, and Deploy.
- * - **The action row**: `actions`, the caller's quiet icon + label actions.
- * Absent when there are none (an unsaved draft has nothing to act on), and
- * the identity row then carries the head's rule itself.
- *
- * `Deploy changes →` (docs/features/deploy-20260917/spec.md decision 8) sits here rather
- * than in `ListingEditorPageContent`, because this is the one part of the
- * editor that reads the same on every tab -- an action anchored to a spot
- * that stayed empty in the mockup, not one that jumps around with the tab
- * strip. It is withheld for a draft that has no name yet (`detail.name ===
- * ""`): there is nothing on disk for `plan` to read until naming creates it. */
 export function EditorHead({
   detail,
   onBack,
@@ -352,27 +279,17 @@ export function EditorHead({
   title: ReactNode;
   meta: ReactNode;
   flush: () => Promise<Settled>;
-  /** What the editor is doing on its own right now, beside the meta line
-   * (ADR-0003). `null` whenever nothing is running, which is most of the
-   * time. */
   activity?: ReactNode;
-  /** Replaces the breadcrumb when truthy: Back to batch (UI doc §8). */
   crumb?: ReactNode;
-  /** The action row's contents, when there are any. */
   actions?: ReactNode;
   /** Mark reviewed, beside Deploy, on a phone (`ReviewButton`); the desktop
    * keeps it in the action row. */
   review?: ReactNode;
-  /** A listing template's head has no status and no Deploy (UI doc §3): a
-   * template never deploys. Its actions are its caller's. */
   kind?: "listing" | "listing-template";
 }) {
   const listing = kind === "listing";
   const isPhone = useIsPhone();
-  // On a phone the action row folds into the "⋯" sheet beside the title.
   const inlineActions = isPhone ? null : actions;
-  /** On a phone, where the actions' errors show: under the head, since the
-   * sheet holding the actions closes once one is picked. */
   const [alertSlot, setAlertSlot] = useState<HTMLDivElement | null>(null);
 
   return (
@@ -418,10 +335,6 @@ type ShellProps = {
 } & (
   | {
       kind?: "listing";
-      /** Everything one design strip change sets off -- the edit, and when
-       * the representative artwork changes, naming an unnamed draft and
-       * arming the AI chain. Built by `ListingEditorPageContent`, which is
-       * the layer that has `commitName`. */
       onDesignChange: (next: DesignMap) => void;
       /** Owned by `ListingEditorPageContent`, not by this shell and not by
        * `DetailsTab`: a run outlives the tab it was started from --
@@ -429,10 +342,6 @@ type ShellProps = {
       aiSeo: AiSeoMode;
     }
   | {
-      /** The listing-template editor (UI doc §3): the same shell minus the
-       * design-specific parts. The design row picks a preview design, the
-       * banner uses the template wording, and Details has no per-listing
-       * copy. Variants, Pricing and Listing Images are unchanged. */
       kind: "listing-template";
       /** Whose `./` files the Images tab shows: the template's, or -- not
        * saved yet -- its source's, through `copies`. */
@@ -440,7 +349,6 @@ type ShellProps = {
     }
 );
 
-/** The issues banner, in the listing template's wording when it is one. */
 function ShellIssues({
   template,
   issues,
@@ -486,8 +394,6 @@ export function ListingEditorShell(props: ShellProps) {
   const { detail, update, flush, head } = props;
   const template = props.kind === "listing-template";
   const aiSeo = props.kind === "listing-template" ? null : props.aiSeo;
-  // What a refresh comes back to. An unnamed draft has no scope: refreshing
-  // one starts a new draft, so there is nothing to come back to.
   const scope = viewScope(template ? "listing-template" : "listing", detail.name);
   const [tab, setTab] = useViewState<Tab>(scope, "tab", "variants", isTab);
   useViewScroll(scope);
@@ -517,9 +423,6 @@ export function ListingEditorShell(props: ShellProps) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // The listing template's preview design (UI doc §3): component state, so
-  // it is never in the document and is back to the bundled grid every time
-  // the editor opens.
   const [preview, setPreview] = useState<PreviewDesign>(DEFAULT_PREVIEW);
   const artwork = template ? previewArtwork(preview) : undefined;
   const owner = props.kind === "listing-template" ? props.owner : undefined;
@@ -563,17 +466,10 @@ export function ListingEditorShell(props: ShellProps) {
     requestAnimationFrame(() => scrollUnderStrip(tabStrip.current, pager.current));
   }
 
-  // A sideways swipe on the tab content moves to the tab beside it, exactly
-  // as tapping that tab does. Anything inside that owns a sideways drag (a
-  // text field, Position mode, a video's scrubber) is marked
-  // `data-swipe-ignore` and keeps it.
   usePager(pager, { items: TAB_IDS, current: tab, onPick: pickTab });
 
   return (
     <div className="editor">
-      {/* On document.body, not inside a tab: DetailsTab unmounts on every
-          other tab, and the chain starts from the design strip, which is
-          usually Variants. */}
       {aiSeo !== null &&
         aiSeo.run.autoNotice &&
         aiSeo.run.busy &&
@@ -602,9 +498,6 @@ export function ListingEditorShell(props: ShellProps) {
         }}
       />
 
-      {/* Above the tabs, not inside one: the artwork is what both Variants
-          (which colours suit it) and Listing Images (which mockups show it)
-          are about. */}
       {props.kind === "listing-template" ? (
         <DesignSelect preview={preview} onPreview={setPreview} />
       ) : (
@@ -686,7 +579,6 @@ function scrollUnderStrip(strip: HTMLElement | null, content: HTMLElement | null
   window.scrollTo({ top: Math.max(0, top) });
 }
 
-/** The tab content; on a phone, inside the element the tab swipe moves. */
 function TabPanel({
   phone,
   pager,
@@ -704,8 +596,6 @@ function TabPanel({
   );
 }
 
-/** A tab's label: whole on the desktop; on a phone with its lead in a span
- * the one-row strip hides, so the text is still the whole label. */
 function TabLabel({ tab, phone }: { tab: (typeof TABS)[number]; phone: boolean }) {
   if (tab.lead === undefined) return tab.label;
   if (!phone) return `${tab.lead}${tab.label}`;

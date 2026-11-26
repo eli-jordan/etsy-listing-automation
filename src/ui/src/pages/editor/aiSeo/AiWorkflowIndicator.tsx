@@ -1,6 +1,3 @@
-// One module per icon, not the package's barrel: the barrel is every
-// Phosphor icon, and importing it made Vitest spend about a minute collecting
-// this one file.
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { NotePencilIcon } from "@phosphor-icons/react/dist/csr/NotePencil";
 import { SkipForwardIcon } from "@phosphor-icons/react/dist/csr/SkipForward";
@@ -13,7 +10,6 @@ import type { WorkflowStep } from "../../../types";
 type StepId = WorkflowStep["id"];
 type StepState = WorkflowStep["state"];
 
-/** docs/features/market-seo-20260924/interactions.md section 1's anatomy table. */
 const STEPS: Record<StepId, { name: string; about: string; icon: ReactNode; activeLabel: string }> =
   {
     brief: {
@@ -50,10 +46,6 @@ const STATE_WORD: Record<StepState, string> = {
 
 type Tone = "busy" | "done" | "failed";
 
-/** The one line beside the nodes, so the chain reads without hovering: a
- * failed step wins, then the running step's label, then *Suggestions ready*
- * once every node has settled. `null` when there is nothing to say -- a run
- * that was cancelled, or one whose first node hasn't started yet. */
 function summary(steps: WorkflowStep[]): { text: string; tone: Tone } | null {
   const failed = steps.find((s) => s.state === "failed");
   if (failed) return { text: `${STEPS[failed.id].name} failed`, tone: "failed" };
@@ -66,7 +58,6 @@ function summary(steps: WorkflowStep[]): { text: string; tone: Tone } | null {
   return null;
 }
 
-/** How long *Suggestions ready* stays before it fades, and the fade. */
 const READY_FOR_MS = 4000;
 const FADE_MS = 300;
 
@@ -104,28 +95,6 @@ function Badge({ state }: { state: StepState }) {
   return null;
 }
 
-/**
- * The page head's AI activity: ADR-0003's brief, then market research, then the
- * SEO proposal, as three connected nodes with a one-line label
- * (docs/features/market-seo-20260924/interactions.md, section 1). Ported from
- * `design/screens/marketSeo/AiWorkflowIndicator.tsx`, without the canvas-only
- * `openTip`.
- *
- * It sits beside the autosave meta for the reason the spinner it replaced
- * did: the head reads the same on every tab, and a seller who attached a
- * design is usually on Variants, far from the Brief field.
- *
- * A chain that finished cleanly -- every node done or skipped -- says
- * *Suggestions ready* for {@link READY_FOR_MS}, fades out over
- * {@link FADE_MS} (at once, under `prefers-reduced-motion`), then renders
- * nothing, which is the ordinary state of the head. A warning or a failure
- * stays until the next run: it needs a second look.
- *
- * `running` is whether the run is still going (`useAiRun`'s `busy`). A clean
- * finish is only news to an editor that watched the run go: one that had
- * already finished when the editor reattached to it renders nothing, as it
- * was left, rather than flashing *ready* on every visit to the listing.
- */
 export function AiWorkflowIndicator({
   steps,
   running,

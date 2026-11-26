@@ -40,8 +40,6 @@ export function selectColours(detail: ListingDetail, next: string[]): Record<str
     patch.media = settleGallery(media) ?? [];
   }
 
-  // A colour's own design goes with it: `design` keys other than the base
-  // keys must name an enabled colour (ADR-0053).
   const design = withoutKeys(detail.design, gone);
   if (design !== null) patch.design = design;
 
@@ -51,17 +49,6 @@ export function selectColours(detail: ListingDetail, next: string[]): Record<str
   return patch;
 }
 
-/** Picking a garment profile, and enabling every colour it classifies.
- *
- * A colour's own design survives the change when the new profile sells that
- * colour, and goes when it does not (spec: *Colour-specific artwork*) -- the
- * same treatment as the other colour-keyed fields, and for the same reason.
- *
- * The Variants tab passes `Object.keys(profile.colors)`. Going through
- * `selectColours` is what drops mockups, own designs and prices of colours
- * the new garment does not sell, the same cascade a Dark/Light switch
- * already uses.
- */
 export function selectGarmentProfile(
   detail: ListingDetail,
   name: string,

@@ -40,14 +40,8 @@ interface Props {
   /** Absent where there are no tabs to jump to -- the listing-template
    * *name it* page, which is read only -- and the rows then offer no action. */
   onJumpTo?: (tab: IssueTab) => void;
-  /** A listing template's wording (the `template-unsaved` mockup): it never
-   * deploys, so a block is what stops the *save*, and no row says
-   * *Prevents deploying*. */
   subject?: "listing" | "listing-template";
   when?: string;
-  /** Removes a `template_positions` key no stage can show -- a template not
-   * in `media:`, a placement that is gone (interactions, *Position outside
-   * the limits*). Absent, those rows offer the usual jump. */
   onRemovePosition?: (template: string, placement: string | null) => void;
 }
 
@@ -154,8 +148,6 @@ export function IssuesBanner({
   );
 }
 
-/** A row's one action: remove a stale position key, "Below" on the open
- * tab, or a jump to the tab that fixes it. */
 function RowAction({
   issue,
   activeTab,

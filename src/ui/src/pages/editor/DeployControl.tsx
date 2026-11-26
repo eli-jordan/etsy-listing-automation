@@ -5,28 +5,6 @@ import type { RunSummary } from "../../types";
 import type { Settled } from "../../hooks/writeLoop";
 import { useIsPhone } from "../../phone/usePhone";
 
-/**
- * The editor page-head's own control (docs/features/deploy-20260917/spec.md decision 8):
- * **Deploy changes →** when there is nothing to reattach to, or a link back
- * into whatever run this listing already has.
- *
- * | Run state for this listing | Control |
- * |---|---|
- * | none, or finished and seen | Deploy changes → |
- * | queued / planning / previewing / applying (and a plan resting at "ready", not yet acted on) | Deploying… View progress → |
- * | an `apply` run that landed on `applied`, not seen | Deployed ✓ View result → |
- * | an `apply` run that landed on `failed`/`stale`, not seen | Deploy failed — view |
- *
- * `cancelled` reads as "deploy changes" even before anything marks it
- * `seen`, because Back already means "I am done with that review" the
- * moment it is pressed. A plan resting at `"ready"` -- itself a terminal
- * phase, so `registry.cancel` refuses it just like it refuses an `apply` --
- * never dangles here either: `DeployPage` marks *any* terminal run seen the
- * moment its result renders, not only ones Back's own cancel call reaches,
- * so a reviewed-but-never-applied plan is already seen well before Back is
- * pressed.
- */
-
 type PageHeadState = "deploy" | "progress" | "deployed" | "failed";
 
 function pageHeadState(run: RunSummary | null): PageHeadState {
@@ -36,20 +14,9 @@ function pageHeadState(run: RunSummary | null): PageHeadState {
   return "progress";
 }
 
-export function DeployControl({
-  name,
-  flush,
-}: {
-  name: string;
-  /** Drains any edit still waiting on the autosave debounce -- the same
-   * flush a tab switch already triggers, so a plan started the instant
-   * after typing reviews the listing just written, not the one before it.
-   * Answers whether it was written. */
-  flush: () => Promise<Settled>;
-}) {
+export function DeployControl({ name, flush }: { name: string; flush: () => Promise<Settled> }) {
   const navigate = useNavigate();
   const [run, setRun] = useState<RunSummary | null>(null);
-  // The phone head has the status, the save chip and this on one line.
   const phone = useIsPhone();
 
   useEffect(() => {
@@ -99,7 +66,6 @@ export function DeployControl({
         <button
           type="button"
           className="btn btn-primary"
-          // The phone's shorter label still names the action in full.
           aria-label={phone ? "Deploy changes →" : undefined}
           onClick={() => void startDeploy()}
         >

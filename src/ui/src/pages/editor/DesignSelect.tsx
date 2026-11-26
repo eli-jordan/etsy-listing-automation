@@ -4,15 +4,6 @@ import { listingDesignThumbnailUrl, listListingDesigns } from "../../api/listing
 import type { DesignSummary, ListingDesignSummary } from "../../types";
 import { type PreviewDesign, samePreview } from "./previewDesign";
 
-/**
- * The design row above the tab strip in the listing-template editor (UI doc
- * §3; the `template-variants` mockup). A listing template has no artwork, so
- * the row picks what the previews are rendered with -- the calibrator's test
- * designs, bundled and uploaded, followed by the recent workspace designs --
- * and nothing it picks is saved. A listing's own artwork is the design strip
- * (`ArtworkStrip`), which edits `design:`.
- */
-
 interface Props {
   preview: PreviewDesign;
   onPreview: (preview: PreviewDesign) => void;

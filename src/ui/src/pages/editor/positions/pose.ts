@@ -1,15 +1,6 @@
 /**
- * A listing's template position as the editor's handles edit it: the
- * template box under a uniform scale, a tilt and a move, applied in the box's
- * rectified frame (its unit square scaled by its mean side lengths, so a tilt
- * is rigid) and mapped to photo pixels through the template homography
- * (ADR-0058 and its 2026-11-02 amendment).
- *
- * A twin of `core/render/positions.py`, not an endpoint: the stage recomputes
- * the pose on every pointer move, and a request per frame would make the
- * handles lag the pointer. `pose.test.ts` runs the Python module's cases so
- * the two cannot drift. Offsets are fractions of W and H; positive rotation
- * is clockwise in image coordinates, about the box centre, before the offset.
+ * Offsets are fractions of W and H; positive rotation is clockwise in image
+ * coordinates, about the box centre, before the offset.
  */
 
 export interface Point {
@@ -119,7 +110,6 @@ export function unitFrame(quad: Quad): Matrix {
   return invert(homography(quad));
 }
 
-/** One point through `m`, with its homogeneous weight. */
 function project({ x, y }: Point, m: Matrix): Point & { w: number } {
   const w = m[6] * x + m[7] * y + m[8];
   return { x: (m[0] * x + m[1] * y + m[2]) / w, y: (m[3] * x + m[4] * y + m[5]) / w, w };
@@ -142,21 +132,14 @@ function mapQuad(quad: Quad, m: Matrix): Quad {
   return quadMap(quad, (p) => mapPoint(p, m));
 }
 
-/** Photo pixels to the template box's unit frame -- where a pointer is, as a pose sees it. */
 export function toUnit(box: Quad, point: Point): Point {
   return mapPoint(point, invert(homography(box)));
 }
 
-/** A unit-frame point to photo pixels. */
 export function toPhoto(box: Quad, point: Point): Point {
   return mapPoint(point, homography(box));
 }
 
-/** `pose` applied to the unit square's corners. */
-/** `(W, H)`: the box's mean top/bottom and left/right side lengths in photo
- * pixels. Scaling the unit square by them gives the *rectified* frame, where
- * a box keeps its real proportions and a tilt is a rigid rotation (ADR-0058
- * amendment, 2026-11-02). */
 export function proportions(box: Quad): { w: number; h: number } {
   const [tl, tr, br, bl] = box;
   const length = (p: Point, q: Point) => Math.hypot(q.x - p.x, q.y - p.y);
@@ -168,7 +151,6 @@ export function proportions(box: Quad): { w: number; h: number } {
   return { w, h };
 }
 
-/** `pose` applied to the unit square's corners, through the rectified frame. */
 function posed(pose: Pose, size: { w: number; h: number }): Quad {
   const angle = (pose.rotation * Math.PI) / 180;
   const a = pose.scale * Math.cos(angle);
@@ -233,7 +215,6 @@ export function clampPose(pose: Pose, limits: Limits): Pose {
   };
 }
 
-/** Fit, then clamp: *Fit within limits* (interactions, *Position outside the limits*). */
 export function nearestAllowedPose(box: Quad, quad: Quad, limits: Limits): Pose {
   return clampPose(decompose(box, quad).pose, limits);
 }
@@ -249,7 +230,6 @@ export function withinLimits(pose: Pose, limits: Limits): boolean {
   );
 }
 
-/** The template's own box: written as no entry (interactions, *Saving*). */
 export function isIdentity(pose: Pose): boolean {
   return (
     Math.abs(pose.scale - 1) < 1e-9 &&

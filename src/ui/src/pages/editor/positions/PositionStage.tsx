@@ -4,24 +4,11 @@ import { type Point, type Quad, compose, homography, toPhoto } from "./pose";
 import { type LiveSource, useLiveScene } from "./useLiveScene";
 import type { Gesture, Layer, Positioning } from "./usePositioning";
 
-/**
- * The preview stage in Position mode: the saved composite, the handles for
- * the selected box, the other placements dimmed, the template's box as a
- * ghost, and -- while the position is ahead of the composite -- the whole scene
- * drawn live over it, so nothing waits on a render. The composite underneath
- * loads unseen, and the live scene fades once it has. Copied from the
- * prototype's `PositionStage`
- * (`design/scenes/template-positions/_PositionStage.tsx`), except that every
- * box is the template's quad under the pose through its homography, so
- * handles sit on the mapped corners rather than an axis-aligned rectangle.
- */
-
 interface Props {
   positioning: Positioning;
   /** The saved composite. */
   picture: string;
   title: string;
-  /** The pictures the live scene is drawn from. */
   source: LiveSource;
 }
 
@@ -46,7 +33,6 @@ function warp(quad: Quad, w: number, h: number): string {
   return `matrix3d(${m.join(",")})`;
 }
 
-/** The tilt handle: above the top edge's middle, away from the box's centre. */
 function stemOf(layer: Layer, corners: Quad, k: number) {
   const top = { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 };
   let centre = { x: top.x, y: top.y + 1 };
@@ -172,8 +158,6 @@ function backingOf(size: { w: number; h: number }, k: number) {
   return { width: Math.round(size.w * ratio), height: Math.round(size.h * ratio) };
 }
 
-/** The live scene without a GPU, or before its pictures arrive: the bare photo
- * with each layer's artwork flat on its box. */
 function Flat({
   layers,
   source,
@@ -238,7 +222,6 @@ function Selected({
   onKey: (event: KeyboardEvent) => void;
 }) {
   const corners = safeCompose(layer);
-  // A refused box is drawn where it is stored, not where the fit would put it.
   const outline = layer.invalid !== null && layer.stored !== null ? layer.stored : corners;
   const stem = stemOf(layer, corners, k);
   const half = HANDLE * k;

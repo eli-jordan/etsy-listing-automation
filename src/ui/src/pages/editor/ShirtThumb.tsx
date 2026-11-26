@@ -3,12 +3,6 @@ import { useId } from "react";
 const BODY =
   "M140 34 C160 56 240 56 260 34 L344 70 L384 158 L322 184 L312 156 L314 402 L86 402 L88 156 L78 184 L16 158 L56 70 Z";
 
-/**
- * A plain shirt drawing in `cloth` with `artwork` on the chest: the design
- * strip judges a file on the shirt it prints on, so light ink on a light
- * shirt reads as the problem it is. `artwork` is an image URL, or `null` for
- * an empty slot.
- */
 export function ShirtThumb({
   cloth,
   artwork,

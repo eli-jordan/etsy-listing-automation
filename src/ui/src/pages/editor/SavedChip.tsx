@@ -7,16 +7,6 @@ import { useIsPhone } from "../../phone/usePhone";
 import { PhoneSheet } from "../../phone/PhoneSheet";
 import { SavedAgo } from "./SavedAgo";
 
-/**
- * The editor head's auto-save chip -- *● Saved 3 mins ago ▾* beside the
- * status -- and the card it opens: the file this editor writes, with Copy,
- * and when it saved (UI doc, *The editor head*).
- *
- * The path is here rather than printed in the head because the head had
- * become a row of competing facts; it matters because this editor writes a
- * file the seller also edits by hand and runs the CLI against, so it is one
- * click away rather than gone.
- */
 export function SavedChip({
   path,
   savedAt,

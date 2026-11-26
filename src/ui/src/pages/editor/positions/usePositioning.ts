@@ -27,18 +27,10 @@ import {
 import { type PositionReadiness, usePositionReadiness } from "./usePositionReadiness";
 
 /**
- * Position mode's state for the one template entry the preview pane shows
- * (interactions: *Entry and the Adjust position switch*, *Adjusting*,
- * *Multiple templates*, *Position outside the limits*).
- *
- * A gesture edits a draft pose; it is saved once it completes -- pointer
- * release, or {@link NUDGE_DEBOUNCE_MS} after the last arrow key -- through
- * the editor's ordinary `onUpdate` and an immediate flush, so the head's save
- * status behaves as for any other field. From the gesture's first move until
- * the saved composite has loaded, the stage draws the scene live.
+ * Interactions: *Entry and the Adjust position switch*, *Adjusting*,
+ * *Multiple templates*, *Position outside the limits*.
  */
 
-/** Interactions, *Saving*: "a nudge after a short debounce (about 400 ms)". */
 export const NUDGE_DEBOUNCE_MS = 400;
 
 export type Gesture = "move" | "scale" | "rotate";
@@ -89,28 +81,16 @@ interface Args {
   detail: ListingDetail;
   /** The entry the pane shows, when it is a template entry in this listing. */
   template: string | null;
-  /** Which pane that is -- a template and colour. The switch belongs to it,
-   * so selecting another reel tile turns it off. */
   pane: string;
   summary: TemplateSummary | undefined;
   /** The composite the stage shows: the saved listing's. */
   picture: string;
-  /** Saved positions, as the last server response had them. */
   saved: Positions | null | undefined;
   onUpdate: (patch: Record<string, unknown>) => void;
   onFlush: (() => void) | undefined;
-  /** A foot that keeps the same lines whether the switch is on or off --
-   * the note, Fit within limits when it applies, and Reset, disabled while
-   * there is nothing to reset -- so turning the switch changes only the
-   * handles on the picture. The phone's Adjust screen, where the foot
-   * moving would move the picture with it. */
   steady?: boolean;
 }
 
-/** Which template entry the pane may position, and which pane it is. Only
- * a saved listing's own entries: a listing template or a batch never
- * carries positions (spec, *Scope and decisions*), and an unnamed draft has
- * no saved composite to adjust. */
 export function positionTarget(
   focus: Focus | null,
   inListing: boolean,
@@ -121,8 +101,6 @@ export function positionTarget(
   return { template: editable && inListing ? focus.template : null, pane };
 }
 
-/** The workspace limits, read once (interactions, *What the production
- * implementation must finish*). `null` until read, or when unreadable. */
 function useLimits(): Limits | null {
   const [limits, setLimits] = useState<Limits | null>(null);
   useEffect(() => {
@@ -140,7 +118,6 @@ function useLimits(): Limits | null {
   return limits;
 }
 
-/** Each template's saved geometry, fetched the first time it is shown. */
 function useConfig(template: string | null): TemplateConfigState | null {
   const [configs, setConfigs] = useState<Record<string, TemplateConfigState | null>>({});
   useEffect(() => {
@@ -152,9 +129,6 @@ function useConfig(template: string | null): TemplateConfigState | null {
   return template === null ? null : (configs[template] ?? null);
 }
 
-/** Saved positions: what the last server response held. `modified_at` moves
- * only when a response lands, which is what makes the preview URL change with
- * the *saved* position rather than the optimistic one. */
 export function useSavedPositions(detail: ListingDetail): Positions | null | undefined {
   const [saved, setSaved] = useState({
     at: detail.modified_at,
@@ -250,8 +224,6 @@ function dragged(d: Drag, box: Quad, point: Point, limits: Limits): Pose {
   return tilted(box, d.from, point, limits);
 }
 
-/** What the stage needs before it can show handles; `null` means no switch --
- * nothing loaded yet, or no photo size. Both renderers take positions. */
 function stageable(
   config: TemplateConfigState | null,
   limits: Limits | null,
@@ -264,7 +236,6 @@ function stageable(
   return { config, limits, size: { w, h } };
 }
 
-/** The draft pose stands in for the stored one while a gesture is unsaved. */
 function withDraft(base: Layer[], draft: Draft | null, name: string): Layer[] {
   return base.map((layer) =>
     draft?.template === name && draft.id === layer.id
@@ -273,8 +244,6 @@ function withDraft(base: Layer[], draft: Draft | null, name: string): Layer[] {
   );
 }
 
-/** The chosen placement, else the first refused one, else the first in the
- * template's order (interactions, *Multiple templates*). */
 function selectionOf(
   layers: Layer[],
   chosen: { template: string; id: string } | null,
@@ -295,8 +264,6 @@ interface GestureContext {
   commit: (target: Layer, pose: Pose) => void;
 }
 
-/** The handles' state: the drag under way, the draft it has made, and the
- * nudge waiting out its debounce. */
 function useGestures() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const drag = useRef<Drag | null>(null);
@@ -381,7 +348,6 @@ function resetOf(
   return editing && positioned ? { label, run } : null;
 }
 
-/** The switch turns off freely, and on only for a template that is ready. */
 function toggled(on: boolean, readiness: PositionReadiness, flip: () => void) {
   if (!on && readiness.waiting) readiness.refuse();
   else flip();
@@ -397,7 +363,6 @@ export function usePositioning(args: Args): Positioning | null {
   const limits = useLimits();
   const config = useConfig(template);
   const readiness = usePositionReadiness(config?.renderer.type === "marigold" ? template : null);
-  /** The switch, per pane: it belongs to the template it was turned on for. */
   const [adjust, setAdjust] = useState<{ pane: string; on: boolean } | null>(null);
   const [chosen, setChosen] = useState<{ template: string; id: string } | null>(null);
   const [edited, setEdited] = useState<string | null>(null);
@@ -423,8 +388,8 @@ export function usePositioning(args: Args): Positioning | null {
   function write(positions: Positions | null) {
     onUpdate({ template_positions: positions });
     setEdited(name);
-    // Writes happen only in Position mode. Pin it, so a pane that opened on
-    // because its stored box was refused stays on once the box is fixed.
+    // Pin Position mode on, so a pane that opened on because its stored box
+    // was refused stays on once the box is fixed.
     setAdjust({ pane, on: true });
     onFlush?.();
   }
