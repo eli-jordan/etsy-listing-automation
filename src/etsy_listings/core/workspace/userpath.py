@@ -1,21 +1,10 @@
-"""Translates user-typed paths into paths this (Windows-native) process can open.
+"""User-typed Cygwin paths (``--root /home/Admin/x``, ``ETSY_LISTINGS_ROOT``),
+translated for this Windows-native process.
 
-This exists for exactly one environment: the tool runs as a Windows-native
-Python, but is driven from a Cygwin shell, where the natural thing to type is
-``--root /home/Admin/etsy-listings``. Windows Python reads that as
-``C:\\home\\Admin\\etsy-listings`` and reports a confusing "no shop.yaml
-found" against a path the user never named.
-
-Only *user-supplied* paths go through here -- CLI options and the
-``ETSY_LISTINGS_ROOT`` environment variable. Paths written inside config files
-are workspace-relative by construction and never need it, and nothing
-downstream of ``Workspace`` ever sees a POSIX-style path.
-
-Translate the **raw string**, before ``pathlib`` sees it: on Windows,
-``str(Path("/home/Admin"))`` is already ``\\home\\Admin``, and a
-backslash-mangled path can no longer be told apart from a legitimate
-root-relative Windows one. That is why the CLI declares ``--root`` as ``str``
-rather than ``Path``.
+Translate the raw string, before ``pathlib`` sees it: on Windows
+``str(Path("/home/Admin"))`` is already ``\\home\\Admin``, which can no longer
+be told apart from a root-relative Windows path. That is why ``--root`` is a
+``str``.
 """
 
 from __future__ import annotations
@@ -32,26 +21,16 @@ CYGPATH_TIMEOUT_SECONDS = 5
 
 
 def to_native_path(value: str) -> Path:
-    """Best-effort conversion of a POSIX-style path to a native one.
-
-    A no-op everywhere except Windows, and even there only for paths that
-    actually look POSIX-absolute. Anything it can't confidently translate is
-    returned unchanged -- a wrong guess would be worse than the original
-    error message.
-    """
     if os.name != "nt" or not value.startswith("/"):
         return Path(value)
 
-    # /cygdrive/c/x -> C:\x. Purely textual, so it works even without Cygwin
-    # installed (MSYS2 and Git Bash emit this form too).
+    # Textual, so it needs no Cygwin: MSYS2 and Git Bash emit this form too.
     cygdrive = _CYGDRIVE.match(value)
     if cygdrive is not None:
         drive, rest = cygdrive.groups()
         return Path(f"{drive.upper()}:\\") / (rest or "").lstrip("/")
 
-    # Anything else ("/home/Admin/...") depends on the shell's mount table,
-    # which only cygpath can read. It ships with Cygwin, so it is present
-    # exactly when such a path could have been typed.
+    # Only cygpath can read the mount table, and it ships with Cygwin.
     return _via_cygpath(value)
 
 
