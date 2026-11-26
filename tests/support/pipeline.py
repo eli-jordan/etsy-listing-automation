@@ -114,7 +114,7 @@ def a_deployable_context(root: Path) -> RunContext:
         + "".join(f"  {size}: 349 NOK\n" for size in SIZES),
         encoding="utf-8",
     )
-    edit_listing(root, design=DESIGN, pricing_plan=PLAN, prices={})
+    edit_listing(root, design={"default": DESIGN}, pricing_plan=PLAN, prices={})
 
     printify = FakePrintifyClient([Shop(id=SHOP_ID, title="My new store")])
     printify.publish_external["fake-product-1"] = ProductExternal(
