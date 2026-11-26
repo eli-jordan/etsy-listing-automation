@@ -9,15 +9,6 @@ from etsy_listings.core.config.errors import ConfigLoadError, format_validation_
 
 
 class MissingDefaultError(ValueError):
-    """A ``shop.yaml`` field that only some phases need, asked for by a
-    phase that needs it.
-
-    Raised at the point of use rather than at load, so a workspace can be set
-    up and used for everything that doesn't need the field yet. The message
-    carries the dotted path, because "shop_id" alone is ambiguous now that
-    both ``etsy`` and ``printify`` have one.
-    """
-
     def __init__(self, field_path: str, needed_to: str, how_to_find: str) -> None:
         self.field_path = field_path
         super().__init__(
@@ -61,10 +52,8 @@ class PrintifyDefaults(BaseModel):
 
 
 class EtsyReturnPolicyDefaults(BaseModel):
-    """A return policy's identity, since Etsy gives the resource no title.
-    The three terms *are* the identity -- `getShopReturnPolicies`
-    is matched on them exactly, and `describe()` (models.py) is what a plan
-    renders instead of a bare id."""
+    """Etsy return policies have no title: `getShopReturnPolicies` is matched
+    on these three terms exactly."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -161,8 +150,6 @@ class Defaults(BaseModel):
 
     @classmethod
     def from_document(cls, path: Path, raw: object) -> Defaults:
-        """``raw`` read as ``path`` would be, raising pydantic's own error so
-        an editor can name each refused field (the Admin page's Shop saves)."""
         if isinstance(raw, dict):
             _refuse_moved_keys(path, raw)
         return cls.model_validate(raw)

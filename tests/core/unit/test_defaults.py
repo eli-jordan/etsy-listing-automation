@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from etsy_listings.core.config.defaults import (
     Defaults,
@@ -176,6 +177,20 @@ def test_both_moved_keys_are_reported_together(tmp_path: Path) -> None:
 
     assert "etsy.currency" in str(caught.value)
     assert "printify.preferred_print_provider" in str(caught.value)
+
+
+def test_from_document_raises_pydantic_errors_located_at_each_refused_field(
+    tmp_path: Path,
+) -> None:
+    raw = {"etsy": {"currency": "NOK", "shop_id": "not a number"}, "printify": {"shop_id": []}}
+
+    with pytest.raises(ValidationError) as exc_info:
+        Defaults.from_document(tmp_path / "shop.yaml", raw)
+
+    assert {error["loc"] for error in exc_info.value.errors()} == {
+        ("etsy", "shop_id"),
+        ("printify", "shop_id"),
+    }
 
 
 def test_the_shop_names_load_beside_the_ids(tmp_path: Path) -> None:
