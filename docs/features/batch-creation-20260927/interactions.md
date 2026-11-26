@@ -312,6 +312,10 @@ Not obvious from the designs:
   summary.** Opening the same listing from the Listings page shows the normal
   editor without it. Create listing template is on every saved listing.
 - **Mark reviewed** here and on the summary set the same flag.
+- **On a phone, Mark reviewed is a button beside Deploy**, not a row of the
+  head's "⋯" sheet: reviewing is what a batch's listing is opened for, so it
+  and Deploy are the head's next steps. Pressed, it reads Reviewed; a second
+  press marks the listing as needing review again.
 - **An out-of-date suggestion can be used directly.** The drawer heading reads
   *Out of date: brief edited since. Still usable*, and the choices stay
   clickable. There is no confirmation dialog: the heading is the warning.

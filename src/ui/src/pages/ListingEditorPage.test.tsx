@@ -289,6 +289,24 @@ describe("ListingEditorPage", () => {
       expect(screen.getByText("Pending delete")).toBeInTheDocument();
     });
 
+    it("keeps the delete confirmation on screen after the phone's ⋯ sheet closes", async () => {
+      onPhone();
+      try {
+        vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+          detail({ printify_product_id: "p1", gestures: ["delete"] }),
+        );
+        renderAt("/listings/take-a-hike");
+
+        fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+        fireEvent.click(screen.getByRole("button", { name: "Mark for deletion" }));
+
+        const confirm = await screen.findByRole("dialog", { name: /deletion/i });
+        expect(confirm.closest("[hidden]")).toBeNull();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it("sends a retire as an edit to lifecycle, straight away", async () => {
       vi.spyOn(listingsApi, "getListing").mockResolvedValue(
         detail({ status: "live", etsy_listing_id: 555, gestures: ["retire"] }),

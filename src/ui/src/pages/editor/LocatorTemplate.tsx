@@ -234,10 +234,6 @@ function TemplateBody({
     );
   }
   if (detail.colors.length === 0) {
-    // Nothing to offer: a colour-matrix entry needs a
-    // colour, and every colour it could name comes from
-    // the listing's own `colors:`. Adding one anyway would
-    // write `{template, colour: null}`, which is a block.
     return <p className="loc-tmpl__note">Pick colours on Variants first.</p>;
   }
   return (

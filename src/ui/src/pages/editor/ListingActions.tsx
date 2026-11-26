@@ -102,8 +102,7 @@ export function ListingActions({
     setConfirming(false);
     setError("");
     try {
-      // Waited for, so no write crosses the delete. Whether it landed does not
-      // matter: an edit that would not save goes with the listing.
+      // Awaited so no write crosses the delete; its outcome is moot.
       await flush();
       const row = await deleteListing(name);
       if (row === null) {
@@ -135,7 +134,6 @@ export function ListingActions({
         Create listing template
       </ActionLink>
       {((member !== null && !phone) || detail.gestures.length > 0) && <ActionDivider />}
-      {/* On a phone it sits beside Deploy instead (ReviewButton). */}
       {member !== null && !phone && (
         <ActionLink
           icon={
@@ -203,12 +201,6 @@ function useReview(
   };
 }
 
-/**
- * Mark reviewed on a phone: a button beside Deploy rather than a row of the
- * "⋯" sheet, because reviewing is what a batch's listing is opened for, and
- * the two are the head's next steps. Pressed, it reads Reviewed, and a
- * second press marks it as needing review again.
- */
 export function ReviewButton({
   member,
   setMember,
@@ -242,9 +234,6 @@ export function ReviewButton({
   );
 }
 
-/** On a phone the actions live in the head's "⋯" sheet, which closes as
- * soon as one is picked; the delete confirmation goes on the page body so it
- * stays on screen after the sheet holding its trigger is hidden. */
 function OnBodyOnPhone({ phone, children }: { phone: boolean; children: ReactNode }) {
   return phone ? createPortal(children, document.body) : children;
 }

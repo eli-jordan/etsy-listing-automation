@@ -21,8 +21,6 @@ import { MAX_VIDEOS } from "./mediaEdits";
 interface Props {
   detail: ListingDetail;
   templates: TemplateSummary[];
-  /** The listing's own files, or `null` for a draft, which has no directory
-   * yet and so no *This listing* group. */
   local: readonly MediaFileSummary[] | null;
   shared: readonly MediaFileSummary[];
   onToggleTemplate: (template: string, colour: string | null) => void;
@@ -31,7 +29,6 @@ interface Props {
   onToggleSwatchSource: (template: string) => void;
   onFocus: (focus: Focus) => void;
   owner?: MediaOwner | null;
-  /** Whose view a refresh comes back to, when there is one to come back to. */
   scope?: ViewScope;
 }
 
@@ -41,7 +38,6 @@ function isLocatorMode(value: unknown): value is LocatorMode {
   return value === "templates" || value === "files";
 }
 
-/** `0:06`, `1:15` -- a clip's length as the badge shows it. */
 function clipLength(seconds: number): string {
   const whole = Math.round(seconds);
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
@@ -126,8 +122,6 @@ export function MediaLocator({
     isNullableString,
   );
 
-  // Not reconciled with the labels in use: a pill the templates have lost stays on
-  // show, because an empty list with no visible reason reads as a broken one.
   const [pills, setPills] = useViewState<string[]>(scope, "locator-labels", [], isStringList);
 
   const calibrated = useMemo(() => templates.filter((t) => t.status === "calibrated"), [templates]);
