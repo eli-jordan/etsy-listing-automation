@@ -195,7 +195,6 @@ export function BatchListingDrawer({
   const category = groupLabel(planGroup(plan, listing?.planFailure ?? null));
   const summaryText = drawerSummary(listing, comparison);
   const isPhone = useIsPhone();
-  // A phone may have scrolled the dialog sideways to show the focused Close.
   const resetSideways = useEffectEvent((dialog: HTMLDialogElement) => {
     if (isPhone) dialog.scrollLeft = 0;
   });
@@ -216,7 +215,7 @@ export function BatchListingDrawer({
       restoreFocusRef.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
       openNativeDialog(dialog);
-      // showModal() focuses the first control and scrolls the translated panel into view.
+      // Undo showModal()'s scroll to its focused control (sideways too, on a phone).
       dialog.scrollTop = 0;
       resetSideways(dialog);
       closeRef.current?.focus({ preventScroll: true });

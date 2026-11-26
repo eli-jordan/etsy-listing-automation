@@ -21,8 +21,6 @@ import { wordDiff } from "./wordDiff";
 
 export interface ListingMediaContext {
   name: string;
-  /** Where a cached scene's picture resolves its artwork from (A35), or
-   * `null` to show the bare photo. */
   scene: SceneSource | null;
 }
 
@@ -120,8 +118,7 @@ function AfterTile({
   );
 }
 
-/** This plan's own preview of the scene, named by the hash the plan computed
- * for it -- a file read, where asking without the hash re-plans the listing. */
+/** Without `hash` the server re-plans the listing to find the preview. */
 function previewUrl(
   listing: string,
   template: string,
@@ -437,8 +434,6 @@ export function ComparisonView({
   /** Optional fixture resolver for canvases and component galleries. The app
    * normally derives these URLs from the listing's media refs. */
   imageUrlForRef?: (ref: string) => string | null;
-  /** The drifted field shown open, when the page links to fields from
-   * outside. Left out, the view keeps this itself. */
   openDrift?: string | null;
   onOpenDriftChange?: (key: string | null) => void;
 }) {

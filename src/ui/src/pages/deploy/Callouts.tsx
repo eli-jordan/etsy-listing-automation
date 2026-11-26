@@ -97,8 +97,6 @@ export function Callouts({
   plan: PlanDTO;
   comparison: Comparison;
   applied: boolean;
-  /** Links the warning to each field's row, while the comparison is on the
-   * page. */
   onRevealDrift?: (field: DriftedField) => void;
 }) {
   const hasWork = plan.stage_plans.some(stageWillRun);
