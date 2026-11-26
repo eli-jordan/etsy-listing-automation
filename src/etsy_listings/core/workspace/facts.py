@@ -55,8 +55,6 @@ _PROBES: BoundedCache[tuple[str, tuple[int | str, ...]], VideoFacts | ProbeFailu
 
 
 class WorkspaceFacts:
-    """The workspace as a listing check sees it. Build one per request."""
-
     def __init__(
         self,
         workspace: Workspace,
@@ -72,9 +70,6 @@ class WorkspaceFacts:
         self._settings: Settings | SettingsProblem | None = None
 
     def settings(self) -> Settings | SettingsProblem:
-        """``settings.yaml`` read once, on demand: unpositioned listings need
-        none. A broken file is a problem to report as an issue, not a failed
-        read."""
         if self._settings is None:
             self._settings = self._workspace.settings_or_problem()
         return self._settings
@@ -89,9 +84,6 @@ class WorkspaceFacts:
 
     @classmethod
     def for_files(cls, workspace: Workspace) -> WorkspaceFacts:
-        """No catalogue, for a caller that only asks about files -- the
-        `etsy_videos` stage's gate, which needs a listing's clips probed and
-        would otherwise pay for every ``template.yaml`` on every plan."""
         return cls(workspace, garment_profile_names=(), templates={})
 
     def garment_profile(self, name: str) -> GarmentProfile | None:
@@ -117,16 +109,6 @@ class WorkspaceFacts:
         return self._profiles[name]
 
     def videos(self, listing: Listing, listing_dir: Path) -> dict[str, VideoFacts | ProbeFailure]:
-        """Every video ``listing.media`` names, keyed by the ref it is named by
-        -- what `check_videos` reads.
-
-        *listing_dir* rather than a name, because a ``./`` ref is resolved
-        against it and the editor's unsaved draft has no name
-        (`Workspace.draft_listing_dir`). A ref that will not resolve is a
-        :class:`ProbeFailure` carrying the refusal, not a raise: it is still
-        a file the seller named, and the banner is where they learn why it
-        cannot be read.
-        """
         result: dict[str, VideoFacts | ProbeFailure] = {}
         for entry in listing.media:
             if not isinstance(entry, str) or media_kind(entry) != "video":
@@ -140,10 +122,6 @@ class WorkspaceFacts:
         return result
 
     def video(self, path: Path) -> VideoFacts | ProbeFailure:
-        """One file's probe, kept by path. Public for a caller whose refs are
-        not a listing's -- a listing template's, which resolve against the
-        template directory, or the files Save as listing template is about to
-        copy."""
         if path not in self._probes:
             self._probes[path] = _remembered_probe(path)
         return self._probes[path]
@@ -171,8 +149,6 @@ def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
 
 
 def _read_template_info(workspace: Workspace, name: str) -> tuple[TemplateInfo | None]:
-    """One template's entry, read from its files: ``None`` for one whose
-    config will not load or that needs repair, which the render stage names."""
     config = template_state(workspace, name).config
     if config is None:
         return (None,)
@@ -188,9 +164,6 @@ def _read_template_info(workspace: Workspace, name: str) -> tuple[TemplateInfo |
 
 
 def _remembered_probe(path: Path) -> VideoFacts | ProbeFailure:
-    """``path``'s probe, kept across requests until the file changes. A file
-    that cannot be versioned (gone, unreadable) is probed afresh, so its
-    failure says why."""
     try:
         version = file_version(path)
     except OSError:
@@ -199,9 +172,6 @@ def _remembered_probe(path: Path) -> VideoFacts | ProbeFailure:
 
 
 def template_info(workspace: Workspace, name: str, config: AnyTemplate) -> TemplateInfo:
-    """One loaded template as a listing check sees it. Public for the render
-    stage, which has already loaded the configs it ships and asks the same
-    artwork question of them (ADR-0053) without gathering the whole catalogue."""
     if isinstance(config, ColourMatrixTemplate):
         colours = frozenset(workspace.template_colours(name))
     elif isinstance(config, MultipleTemplate):
