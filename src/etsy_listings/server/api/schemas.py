@@ -246,10 +246,9 @@ class ResolvedPrice(ApiModel):
 
 
 def always_sent_list() -> Any:
-    """An empty-list default the server always sends. ``default_factory``
-    keeps the mutable default off the class (S01), and the explicit schema
-    default keeps OpenAPI, and so the generated client, from marking the field
-    optional."""
+    """An empty-list default the server always sends: ``default_factory`` keeps the mutable
+    default off the class, and the explicit schema default stops OpenAPI, and so the generated
+    client, marking the field optional."""
     return Field(default_factory=list, json_schema_extra={"default": []})
 
 
