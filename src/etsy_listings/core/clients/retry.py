@@ -97,13 +97,13 @@ def wait_for(
 
 def _send_once(
     send: Callable[[], httpx.Response], method: str
-) -> tuple[httpx.Response | None, httpx.TransportError | None]:
+) -> httpx.Response | httpx.TransportError:
     try:
-        return send(), None
+        return send()
     except httpx.TransportError as exc:
         if method.upper() not in IDEMPOTENT_METHODS:
             raise
-        return None, exc
+        return exc
 
 
 def with_retries(
@@ -123,19 +123,13 @@ def with_retries(
     response rather than a wrapper's summary of it. A transport error has no
     response to return, so that one does propagate.
     """
-    last_error: httpx.TransportError | None = None
-    for attempt in range(policy.attempts):
-        response, error = _send_once(send, method)
-        if error is not None:
-            last_error = error
-        elif response is not None and not should_retry(method, response):
-            return response
-
-        if attempt == policy.attempts - 1:
-            break
-        sleep(wait_for(policy, attempt, response, random=random))
-
-    if response is None:
-        assert last_error is not None  # unreachable without one
-        raise last_error
-    return response
+    last = _send_once(send, method)
+    for attempt in range(1, policy.attempts):
+        if isinstance(last, httpx.Response) and not should_retry(method, last):
+            return last
+        response = last if isinstance(last, httpx.Response) else None
+        sleep(wait_for(policy, attempt - 1, response, random=random))
+        last = _send_once(send, method)
+    if isinstance(last, httpx.TransportError):
+        raise last
+    return last
