@@ -1,5 +1,6 @@
 import type { MaskEdit } from "./preparation";
-import { api } from "./client";
+import { api, detailMessage, formBody, withTuples } from "./client";
+import type { components } from "./schema";
 import type {
   BoundingBox,
   ColourReportRow,
@@ -49,17 +50,10 @@ function revisionOf(response: Response | undefined): string {
   return (response?.headers.get("ETag") ?? "").replace(/^"|"$/g, "");
 }
 
-/**
- * Returns null when the template has no template.yaml yet -- a folder of
- * photos that has not been given a kind.
- *
- * The cast is because openapi-fetch widens `bounding_box`'s 4-tuple to a
- * plain array when inferring the response type of a 3-way discriminated
- * union -- the server still enforces exactly 4 points either way.
- */
+/** Null when the template has no template.yaml yet -- a folder of photos
+ * that has not been given a kind. */
 export async function getTemplateConfig(name: string): Promise<TemplateConfigDocument | null> {
   const { data, error, response } = await api.GET("/api/templates/{name}/config", {
-    // Bypass configs cached before the server added its no-store policy too.
     cache: "no-store",
     params: { path: { name } },
   });
@@ -67,14 +61,15 @@ export async function getTemplateConfig(name: string): Promise<TemplateConfigDoc
     // Only a 404 means no template.yaml yet. A template that needs repair or
     // will not parse has one, and must not be offered a kind.
     if (response.status === 404) return null;
-    const detail: unknown = error.detail;
-    const refused = response.status === 409 && typeof detail === "string";
-    throw new CalibratorApiError(refused ? detail : `could not read the config for ${name}`);
+    const fallback = `could not read the config for ${name}`;
+    throw new CalibratorApiError(
+      response.status === 409 ? detailMessage(error, fallback) : fallback,
+    );
   }
   const modifiedAt = response.headers.get("Last-Modified");
   if (modifiedAt === null) throw new CalibratorApiError("template config has no modification time");
   return {
-    config: data as unknown as TemplateConfigState,
+    config: withTuples<TemplateConfigState>(data),
     modifiedAt,
     revision: revisionOf(response),
   };
@@ -97,22 +92,15 @@ export async function saveTemplateConfig(
   });
   if (error) {
     if (response?.status === 409 || response?.status === 412) throw new TemplateConflictError();
-    // A refusal names its rule. A validation error's detail is a list, and a
-    // server fault's is not for the seller.
-    const detail: unknown = error.detail;
-    const refused = response?.status === 422 && typeof detail === "string";
-    throw new CalibratorApiError(refused ? detail : "could not save template.yaml");
+    const fallback = "could not save template.yaml";
+    throw new CalibratorApiError(
+      response?.status === 422 ? detailMessage(error, fallback) : fallback,
+    );
   }
-  return { config: data as unknown as TemplateConfigState, revision: revisionOf(response) };
+  return { config: withTuples<TemplateConfigState>(data), revision: revisionOf(response) };
 }
 
-/** What followed a rename, as workspace-relative files. `unresolved` could not
- * be read or written, and may still name the old template. */
-export interface TemplateRenameResult {
-  name: string;
-  updated: string[];
-  unresolved: string[];
-}
+export type TemplateRenameResult = components["schemas"]["TemplateRenameResponse"];
 
 export async function renameTemplate(name: string, newName: string): Promise<TemplateRenameResult> {
   const { data, error } = await api.POST("/api/templates/{name}/rename", {
@@ -120,8 +108,7 @@ export async function renameTemplate(name: string, newName: string): Promise<Tem
     body: { new_name: newName },
   });
   if (data) return data;
-  const detail: unknown = error?.detail;
-  throw new CalibratorApiError(typeof detail === "string" ? detail : `could not rename ${name}`);
+  throw new CalibratorApiError(detailMessage(error, `could not rename ${name}`));
 }
 
 export async function getColourReport(name: string): Promise<ColourReportRow[]> {
@@ -138,7 +125,7 @@ export async function assignKind(name: string, kind: TemplateKind): Promise<Temp
     body: { kind },
   });
   if (error) throw new CalibratorApiError(`could not set the kind for ${name}`);
-  return data as unknown as TemplateConfigState;
+  return withTuples<TemplateConfigState>(data);
 }
 
 export async function listDesigns(): Promise<DesignSummary[]> {
@@ -147,16 +134,12 @@ export async function listDesigns(): Promise<DesignSummary[]> {
   return data;
 }
 
-/** Adds a PNG to the library. Hand-rolled multipart -- the generated client
- * cannot describe one. */
 export async function uploadDesign(file: File): Promise<DesignSummary> {
-  const body = new FormData();
-  body.append("file", file);
-  const response = await fetch("/api/designs", { method: "POST", body });
-  if (!response.ok) {
-    throw new CalibratorApiError("failed to upload test design");
-  }
-  return (await response.json()) as DesignSummary;
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.POST("/api/designs", { body: formBody(form) });
+  if (!data) throw new CalibratorApiError("failed to upload test design");
+  return data;
 }
 
 /**
@@ -205,13 +188,7 @@ export async function getTemplateSwatch(name: string, colour: string): Promise<s
   return data.hex;
 }
 
-/** A listing holding its own position for a template (ADR-0058).
- * `placements` names the placement IDs of a `multiple` chart it positions;
- * empty for one box. */
-export interface PositionedListing {
-  listing: string;
-  placements: string[];
-}
+export type PositionedListing = components["schemas"]["PositionedListingResponse"];
 
 export async function getPositionedListings(name: string): Promise<PositionedListing[]> {
   const { data, error } = await api.GET("/api/templates/{name}/positioned-listings", {

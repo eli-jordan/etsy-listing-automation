@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, detailMessage, formBody, withTuples } from "./client";
 import type {
   CommonCopySummary,
   MediaFileSummary,
@@ -15,10 +15,6 @@ import type {
 
 export class ListingsApiError extends Error {}
 
-// openapi-fetch's Readable widens the nested bounding_box tuples to arrays.
-// ListingDetail responses are validated by the server as exactly four corners,
-// so restore the generated type at these response boundaries (as calibrator.ts does).
-
 export async function listListings(): Promise<ListingSummary[]> {
   const { data, error } = await api.GET("/api/listings");
   if (error || !data) throw new ListingsApiError("could not load listings");
@@ -30,7 +26,7 @@ export async function getListing(name: string): Promise<ListingDetail> {
     params: { path: { name } },
   });
   if (error || !data) throw new ListingsApiError(`could not load listing ${name}`);
-  return data as ListingDetail;
+  return withTuples<ListingDetail>(data);
 }
 
 /** The same, but `null` on a 404 rather than a thrown error -- what the
@@ -42,7 +38,7 @@ export async function tryGetListing(name: string): Promise<ListingDetail | null>
   });
   if (response.status === 404) return null;
   if (error || !data) throw new ListingsApiError(`could not load listing ${name}`);
-  return data as ListingDetail;
+  return withTuples<ListingDetail>(data);
 }
 
 export async function patchListing(
@@ -54,13 +50,13 @@ export async function patchListing(
     body: patch,
   });
   if (error || !data) throw new ListingsApiError(`could not save listing ${name}`);
-  return data as ListingDetail;
+  return withTuples<ListingDetail>(data);
 }
 
 export async function getListingDraft(): Promise<ListingDetail> {
   const { data, error } = await api.GET("/api/listing-draft");
   if (error || !data) throw new ListingsApiError("could not start a new listing");
-  return data as ListingDetail;
+  return withTuples<ListingDetail>(data);
 }
 
 export async function describeListingDraft(
@@ -68,7 +64,7 @@ export async function describeListingDraft(
 ): Promise<ListingDetail> {
   const { data, error } = await api.POST("/api/listing-draft", { body: { document } });
   if (error || !data) throw new ListingsApiError("could not check the draft");
-  return data as ListingDetail;
+  return withTuples<ListingDetail>(data);
 }
 
 /** Naming a listing is what creates it. Resolves for a document the server
@@ -79,7 +75,7 @@ export async function describeListingDraft(
 export async function createListing(body: CreateListingRequest): Promise<ListingDetail> {
   const { data, error } = await api.POST("/api/listings", { body });
   if (error || !data) throw new ListingsApiError("could not create listing");
-  return data as ListingDetail;
+  return withTuples<ListingDetail>(data);
 }
 
 export async function deleteListing(name: string): Promise<ListingSummary | null> {
@@ -97,7 +93,7 @@ export async function renameListing(name: string, newName: string): Promise<List
     body: { new_name: newName },
   });
   if (error || !data) throw new ListingsApiError(`could not rename ${name} to ${newName}`);
-  return data as ListingDetail;
+  return withTuples<ListingDetail>(data);
 }
 
 export async function listGarmentProfiles(): Promise<GarmentProfileSummary[]> {
@@ -144,19 +140,15 @@ export function listingMediaFileUrl(listing: string, name: string): string {
   return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/file`;
 }
 
-/** One of the listing's scenes, each layer printing the file its colour
- * resolves to in the *saved* listing (A35). `version` is ignored by the
- * server: it is a signature of the saved design map, so a landed save is a new
- * URL and the browser fetches the picture again. */
 export function listingScenePreviewUrl(
   listing: string,
   template: string,
   colour: string | null,
-  version: string,
+  cacheKey: string,
 ): string {
   const params = new URLSearchParams({ template });
   if (colour) params.set("colour", colour);
-  params.set("v", version);
+  params.set("v", cacheKey);
   return `/api/listings/${encodeURIComponent(listing)}/scene-preview?${params.toString()}`;
 }
 
@@ -165,9 +157,9 @@ export function listingSceneArtworkUrl(
   template: string,
   colour: string | null,
   placement: string | null,
-  version: string,
+  cacheKey: string,
 ): string {
-  const params = new URLSearchParams({ template, v: version });
+  const params = new URLSearchParams({ template, v: cacheKey });
   if (colour) params.set("colour", colour);
   if (placement) params.set("placement", placement);
   return `/api/listings/${encodeURIComponent(listing)}/scene-artwork?${params.toString()}`;
@@ -217,16 +209,11 @@ export async function listListingDesigns(): Promise<ListingDesignSummary[]> {
  * filename: a name taken by other artwork gets a `-2` suffix. Hand-rolled
  * multipart, as `uploadDesign` is; the error carries the server's reason. */
 export async function uploadListingDesign(file: File): Promise<ListingDesignSummary> {
-  const body = new FormData();
-  body.append("file", file);
-  const response = await fetch("/api/listing-designs", { method: "POST", body });
-  if (!response.ok) {
-    const detail = (await response.json().catch(() => null)) as { detail?: unknown } | null;
-    throw new ListingsApiError(
-      typeof detail?.detail === "string" ? detail.detail : `could not upload ${file.name}`,
-    );
-  }
-  return (await response.json()) as ListingDesignSummary;
+  const form = new FormData();
+  form.append("file", file);
+  const { data, error } = await api.POST("/api/listing-designs", { body: formBody(form) });
+  if (!data) throw new ListingsApiError(detailMessage(error, `could not upload ${file.name}`));
+  return data;
 }
 
 export async function listEtsySections(): Promise<EtsySectionsResponse> {

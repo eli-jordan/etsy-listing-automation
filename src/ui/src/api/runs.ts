@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, withTuples } from "./client";
 import type { CreateRunRequest, RunDetail, RunSummary } from "../types";
 
 export class RunsApiError extends Error {}
@@ -45,11 +45,7 @@ export function isReviewedScope(run: Pick<RunSummary, "scope">): boolean {
 export async function getRun(id: string): Promise<RunDetail> {
   const { data, error } = await api.GET("/api/runs/{run_id}", { params: { path: { run_id: id } } });
   if (error || !data) throw new RunsApiError(`could not load run ${id}`);
-  // `as unknown as RunDetail`: `events`' `ProgressEvent.swatches` tuple
-  // (`[number, number, number]`) widens to `number[]` through openapi-fetch's
-  // generic response extraction -- the same known gap `api/calibrator.ts`
-  // already works around for `BoundingBox`, one level deeper here.
-  return data as unknown as RunDetail;
+  return withTuples<RunDetail>(data);
 }
 
 /** Cancels a queued or planning/previewing run. Refuses (`409`) for an

@@ -23,34 +23,29 @@ function answer(status: number, data?: unknown, error?: unknown) {
   return { data, error, response: new Response(null, { status }) } as never;
 }
 
-function reply(status: number, body: unknown) {
-  return vi
-    .spyOn(globalThis, "fetch")
-    .mockResolvedValue(new Response(JSON.stringify(body), { status }));
-}
-
 afterEach(() => vi.restoreAllMocks());
 
 describe("batches api", () => {
   it("stages files as multipart with the listing template", async () => {
-    const fetch = reply(200, { id: "s1" });
+    const post = vi.spyOn(api, "POST").mockResolvedValue(answer(200, { id: "s1" }));
     const file = new File(["x"], "a.png", { type: "image/png" });
 
     await expect(stageDesigns("heavyweight-tee", [file])).resolves.toEqual({ id: "s1" });
 
-    const [url, init] = fetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/staging");
-    const form = init.body as FormData;
+    const [path, init] = post.mock.calls[0] as unknown as [string, { body: FormData }];
+    expect(path).toBe("/api/staging");
+    const form = init.body;
     expect(form.get("listing_template")).toBe("heavyweight-tee");
     expect((form.getAll("files")[0] as File).name).toBe("a.png");
   });
 
   it("turns a 422 refusal into StagingRefused, and anything else into its sentence", async () => {
     const refusal = { message: "a.zip is a ZIP", remedy: "Nothing was uploaded or changed." };
-    reply(422, { detail: refusal });
+    const post = vi.spyOn(api, "POST");
+    post.mockResolvedValueOnce(answer(422, undefined, { detail: refusal }));
     await expect(stageDesigns("t", [])).rejects.toEqual(new StagingRefused(refusal));
 
-    reply(404, { detail: "no listing template 't'" });
+    post.mockResolvedValueOnce(answer(404, undefined, { detail: "no listing template 't'" }));
     await expect(stageDesigns("t", [])).rejects.toThrow("no listing template 't'");
   });
 

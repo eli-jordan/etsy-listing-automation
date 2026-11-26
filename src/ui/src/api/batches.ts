@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, detailMessage, formBody } from "./client";
 import type { components } from "./schema";
 
 export type StagingDetail = components["schemas"]["StagingDetail"];
@@ -20,32 +20,24 @@ export class StagingRefused extends BatchesApiError {
   }
 }
 
-function detailOf(error: unknown, fallback: string): string {
-  const detail = (error as { detail?: unknown } | undefined)?.detail;
-  return typeof detail === "string" ? detail : fallback;
-}
-
-/** Multipart, so a plain `fetch`: openapi-fetch would serialise the body as
- * JSON. */
 export async function stageDesigns(listingTemplate: string, files: File[]): Promise<StagingDetail> {
   const form = new FormData();
   form.append("listing_template", listingTemplate);
   for (const file of files) form.append("files", file, file.name);
-  const response = await fetch("/api/staging", { method: "POST", body: form });
-  const body: unknown = await response.json().catch(() => undefined);
-  if (response.ok) return body as StagingDetail;
-  const detail = (body as { detail?: unknown } | undefined)?.detail;
+  const { data, error, response } = await api.POST("/api/staging", { body: formBody(form) });
+  if (data) return data;
+  const detail = (error as { detail?: unknown } | undefined)?.detail;
   if (response.status === 422 && typeof detail === "object" && detail !== null) {
     throw new StagingRefused(detail as StagingRefusal);
   }
-  throw new BatchesApiError(detailOf(body, "The designs could not be staged."));
+  throw new BatchesApiError(detailMessage(error, "The designs could not be staged."));
 }
 
 export async function getStaging(id: string): Promise<StagingDetail> {
   const { data, error } = await api.GET("/api/staging/{session_id}", {
     params: { path: { session_id: id } },
   });
-  if (error || !data) throw new BatchesApiError(detailOf(error, "This staging has gone."));
+  if (error || !data) throw new BatchesApiError(detailMessage(error, "This staging has gone."));
   return data;
 }
 
@@ -57,7 +49,7 @@ export async function patchStaging(
     params: { path: { session_id: id } },
     body: { names: edit.names ?? {}, remove: edit.remove ?? [], label: edit.label ?? null },
   });
-  if (error || !data) throw new BatchesApiError(detailOf(error, "The change was not saved."));
+  if (error || !data) throw new BatchesApiError(detailMessage(error, "The change was not saved."));
   return data;
 }
 
@@ -72,7 +64,8 @@ export async function confirmStaging(id: string): Promise<BatchDetail> {
   const { data, error } = await api.POST("/api/staging/{session_id}/confirm", {
     params: { path: { session_id: id } },
   });
-  if (error || !data) throw new BatchesApiError(detailOf(error, "The listings were not created."));
+  if (error || !data)
+    throw new BatchesApiError(detailMessage(error, "The listings were not created."));
   return data;
 }
 
@@ -80,7 +73,7 @@ export async function getBatch(id: string): Promise<BatchDetail> {
   const { data, error } = await api.GET("/api/batches/{batch_id}", {
     params: { path: { batch_id: id } },
   });
-  if (error || !data) throw new BatchesApiError(detailOf(error, "No such batch."));
+  if (error || !data) throw new BatchesApiError(detailMessage(error, "No such batch."));
   return data;
 }
 
@@ -88,7 +81,7 @@ export async function retryBatchRow(id: string, row: string): Promise<BatchDetai
   const { data, error } = await api.POST("/api/batches/{batch_id}/rows/{row}/retry", {
     params: { path: { batch_id: id, row } },
   });
-  if (error || !data) throw new BatchesApiError(detailOf(error, "Retry failed."));
+  if (error || !data) throw new BatchesApiError(detailMessage(error, "Retry failed."));
   return data;
 }
 
@@ -105,7 +98,7 @@ export async function controlBatch(
   const { data, error } = await api.POST(CONTROLS[action], {
     params: { path: { batch_id: id } },
   });
-  if (error || !data) throw new BatchesApiError(detailOf(error, "The batch did not change."));
+  if (error || !data) throw new BatchesApiError(detailMessage(error, "The batch did not change."));
   return data;
 }
 
@@ -128,7 +121,7 @@ export async function renameBatch(id: string, label: string): Promise<BatchDetai
     params: { path: { batch_id: id } },
     body: { label },
   });
-  if (error || !data) throw new BatchesApiError(detailOf(error, "The batch was not renamed."));
+  if (error || !data) throw new BatchesApiError(detailMessage(error, "The batch was not renamed."));
   return data;
 }
 
@@ -148,7 +141,7 @@ export async function setReviewed(
     params: { path: { batch_id: id, row } },
     body: { reviewed },
   });
-  if (error || !data) throw new BatchesApiError(detailOf(error, "Reviewed was not changed."));
+  if (error || !data) throw new BatchesApiError(detailMessage(error, "Reviewed was not changed."));
   return data;
 }
 
@@ -156,6 +149,7 @@ export async function getListingBatch(name: string): Promise<ListingBatch | null
   const { data, error } = await api.GET("/api/listings/{name}/batch", {
     params: { path: { name } },
   });
-  if (error) throw new BatchesApiError(detailOf(error, "The listing's batch could not be read."));
+  if (error)
+    throw new BatchesApiError(detailMessage(error, "The listing's batch could not be read."));
   return data ?? null;
 }

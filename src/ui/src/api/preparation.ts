@@ -1,5 +1,5 @@
 import type { components } from "./schema";
-import { api } from "./client";
+import { api, withTuples } from "./client";
 import { openEventStream, type EventStreamOptions } from "./sse";
 export type Preparation = components["schemas"]["PreparationResponse"];
 export type PreparationJob = components["schemas"]["PreparationJobResponse"];
@@ -100,6 +100,5 @@ export async function getMaskHistory(
         });
   if (result.error || !result.data)
     throw new Error("Could not read brush history. Saved masks remain available.");
-  // openapi-fetch widens nested coordinate tuples. The response contract validates pairs.
-  return result.data as unknown as MaskHistory;
+  return withTuples<MaskHistory>(result.data);
 }
