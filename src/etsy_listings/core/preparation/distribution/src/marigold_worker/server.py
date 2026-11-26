@@ -11,7 +11,7 @@ import sys
 import threading
 import uuid
 from pathlib import Path
-from typing import Protocol
+from typing import NoReturn, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -53,15 +53,13 @@ class Backend(Protocol):
 
 
 def safe_path(root: Path, relative: str) -> Path:
-    """The request model has already refused unsafe path syntax."""
     path = root.joinpath(*relative.split("/")).resolve()
     if not path.is_relative_to(root):
         raise ValueError("Cache path escapes the cache root")
     return path
 
 
-def _invalid(message: str) -> None:
-    # S01 TRY301: the request loop answers this; the raise stays out of its try.
+def _invalid(message: str) -> NoReturn:
     raise ValueError(message)
 
 
@@ -109,16 +107,12 @@ def _publish(destination: Path, prediction: NDArray[np.float32]) -> str:
         return hashlib.file_digest(checksum_stream, "sha256").hexdigest()
 
 
-class _Session:
-    """One worker process's state, shared by the control reader thread and the
-    model call loop. ``lock`` guards the active call's fields, and replies that
-    change them are written under it; ``output_lock`` keeps each reply line
-    whole."""
+class _State:
+    """Shared by the control reader thread and the model call loop. ``lock``
+    guards the active call's fields, and replies that change them are written
+    under it; ``output_lock`` keeps each reply line whole."""
 
-    def __init__(self, backend: Backend, root: Path) -> None:
-        self.backend = backend
-        self.root = root
-        self.capabilities = backend.capabilities()
+    def __init__(self) -> None:
         self.pending: queue.Queue[InferRequest | None] = queue.Queue(maxsize=1)
         self.lock = threading.Lock()
         self.output_lock = threading.Lock()
@@ -132,7 +126,15 @@ class _Session:
             sys.stdout.write(encode(reply))
             sys.stdout.flush()
 
-    # The control reader thread.
+    def stopping(self) -> bool:
+        with self.lock:
+            return self.shutdown
+
+
+class _ControlReader:
+    def __init__(self, state: _State, capabilities: Capabilities) -> None:
+        self.state = state
+        self.capabilities = capabilities
 
     def read(self) -> None:
         try:
@@ -140,12 +142,12 @@ class _Session:
                 if self._read_line(line):
                     return
         finally:
-            with self.lock:
-                self.shutdown = True
-                self.cancelled = True
-                if self.active is None:
+            with self.state.lock:
+                self.state.shutdown = True
+                self.state.cancelled = True
+                if self.state.active is None:
                     with contextlib.suppress(queue.Full):
-                        self.pending.put_nowait(None)
+                        self.state.pending.put_nowait(None)
 
     def _read_line(self, line: str) -> bool:
         """Answer one request line. True once the reader should stop."""
@@ -156,11 +158,11 @@ class _Session:
             raw = json.loads(line)
             request_id = Envelope.model_validate(raw).request_id
             request = REQUEST.validate_python(raw)
-            with self.lock:
+            with self.state.lock:
                 return self._control(request, request_id)
         except (ValueError, TypeError, queue.Full) as exc:
             reason = describe(exc) if isinstance(exc, ValidationError) else str(exc)
-            self.emit(Failure(request_id=request_id, code="invalid_request", message=reason))
+            self.state.emit(Failure(request_id=request_id, code="invalid_request", message=reason))
             return False
 
     def _control(
@@ -170,15 +172,15 @@ class _Session:
     ) -> bool:
         """Apply one request under ``lock``. True for shutdown."""
         if isinstance(request, CancelRequest):
-            if request.target == self.active:
-                self.cancelled = True
-            self.emit(Acknowledged(request_id=request_id))
+            if request.target == self.state.active:
+                self.state.cancelled = True
+            self.state.emit(Acknowledged(request_id=request_id))
         elif isinstance(request, ShutdownRequest):
-            self.shutdown = True
-            self.cancelled = True
-            self.emit(Acknowledged(request_id=request_id))
-            if self.active is None:
-                self.pending.put_nowait(None)
+            self.state.shutdown = True
+            self.state.cancelled = True
+            self.state.emit(Acknowledged(request_id=request_id))
+            if self.state.active is None:
+                self.state.pending.put_nowait(None)
             return True
         elif isinstance(request, HelloRequest):
             self._greet(request_id)
@@ -187,29 +189,34 @@ class _Session:
         return False
 
     def _greet(self, request_id: str) -> None:
-        if self.active is not None:
+        if self.state.active is not None:
             _invalid("Worker is busy")
-        self.hello = True
-        self.emit(HelloReply(request_id=request_id, **self.capabilities.model_dump()))
+        self.state.hello = True
+        self.state.emit(HelloReply(request_id=request_id, **self.capabilities.model_dump()))
 
     def _accept(self, request: InferRequest, request_id: str) -> None:
-        if not self.hello:
+        if not self.state.hello:
             _invalid("Handshake required before inference")
-        if self.active is not None:
+        if self.state.active is not None:
             _invalid("Worker is busy; only one inference call is allowed")
-        self.active = request_id
-        self.cancelled = False
-        self.pending.put_nowait(request)
+        self.state.active = request_id
+        self.state.cancelled = False
+        self.state.pending.put_nowait(request)
 
-    # The model call loop, on the main thread.
+
+class _CallRunner:
+    def __init__(self, state: _State, backend: Backend, root: Path) -> None:
+        self.state = state
+        self.backend = backend
+        self.root = root
 
     def run(self, message: InferRequest) -> None:
         try:
             checksum, metadata = self._infer(message)
-            with self.lock:
-                cancelled = self.cancelled
-                self.active = None
-                self.emit(
+            with self.state.lock:
+                cancelled = self.state.cancelled
+                self.state.active = None
+                self.state.emit(
                     InferenceResult(
                         request_id=message.request_id,
                         artifact=message.output,
@@ -219,9 +226,9 @@ class _Session:
                     )
                 )
         except Exception as exc:  # noqa: BLE001 -- one failed call becomes a protocol Failure; the worker stays up
-            with self.lock:
-                self.active = None
-                self.emit(
+            with self.state.lock:
+                self.state.active = None
+                self.state.emit(
                     Failure(
                         request_id=message.request_id,
                         code="inference_failed",
@@ -237,29 +244,27 @@ class _Session:
         if destination.exists():
             _invalid("Output already exists; choose a new evidence artifact")
         image = _open_image(source)
-        self.emit(Progress(request_id=message.request_id, step=role))
+        self.state.emit(Progress(request_id=message.request_id, step=role))
         prediction, metadata = self.backend.infer(role, image, message.settings)
         _check_prediction(role, image, prediction)
         return _publish(destination, prediction), metadata
-
-    def stopping(self) -> bool:
-        with self.lock:
-            return self.shutdown
 
 
 def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> None:
     root = Path(cache_root)
     if not root.is_absolute():
         raise ValueError("Worker cache root must be native absolute")
-    session = _Session(backend, root.resolve())
-    threading.Thread(target=session.read, daemon=True).start()
+    state = _State()
+    reader = _ControlReader(state, backend.capabilities())
+    runner = _CallRunner(state, backend, root.resolve())
+    threading.Thread(target=reader.read, daemon=True).start()
     while True:
         try:
-            message = session.pending.get(timeout=idle_seconds)
+            message = state.pending.get(timeout=idle_seconds)
         except queue.Empty:
             return
         if message is None:
             return
-        session.run(message)
-        if session.stopping():
+        runner.run(message)
+        if state.stopping():
             return

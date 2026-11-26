@@ -18,7 +18,7 @@ from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self, cast
+from typing import NoReturn, Self, cast
 
 from pydantic import ValidationError
 
@@ -66,8 +66,7 @@ class WorkerError(RuntimeError):
     """A retryable worker failure. Settings and earlier evidence remain intact."""
 
 
-def _protocol_error(message: str) -> None:
-    """Raised from a helper so the caller's ``try`` can clean up first (S01 TRY301)."""
+def _protocol_error(message: str) -> NoReturn:
     raise WorkerError(message)
 
 

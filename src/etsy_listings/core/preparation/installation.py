@@ -10,7 +10,7 @@ import subprocess
 import tomllib
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, NoReturn, Protocol
 
 from PIL import Image
 
@@ -34,8 +34,7 @@ REVISIONS = (
 )
 
 
-def _unverified(message: str) -> None:
-    """Integrity failure the caller's handler records (S01 TRY301)."""
+def _unverified(message: str) -> NoReturn:
     raise SetupError(message)
 
 

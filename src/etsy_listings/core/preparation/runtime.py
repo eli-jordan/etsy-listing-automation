@@ -6,7 +6,7 @@ import threading
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, NoReturn, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -23,8 +23,7 @@ class SetupError(RuntimeError):
     """Installation failed without switching the last verified runtime."""
 
 
-def _setup_failed(message: str) -> None:
-    """Raised from a helper so a caller's ``try`` can record it (S01 TRY301)."""
+def _setup_failed(message: str) -> NoReturn:
     raise SetupError(message)
 
 
