@@ -75,13 +75,6 @@ what `dirty` is for.
 
 
 def is_live_etsy_state(state: str | None) -> bool:
-    """Whether Etsy's ``state`` means this listing has been published.
-
-    ``None`` -- no id on record, or a state we could not read -- is **not**
-    live. A listing this tool cannot prove is published is reported as though
-    it were not, which is the reading that never overstates what has happened
-    to a shop.
-    """
     return state is not None and state in LIVE_ETSY_STATES
 
 
@@ -121,9 +114,7 @@ def _lifecycle_status(inputs: StatusInputs) -> ListingStatus | None:
     if lifecycle == "deleted":
         return "pending-delete"
     if lifecycle == "renew" or (lifecycle is None and inputs.last_applied_lifecycle == "retired"):
-        # Un-retire and pending renew: the workspace wants it on sale, Etsy
-        # does not. Etsy cannot go back to `draft` (birth-only), so the
-        # badge is ours.
+        # Etsy has no way back to `draft`, so this badge is ours, not Etsy's.
         return "draft"
     if lifecycle == "retired":
         return "pending-retire" if inputs.etsy_state == "active" else "inactive"
