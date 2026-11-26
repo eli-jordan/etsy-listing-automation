@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 import os
 import re
 import tempfile
@@ -32,7 +33,7 @@ from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.render import load_design, load_template_base
 from etsy_listings.core.render.identity import artwork_identity
 from etsy_listings.core.render.types import RGB, RGBA
-from etsy_listings.core.workspace import Workspace
+from etsy_listings.core.workspace import Workspace, layout
 from etsy_listings.core.workspace.file_version import file_version
 
 SCENE_CACHE_BYTES = 2 * 1024**3
@@ -175,6 +176,15 @@ class PixelDigests:
     ) -> tuple[RGBA, str]:
         return self._decode("design", path, load, artwork_identity)
 
+    def known(self, kind: str, path: Path) -> tuple[tuple[int | str, ...], str] | None:
+        """The stamp and digest this process computed for ``path``, if any:
+        what :class:`RememberedDigests` keeps across restarts."""
+        return self._known.get((kind, path.resolve()))
+
+    def clear(self) -> None:
+        """Forget every digest, as a restart does."""
+        self._known.clear()
+
     def _recall(self, kind: str, path: Path) -> str | None:
         try:
             stamp = file_version(path)
@@ -216,3 +226,45 @@ def photo_digest(base: RGB) -> str:
 
 PIXEL_DIGESTS = PixelDigests()
 """Process-wide: the server's preview requests share it."""
+
+
+class RememberedDigests:
+    """Pixel digests kept on disk under ``.cache/pixel-digests/``, each with
+    the file stamp it was computed for, so a scene viewed before a restart is
+    found again without decoding its photo and designs.
+
+    Only the Listing Images preview reads them, and it checks each answer
+    afterwards (``GET /api/listings/{name}/scene-preview/verify``): a digest
+    read from here is a guess about a file, while :data:`PIXEL_DIGESTS` holds
+    what this process computed. The render stage and deploy never read it.
+    Writing is safe from anywhere, since an entry is only ever a digest just
+    computed from the file at that stamp."""
+
+    def __init__(self, workspace: Workspace) -> None:
+        self._root = workspace.cache(layout.PIXEL_DIGESTS_DIR)
+
+    def recall(self, kind: str, path: Path) -> str | None:
+        """``path``'s remembered digest, while its stamp is the one recorded."""
+        try:
+            stamp = file_version(path)
+            entry = json.loads(self._path(kind, path).read_bytes())
+        except (OSError, ValueError):
+            return None
+        if not isinstance(entry, dict) or entry.get("stamp") != list(stamp):
+            return None
+        digest = entry.get("digest")
+        return digest if isinstance(digest, str) else None
+
+    def remember(self, kind: str, path: Path) -> None:
+        """Keep what this process computed for ``path``, if it computed one."""
+        known = PIXEL_DIGESTS.known(kind, path)
+        if known is None:
+            return
+        stamp, digest = known
+        entry = json.dumps({"stamp": list(stamp), "digest": digest}).encode()
+        with contextlib.suppress(OSError):
+            write_atomic(self._path(kind, path), entry)
+
+    def _path(self, kind: str, path: Path) -> Path:
+        key = hashlib.sha256(f"{kind}\0{path.resolve()}".encode()).hexdigest()
+        return self._root / f"{key}.json"

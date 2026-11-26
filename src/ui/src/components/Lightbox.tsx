@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useCheckedPicture } from "../hooks/useCheckedPicture";
 import { useCarousel } from "../phone/useCarousel";
 import { useIsPhone } from "../phone/usePhone";
 import { useSheetDrag } from "../phone/useSheetDrag";
@@ -182,6 +183,7 @@ type SlidePlace = "previous" | "current" | "next";
 /** Keyed by its caller, so a step swaps in a fresh element: reusing one keeps
  * painting the old picture until the new one arrives. */
 function Picture({ item }: { item: LightboxItem }) {
+  const url = useCheckedPicture(item.url);
   return item.kind === "video" ? (
     <video
       src={item.url}
@@ -192,7 +194,7 @@ function Picture({ item }: { item: LightboxItem }) {
       preload="metadata"
     />
   ) : (
-    <img src={item.url} alt={item.label} className="lightbox__image" />
+    <img src={url} alt={item.label} className="lightbox__image" />
   );
 }
 

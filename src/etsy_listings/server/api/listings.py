@@ -77,6 +77,8 @@ from etsy_listings.core.application.scene_previews import (
     SceneFrame,
     SceneLayers,
     layer_artwork,
+    remembered_scene,
+    remembered_scene_was_wrong,
     saved_scene,
 )
 from etsy_listings.core.application.scene_warming import SceneWarmer
@@ -112,6 +114,7 @@ from etsy_listings.server.api.schemas import (
     ListingSummary,
     PricingPlanSummary,
     RenameListingRequest,
+    SceneCheckResponse,
     WorkspaceSummary,
 )
 from etsy_listings.server.api.thumbnails import thumbnail_response
@@ -437,22 +440,44 @@ def scene_preview(
     (ADR-0058), so a landed position save is the composite the render writes.
     ``v`` is ignored; the editor sends a signature of the saved design so a
     landed save is a new URL and the browser fetches it again.
+
+    A full-size scene may be found under pixel digests remembered from before
+    a restart, which saves seconds of decoding; the editor then asks
+    :func:`check_scene_preview` whether that was the right one.
     """
-    workspace, colour, scale = target.workspace, query.colour, query.scale
+    layers = _scene_layers(target, template, query.colour)
+    if query.scale == "full":
+        picture = remembered_scene(target.workspace, template, layers, images=PREVIEW_IMAGES)
+    else:
+        picture = saved_scene(
+            target.workspace, template, layers, size=query.scale, images=PREVIEW_IMAGES
+        )
+    return scene_response(picture, if_none_match=request.headers.get("if-none-match"))
+
+
+@router.get("/{name}/scene-preview/check", response_model=SceneCheckResponse)
+def check_scene_preview(
+    target: Annotated[Target, Depends(target)],
+    template: str,
+    query: Annotated[ScenePreviewQuery, Depends()],
+) -> SceneCheckResponse:
+    """Whether :func:`scene_preview` showed a scene found under a remembered
+    digest that no longer names its file's pixels, so the editor should
+    fetch the picture again. Computes the digests, which corrects them."""
+    layers = _scene_layers(target, template, query.colour)
+    changed = remembered_scene_was_wrong(target.workspace, template, layers, images=PREVIEW_IMAGES)
+    return SceneCheckResponse(changed=changed)
+
+
+def _scene_layers(target: Target, template: str, colour: str | None) -> SceneLayers:
+    """What ``template``'s scene paints for the *saved* listing (A35)."""
     try:
-        listing = listing_scenes(workspace, target.name)
+        listing = listing_scenes(target.workspace, target.name)
     except ConfigLoadError as exc:
         raise HTTPException(
             status_code=404, detail=f"listing {target.name!r} does not load"
         ) from exc
-    picture = saved_scene(
-        workspace,
-        template,
-        SceneLayers(colour, listing.artwork, listing.boxes(template)),
-        size=scale,
-        images=PREVIEW_IMAGES,
-    )
-    return scene_response(picture, if_none_match=request.headers.get("if-none-match"))
+    return SceneLayers(colour, listing.artwork, listing.boxes(template))
 
 
 @router.get("/{name}/scene-artwork")
