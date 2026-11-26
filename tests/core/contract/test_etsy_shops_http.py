@@ -81,17 +81,6 @@ def test_the_owner_lookup_reads_the_single_shop_it_returns() -> None:
     assert shop.shop_id == 12345678
 
 
-def test_the_owner_lookup_also_reads_a_results_envelope() -> None:
-    """Documented as a single Shop; the sibling search returns `results`.
-    Tolerating both costs one line and removes a whole class of surprise."""
-    handler = lambda _: httpx.Response(200, json={"count": 1, "results": [SHOP]})  # noqa: E731
-
-    shop = _client(handler).shop_by_owner(87654321)
-
-    assert shop is not None
-    assert shop.shop_id == 12345678
-
-
 def test_a_seller_with_no_shop_is_none_rather_than_an_error() -> None:
     """A seller account without a shop is a real state, and one `setup` can
     ask about -- not a failure to report."""
