@@ -42,10 +42,7 @@ def update_gitignore(root: Path) -> tuple[str, ...]:
     """
     path = root / ".gitignore"
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
-    # The pattern, not the line: the entries this function writes carry a
-    # trailing `# why` comment, so comparing whole lines made every run think
-    # its own previous output was missing and append it again.
-    present = {line.split("#", 1)[0].strip() for line in existing.splitlines()}
+    present = {_ignore_pattern(line) for line in existing.splitlines()}
 
     added = tuple(
         f"{pattern:<12} # {why}" for pattern, why in GITIGNORE_ENTRIES if pattern not in present
@@ -56,6 +53,10 @@ def update_gitignore(root: Path) -> tuple[str, ...]:
     prefix = existing if not existing or existing.endswith("\n") else existing + "\n"
     path.write_text(prefix + "\n".join(added) + "\n", encoding="utf-8")
     return added
+
+
+def _ignore_pattern(line: str) -> str:
+    return line.split("#", 1)[0].strip()
 
 
 def env_with(existing: str, key: str, value: str) -> str:
