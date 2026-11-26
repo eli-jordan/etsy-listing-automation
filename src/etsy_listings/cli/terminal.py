@@ -1,11 +1,9 @@
 """Terminal decorations that need an ASCII fallback.
 
 A redirected stdout on Windows is cp1252, and a cygwin console can report an
-encoding that represents neither a block nor an emoji. Printing one anyway
-raises ``UnicodeEncodeError`` part-way through a run -- which is exactly how
-``apply`` used to die after rendering its first scene. Anything that prints a
-non-ASCII decoration asks here first, so there is one place that knows the
-rule rather than a `try: encode` at every call site.
+encoding that represents neither a block nor an emoji; printing one anyway
+raises ``UnicodeEncodeError`` mid-run. Anything that prints a non-ASCII
+decoration asks :func:`choose` first.
 
 A CLI leaf: the ``apply`` swatches and the ``new`` picker's marker are
 both terminal output, which only the CLI produces (ADR-0052). It depends on
@@ -42,18 +40,9 @@ def adopt_declared_encoding(environ: Mapping[str, str] | None = None) -> None:
     """Re-encode stdout and stderr as UTF-8 when the shell declared UTF-8 and
     Python decided otherwise.
 
-    Native-Windows Python picks its output encoding from the console
-    codepage -- cp1252 on a Norwegian/UK Windows -- and a cygwin pty is a
-    named pipe with no console behind it, so that answer describes nothing
-    about the terminal actually rendering the output. mintty is UTF-8, and
-    says so in ``LANG``. Trusting the shell's own declaration over a codepage
-    it never set is what lets the ⭐ marker and the ``apply`` swatches print
-    as themselves instead of degrading to ASCII on a terminal that would have
-    shown them perfectly.
-
-    ``PYTHONIOENCODING`` wins if it is set: that is someone stating an
-    encoding on purpose, and guessing over an explicit choice is exactly the
-    failure this function exists to undo.
+    Native-Windows Python takes the console codepage (cp1252), but a cygwin
+    pty is a named pipe with no console behind it; mintty is UTF-8 and says
+    so in ``LANG``. An explicit ``PYTHONIOENCODING`` wins.
     """
     env = os.environ if environ is None else environ
     if env.get("PYTHONIOENCODING") or not declared_utf8(env):
@@ -71,12 +60,9 @@ def adopt_declared_encoding(environ: Mapping[str, str] | None = None) -> None:
 def stdout_reader_gone(exc: OSError) -> bool:
     """Did ``exc`` come from writing to a stdout pipe nobody reads any more?
 
-    ``etsy-listings auth etsy --help | head`` closes the pipe once ``head``
-    has its lines. POSIX reports that as ``BrokenPipeError``; native-Windows
-    Python reports a write to a closed pipe as ``EINVAL`` instead, which
-    Click's own broken-pipe handling does not recognise. ``EINVAL`` counts
-    only when stdout really is a pipe, so an unrelated invalid-argument error
-    still surfaces.
+    POSIX reports it as ``BrokenPipeError``; native-Windows Python as
+    ``EINVAL``, which Click's broken-pipe handling misses, so ``EINVAL``
+    counts only when stdout really is a pipe.
     """
     if isinstance(exc, BrokenPipeError):
         return True
