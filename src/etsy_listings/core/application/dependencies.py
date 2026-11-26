@@ -1,33 +1,7 @@
-"""The seams a host supplies to core's operations and coordinators.
-
-Each is a callable shape rather than a class to subclass, so the real thing
-satisfies it as it stands and a test passes a fake in its place:
-
-* :data:`EtsyStates` -- what listing operations take the UI process's memo of
-  Etsy listing states through. The memo is the server's
-  (``server/api/etsystate.py``), request-serving read infrastructure that
-  stays there, and core must never import the server
-  (ADR-0052).
-* :data:`ContextFactory` -- how ``deploy.deployments.Deployments`` builds a
-  run's engine context; ``connections.run_context`` in a real host.
-* :data:`MarketClientFactory` -- how ``ai.coordinator.AiCoordinator`` finds
-  the uncached Etsy market client; :func:`default_market_client` in a real
-  host.
-* :class:`ClientFactories` -- how a host builds the Etsy and Printify
-  clients its routes, its AI runs and setup's discovery ask through;
-  :data:`DEFAULT_CLIENTS` in a real host.
-  A record of callables rather than one callable, because a route needs
-  more than one vendor's client and a test swaps any of them.
-
-They live here, not beside the worker that calls them, because the deploy
-executor and the AI runner are implementation-only (Import Linter's
-``protected`` contracts in ``pyproject.toml``): a host names the seam it
-fills without importing the machinery behind the coordinator.
-
-Everything else an operation coordinates through is core's own, so it takes
-that class directly: the AI run registry, the batch queue, AI readiness and the
-deploy-to-AI handoff (``ai/``). One implementation each and no
-second one in sight left an interface for them nothing to vary.
+"""The seams a host supplies to core's operations and coordinators: callable
+shapes the real thing satisfies as it stands and a test replaces with a fake.
+They live here because the deploy executor and the AI runner behind them are
+implementation-only (Import Linter's ``protected`` contracts).
 """
 
 from __future__ import annotations
@@ -73,13 +47,8 @@ def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
 @dataclass(frozen=True)
 class ClientFactories:
     """The vendor clients a host's handlers build, one per workspace.
-
-    A host takes this rather than calling ``connections`` itself, so a test
-    hands it factories over the in-memory fakes instead of patching module
-    attributes. Each field is one of ``connections``' factories in a real
-    host, and building a client resolves no credential (the credential
-    invariant), so any of them is safe to call before ``auth`` has run.
-    Which protocol a field answers is the caller's authority (ADR-0024).
+    Building one resolves no credential, so any is safe before ``auth`` has
+    run; which protocol a field answers is the caller's authority (ADR-0024).
     """
 
     etsy_listing: Callable[[Path], EtsyListingClient]

@@ -174,6 +174,14 @@ module-level patch because a patch silently reaches every caller of the
 module, including ones the test never meant to fake, and stops working once a
 caller holds the function rather than the module.
 
+Every seam a host fills lives in `application/dependencies.py`, not beside the
+worker that calls it, because the deploy executor and the AI runner are
+implementation-only: a host names the seam without importing the machinery
+behind the coordinator. Everything else an operation coordinates through (the
+AI run registry, the batch queue, AI readiness and the deploy-to-AI handoff) is
+core's own and taken as its concrete class; with one implementation each, an
+interface would have had nothing to vary.
+
 `core/application/credentials.py` owns finding, verifying and storing a
 credential and both halves of the Etsy grant around the browser step;
 `cli/credentials.py` owns asking for one and saying what happened.
