@@ -15,9 +15,7 @@ function navClass({ isActive }: { isActive: boolean }): string {
   return isActive ? "nav-item nav-item--active" : "nav-item";
 }
 
-/** On a phone the nav is a bottom tab bar with a fifth of the width per
- * entry, so the two long names shorten there; the link keeps its full name
- * for assistive technology either way. */
+/** A phone's tab bar gives each entry a fifth of the width. */
 function navLabel(isPhone: boolean, full: string, short: string) {
   return isPhone ? { label: short, aria: full } : { label: full, aria: undefined };
 }
@@ -31,9 +29,6 @@ export function AppShell() {
 }
 
 function Shell() {
-  // One workspace is one shop, and the sidebar is where that is said. A
-  // failure is silence, not an error banner: the shop's name is orientation,
-  // and no page here stops working without it.
   const [shopName, setShopName] = useState<string | null>(null);
   const { pathname } = useLocation();
   const underListingTemplates = pathname.startsWith("/batches/");
