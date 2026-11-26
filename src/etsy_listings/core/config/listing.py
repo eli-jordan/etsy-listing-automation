@@ -93,10 +93,7 @@ def _check_design_entry(key: str, ref: str | None, colors: list[str] | None) -> 
         )
 
 
-def _check_design(design: Mapping[str, str | None], colors: list[str] | None) -> None:
-    """The malformed maps -- refused writes, not blockers (spec: *Saving,
-    blockers and warnings*). Incomplete ones (an empty slot, no design at
-    all) are `config/listing_validation.py`'s to explain."""
+def _refuse_malformed_design(design: Mapping[str, str | None], colors: list[str] | None) -> None:
     if DEFAULT in design and is_light_dark(design):
         raise ValueError(
             "design: default cannot be combined with on-light or on-dark -- a listing "
@@ -174,13 +171,6 @@ def check_production_fields(
     media: list[MediaEntry],
     currency: str | None,
 ) -> None:
-    """The structural rules over the fields a listing and a listing template
-    both carry: prices in the workspace's currency, a gallery Etsy can
-    show, and no override or media entry for a colour that is not on sale.
-
-    One function rather than a copy in each model, because a listing template
-    is instantiated *into* a listing: a rule stated twice here is a template
-    that saves and then makes listings that will not load."""
     if currency:
         _check_currencies(prices, price_overrides, currency)
 
@@ -303,7 +293,7 @@ class Listing(BaseModel):
     def _design_keys(
         cls, design: dict[str, str | None], info: ValidationInfo
     ) -> dict[str, str | None]:
-        _check_design(design, info.data.get("colors"))
+        _refuse_malformed_design(design, info.data.get("colors"))
         return design
 
     @model_validator(mode="after")
@@ -330,8 +320,6 @@ class Listing(BaseModel):
     def load(
         cls, path: Path, *, currency: str, read: Callable[[Path], bytes] = Path.read_bytes
     ) -> Listing:
-        """``read`` fetches the file's bytes, as for ``ListingTemplate.load``:
-        the workspace passes its retrying reader."""
         return load_model(
             cls, path, context={"currency": currency}, read=read, missing="listing file not found"
         )

@@ -1,27 +1,5 @@
 """``listing-templates/{name}/template.yaml``: a listing's reusable production
-settings, and nothing about one design (ADR-0047; spec *Listing templates*).
-
-A listing template is its own resource, not a listing kind and not a listing
-with placeholder fields. What it has is exactly the spec's copy table --
-garment, colours, pricing, gallery, description body, Etsy production
-settings -- and what it lacks it cannot carry: ``design``, ``artwork``,
-``brief``, ``lifecycle``, ``etsy.title``, ``etsy.tags`` and
-``etsy.description.lead`` are refused as extra fields rather than ignored,
-so a hand-edited file that names one is told so instead of quietly dropping
-it at the next save.
-
-The structural rules it shares with a listing are the listing's own
-( :func:`~etsy_listings.core.config.listing.check_production_fields`): every listing
-made from a template must load, so the two cannot be allowed to disagree about
-what a well-formed gallery or price is. Completeness -- is there a garment, a
-colour, a price source -- is `config/listing_validation.py`'s
-``check_listing_template``, for the same reason a listing's is.
-
-A ``./`` ref here names a file beneath the template's own directory, where
-Save as listing template copies a listing's local media
-(``Workspace.resolve_template_ref``). A bare ref is a shared workspace ref,
-exactly as in a listing.
-"""
+settings (ADR-0047; spec *Listing templates*)."""
 
 from __future__ import annotations
 
@@ -101,9 +79,6 @@ class ListingTemplate(BaseModel):
     def load(
         cls, path: Path, *, currency: str, read: Callable[[Path], bytes] = Path.read_bytes
     ) -> ListingTemplate:
-        """``read`` is how the file's bytes are fetched: the workspace passes
-        its retrying reader, which ``config`` cannot import without a
-        cycle through the workspace package."""
         return load_model(
             cls,
             path,

@@ -84,6 +84,15 @@ a single safe path segment and is its workspace identity. Creating or cloning a
 template proposes a name but requires the seller to choose a unique one. It
 never overwrites or silently suffixes an existing listing template.
 
+A `template.yaml` that names a design-specific field (`design`, `artwork`,
+`brief`, `lifecycle`, `etsy.title`, `etsy.tags` or `etsy.description.lead`) is
+refused rather than read without it, so a hand edit is told so instead of
+losing the field at the next save. A template and a listing share one set of
+structural rules (prices in the workspace's currency, a gallery Etsy can show,
+no override or media entry for a colour that is not on sale), stated once for
+both: every listing made from a template must load, and two copies of a rule
+would drift into templates that save but make listings that do not.
+
 Listing templates are ordinary workspace data, not cache data. Listing-local
 media copied into a template becomes template-owned data beneath that
 template's directory.
