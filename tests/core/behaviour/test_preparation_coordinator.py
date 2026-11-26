@@ -583,6 +583,11 @@ def test_cleanup_preserves_last_complete_predictions_failed_retry_and_active_ren
             ),
         )
         result = wait_terminal(coordinator, retry.id)
+        # The phase is recorded before the job's turn ends with a cleanup of
+        # its own (`_settle`). Left running, that cleanup could land after
+        # the lease below is released and remove the first generation before
+        # this test's cleanup does. The gate counts the turn until it ends.
+        assert coordinator.gate.wait_idle()
         assert result.phase == "completed", result.error
         assert result.result.generation_id != leased.manifest.generation_id
         removed = coordinator.cleanup("shirt")
