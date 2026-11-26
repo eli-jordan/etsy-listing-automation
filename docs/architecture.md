@@ -712,7 +712,12 @@ configured-identity retention and the editable key set. `core/workspace/revision
 lock around read, revision comparison, validation and atomic replace. A stale
 revision refuses with 412 and `kind: "stale"`; invalid values refuse with field
 errors and 422.
-Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
+Semantic no-ops leave the source bytes and file untouched, per ADR-0055. A
+conflict never overwrites an external edit, even a comment-only one: the page
+reloads instead. An optional file such as `settings.yaml` is read with
+`absent_ok`, as no bytes at `ABSENT_REVISION`, and a save against that
+revision creates it. Absent is not the empty file's hash, so a file that
+appears meanwhile, even an empty one, is an external edit like any other.
 
 A successful save replaces the server workspace's defaults inside the same
 revision lock, after the replace succeeds (`replace_if_unchanged(adopt=...)`),

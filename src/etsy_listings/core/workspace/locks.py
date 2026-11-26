@@ -32,9 +32,6 @@ _LOCKS: dict[str, threading.RLock] = {}
 
 @contextmanager
 def hold(workspace: Workspace, domain: LockDomain, name: str, *more: str) -> Iterator[None]:
-    """Hold ``domain``'s lock for ``name``, and for each of ``more``, during
-    the ``with`` block. Raises ``InvalidNameError`` or
-    ``PathEscapesWorkspaceError`` before taking any of them."""
     keys = sorted({_key(workspace, domain, each) for each in (name, *more)})
     with ExitStack() as stack:
         for key in keys:
