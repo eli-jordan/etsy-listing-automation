@@ -99,6 +99,10 @@ def _segment(name: str) -> str:
     return name
 
 
+def _placement_segment(placement_id: str) -> str:
+    return TypeAdapter(PlacementId).validate_python(placement_id)
+
+
 class NotAMediaFileError(InvalidNameError):
     """A path, from a URL, that does not name an image or video in the
     directory it was asked of.
@@ -895,10 +899,9 @@ class Workspace:
         return self.template_renderer_dir(template) / layout.CALIBRATION_RECEIPT_FILE
 
     def template_mask_dir(self, template: str, placement_id: str | None = None) -> Path:
-
         directory = self.template_renderer_dir(template) / layout.MASKS_DIR
         if placement_id is not None:
-            directory /= TypeAdapter(PlacementId).validate_python(placement_id)
+            directory /= _placement_segment(placement_id)
         return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
 
     def template_mask_file(
@@ -907,10 +910,9 @@ class Workspace:
         return self.template_mask_dir(template, placement_id) / _MASK_FILES[source]
 
     def template_brush_history(self, template: str, placement_id: str | None = None) -> Path:
-        # Validate both names through the durable location's accessor.
-        self.template_mask_dir(template, placement_id)
+        stem = _placement_segment(placement_id) if placement_id is not None else "implicit"
         directory = self.cache(layout.PREPARATION_DIR, layout.BRUSHES_DIR, _segment(template))
-        return directory / (f"{placement_id}.json" if placement_id is not None else "implicit.json")
+        return directory / f"{stem}.json"
 
     def template_maps_dir(self, template: str) -> Path:
         directory = self.template_renderer_dir(template) / layout.MAPS_DIR
@@ -1090,14 +1092,6 @@ class Workspace:
         stem = _segment(colour) if colour is not None else "scene"
         filename = f"{stem}-{_segment(scene_hash)}.png"
         return self.preview_dir(listing) / _segment(template) / filename
-
-    # ------------------------------------------------------------------
-    # Reading the tree's config files. The workspace already owns
-    # shop.yaml, so it is also the natural place to load the files whose
-    # validation depends on it -- callers no longer have to remember to pass
-    # `currency=` to every listing load, which was the one argument it was
-    # possible to get quietly wrong.
-    # ------------------------------------------------------------------
 
     def load_listing(self, listing: str) -> Listing:
         return Listing.load(
