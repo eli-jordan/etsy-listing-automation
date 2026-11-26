@@ -19,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 def prune_position_fits(workspace: Workspace) -> list[str]:
-    """Remove the fits no listing's current position produces; the removed
-    keys. Nothing is removed when the workspace cannot be read reliably."""
     if not workspace.position_fits():
         return []
     fits = PositionFits(workspace)
@@ -75,8 +73,6 @@ class _Templates:
 
 
 def _template(workspace: Workspace, name: str) -> tuple[AnyTemplate, PreparationInputs] | None:
-    """A Marigold template's config and saved inputs, or None when it is not
-    Marigold or does not load (its listings then keep no fit)."""
     try:
         config = template_state(workspace, name).require()
         if not isinstance(config.renderer, MarigoldRenderer):

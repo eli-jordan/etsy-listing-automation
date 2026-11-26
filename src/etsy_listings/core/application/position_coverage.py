@@ -25,8 +25,6 @@ _SKIPPED = (UserFacingError, ValueError, OSError)
 
 
 def widens(candidate: PositionLimits, saved: PositionLimits) -> bool:
-    """Whether ``candidate`` allows any pose ``saved`` does not: the only
-    change that can need new inference."""
     return (
         candidate.scale.min < saved.scale.min
         or candidate.scale.max > saved.scale.max
@@ -46,12 +44,8 @@ def positioned_templates(workspace: Workspace) -> list[str]:
 
 
 def needs_coverage(
-    workspace: Workspace, template: str, limits: PositionLimits, *, verify: bool = True
+    workspace: Workspace, template: str, limits: PositionLimits, *, verify_evidence: bool = True
 ) -> bool:
-    """Whether ``template`` is Marigold and its current evidence misses its
-    padded quad under ``limits``: what :meth:`Preparations.cover` would infer.
-    A template that cannot be read is not counted; ``plan`` reports it.
-    ``verify=False`` takes the evidence files as sound, for a quick answer."""
     try:
         config = template_state(workspace, template).require()
         if not isinstance(config.renderer, MarigoldRenderer):
@@ -60,7 +54,7 @@ def needs_coverage(
         if padded is None:
             return False
         inputs = Artifacts(workspace).saved_inputs(template)
-        return not PositionFits(workspace).covers(template, inputs, padded, verify=verify)
+        return not PositionFits(workspace).covers(template, inputs, padded, verify=verify_evidence)
     except _SKIPPED as exc:
         logger.debug("not checking %r's coverage: %s", template, exc)
         return False
@@ -115,9 +109,6 @@ class PositionReadiness:
 
 
 def position_readiness(preparations: Preparations, template: str) -> PositionReadiness:
-    """``template``'s readiness for positions, quick enough to ask whenever it
-    is selected. A template not prepared has its maps to report instead, and
-    unreadable settings hold nothing back: ``plan`` reports them."""
     jobs = preparations.list_jobs(template=template, limit=MAX_JOB_PAGE)
     if any(job.phase not in TERMINAL for job in jobs):
         return PositionReadiness(ready=False, preparing=True)
@@ -125,13 +116,11 @@ def position_readiness(preparations: Preparations, template: str) -> PositionRea
     limits = _limits(workspace, f"checking {template!r}'s coverage")
     if limits is None:
         return PositionReadiness(ready=True, preparing=False)
-    short = needs_coverage(workspace, template, limits, verify=False)
+    short = needs_coverage(workspace, template, limits, verify_evidence=False)
     return PositionReadiness(ready=not (short and _prepared(workspace)(template)), preparing=False)
 
 
 def cover_template(preparations: Preparations, template: str) -> Job | None:
-    """The coverage job queued or joined for ``template``, which a seller
-    asked to adjust; None when it needs none or no worker is installed."""
     limits = _limits(preparations.workspace, f"covering {template!r}")
     return None if limits is None else next(iter(_cover(preparations, [template], limits)), None)
 

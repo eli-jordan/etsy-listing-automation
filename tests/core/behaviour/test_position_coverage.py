@@ -7,7 +7,11 @@ from __future__ import annotations
 
 import time
 
-from etsy_listings.core.application.position_coverage import cover_prepared_templates
+from etsy_listings.core.application.position_coverage import (
+    cover_prepared_templates,
+    needs_coverage,
+    widens,
+)
 from etsy_listings.core.application.preparation.coordinator import (
     PreparationRequest,
     Preparations,
@@ -114,3 +118,27 @@ def test_catching_up_covers_only_prepared_marigold_templates(workspace_root):
         assert [(job.template, job.kind) for job in jobs] == [("tee", "coverage")]
     finally:
         coordinator.close()
+
+
+def test_only_limits_wider_than_the_saved_ones_widen():
+    saved = TemplatePositionLimits()
+    narrower = TemplatePositionLimits.model_validate({"scale": {"min": 0.9}, "rotation": 5})
+    assert not widens(saved, saved)
+    assert not widens(narrower, saved)
+    for wider in (
+        {"scale": {"min": 0.5}},
+        {"scale": {"max": 1.5}},
+        {"offset": 0.2},
+        {"rotation": 30},
+    ):
+        assert widens(TemplatePositionLimits.model_validate(wider), saved)
+
+
+def test_a_template_that_cannot_be_read_needs_no_coverage(workspace_root):
+    workspace = small_print(workspace_root)
+    prepare_template(workspace, "tee")
+    assert needs_coverage(workspace, "tee", TemplatePositionLimits())
+
+    workspace.template_config_file("tee").write_bytes(b"kind: [")
+
+    assert not needs_coverage(workspace, "tee", TemplatePositionLimits())
