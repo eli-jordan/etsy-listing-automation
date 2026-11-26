@@ -13,7 +13,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import yaml
 from pydantic import TypeAdapter
@@ -58,13 +58,6 @@ class PathEscapesWorkspaceError(ValueError):
 
 
 class InvalidRefError(ConfigLoadError):
-    """A path in ``listing.yaml`` that is not a two-root ref.
-
-    A :class:`ConfigLoadError`, so a stage that meets one fails that listing
-    with a sentence rather than a traceback, and the rest of an ``--all``
-    batch carries on.
-    """
-
     def __init__(
         self, listing_dir: Path, ref: str, detail: str, *, file: str = layout.LISTING_FILE
     ) -> None:
@@ -75,19 +68,13 @@ class InvalidRefError(ConfigLoadError):
 
 @dataclass(frozen=True)
 class DescriptionResolution:
-    """One common-copy read, shared by the editor's preview and its issue check."""
-
     composed: str
     error: CommonCopyError | None = None
 
 
 class InvalidNameError(ValueError):
-    """A listing/template/colour name that is not a single path segment.
-
-    Names come from config files and, in the UI's case, from URLs, so this is
-    the check that stops ``../../etc/passwd`` ever being joined onto the
-    workspace root in the first place.
-    """
+    """Names arrive from URLs: this stops ``../../etc/passwd`` being joined
+    onto the workspace root."""
 
     def __init__(self, name: str, message: str | None = None) -> None:
         super().__init__(message or f"{name!r} is not a valid name: expected a single path segment")
@@ -104,12 +91,6 @@ def _placement_segment(placement_id: str) -> str:
 
 
 class NotAMediaFileError(InvalidNameError):
-    """A path, from a URL, that does not name an image or video in the
-    directory it was asked of.
-
-    An :class:`InvalidNameError`, so the UI's one handler turns it into a
-    ``400`` like any other name it cannot use."""
-
     def __init__(self, path: str, directory: Path) -> None:
         super().__init__(path, f"{path!r} is not a media file in {directory.name}/")
 
@@ -118,16 +99,8 @@ _MEDIA_EXTENSIONS: tuple[str, ...] = (*IMAGE_EXTENSIONS, *VIDEO_EXTENSIONS)
 
 
 def _is_media_file_in(path: Path, directory: Path) -> bool:
-    """Is ``path`` an image or video that really sits inside ``directory``?
-
-    Judged on the *resolved* path, both halves: a symlink inside the directory
-    may point at another listing's files, or at ``shop.yaml`` behind a ``.png``
-    name. Inside the workspace root is not enough -- these directories are
-    what a picture endpoint serves, and they hold ``listing.yaml`` and the
-    lockfile beside the pictures. The extension is matched case-insensitively,
-    as :func:`~etsy_listings.core.config.media.media_kind` matches it, and it is
-    also what keeps those two files out.
-    """
+    """Judged on the resolved path too: a symlink inside the directory may
+    point at another listing's files, or at ``shop.yaml`` behind a ``.png`` name."""
     if not path.is_file():
         return False
     target = path.resolve()
@@ -137,11 +110,6 @@ def _is_media_file_in(path: Path, directory: Path) -> bool:
 
 
 class AmbiguousColourSuffixError(ValueError):
-    """More than one photo in a template's directory ends in the same colour
-    slug's hyphen segments, so :func:`Workspace.template_base_image`'s
-    trailing-segment fallback has no single answer. Refused rather
-    than guessed at -- an arbitrary pick here would ship the wrong photo."""
-
     def __init__(self, template: str, colour: str, candidates: list[Path]) -> None:
         names = ", ".join(sorted(p.name for p in candidates))
         super().__init__(
@@ -152,14 +120,6 @@ class AmbiguousColourSuffixError(ValueError):
 
 
 def _ends_with_colour_segments(stem: str, colour: str) -> bool:
-    """Does ``stem``'s hyphen segments end with ``colour``'s own segments?
-
-    Segment-aligned, not a raw substring test: colour ``blue`` must not match
-    filename ``flo-blue`` because ``"blue"`` appears inside it, only because
-    ``"blue"`` is the filename's own trailing segment. A raw ``str.endswith``
-    would additionally match a colour ``"o-blue"`` against the same file,
-    which is not a colour, just a coincidence of characters.
-    """
     stem_segments = stem.split("-")
     colour_segments = colour.split("-")
     if len(colour_segments) > len(stem_segments):
@@ -168,14 +128,8 @@ def _ends_with_colour_segments(stem: str, colour: str) -> bool:
 
 
 def _looks_like_windows_absolute(ref: str) -> bool:
-    """Catch drive-relative (``C:foo``) and UNC (``\\\\server\\share``) forms.
-
-    ``PureWindowsPath("C:foo").is_absolute()`` is ``False`` -- Windows calls that
-    "drive-relative", not absolute, because it has a drive but no root. It still
-    names a location outside anything we'd consider workspace-relative, and a
-    plain POSIX-style escape check would miss it entirely, so it needs its own
-    test.
-    """
+    """``PureWindowsPath("C:foo").is_absolute()`` is ``False`` (drive-relative),
+    yet it leaves the workspace, as a UNC path does."""
     p = PureWindowsPath(ref)
     return p.drive != "" or ref.startswith(("\\\\", "//"))
 
@@ -184,14 +138,9 @@ _EXTENDED_LENGTH_PREFIX = "\\\\?\\"
 
 
 def _without_extended_length_prefix(path: Path) -> Path:
-    """``C:\\x`` for ``\\\\?\\C:\\x``, so a resolved path compares with the root.
-
-    ``Path.resolve`` on Windows can keep the extended-length prefix: past
-    MAX_PATH, or when its two lookups of a path disagree because another
-    thread created a directory in between. The root resolved without it,
-    so ``relative_to`` would report a path inside the workspace as an
-    escape. ``\\\\?\\UNC\\`` network paths keep their prefix.
-    """
+    """``Path.resolve`` on Windows can keep the extended-length prefix (past
+    MAX_PATH, or when another thread creates a directory between its two
+    lookups), and the root resolved without it. UNC network paths keep theirs."""
     text = str(path)
     if text.startswith(_EXTENDED_LENGTH_PREFIX) and not text.startswith(
         _EXTENDED_LENGTH_PREFIX + "UNC\\"
@@ -219,11 +168,13 @@ _MASK_FILES: Mapping[MaskSource, str] = {
 
 @dataclass(frozen=True)
 class ScenePhoto:
-    """A scene's blank mockup photo, and the name its derived maps cache under
-    (see :meth:`Workspace.scene_photo`)."""
-
     path: Path
     map_key: str
+
+
+class TemplateCaches(NamedTuple):
+    renders: Path
+    previews: Path
 
 
 class Workspace:
@@ -232,13 +183,6 @@ class Workspace:
         self.defaults = defaults
 
     def snapshot(self) -> Workspace:
-        """This workspace with the ``shop.yaml`` it holds now, for one run.
-
-        The Admin page's save replaces ``defaults`` on the server's workspace
-        (``shop_settings.edit_shop``). A run that reads ``defaults`` from
-        the snapshot it took at its start keeps one shop throughout, and
-        the next run takes the edit. Everything else is the same root.
-        """
         return Workspace(self.root, self.defaults)
 
     def browser_storage_id(self) -> str:
@@ -264,9 +208,7 @@ class Workspace:
                 raise WorkspaceNotFoundError(candidate)
             return candidate
 
-        # ETSY_LISTINGS_ROOT arrives as a raw string, so it may still be in
-        # Cygwin form. (--root gets the same treatment in the CLI, which must
-        # translate before pathlib touches the string -- see to_native_path.)
+        # A raw string, so it may still be in Cygwin form.
         env_root = os.environ.get(layout.ROOT_ENV_VAR)
         if env_root:
             candidate = to_native_path(env_root).resolve()
@@ -281,14 +223,7 @@ class Workspace:
         raise WorkspaceNotFoundError(search_start)
 
     def resolve(self, ref: str, relative_to: Path) -> Path:
-        """Resolve ``ref`` against ``relative_to`` to an absolute path.
-
-        The escape check every path goes through. A path written in
-        ``listing.yaml`` does not come here directly: :meth:`resolve_ref`
-        interprets its two roots first, then calls this.
-        Raises :class:`PathEscapesWorkspaceError` if the result would fall
-        outside :attr:`root`.
-        """
+        """The escape check every path goes through."""
         if Path(ref).is_absolute() or _looks_like_windows_absolute(ref):
             raise PathEscapesWorkspaceError(ref, self.root)
 
@@ -309,12 +244,6 @@ class Workspace:
         return self._resolve_owned_ref(ref, listing_dir, layout.LISTING_FILE)
 
     def resolve_template_ref(self, ref: str, *, template: str) -> Path:
-        """:meth:`resolve_ref` for a path in a listing template's
-        ``template.yaml``: the same two roots, with ``./`` meaning the
-        template's own directory, where Save as listing template copies a
-        listing's local media. One interpreter with a second owner, not a
-        second resolver -- a template's refs become a listing's when it is
-        instantiated, so they must mean the same thing."""
         return self._resolve_owned_ref(
             ref, self.listing_template_dir(template), layout.TEMPLATE_FILE
         )
@@ -346,10 +275,6 @@ class Workspace:
         return self.root.joinpath(layout.CACHE_DIR, *parts)
 
     def listing_names(self) -> list[str]:
-        """Directories that still have ``listing.yaml``, or a lockfile with
-        the yaml gone (missing listing files: the row still appears, ``Blocked``). An empty
-        directory is not a listing.
-        """
         listings = self.root / layout.LISTINGS_DIR
         if not listings.is_dir():
             return []
@@ -362,10 +287,6 @@ class Workspace:
         return sorted(names)
 
     def listing_directory_names(self) -> list[str]:
-        """Every directory under ``listings/``, a listing or not. A name one
-        holds is taken even without a ``listing.yaml`` -- create refuses it
-        -- so this, not :meth:`listing_names`, is what a new name must avoid
-        ."""
         listings = self.root / layout.LISTINGS_DIR
         if not listings.is_dir():
             return []
@@ -375,12 +296,6 @@ class Workspace:
         return self.root / layout.LISTINGS_DIR / _segment(listing)
 
     def draft_listing_dir(self) -> Path:
-        """A listing directory for a listing that has none yet -- the editor's
-        unnamed draft, and the design a brief is drafted from before the
-        listing is named. A workspace-rooted ref lands on the same file
-        from any listing directory, so this answers for them exactly as a real
-        one would; a `./` ref finds nothing here, which is right, since a
-        listing with no directory has no files of its own."""
         return self.root / layout.LISTINGS_DIR / "_"
 
     def listing_file(self, listing: str) -> Path:
@@ -390,10 +305,6 @@ class Workspace:
         return self.root / layout.LISTING_TEMPLATES_DIR
 
     def listing_template_names(self) -> list[str]:
-        """Directories that hold a ``template.yaml``. Save as listing
-        template creates the directory before it writes the file, and a
-        directory without one is a save still in flight or one that failed,
-        not a template anybody can use."""
         directory = self.listing_templates_dir()
         if not directory.is_dir():
             return []
@@ -413,23 +324,12 @@ class Workspace:
         return self.listing_template_dir(template) / layout.LISTING_TEMPLATE_ASSETS_DIR
 
     def listing_template_media_file(self, template: str, path: str) -> Path:
-        """One of a listing template's own files, by its path under the
-        template's directory -- a ``./`` ref without the ``./``. The boundary
-        :meth:`listing_media_file` draws, for the same reason: the directory
-        also holds ``template.yaml``."""
         return self._media_file_in(self.listing_template_dir(template), path)
 
     def listing_template_media_files(self, template: str) -> list[Path]:
-        """Every image and video under a listing template's ``assets/``: the
-        *This template* group of the file locator. Only ``assets/``, because
-        that is where every file a template owns is put -- a stray
-        file beside ``template.yaml`` is nothing the template names."""
         return self._media_files_in(self.listing_template_assets_dir(template))
 
     def remove_listing_template(self, template: str) -> None:
-        """Wipe ``listing-templates/{name}/``, assets and all. Batches and
-        listings made from it keep their own frozen copies (spec,
-        *Completeness and editing*), so nothing else goes with it."""
         directory = self.listing_template_dir(template)
         if directory.is_dir():
             remove_tree(directory)
@@ -442,15 +342,6 @@ class Workspace:
         )
 
     def write_listing_template(self, template: str, document: ListingTemplate) -> None:
-        """Write ``template.yaml``, atomically. Defaults are left out, so
-        the file says only what the seller set -- as a hand-written listing
-        does. Whether the document is complete enough to write is the
-        caller's question, not the file's.
-
-        An existing file keeps its text: only the values that differ between
-        the template it holds and ``document`` are edited in (ADR-0055), so
-        ``349 NOK`` is not rewritten because the model reads it differently.
-        A file that no longer loads is edited against what it reads as."""
         path = self.listing_template_file(template)
         dumped = document.model_dump(mode="json", exclude_defaults=True)
         before: object = UNSET
@@ -468,14 +359,9 @@ class Workspace:
         )
 
     def resolve_frozen_template_ref(self, ref: str, *, frozen_dir: Path) -> Path:
-        """:meth:`resolve_template_ref` for a listing template frozen into a
-        staging session or a batch (spec, *Frozen staging*): ``./`` is the
-        frozen copy's directory, a bare ref the live workspace, because
-        shared refs are never frozen."""
         return self._resolve_owned_ref(ref, frozen_dir, layout.TEMPLATE_FILE)
 
-    # Batch creation's cache records. Ids come from URLs, so every one
-    # goes through `_segment` like a listing name.
+    # Batch creation's cache records: ids come from URLs, so each one is a `_segment`.
 
     def staging_ids(self) -> list[str]:
         return self._cache_entries(layout.STAGING_DIR, directories=True)
@@ -555,8 +441,6 @@ class Workspace:
         remove_tree(self.preparation_prediction_set(template, identity))
 
     def position_fit(self, key: str) -> Path:
-        """One listing position's content-addressed Marigold fit (option B),
-        a directory named by its key; rebuildable, so it lives in the cache."""
         return self.cache("position-fits", _segment(key))
 
     def position_fits(self) -> list[str]:
@@ -566,22 +450,13 @@ class Workspace:
         remove_tree(self.position_fit(key))
 
     def design_ref(self, design: str) -> str:
-        """The workspace-rooted ref ``listing.yaml`` names ``designs/<design>.png``
-        by -- what batch creation writes into every listing it makes
-        (spec, *Design validation*)."""
         return f"{layout.DESIGNS_DIR}/{_segment(design)}.png"
 
     def design_content_hash(
         self, design: Mapping[str, str | None], *, listing_dir: Path
     ) -> str | None:
-        """Content identity for the design the editor and SEO request see.
-
-        Keys and refs are sorted, and the hash contains no absolute path. A
-        missing secondary file gets a stable marker so changes to readable
-        artwork still change the identity of an incomplete draft. The whole
-        map, ``null`` slots included: an emptied slot is a different listing
-        to review (multi-artwork plan, *Settled decisions*).
-        """
+        """No absolute path enters the hash, and ``null`` slots do: an emptied
+        slot is a different listing to review."""
         if not design:
             return None
         digest = hashlib.sha256()
@@ -612,14 +487,6 @@ class Workspace:
         return self.designs_dir() / f"{_segment(design)}.png"
 
     def design_files(self) -> list[Path]:
-        """Every ``designs/*.png``, the artwork a listing can be built from.
-
-        Paths rather than names, because the ``new`` picker orders them by
-        modification time -- a design is usually made minutes before the
-        listing that ships it -- and only a path carries that. Flat, not
-        recursive: :meth:`design_file` derives one fixed path per name, so a
-        nested design would be listed and then not resolvable.
-        """
         designs = self.designs_dir()
         if not designs.is_dir():
             return []
@@ -629,55 +496,20 @@ class Workspace:
         return self.root / layout.COMMON_MEDIA_DIR
 
     def common_media_file(self, path: str) -> Path:
-        """One shared file, named by its path under ``common-media/`` --
-        ``size-guide.png``, ``videos/intro.mp4``.
-
-        Taken as written, with no extension appended: a shared file may be a
-        JPEG or a video and may sit in a subdirectory, so the name
-        has to say which. See :meth:`_media_file_in` for the boundary it
-        enforces; it takes names from URLs.
-        """
         return self._media_file_in(self.common_media_dir(), path)
 
     def common_media_files(self) -> list[Path]:
-        """Every image and video under ``common-media/``, recursively: the
-        shared files a listing can put in ``media:`` as a file ref (a sizing
-        chart, a care card, a size-guide video), as opposed to a rendered
-        mockup.
-
-        Only the types ``media:`` accepts, matched case-insensitively
-        as :func:`~etsy_listings.core.config.media.media_kind` matches them, so
-        nothing is offered that a listing would then refuse to load. Sorted
-        by path rather than mtime -- unlike a design, a shared asset is
-        written once and reused for years, so recency says nothing useful.
-        """
         return self._media_files_in(self.common_media_dir())
 
     def listing_media_file(self, listing: str, path: str) -> Path:
-        """One of a listing's own files, by its path under the listing's
-        directory -- what a ``./`` ref names, without the ``./``.
-        The same boundary as :meth:`common_media_file`, which matters more
-        here: this directory also holds ``listing.yaml`` and the lockfile."""
         return self._media_file_in(self.listing_dir(listing), path)
 
     def listing_media_files(self, listing: str) -> list[Path]:
-        """Every image and video in a listing's own directory, recursively:
-        the *This listing* half of the file locator. Never
-        ``listing.yaml``, the lockfile, or anything a symlink reaches outside
-        the directory. Empty for a listing with no directory yet."""
         return self._media_files_in(self.listing_dir(listing))
 
     def _media_file_in(self, directory: Path, path: str) -> Path:
-        """``path`` under ``directory``, refused unless it names an image or
-        video there.
-
-        Every segment goes through the single-segment rule every other layout
-        accessor applies, which is what stops ``..``. The escape check is then
-        tighter than :meth:`resolve`'s: the resolved file has to be inside
-        *this directory*, not merely inside the root, so a symlink to another
-        listing or to ``shop.yaml`` is refused. The file need not exist -- a
-        missing one is the caller's ``404``, not a refusal.
-        """
+        """Tighter than :meth:`resolve`: the file must resolve inside
+        ``directory``, not merely the root. A missing file is the caller's 404."""
         joined = "/".join(_segment(segment) for segment in path.split("/"))
         if Path(joined).suffix.lower() not in _MEDIA_EXTENSIONS:
             raise NotAMediaFileError(path, directory)
@@ -712,18 +544,8 @@ class Workspace:
         return self.root / layout.COMMON_COPY_DIR
 
     def common_copy_file(self, ref: str) -> Path:
-        """Verify a `description.ref` and resolve it -- beneath
-        `common-copy/` only.
-
-        Written from the workspace root, as every ref is, but
-        narrower than :meth:`resolve_ref`: it has no `./` form, because
-        common copy is shared by definition. It still goes through :meth:`resolve` for
-        the general escape checks (absolute paths, `..` past the root,
-        Windows drive forms), plus one more: the result must actually land
-        inside :meth:`common_copy_dir`, so `common-copy/../listings/x` -- inside
-        the workspace, but not common copy -- is refused exactly like an
-        escape, rather than quietly resolving to someone else's file.
-        """
+        """Narrower than :meth:`resolve_ref`: the result must land inside
+        ``common-copy/``, so ``common-copy/../listings/x`` is refused too."""
         prefix = f"{layout.COMMON_COPY_DIR}/"
         if not ref.startswith(prefix):
             raise PathEscapesWorkspaceError(ref, self.root)
@@ -735,14 +557,6 @@ class Workspace:
         return candidate
 
     def common_copy_files(self) -> list[Path]:
-        """Every ``common-copy/*.md``: the reusable description bodies a
-        listing can point ``description.ref`` at (AI SEO implementation plan,
-        PR6's common-copy selector). Flat and Markdown-only, so that
-        everything listed is something :meth:`common_copy_file` resolves --
-        anything it could not would be offered and then fail. Sorted by name: a
-        common-copy file, like a shared image, is written once and reused for
-        years, so recency says nothing useful about it.
-        """
         shared = self.common_copy_dir()
         if not shared.is_dir():
             return []
@@ -755,11 +569,6 @@ class Workspace:
         return parse_common_copy(ref, path.read_text(encoding="utf-8"))
 
     def resolve_description(self, description: DescriptionConfig) -> DescriptionResolution:
-        """Resolve a description once, retaining both its preview and any ref error.
-
-        The editor needs both facts from the same file read. Deployment uses
-        :meth:`compose_description`, which raises the error from this result.
-        """
         text = description.text
         if description.ref is not None:
             try:
@@ -787,12 +596,6 @@ class Workspace:
         return self.root / layout.PRICING_PLANS_DIR
 
     def pricing_plan_files(self) -> list[Path]:
-        """Every ``*.yaml`` under ``pricing-plans/``, recursively -- nested
-        layouts are allowed here (unlike ``garment-profiles/``/``mockup-templates/``),
-        since a plan's directory has no enforced meaning; it's purely where
-        the user chose to file it. Discovery only -- a listing may reference
-        a plan anywhere in the workspace via its relative path, the same
-        flexibility ``design:`` already has."""
         root = self.pricing_plans_dir()
         if not root.is_dir():
             return []
@@ -808,17 +611,6 @@ class Workspace:
         return self.root / layout.MOCKUP_TEMPLATES_DIR
 
     def template_names(self, *, include_uncalibrated: bool = False) -> list[str]:
-        """Templates that are actually usable -- a directory only counts once
-        the calibrator has written its ``template.yaml``, the same rule
-        :meth:`listing_names` applies to ``listing.yaml``. An uncalibrated
-        directory has no kind and no geometry, so offering it would only move
-        the failure later.
-
-        ``include_uncalibrated=True`` lifts that filter for the one caller
-        that has to see past it: the calibrator UI is what *writes*
-        ``template.yaml``, so filtering on it there would hide exactly the
-        directories that still need calibrating.
-        """
         templates = self.templates_dir()
         if not templates.is_dir():
             return []
@@ -832,26 +624,9 @@ class Workspace:
         return self.templates_dir() / _segment(template)
 
     def has_template(self, template: str) -> bool:
-        """Is there a directory for this template at all?
-
-        Distinct from :meth:`template_names`'s filter, which asks whether one
-        has been *calibrated*. The calibrator needs the weaker question: a
-        folder of photos with no ``template.yaml`` is exactly what it exists
-        to turn into a template.
-        """
         return self.template_dir(template).is_dir()
 
     def template_photos(self, template: str) -> list[Path]:
-        """Every mockup photo in the template's directory except the scene,
-        sorted.
-
-        For a ``colour-matrix`` set these are the colours; for the other two
-        kinds it is what is there *before* calibration renames the single
-        photo to ``scene.png``. Either way the filenames are the template's
-        content, so reading them is a layout question and belongs here -- the
-        calibrator used to glob for them itself, which is the one place
-        anything but this module knew what a template directory looks like.
-        """
         directory = self.template_dir(template)
         if not directory.is_dir():
             return []
@@ -861,14 +636,6 @@ class Workspace:
         return [photo.stem for photo in self.template_photos(template)]
 
     def template_preview_photo(self, template: str) -> Path | None:
-        """The one photo that stands for the whole template, or ``None``.
-
-        Which one hardly matters: a colour-matrix set's colours are the same
-        garment at the same size, and the other two kinds have exactly one
-        photo. So this takes ``scene.png`` when there is one and the first
-        colour otherwise -- **without reading the config**, which is what lets
-        it answer for a directory that has not been given a kind yet.
-        """
         scene = self.template_scene_image(template)
         if scene.is_file():
             return scene
@@ -965,17 +732,6 @@ class Workspace:
         return self.template_renderer_dir(template) / layout.DERIVED_DIR
 
     def template_base_image(self, template: str, colour: str) -> Path:
-        """``colour-matrix``-kind templates only: the mockup filename
-        *is* the slugified colour name.
-
-        Falls back to a trailing-segment match against the directory's actual
-        photos when no exact ``{colour}.png`` exists -- a vendor photo pack
-        delivered as ``comfort-colors-flat-lay-black.png`` still resolves
-        colour ``black``, without renaming every file to drop the shared
-        prefix. Only when exactly one photo qualifies: zero leaves the
-        (non-existent) exact path for the caller's own "no mockup base image"
-        error, and more than one raises rather than guessing.
-        """
         exact = self.template_dir(template) / f"{_segment(colour)}.png"
         if exact.is_file():
             return exact
@@ -992,24 +748,11 @@ class Workspace:
         return self.template_dir(template) / f"{_SCENE_STEM}.png"
 
     def scene_photo(self, template: str, colour: str | None) -> ScenePhoto:
-        """Which photo a scene composites over, and what its derived maps are
-        cached under.
-
-        The two answers are one rule, so they are given together: a
-        colour-matrix scene has a photo *per colour* and therefore a height
-        and luminance map per colour, while the other two kinds have one of
-        each for the whole template. Both the render stage and the
-        calibrator's preview endpoint ask here, rather than each re-deriving
-        it from the template's kind -- which is what previously let the two
-        drift.
-        """
         if colour is not None:
             return ScenePhoto(path=self.template_base_image(template, colour), map_key=colour)
         return ScenePhoto(path=self.template_scene_image(template), map_key=template)
 
     def test_designs_dir(self) -> Path:
-        """Where the calibrator's uploaded test targets live. Separate
-        from ``designs/``, which holds artwork that actually ships."""
         return self.root / layout.TEST_DESIGNS_DIR
 
     def test_design_file(self, name: str) -> Path:
@@ -1025,20 +768,11 @@ class Workspace:
         return self.cache(layout.RENDERS_DIR, _segment(listing))
 
     def render_file(self, listing: str, template: str, colour: str | None = None) -> Path:
-        """Namespaced by template: a listing can reference several templates
-        (item 4), including more than one ``colour-matrix``-kind set, so a
-        bare colour slug alone is not always unique across them. Mirrors each
-        template's own scene-naming convention, just namespaced --
-        ``{colour}.png`` under the template for ``colour-matrix`` kind (pass
-        ``colour``), ``scene.png`` for ``multiple``/``single`` kind (omit
-        ``colour`` -- exactly one output, nothing to disambiguate)."""
         filename = f"{_segment(colour)}.png" if colour is not None else "scene.png"
         return self.renders_dir(listing) / _segment(template) / filename
 
-    def listing_template_caches(self, listing: str, template: str) -> tuple[Path, Path]:
-        """What ``listing`` has cached for one mockup template: its renders
-        and its previews, which a rename of the template has to move."""
-        return (
+    def listing_template_caches(self, listing: str, template: str) -> TemplateCaches:
+        return TemplateCaches(
             self.renders_dir(listing) / _segment(template),
             self.preview_dir(listing) / _segment(template),
         )
@@ -1104,40 +838,18 @@ class Workspace:
         return GarmentProfile.load(self.garment_profile_file(garment_profile))
 
     def load_pricing_plan(self, path: Path) -> PricingPlan:
-        """Attaches workspace currency, like
-        ``load_garment_profile``/``load_listing``
-        -- but path-based, not bare-name: pricing-plan refs are path refs
-        (see ``Listing.pricing_plan``'s docstring), so resolving a name to a
-        path is the caller's job, the same point ``design:`` refs are
-        resolved. This method only owns "attach currency, wrap load errors"."""
         return PricingPlan.load(path, currency=self.defaults.etsy.currency)
 
     def capture_settings(self) -> Settings:
-        """``settings.yaml`` for a run, which keeps what it captures to the end
-        (ADR-0056, ADR-0057): a broken file raises :class:`ConfigLoadError`,
-        and the run fails with its message.
-
-        This and its two siblings are the only reads of the file, each named
-        for what a broken one means to its caller. All read on every call
-        rather than at discovery: a seller tuning weights while the UI runs
-        gets them on the next research, and a broken file touches only what
-        reads it."""
         return Settings.load(self.settings_file())
 
     def settings_or_problem(self) -> Settings | SettingsProblem:
-        """``settings.yaml``, or what is wrong with it, for a read whose answer
-        carries the problem: a stage's ``Blocked``, a listing's issue, a
-        refusal. Never raises for a broken file."""
         try:
             return self.capture_settings()
         except ConfigLoadError as exc:
             return SettingsProblem(str(exc))
 
     def settings_if_readable(self, *, skipping: str) -> Settings | None:
-        """``settings.yaml``, or ``None`` having logged that ``skipping``, the
-        best-effort follow-up it was wanted for, will not happen. Whatever the
-        file holds up is reported by what reads it to act: ``plan`` and the
-        listing's issues."""
         settings = self.settings_or_problem()
         if isinstance(settings, SettingsProblem):
             logger.warning("skipped %s: %s", skipping, settings.message)

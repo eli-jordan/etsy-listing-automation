@@ -853,6 +853,16 @@ File references without a prefix resolve from the workspace root. `./` resolves
 from the owning listing or listing-template directory; subdirectories are
 allowed, while absolute paths, backslashes and `..` segments are refused
 (ADR-0046). Reference resolution checks the resolved target against the root.
+One interpreter serves every owner (a listing, a listing template, and a
+template frozen into a staging session or batch, whose `./` is the frozen copy
+and whose bare refs stay live), so a template's refs mean the same once it
+becomes a listing. The editor's unnamed draft resolves against a stand-in
+listing directory at the same depth: a workspace-rooted ref lands on the same
+file, and a `./` ref finds nothing, since a listing with no directory has no
+files of its own. Picture endpoints serve only images and videos whose
+resolved path is inside the directory asked of, never the `listing.yaml`,
+`template.yaml` or lockfile beside them. A listing template's own files are
+the ones under its `assets/`, where Save as listing template puts them.
 Layout names are validated as single segments, but not all layout accessors
 check symlink/junction containment; that remaining gap is audit finding F02.
 
