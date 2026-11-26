@@ -483,10 +483,7 @@ def _id_drifts(
 def _partner_drift(was: AppliedEtsyListing, live: EtsyListing) -> Drift | None:
     live_partner_ids = {p.production_partner_id for p in live.production_partners}
     if set(was.production_partner_ids) == live_partner_ids or not live.production_partners:
-        # An empty `production_partners` on a draft this tool has already
-        # patched reads as "not returned by this call" rather than "cleared"
-        # -- Etsy gives no way to tell the two apart, so only a live set that
-        # actually names something is trusted to disagree.
+        # Etsy returns no partners for "not returned" and "cleared" alike.
         return None
     live_names = sorted(
         partner.partner_name or str(partner.production_partner_id)
