@@ -1,8 +1,4 @@
-"""A warm JSON-lines v1 worker, without any model-package import.
-
-The wire format is the worker distribution's own ``protocol`` module, imported
-from the embedded copy this package ships: it needs only pydantic.
-"""
+"""A warm JSON-lines v1 worker; the embedded ``protocol`` needs only pydantic, no model package."""
 
 from __future__ import annotations
 
@@ -60,7 +56,7 @@ class InferenceCall:
 
 
 class WorkerError(RuntimeError):
-    """A retryable worker failure. Settings and earlier evidence remain intact."""
+    pass
 
 
 def _protocol_error(message: str) -> NoReturn:
@@ -183,8 +179,6 @@ class Worker:
         request_id: str,
         progress: Callable[[Progress], None] | None,
     ) -> Reply | None:
-        """The active call's reply, or None for a control acknowledgement or
-        progress, which ``_receive`` reads past."""
         if message.request_id in self._controls:
             self._controls.discard(message.request_id)
             return None
@@ -239,7 +233,6 @@ class Worker:
         return self._process.poll() is None
 
     def cancel(self, request_id: str) -> None:
-        """Control writes do not wait for the active inference response."""
         control = CancelRequest(request_id=uuid.uuid4().hex, target=request_id)
         self._controls.add(control.request_id)
         self._send(control)
@@ -252,7 +245,6 @@ class Worker:
                 stream.close()
 
     def _shut_down(self) -> bool:
-        """Ask the worker to exit after any active call; False if it does not."""
         try:
             self._send(ShutdownRequest(request_id=uuid.uuid4().hex))
             self._process.wait(timeout=SHUTDOWN_TIMEOUT)
@@ -280,11 +272,7 @@ class Worker:
 
 
 class WarmWorker:
-    """Coordinator-owned adapter. Restart idle workers; never retry an active call.
-
-    Hold one selected command for the job lifetime, so installing a newer engine
-    cannot redirect recovered or running work to it (ADR-0054).
-    """
+    """Never retries an active call; holds one engine command for the job's lifetime (ADR-0054)."""
 
     def __init__(
         self,

@@ -74,8 +74,7 @@ def _saved_facts(workspace: Workspace, name: str) -> SavedPreparationFacts:
     artifacts = Artifacts(workspace)
     inputs = artifacts.saved_inputs(name)
     maps, prepared_engine = _map_readiness(artifacts, name, inputs)
-    # Every colour shares the main photo's maps, so every photo must match its
-    # size, not only the one a scene asks for.
+    # Every colour shares the main photo's maps, so every colour photo must match its size.
     if isinstance(config, ColourMatrixTemplate) and _any_photo_differs(workspace, name, inputs):
         return SavedPreparationFacts(
             Readiness(

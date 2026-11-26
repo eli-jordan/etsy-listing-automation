@@ -134,18 +134,9 @@ def lease_scene(
     *,
     expected: PreparationInputs | None = None,
 ) -> Iterator[PreparedScene]:
-    """Lease ``template``'s accepted generation to composite ``composition``.
-
-    The saved inputs are read and the generation acquired under one short
-    template lock, then the lock is released while the lease keeps the
-    generation alive for composition. ``expected`` is inputs read earlier (a
-    plan, or a preview before it decoded its images); saved inputs that have
-    since changed refuse with :class:`StalePreparationError`. Every refusal is an
-    :class:`~etsy_listings.core.preparation.artifacts.ArtifactError`.
-
-    A layer ``composition.boxes`` positions is drawn with its position fit,
-    fitted first -- or awaited, when another caller is fitting it -- and never
-    with the template's maps (spec *Rendering -> Marigold (option B)*).
+    """Reads saved inputs and acquires the generation under one short template lock;
+    the lease, not the lock, then keeps it alive. Inputs changed since ``expected``
+    refuse with :class:`StalePreparationError`; every refusal is an ``ArtifactError``.
     """
     base, layers, appearance = composition.base, composition.layers, composition.appearance
     artifacts = Artifacts(workspace)
