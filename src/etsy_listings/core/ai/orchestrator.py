@@ -75,8 +75,6 @@ def _out_of_time(provider_name: str, budget: RunBudget, what: str) -> SeoDeadlin
 
 @dataclass(frozen=True)
 class _Run[Result]:
-    """One task's inputs, shared by every provider that :func:`run_task` tries."""
-
     task: ProviderTask
     decode: Callable[[str], Result]
     budget: RunBudget
