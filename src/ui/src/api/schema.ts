@@ -5547,8 +5547,6 @@ export interface components {
     };
     /** SinglePreviewRequest */
     SinglePreviewRequest: {
-      /** Artwork */
-      artwork?: string | null;
       /** Bounding Box */
       bounding_box: [
         components["schemas"]["Point"],
