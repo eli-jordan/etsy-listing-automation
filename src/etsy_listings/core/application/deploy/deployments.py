@@ -8,6 +8,7 @@ from etsy_listings.core.application.deploy.events import TERMINAL_PHASES, RunSco
 from etsy_listings.core.application.deploy.executor import RunExecutor
 from etsy_listings.core.application.deploy.registry import (
     BatchApply,
+    CancelOutcome,
     Conflict,
     Run,
     RunCommand,
@@ -53,10 +54,7 @@ class Deployments:
             check_reviewed_apply(self._registry.get(command.reviewed_run_id), command)
         return self._registry.create(command)
 
-    def cancel(self, run_id: str) -> bool | None:
-        """Cancel a queued or running plan: ``True`` if cancelled or asked
-        to stop at its next safe point, ``False`` for an apply (never
-        cancellable) or a finished run, ``None`` for no such run."""
+    def cancel(self, run_id: str) -> CancelOutcome:
         return self._registry.cancel(run_id)
 
     def get(self, run_id: str) -> Run | None:
@@ -75,16 +73,7 @@ class Deployments:
         scope: RunScope | None = None,
         batch: str | None = None,
     ) -> list[Run]:
-        """Runs still remembered (ADR-0041's retention).
-
-        ``scope="workspace"``: the current workspace run, which a finished
-        plan stays until a later workspace run replaces it. ``scope="batch"``
-        with ``batch``: that listing batch's current run, kept the same way;
-        without, every retained batch run. ``scope=
-        "listings"``: every retained listing-scoped run. Otherwise ``listing``
-        narrows to that listing's current run, active or finished and not yet
-        superseded; with neither, every run.
-        """
+        """Runs still remembered (ADR-0041's retention)."""
         if scope == "workspace":
             return _listed(self._registry.for_workspace())
         if scope == "batch":

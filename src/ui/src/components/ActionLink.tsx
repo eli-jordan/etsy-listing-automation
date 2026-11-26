@@ -1,9 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-/**
- * `tone="danger"` stays as quiet as its neighbours and turns red only on
- * hover; `tone="done"` is a settled state (Mark reviewed, once pressed).
- */
+/** `danger` turns red only on hover; `done` is a settled state (Mark reviewed, once pressed). */
 export function ActionLink({
   icon,
   children,

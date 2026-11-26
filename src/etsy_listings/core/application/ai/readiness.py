@@ -30,8 +30,6 @@ limits from, so both come from one revision of ``settings.yaml`` (ADR-0057)."""
 def current_providers(
     factory: ProviderFactory, workspace: Workspace
 ) -> Sequence[AiProvider] | SettingsProblem:
-    """``factory``'s providers for ``settings.yaml`` as it is now, without
-    capturing it: a broken file is reported, not raised."""
     settings = workspace.settings_or_problem()
     if isinstance(settings, SettingsProblem):
         return settings
@@ -62,15 +60,6 @@ def unready_reason(
     *,
     draft_brief: bool,
 ) -> str | None:
-    """Why an AI run may not start for this listing, or ``None`` when it may.
-
-    Checked in the order a seller would most usefully hear about them: what
-    *this* listing is missing before what the local machine's provider
-    tooling is missing, since the former is fixed by editing the listing and
-    the latter is not the listing's to fix at all.
-
-    The listing itself being saved is the caller's to check first.
-    """
     drafting = draft_brief and not listing.brief.strip()
     if representative(listing.design) is None:
         return "the listing has no selected design"

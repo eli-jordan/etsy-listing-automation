@@ -3,9 +3,8 @@ import { listPricingPlans } from "../../api/listings";
 import { useIsPhone } from "../../phone/usePhone";
 import type { ListingDetail, PricingPlanSummary } from "../../types";
 
-/** A `"<amount> <CURRENCY>"` string (a `PriceField`'s wire form), split for
- * an editable amount plus a fixed currency suffix -- the currency itself is
- * the workspace's, not something this field lets you change per size. */
+/** A `PriceField`'s `"<amount> <CURRENCY>"`, split into an editable amount and
+ * the workspace's currency, which this field does not change. */
 function splitAmount(raw: string): { amount: string; currency: string } {
   const [amount, currency] = raw.split(" ");
   return { amount: amount ?? "", currency: currency ?? "" };
@@ -69,7 +68,6 @@ export function PricingTab({ detail, onUpdate, onFlush }: Props) {
                   <input
                     className="input price-table__input"
                     type="number"
-                    // iOS gives a number field its full keyboard.
                     {...(phone ? { inputMode: "decimal" as const } : {})}
                     step="0.01"
                     aria-label={`Price for size ${price.size}`}

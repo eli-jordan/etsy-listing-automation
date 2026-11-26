@@ -27,11 +27,8 @@ class AppliedVariant(BaseModel):
     id: int
     price: int
     colour_slug: str
-    """Which colour this variant id sold as, at the time it was applied
-    . Carried on the variant itself, rather than looked up from this
-    run's catalog resolution, because a colour Printify has since discontinued
-     would otherwise have no name to be reported *removed* by --
-    exactly the run a removal needs to be visible on."""
+    """Carried, not looked up, so a colour Printify has since discontinued
+    still has a name to be reported removed by."""
 
 
 @dataclass(frozen=True)
@@ -42,8 +39,7 @@ class ArtworkGroup:
 
 
 class AppliedPrintArea(BaseModel):
-    """One print area as last applied: the file's content hash and the
-    variants that print it (ADR-0053)."""
+    """ADR-0053."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -69,8 +65,6 @@ class AppliedProduct(BaseModel):
 
 @dataclass(frozen=True)
 class PricedVariant:
-    """One colour x size cell, and what it sells for."""
-
     id: int
     colour_slug: str
     size: str
@@ -88,8 +82,7 @@ class PrintifyProductDesired:
     variants: tuple[PricedVariant, ...]
     groups: tuple[ArtworkGroup, ...]
     missing: tuple[tuple[str, str], ...] = ()
-    """``(colour_slug, size)`` cells the catalog no longer offers. Reported,
-    never fatal -- missing variant cells."""
+    """``(colour_slug, size)`` cells the catalog no longer offers; never fatal."""
     currency: str = ""
 
     @property
@@ -101,9 +94,8 @@ class PrintifyProductDesired:
         return tuple(sorted(v.id for v in self.variants if v.colour_slug in colours))
 
     def applied(self) -> AppliedProduct:
-        """Variants are a list sorted by id rather than a mapping, because a JSON
-        round-trip turns integer keys into strings and the comparison would
-        then find a difference on every run."""
+        """Variants are a list sorted by id: a JSON round-trip turns integer
+        keys into strings, which would differ on every run."""
         return AppliedProduct(
             title=self.title,
             description=self.description,

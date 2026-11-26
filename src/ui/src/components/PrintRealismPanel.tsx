@@ -1,25 +1,14 @@
 import type { DisplaceConfig, ShadeBlend, ShadeConfig } from "../types";
 
 /**
- * The two tunable render passes, named after what they do to a photograph.
- *
- * `displace` and `shade` are accurate names for what the code does and useless
- * names for deciding whether a mockup looks right -- the question in front of
- * the user is "does the print follow the creases?", not "what is the
- * displacement strength?". Wireframe 2a renames them, and turns the blend mode
- * into three named looks.
- *
- * The raw values stay reachable under *Advanced*: `template.yaml`, the render
- * goldens and every error message speak in pass names, so renaming them here
- * must not make them unfindable.
+ * The two tunable passes, named for what they do to a photograph. The raw pass
+ * names stay under *Advanced*: template.yaml, the goldens and every error use them.
  */
 
 const DISPLACE_DEFAULT: DisplaceConfig = { enabled: false, strength: 0 };
 const SHADE_DEFAULT: ShadeConfig = { enabled: true, opacity: 0.6, blend: "soft-light" };
 
-/** Named for the result, not the maths. `Natural` is `soft-light`, which is
- * also the config default -- multiply crushes prints on dark garments, so the
- * safe choice and the obvious-sounding one are deliberately the same. */
+/** `Natural` is `soft-light`, the config default: multiply crushes prints on dark garments. */
 const SHADE_PRESETS: { label: string; blend: ShadeBlend }[] = [
   { label: "Natural", blend: "soft-light" },
   { label: "Rich", blend: "multiply" },

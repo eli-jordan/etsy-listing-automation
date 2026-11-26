@@ -43,8 +43,7 @@ def filter_blueprints_by_category(blueprints: list[Blueprint], category: str) ->
 
 
 def local_blueprint_keys(workspace: Workspace) -> set[tuple[str, str]]:
-    """The normalised ``(brand, model)`` pairs this workspace already has a
-    garment profile for (ADR-0005), skipping profiles that will not parse."""
+    """Skips profiles that will not parse."""
     keys: set[tuple[str, str]] = set()
     for name in workspace.garment_profile_names():
         try:
@@ -66,8 +65,8 @@ def resolve_colour_slugs(variant_set: VariantSet, exceptions: ColourExceptions) 
 
 
 def garment_profile_slug_for(blueprint: Blueprint) -> str:
-    """``garment-profiles/{slug}.yaml``, from brand and model: Printify's
-    titles are generic and shared across brands (ADR-0005)."""
+    """From brand and model: Printify's titles are generic and shared across
+    brands (ADR-0005)."""
     return slugify(f"{blueprint.brand} {blueprint.model}")
 
 
@@ -129,9 +128,8 @@ def ensure_garment_profile(
     *,
     placeholder: str = DEFAULT_PLACEHOLDER,
 ) -> SavedGarmentProfile:
-    """The garment profile for ``blueprint``, recorded if this is its first
-    use and otherwise read back as edited. Raises ``ValueError`` when the
-    provider offers no ``placeholder`` print area."""
+    """Raises ``ValueError`` when the provider offers no ``placeholder`` print
+    area."""
     built = build_garment_profile(
         blueprint=blueprint,
         provider_title=provider.title,

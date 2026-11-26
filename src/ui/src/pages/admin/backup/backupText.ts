@@ -12,7 +12,6 @@ import type {
 import type { BackupsOn } from "../../../shell/backupAttention";
 import { timeAgo } from "../../editor/timeAgo";
 
-/** The message a refused submit shows; null when it went through. */
 export type SubmitFailure = string | null;
 
 export const INTERVALS = [4, 6, 12, 24, 48] as const;

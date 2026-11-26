@@ -14,12 +14,8 @@ const MAX_TITLE_LENGTH = 140;
 const MAX_TAGS = 13;
 const CREATE_SECTION_VALUE = "create";
 
-/** `check_copy_is_concrete`/`check_description_ref`
- * (`config/listing_validation.py`) file every description issue -- the empty
- * lead that blocks deployment, and a `ref` that will not resolve -- under
- * this one `where`, matching `_COPY_WHERE["description"]` exactly. Both are
- * shown together beneath the description fields, the same block issues the
- * page-level banner surfaces, but visible without leaving the tab. */
+/** Where `config/listing_validation.py` files every description issue
+ * (`_COPY_WHERE["description"]`); shown together beneath the description fields. */
 const DESCRIPTION_ISSUE_WHERE = "Listing Details › Description";
 
 type Props = {

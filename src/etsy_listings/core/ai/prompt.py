@@ -179,7 +179,6 @@ def build_prompt(seller_prompt: str, request: SeoRequest) -> str:
 
 
 def build_seo_task(seller_prompt: str, request: SeoRequest) -> ProviderTask:
-    """One SEO generation, as the thing a provider adapter actually runs."""
     return ProviderTask(
         prompt_text=build_prompt(seller_prompt, request),
         response_schema=RESPONSE_SCHEMA,

@@ -47,8 +47,7 @@ class RestoreStatus(BaseModel):
 
 
 def default_target(workspace: Path, snapshot: Snapshot) -> Path:
-    """The restore dialog's suggestion: a new sibling of the workspace,
-    outside every folder a restore refuses."""
+    """A new sibling, outside every folder a restore refuses."""
     return workspace.with_name(f"{workspace.name}-restore-{snapshot.short_id}")
 
 

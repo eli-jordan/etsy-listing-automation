@@ -59,20 +59,14 @@ export function ListingEditorPage() {
   const navigate = useNavigate();
   const routeName = name ?? null;
 
-  // The listing as the editor that just named it already had it. Naming one
-  // crosses from `/listings/new` to `/listings/:name` -- a different route
-  // *pattern*, which React Router remounts across no matter how carefully this
-  // component tries to track what it is showing -- so the freshly written
-  // document rides along in the navigation instead of being fetched back.
-  // That is a round trip saved and, more to the point, no window in which a
-  // GET could answer with a document older than the save the unmounting editor
-  // just flushed.
+  // The listing as the editor that just named it had it. Naming crosses from
+  // `/listings/new` to `/listings/:name`, a different route pattern, which React
+  // Router remounts across; the written document rides along in the navigation
+  // so no GET can answer older than the save the unmounting editor flushed.
   const handed = (useLocation().state as { listing?: ListingDetail } | null)?.listing ?? null;
-  // Used once, then dropped from the browser's history entry: a reload keeps
-  // history state, and the handed document is the listing as it was named,
-  // long since changed on disk. `window.history` directly, not `navigate`,
-  // because React Router does not watch it -- this page must not re-render
-  // (and remount the editor) over it; only the next load must not see it.
+  // Used once, then dropped from the history entry, which a reload keeps.
+  // Through `window.history`, which React Router does not watch, so this page
+  // does not re-render and remount the editor over it.
   useEffect(() => {
     if (handed === null) return;
     const entry = window.history.state as Record<string, unknown> | null;

@@ -152,9 +152,6 @@ class Session {
   private doc: Opening | null = null;
   private listeners = new Set<() => void>();
   private leaving: Promise<unknown> = Promise.resolve();
-  /** Operations are objects shared by successive draft snapshots, so an
-   * editor handing back a list built before a save landed would otherwise
-   * send its strokes twice. */
   private committed = new WeakSet<MaskOperation>();
   private ownJobs = new Set<string>();
   private preparation: Preparation | null = null;

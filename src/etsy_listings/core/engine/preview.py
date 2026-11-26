@@ -59,8 +59,6 @@ def render_pending(
 
 @dataclass(frozen=True)
 class PreviewLookup:
-    """The current-hash preview file for one scene, or why there isn't one."""
-
     path: Path | None = None
     miss: Literal["blocked", "no_scene", "missing_file"] | None = None
 

@@ -39,10 +39,8 @@ Slot = tuple[str, str]
 """A row's place in the queue: its batch id and row id."""
 
 
-def queue_order(batches: list[Batch], after: str | None) -> list[Slot]:
-    """Every queued row in the order the dispatcher would start them, with
-    nothing holding a listing; ``after`` is the batch served last."""
-    ordered = _rotated_after(sorted(batches, key=lambda b: (b.created_at, b.id)), after)
+def queue_order(batches: list[Batch], served_last: str | None) -> list[Slot]:
+    ordered = _rotated_after(sorted(batches, key=lambda b: (b.created_at, b.id)), served_last)
     return _round_robin([[(b.id, row.id) for row in b.rows if row.ai == "queued"] for b in ordered])
 
 
@@ -100,7 +98,6 @@ class BatchQueue:
             self._update(batch.id, lambda row: row.ai == "running", ai="queued")
 
     def stop(self, *, timeout: float = 10.0) -> None:
-        """Start nothing more. Runs already going are the runner's to stop."""
         with self._wake:
             self._stopping = True
             self._wake.notify_all()
@@ -114,8 +111,6 @@ class BatchQueue:
             self._wake.notify_all()
 
     def wait_idle(self, *, timeout: float) -> bool:
-        """Block until the dispatcher has answered every wake so far;
-        ``False`` on timeout."""
         return self._idle.wait(timeout)
 
     def _loop(self) -> None:
@@ -217,8 +212,8 @@ class BatchQueue:
         )
 
     def cancel(self, batch_id: str) -> Batch | None:
-        # Under the batch's lock, so the dispatcher cannot start a row
-        # between the two steps: every run it has started is in `_runs`.
+        # Under the batch's lock the dispatcher cannot start a row between
+        # these steps, so every run it started is in `_runs`.
         with self._batches.lock(batch_id):
             batch = self._update_locked(batch_id, lambda row: row.ai == "queued", ai="stopped")
             with self._state:

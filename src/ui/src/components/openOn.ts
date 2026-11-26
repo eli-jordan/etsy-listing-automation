@@ -1,8 +1,3 @@
-/** Whether this menu has anything to show. Exported because the two callers
- * decide for themselves whether an empty menu is worth rendering, and an
- * absent id arrives as `null` from the API and `undefined` from a partial
- * fixture -- one predicate so the two cannot be told apart differently in two
- * places. */
 export function hasOpenTargets(
   etsyListingId: number | null | undefined,
   printifyProductId: string | null | undefined,
@@ -13,6 +8,8 @@ export function hasOpenTargets(
   );
 }
 
+/** Shop Manager's editor, not the public listing page: a listing this tool
+ * creates stays an Etsy draft, whose public URL 404s. */
 export function etsyListingUrl(listingId: number): string {
   return `https://www.etsy.com/your/shops/me/listing-editor/edit/${listingId}`;
 }

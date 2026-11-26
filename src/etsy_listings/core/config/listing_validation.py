@@ -137,25 +137,8 @@ def check_design_resolution(design: Path, profile: GarmentProfile) -> list[Issue
 
 
 def check_garment_profile_chosen(garment_profile: str) -> list[Issue]:
-    """Refuse a listing that has not said which garment it prints on.
-
-    The listings editor writes a listing the moment it has a name and a price
-    source, so "no garment profile yet" is an ordinary state on disk rather than
-    a typo -- and every stage that wants one loads it through
-    ``workspace.load_garment_profile``, where an empty name reaches ``_segment``
-    and raises ``InvalidNameError``. That is a plain ``ValueError``, not a
-    ``UserFacingError``, so it would not merely fail this listing: it would
-    unwind the stage walk and end a whole ``--all`` batch on a listing somebody
-    is still filling in.
-
-    ``strip()`` rather than a bare truth test, and that is the whole point of
-    this living in one place: a name of one space is no more a garment than an
-    empty one, and the two copies of this rule used to answer differently.
-
-    A missing profile *file* is `ConfigLoadError`'s to report on the engine
-    side, and :func:`_check_garment_profile_exists`'s on the editor's. This
-    only catches the name that could never name a file.
-    """
+    """Refuse a listing with a blank garment profile name before it reaches ``_segment``, whose
+    plain ``ValueError`` would end a whole ``--all`` batch."""
     if garment_profile.strip():
         return []
     return [
@@ -826,14 +809,9 @@ def check_listing(
 
 
 def check_listing_template(template: ListingTemplate, inputs: CheckInputs) -> list[Issue]:
-    """Every production issue with a listing template: the checks
-    :func:`check_listing` makes about garment, colours, price source,
-    gallery, videos and mockup-template kinds, and none of its design, brief,
-    copy or lifecycle checks.
-
-    Any ``block`` refuses the write: a listing template on disk is always
-    complete, so the server keeps the last complete version instead.
-    """
+    """The checks :func:`check_listing` makes about garment, colours, price source, gallery, videos
+    and mockup-template kinds, without its design, brief, copy or lifecycle ones. Any ``block``
+    refuses the write."""
     garment_profile = inputs.garment_profile
     issues: list[Issue] = []
     issues += _check_garment_profile_exists(template, inputs.garment_profile_names)

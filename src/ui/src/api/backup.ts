@@ -15,9 +15,7 @@ export type IntervalHours = BackupSetUp["interval_hours"];
 
 export type BackupConnected = components["schemas"]["BackupConnected"];
 
-/** Set-up's, create's, connect's and restore's answer: started, or a
- * {@link Refusal}. Set-up's names the destination it connected, when one
- * already held a backup. */
+/** `connected`: set-up found a backup already at the destination and connected it. */
 export type SetUpOutcome =
   { kind: "started"; status: BackupStatus; connected?: BackupConnected | null } | Refusal;
 
@@ -99,7 +97,6 @@ export async function getBackupSnapshots(): Promise<BackupSnapshots> {
 export async function startRestore(snapshot: string, target: string): Promise<SetUpOutcome> {
   const { data, error } = await api.POST("/api/backup/restore", { body: { snapshot, target } });
   if (data) return { kind: "started", status: data };
-  // A refused target is the domain's 409, answered as `detail`.
   const refused = message(error, "Could not start the restore");
   return refusalOf(error) ?? { kind: "refused", message: refused, fieldErrors: {} };
 }

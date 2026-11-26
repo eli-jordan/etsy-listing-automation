@@ -46,10 +46,8 @@ def resolve_proposal(
     name: str,
     resolution: ProposalResolution,
 ) -> ListingProposal:
-    """Record ``resolution``'s sections on the proposal it names, and answer
-    it as :func:`read_proposal` would. The listing is checked again under its
-    write lock, so a delete or rename landing in between leaves no record for
-    a listing that is gone."""
+    """The listing is checked again under its write lock, so a delete or
+    rename landing in between leaves no record for a listing that is gone."""
     _require(workspace, name)
     with ListingDocuments(workspace).lock(name):
         _require(workspace, name)

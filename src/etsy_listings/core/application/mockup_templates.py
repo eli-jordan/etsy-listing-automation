@@ -73,14 +73,13 @@ class TemplateOverview:
     photos: list[TemplatePhoto]
     has_config: bool
     status_reason: str | None
-    """Why it is not calibrated yet, in the rail's words; ``None`` once it is."""
     width: int | None
     height: int | None
     """The photo's **true** pixel size: the space ``template.yaml``'s boxes
     are in, which the editor's downscaled canvas cannot tell the client."""
     labels: list[str]
     config: AnyTemplate | None = None
-    """What was read to make this row, or ``None`` for one that did not load."""
+    """``None`` for a template that did not load."""
 
     @property
     def calibrated(self) -> bool:
@@ -209,9 +208,8 @@ def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
 
 @dataclass(frozen=True)
 class ColourAssignment:
-    """What one photo of a candidate ``colour-matrix`` set will be taken as.
-    ``clean`` is false when assigning the kind will rename it (ADR-0004: the
-    filename *is* the slugified colour)."""
+    """``clean`` is false when assigning the kind will rename the photo
+    (ADR-0004: the filename *is* the slugified colour)."""
 
     filename: str
     colour: str
@@ -425,8 +423,7 @@ class PreviewScene:
     derived_dir: Path
     layers: tuple[RenderConfig, ...]
     designs: tuple[Path | None, ...]
-    """The design file each layer composites, as the caller resolved it --
-    parallel to ``layers``. ``None`` leaves that layer's garment bare."""
+    """Parallel to ``layers``; ``None`` leaves that layer's garment bare."""
 
 
 LayerDesign = Callable[[str | None], Path | None]

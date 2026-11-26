@@ -43,19 +43,14 @@ def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
 
 @dataclass(frozen=True)
 class ClientFactories:
-    """The vendor clients a host's handlers build, one per workspace.
-    Building one resolves no credential, so any is safe before ``auth`` has
-    run; which protocol a field answers is the caller's authority (ADR-0024).
-    """
+    """Building a client resolves no credential, so any is safe before
+    ``auth`` has run (ADR-0024)."""
 
     etsy_listing: Callable[[Path], EtsyListingClient]
-    """Signed-in listing reads and writes, shop sections and lookups."""
     etsy_shop: Callable[[Path], EtsyShopClient]
-    """Unscoped shop lookups; adds a bearer only when someone has signed in."""
+    """Adds a bearer only when someone has signed in."""
     printify: Callable[[Workspace], PrintifyClient]
-    """The shop-scoped, writing half of Printify."""
     catalog: Callable[[Workspace], CatalogClient]
-    """Blueprints, providers and variants over the workspace's disk cache."""
     etsy_market: MarketClientFactory
     """Read-only market research, or ``None`` with no Etsy app key."""
 

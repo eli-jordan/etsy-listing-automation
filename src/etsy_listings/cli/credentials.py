@@ -35,8 +35,6 @@ __all__ = [
 
 @dataclass(frozen=True)
 class CredentialPrompt:
-    """How a wizard asks for one core credential: one prompt per variable."""
-
     credential: credentials.Credential
     asks: tuple[str, ...]
     blurb: tuple[str, ...]

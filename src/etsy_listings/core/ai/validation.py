@@ -109,8 +109,8 @@ def _normalize_rationale_item(item: Any) -> Any:
 
 
 def normalize_raw_proposal(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """A new dict with harmless formatting fixed; ``raw`` itself is untouched.
-    Never raises, and leaves list lengths and enum-like values to validation."""
+    """A new dict with harmless formatting fixed; list lengths and enum-like values are left to
+    validation."""
     normalized: dict[str, Any] = dict(raw)
     for field_name in ("titles", "tags", "description_leads", "warnings"):
         normalized[field_name] = _normalize_string_list(normalized.get(field_name))

@@ -263,7 +263,7 @@ def test_drain_and_cancel_leaves_an_already_dequeued_run_alone() -> None:
 
 
 def test_cancel_an_unknown_run_returns_none() -> None:
-    assert _registry().cancel("nope") is None
+    assert _registry().cancel("nope") == "missing"
 
 
 def test_cancel_an_apply_is_refused() -> None:
@@ -271,7 +271,7 @@ def test_cancel_an_apply_is_refused() -> None:
     run = _apply(registry, "take-a-hike")
     assert isinstance(run, Run)
 
-    assert registry.cancel(run.id) is False
+    assert registry.cancel(run.id) == "refused"
     assert run.phase == "queued", "refused, not cancelled"
 
 
@@ -280,7 +280,7 @@ def test_cancel_a_queued_plan_cancels_it_immediately() -> None:
     run = _plan(registry, "take-a-hike")
     assert isinstance(run, Run)
 
-    assert registry.cancel(run.id) is True
+    assert registry.cancel(run.id) == "cancelled"
     assert run.phase == "cancelled"
 
 
@@ -292,7 +292,7 @@ def test_cancel_a_planning_run_asks_it_to_stop_without_forcing_the_phase() -> No
     assert isinstance(run, Run)
     run.transition_plan("planning")
 
-    assert registry.cancel(run.id) is True
+    assert registry.cancel(run.id) == "cancelled"
     assert run.phase == "planning"
     assert run.cancel_requested is True
 
@@ -303,7 +303,7 @@ def test_cancel_an_already_finished_run_is_refused() -> None:
     assert isinstance(run, Run)
     run.transition_plan("ready")
 
-    assert registry.cancel(run.id) is False
+    assert registry.cancel(run.id) == "refused"
 
 
 # ------------------------------------------------------------------------- Run

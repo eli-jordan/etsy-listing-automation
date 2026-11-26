@@ -198,10 +198,9 @@ def _at(document: object, path: str) -> object:
 def _retain_provider_source(
     raw: dict[str, Any], candidate: dict[str, Any], original: Settings, validated: Settings
 ) -> None:
-    """The API materializes defaults for display. Unchanged preferences
-    retain their original spelling and presence, even when rows move.
-    Identity is the provider name, never its old position (ADR-0055/0056).
-    """
+    """The API materializes defaults for display, so unchanged preferences
+    keep their original spelling and presence, matched by provider name, not
+    position (ADR-0055/0056)."""
     old_ai = raw.get("ai")
     if not isinstance(old_ai, dict) or not isinstance(old_ai.get("providers"), list):
         return

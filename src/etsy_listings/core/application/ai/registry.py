@@ -42,9 +42,8 @@ def _now() -> datetime:
 
 @dataclass(eq=False)
 class AiRun:
-    """One run: its listing, its event buffer, and the cancel event every
-    provider call and the market research share. ``condition`` is the lock
-    the run's thread appends under and the SSE route waits on."""
+    """``condition`` is the lock the run's thread appends under and the SSE
+    route waits on."""
 
     id: str
     listing: str
@@ -52,26 +51,19 @@ class AiRun:
     origin: RunOrigin = "manual"
     created_at: datetime = field(default_factory=_now)
     started_at: datetime | None = None
-    """When the run began working: ``created_at`` unless a backup's pause held
-    it, then when :meth:`begin` released it; ``None`` while held."""
     finished_at: datetime | None = None
     events: list[AnyAiRunEvent] = field(default_factory=list)
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
     stop_reason: StopReason | None = None
     condition: threading.Condition = field(default_factory=threading.Condition, repr=False)
     on_finish: tuple[FinishListener, ...] = field(default=(), repr=False)
-    """Called once the run has finished, on the thread that finished it and
-    outside ``condition`` -- a listener takes other locks (the batch
-    store's), and a request holding one of those may be reading this run."""
+    """Called outside ``condition``: a listener takes the batch store's lock,
+    and a request holding that may be reading this run."""
     _settled: threading.Event = field(default_factory=threading.Event, repr=False)
-    """Set once :meth:`finish` has told every listener: a batch row has its
-    outcome by then, not just the run its phase."""
     _phase: AiRunPhase = "running"
-    """``queued`` while a backup's pause holds the run, until :meth:`begin`."""
     _ticket: Ticket | None = field(default=None, repr=False)
-    """The backup gate's ticket for this run's work, released once
-    :meth:`finish` has told every listener -- so a backup waiting for quiet
-    starts only after a batch row has its outcome."""
+    """Released only after every listener has run, so a backup waiting for
+    quiet starts after a batch row has its outcome."""
     _steps: dict[StepId, WorkflowStep] = field(
         default_factory=lambda: {i: WorkflowStep(id=i, state="pending") for i in STEP_IDS}
     )
@@ -89,8 +81,6 @@ class AiRun:
         return self._phase not in ("queued", "running")
 
     def begin(self, ticket: Ticket) -> bool:
-        """Start a held run under the gate's ``ticket``, which it then owns.
-        ``False``, releasing the ticket, when it was stopped while held."""
         with self.condition:
             if self._phase == "queued":
                 self._phase = "running"
@@ -111,7 +101,6 @@ class AiRun:
             return next((i for i in STEP_IDS if self._steps[i].state == "active"), None)
 
     def emit(self, make_event: Callable[[int], AnyAiRunEvent]) -> None:
-        """Append one event, numbered under the lock a waiter reads with."""
         with self.condition:
             event = make_event(len(self.events) + 1)
             self.events.append(event)
@@ -143,14 +132,11 @@ class AiRun:
         self.finish("failed", message)
 
     def wait_settled(self, timeout: float | None = None) -> bool:
-        """Block until the run has finished and its listeners have heard.
-        ``False`` on timeout."""
         return self._settled.wait(timeout)
 
     def request_stop(self, reason: StopReason) -> bool:
-        """Set the cancel event, which kills a provider's subprocess tree and
-        stops research at its next call; ``False`` once finished. A run held
-        by a backup's pause has no thread to notice, so it ends here."""
+        """A run held by a backup's pause has no thread to notice the cancel
+        event, so it ends here."""
         with self.condition:
             if self.finished:
                 return False
@@ -165,8 +151,6 @@ class AiRun:
     def wait_for_events(
         self, after_seq: int, *, timeout: float
     ) -> tuple[list[AnyAiRunEvent], bool]:
-        """Block up to ``timeout`` seconds for events past ``after_seq``, with
-        the deploy registry's ``done`` contract."""
         with self.condition:
             pending = self.events[after_seq:]
             if not pending and not self.finished:
@@ -206,9 +190,7 @@ class AiRunRegistry:
         queued: bool = False,
         ticket: Ticket | None = None,
     ) -> AiRun | Conflict | Deploying:
-        """A new run holding ``listing``, ``queued`` until :meth:`AiRun.begin`
-        when a backup's pause holds it. The run owns ``ticket``; a refusal
-        releases it."""
+        """The run owns ``ticket``; a refusal releases it."""
         key = listing.casefold()
         with self._lock:
             refused = self._refusal_locked(key)
@@ -249,9 +231,8 @@ class AiRunRegistry:
             return self._runs.get(self._latest.get(listing.casefold(), ""))
 
     def forget(self, listing: str) -> None:
-        """Drop the deleted or renamed listing's finished run, so a new
-        listing given that name cannot reattach to it and replay another's
-        brief and proposal."""
+        """So a new listing given a deleted or renamed one's name cannot
+        reattach to its finished run and replay its brief and proposal."""
         key = listing.casefold()
         with self._lock:
             run = self._runs.get(self._latest.get(key, ""))
@@ -264,9 +245,8 @@ class AiRunRegistry:
             return [run for run in self._runs.values() if not run.finished]
 
     def hold_for_deploy(self, listings: Iterable[str]) -> list[AiRun]:
-        """Refuse every new run for ``listings`` until :meth:`release_deploy`
-        (ADR-0050), and answer the runs still going on them, in one step so
-        no run can start between the two."""
+        """Refuses new runs for ``listings`` and answers the active ones in one
+        step, so no run can start between the two (ADR-0050)."""
         keys = {name.casefold() for name in listings}
         with self._lock:
             self._deploying.update(keys)

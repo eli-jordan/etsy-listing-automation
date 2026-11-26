@@ -68,15 +68,8 @@ def _sync_prompts(root: Path, *, replace: bool) -> None:
 
 
 def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]]:
-    """A token that has actually answered ``GET /v1/shops.json``, and what it
-    answered.
-
-    The shop list comes back from the same call rather than being fetched
-    again: verifying the token *is* asking which shops it can reach,
-    and a second call would only invite the two answers to disagree. That is
-    also why this one verifies a *reused* token where ``auth`` does not --
-    ``setup`` needs the answer either way, so there is no call to save.
-    """
+    """A token that has answered ``GET /v1/shops.json``, and the shops it answered. Verifying it
+    is that call, so ``setup`` verifies a reused token too and never fetches the shops twice."""
 
     def verify(values: tuple[str, ...]) -> tuple[list[Shop], str]:
         try:
@@ -96,12 +89,12 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
 
 def _pick_shop(shops: list[Shop]) -> Shop:
     selection = shop_discovery.select_shop(shops)
-    if selection.problem is not None:
-        typer.echo(f"{selection.problem}", err=True)
+    if isinstance(selection, shop_discovery.NoShops):
+        typer.echo(selection.problem, err=True)
         raise typer.Exit(code=1)
-    if selection.shop is not None:
-        typer.echo(f"Printify shop: {selection.shop.title} ({selection.shop.id})")
-        return selection.shop
+    if isinstance(selection, Shop):
+        typer.echo(f"Printify shop: {selection.title} ({selection.id})")
+        return selection
 
     return prompts.pick(
         "Which Printify shop?", shops, label=lambda shop: f"{shop.title}  ({shop.id})"

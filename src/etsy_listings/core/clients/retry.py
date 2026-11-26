@@ -27,10 +27,7 @@ reason this function takes a method at all."""
 @dataclass(frozen=True)
 class RetryPolicy:
     attempts: int = 4
-    """Total attempts, not retries after the first. Four gives roughly
-    0.5 + 1 + 2 seconds of waiting before giving up -- long enough to ride out
-    a rate-limit window, short enough that a genuinely broken endpoint is
-    reported while the user is still watching."""
+    """Total attempts, not retries: four wait about 0.5 + 1 + 2 seconds before giving up."""
 
     base_delay: float = 0.5
     max_delay: float = 30.0
@@ -102,10 +99,6 @@ def with_retries(
     sleep: Callable[[float], None] = time.sleep,
     random: Callable[[], float] = _random.random,
 ) -> httpx.Response:
-    """Call ``send`` until it succeeds, is refused for a reason retrying cannot
-    fix, or runs out of attempts. The final response is returned, not raised,
-    so the caller decodes the real error; a transport error propagates.
-    """
     last = _send_once(send, method)
     for attempt in range(1, policy.attempts):
         if isinstance(last, httpx.Response) and not should_retry(method, last):

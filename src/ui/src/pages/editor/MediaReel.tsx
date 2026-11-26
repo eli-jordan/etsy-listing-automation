@@ -14,14 +14,9 @@ import type { Focus } from "./focus";
 import { PositionGlyph } from "./positions/PositionControls";
 
 /**
- * The listing's gallery, in the order Etsy will show it, reorderable by drag.
- *
- * Videos sit inline, because `media:` is the gallery: a muted clip
- * on its own frame with a play badge, playing on hover. Position 2 is where
- * Etsy pins the featured video, and is labelled so. Which drops the gallery
- * rules allow is `mediaEdits`' answer, asked while a tile is carried so a
- * refused target looks refused; a drop there changes nothing and the tile
- * snaps back.
+ * The listing's gallery in the order Etsy will show it, reorderable by drag.
+ * Position 2 is where Etsy pins the featured video. A drop `mediaEdits` refuses
+ * changes nothing, and the tile snaps back.
  */
 
 interface Props {

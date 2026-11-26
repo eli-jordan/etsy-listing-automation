@@ -11,9 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 class Ticket:
-    """One admitted unit of work, counted by :meth:`JobGate.wait_idle` until
-    released."""
-
     def __init__(self, job: str, release: Callable[[], None]) -> None:
         self._release = release
         self.job = job
@@ -67,21 +64,19 @@ class JobGate:
         return queued and self.paused
 
     def on_resume(self, listener: Callable[[], None]) -> None:
-        """Call ``listener`` after each :meth:`resume`, outside the gate's lock."""
+        """Listeners run outside the gate's lock."""
         with self._condition:
             self._listeners.append(listener)
 
     def admit(self, job: str) -> Ticket | None:
-        """A ticket for ``job`` starting now, or ``None`` while paused or
-        while held work is still in line."""
+        """``None`` while paused or while held work is still in line."""
         with self._condition:
             if self._paused or self._line:
                 return None
             return self._ticket_locked(job)
 
     def hold(self, job: str, start: Callable[[Ticket], object]) -> None:
-        """Call ``start`` with a ticket for ``job`` once the gate is open and
-        the line ahead has started. ``start`` owns the ticket."""
+        """``start`` owns the ticket."""
         with self._condition:
             if self._stopped:
                 return
@@ -89,8 +84,7 @@ class JobGate:
         self._start_line()
 
     def wait_admit(self, job: str) -> Ticket | None:
-        """Block in line until ``job`` is admitted, and answer its ticket;
-        ``None`` once :meth:`stop` has closed admission."""
+        """``None`` once :meth:`stop` has closed admission."""
         place = _Place(job, None)
         with self._condition:
             if self._stopped:
@@ -129,8 +123,7 @@ class JobGate:
             self._condition.notify_all()
 
     def wait_idle(self, *, waiting: Callable[[str], None] | None = None) -> bool:
-        """Block until no admitted work is in flight, telling ``waiting`` each
-        job it waits on. ``False`` when :meth:`stop` ended the wait."""
+        """``False`` when :meth:`stop` ended the wait."""
         named: str | None = None
         with self._condition:
             while self._in_flight and not self._stopped:

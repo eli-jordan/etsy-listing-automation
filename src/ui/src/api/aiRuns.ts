@@ -43,8 +43,6 @@ export async function findAiRun(listing: string): Promise<AiRunSummary | null> {
   return data;
 }
 
-/** `false` when the run finished first: a race with the run ending on its own
- * is not a defect. */
 export async function cancelAiRun(id: string): Promise<boolean> {
   const { error, response } = await api.DELETE("/api/ai/runs/{run_id}", {
     params: { path: { run_id: id } },
@@ -56,7 +54,6 @@ export async function cancelAiRun(id: string): Promise<boolean> {
 
 export type AiRunStreamOptions = Omit<EventStreamOptions<AiRunEvent>, "lastEventId">;
 
-/** Always from the first event: the editor rebuilds a run from all of them. */
 export function openAiRunStream(id: string, options: AiRunStreamOptions): EventStreamHandle {
   return openEventStream(`/api/ai/runs/${encodeURIComponent(id)}/events`, options);
 }

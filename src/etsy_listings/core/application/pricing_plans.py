@@ -207,10 +207,8 @@ class GarmentOffer:
 
 @dataclass(frozen=True)
 class PriceSources:
-    """Where a starting plan's figures come from: shipping from the
-    documented catalog, manufacturing costs from Printify's undocumented
-    endpoint, and the rate from a one-off FX fetch. The two fetches default
-    to the live ones, looked up at call time."""
+    """Manufacturing costs come from Printify's undocumented endpoint. The
+    fetches default to the live ones, looked up at call time."""
 
     catalog: CatalogClient
     fetch_costs: Callable[[int, int], dict[int, int]] | None = None

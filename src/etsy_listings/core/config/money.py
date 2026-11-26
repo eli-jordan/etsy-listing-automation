@@ -17,8 +17,6 @@ class MoneyFormatError(ValueError): ...
 
 @dataclass(frozen=True, slots=True)
 class Money:
-    """An amount paired with its ISO-4217-ish currency code."""
-
     amount: Decimal
     currency: str
 

@@ -91,11 +91,9 @@ export function positionSignature(entry: Entry | undefined): string {
   return (hash >>> 0).toString(36);
 }
 
-/** `listing_validation`'s pose refusals (rules 1 and 2): the stage shows these
- * and Fit within limits repairs them. Every other refusal under
- * `template_positions` names a key no stage can show -- a template not in
- * `media:`, a placement that is gone, the wrong shape for the template's
- * kind -- and its banner row removes the key instead. */
+/** `listing_validation`'s pose refusals (rules 1 and 2), which the stage shows
+ * and Fit within limits repairs. Any other `template_positions` refusal names a
+ * key no stage can show, and its banner row removes the key instead. */
 const POSE_REFUSAL =
   /\b(scales the design to|has (horizontal|vertical) offset|has rotation|is not a plain move)\b/;
 

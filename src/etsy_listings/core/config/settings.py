@@ -40,11 +40,8 @@ class BatchAiSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     concurrency: int = Field(1, ge=1, le=MAX_BATCH_CONCURRENCY)
-    """How many batch rows draft at once, across every batch. Manual
-    editor runs do not count against it. One by default: a seller's
-    provider CLI is usually on a plan with a rate limit, and a queue that
-    ran every row at once would spend it on the first batch. At most
-    :data:`MAX_BATCH_CONCURRENCY`, the Admin page slider's top."""
+    """Batch rows drafting at once, across every batch; editor runs do not count. One by default, as
+    a seller's provider CLI is usually rate-limited."""
 
 
 MIN_STEP_LIMIT_MINUTES = 1

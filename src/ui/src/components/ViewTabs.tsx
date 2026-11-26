@@ -1,6 +1,5 @@
 export type View = "calibrate" | "preview";
 
-/** Calibrate / Preview, the same two views for every template kind. */
 export function ViewTabs({ value, onChange }: { value: View; onChange: (view: View) => void }) {
   return (
     <div className="seg" role="tablist" aria-label="View">

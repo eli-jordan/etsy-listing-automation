@@ -4,9 +4,6 @@ import { listingDocument } from "../pages/editor/listingDocument";
 import type { ListingDetail } from "../types";
 import { type AutosaveTransport, ListingAutosave, type SaveState } from "./listingAutosave";
 
-/** A listing: `POST /api/listing-draft`, `POST /api/listings`, a PATCH of
- * the delta and the rename. A refused create answers the *empty* draft
- * beside its field errors, so only the errors are news. */
 export const LISTING_TRANSPORT: AutosaveTransport = {
   document: (detail) => listingDocument(detail),
   describe: (candidate) => describeListingDraft(candidate),
@@ -15,8 +12,6 @@ export const LISTING_TRANSPORT: AutosaveTransport = {
     if (fresh.name === "") return { saved: false, issues: null, field_errors: fresh.field_errors };
     return { saved: true, detail: fresh };
   },
-  // A PATCH whose merged document contradicts itself answers 200 with
-  // `field_errors` and the listing unchanged: not written, so not saved.
   save: async (name, patch) => {
     const fresh = await patchListing(name, patch);
     if (Object.keys(fresh.field_errors ?? {}).length > 0) {
@@ -32,7 +27,6 @@ interface UseAutosave extends Pick<ListingAutosave, "update" | "adopt" | "flush"
   save: SaveState;
 }
 
-/** One per mount: a listing switch remounts the editor. */
 export function useAutosave(
   name: string | null,
   initial: ListingDetail,

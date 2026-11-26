@@ -99,28 +99,23 @@ def _copy_preview(source: Path, target: Path) -> None:
 @dataclass(frozen=True)
 class ResolvedLayer:
     colour: str | None
-    """The garment colour this layer depicts -- a placement's own colour in a
-    ``multiple`` scene, the scene's colour otherwise. What artwork resolution
-    asks by, and part of the recipe: repointing a placement at a different
-    colour changes what should be rendered even when the geometry does not."""
+    """A placement's own colour in a ``multiple`` scene, the scene's
+    otherwise. Part of the recipe: a recoloured placement re-renders even when
+    the geometry does not change."""
     design: Path
     design_hash: str
-    """The design file's content hash -- the layer's design identity (ADR-0053).
-    Not its ref and not a ``design:`` key, so a renamed file or a reshaped
-    map that prints the same bytes hashes the same."""
+    """The layer's design identity (ADR-0053): a renamed file that prints the
+    same bytes hashes the same."""
     bounding_box: BoundingBox
-    """The template's own box for this layer, whichever renderer draws it:
-    where every scene samples its swatch. A listing's position never moves
-    it -- the swatch reads the garment's colour, not the print -- so Photo
-    warp's homography target is the
-    :class:`RenderConfig`'s box instead, which does follow the listing."""
+    """The template's own box, where every scene samples its swatch. A
+    listing's position never moves it; Photo warp's homography targets the
+    :class:`RenderConfig`'s box, which does."""
     placement_id: str | None = None
 
 
 @dataclass(frozen=True)
 class PhotoWarpRender:
-    """A scene the pure Photo warp passes draw: one frozen
-    :class:`RenderConfig` per layer, in paint order, which is all of the
+    """One :class:`RenderConfig` per layer, in paint order: all of the
     template that decides its pixels besides the photo and artwork."""
 
     configs: tuple[RenderConfig, ...]
@@ -140,9 +135,8 @@ class PreparedRender:
     appearance: MarigoldAppearance
     identity: str
     map_content: str
-    """The accepted generation's content digest, recorded in the recipe --
-    combined with each position fit's digest when the listing positions a
-    layer (option B), so only positioned scenes' lockfiles change."""
+    """Combined with each position fit's digest when the listing positions a
+    layer, so only positioned scenes' lockfiles change."""
     boxes: LayerBoxes = field(default_factory=dict)
     """The listing's saved position, which ``apply()`` leases the fits for."""
 
@@ -153,8 +147,6 @@ SceneRender = PhotoWarpRender | PreparedRender
 
 @dataclass(frozen=True)
 class SceneWork:
-    """One render: everything it needs, resolved exactly once."""
-
     key: str  # "template/colour" for colour-matrix, "template" otherwise
     template: str
     colour: str | None
@@ -162,27 +154,16 @@ class SceneWork:
     config_file: Path
     base_image: Path
     map_key: str
-    """Key for the template's ``DerivedMapCache`` -- the colour for a
-    colour-matrix scene (one photo per colour, so one map per colour), the
-    template name otherwise (one photo, one map)."""
+    """The colour for a colour-matrix scene (one photo, so one map, per
+    colour), the template name otherwise."""
     layers: tuple[ResolvedLayer, ...]
     output: Path
     render: SceneRender
 
     def recipe(self) -> dict[str, object]:
-        """The part of this scene that decides its pixels, for the input hash.
-
-        Each layer carries its design's content hash, which *is* its design
-        identity (ADR-0053) -- there is no other name for which file a layer
-        prints that survives a rename. The template's and the photo's bytes
-        are hashed separately (``template_hash``, ``base_hash``), and no path
-        enters: a path is not a hash. Prepared scenes record accepted map
-        content and appearance here; their canonical pixel identity also
-        contains ordered artwork and the target photo (ADR-0054).
-
-        Every lockfile records this as ``scene_config``: changing its shape
-        re-renders every listing.
-        """
+        """No path enters: the template's and photo's bytes are hashed
+        separately (ADR-0053, ADR-0054). Every lockfile records this as
+        ``scene_config``, so changing its shape re-renders every listing."""
         match self.render:
             case PreparedRender(appearance=appearance, map_content=map_content):
                 return {
@@ -225,19 +206,13 @@ class SceneWork:
 class RenderDesired:
     listing: str
     root: Path
-    """The workspace root, purely so paths can be reported workspace-relative.
-    Absolute and machine-specific, so it never enters a hash -- see
-    ``_input_hash``, which names the fields that do."""
+    """Machine-specific, so it never enters a hash."""
     works: tuple[SceneWork, ...]  # first-seen media order, deduped
     template_hash: dict[str, str]  # template name -> _template_hash of its template.yaml
     base_hash: dict[str, str]  # scene key -> sha256 of that scene's photo
     preview_exists: dict[str, bool] = field(default_factory=dict)
-    """Scene key -> whether ``Workspace.preview_file`` already holds a preview
-    matching that scene's current :func:`scene_hash`, checked once by
-    ``desired()`` -- the one place this stage already does I/O beyond
-    hashing. Feeds :meth:`RenderStage.snapshot`'s ``preview`` field. Defaults
-    to empty so a ``RenderDesired`` built by hand (a unit test exercising
-    :func:`scene_hash` in isolation) doesn't have to know this exists."""
+    """Scene key -> whether a preview at its current :func:`scene_hash`
+    exists, checked once by ``desired()``."""
 
     @property
     def scenes(self) -> tuple[str, ...]:
@@ -330,21 +305,16 @@ class RenderApplied(BaseModel):
     input_hash: str
     scenes: tuple[str, ...]
     scene_hashes: dict[str, str] = {}
-    """Scene key -> :func:`scene_hash` at the last apply. Defaulted, not
-    required: a lockfile written before this field existed decodes as if every
-    scene's map were empty, which :meth:`RenderStage.snapshot` already reads
-    as "no record to compare against" -- the same answer a scene that has
-    never been applied gets."""
+    """Scene key -> :func:`scene_hash` at the last apply. Defaulted so a
+    lockfile without it decodes as having no record to compare against."""
 
 
 @dataclass(frozen=True)
 class RenderLive:
     outputs_present: dict[str, bool]  # scene key -> its render file exists
     scene_hashes: dict[str, str] = field(default_factory=dict)
-    """``applied.scene_hashes``, carried through unchanged. ``read_live``
-    has ``applied`` and ``snapshot`` does not -- this is how the value one
-    decoded and the other needs to compare against reaches the second without
-    a second decode of the stage's own subtree."""
+    """``applied.scene_hashes``, carried because ``snapshot`` is not handed
+    ``applied``."""
 
 
 def _scene_key(template: str, colour: str | None) -> str:
@@ -766,11 +736,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             template_hash=templates.hashes,
             base_hash=base_hash,
         )
-        # ADR-0040: has a preview already been rendered for each scene's *current*
-        # state? Checked here, once, because this is the one place the stage
-        # already does I/O beyond hashing (this method's own docstring) --
-        # `snapshot()` has no workspace to ask, and by the time `preview()`
-        # runs this is exactly the question it needs answered too.
+        # ADR-0040: checked here because `snapshot()` has no workspace to ask.
         preview_exists = {
             work.key: preview_path(workspace, desired, work).is_file() for work in desired.works
         }
@@ -863,15 +829,9 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
     def rewrites(
         self, ctx: RunContext, desired: RenderDesired, live: RenderLive | None
     ) -> dict[Path, Path | None]:
-        """Each ``stale`` or ``missing`` scene's render output, mapped to the
-        preview :meth:`apply` will promote into it, or ``None`` before
-        :meth:`preview` has rendered one.
-
-        A ``cached`` scene is left out: apply writes it again, but with the
-        bytes already on disk, so a stage reading it now reads what it will
-        get. The preview is the exact file apply copies (ADR-0040), which is
-        what lets a plan say whether a re-rendered image actually differs.
-        """
+        """A ``cached`` scene is left out: apply rewrites it with the bytes
+        already on disk. The preview is the exact file apply copies
+        (ADR-0040)."""
         changing = {
             scene.scene for scene in self.snapshot(desired, live).scenes if scene.state != "cached"
         }
@@ -892,13 +852,9 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         should_stop: Callable[[], bool] = lambda: False,
         on_ready: Callable[[SceneWork], None] | None = None,
     ) -> tuple[SceneWork, ...]:
-        """Up to :data:`PREVIEW_WORKERS` scenes render concurrently. ``should_stop``
-        is checked before each submission, so cancellation starts no more work;
-        the small number already in flight is allowed to finish without leaving
-        a half-written file. ``on_ready`` fires on this calling thread as each
-        file becomes available, rather than making the UI wait for the entire
-        gallery before it can reveal the first image.
-        """
+        """``should_stop`` is checked before each submission; work in flight
+        finishes, leaving no half-written file. ``on_ready`` fires on this
+        thread as each file becomes available."""
         workspace = ctx.workspace
         snapshot = self.snapshot(desired, live)
         needed = {s.scene for s in snapshot.scenes if s.state in ("stale", "missing")}
@@ -911,7 +867,6 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
 
     @staticmethod
     def _render_preview(workspace: Workspace, work: SceneWork, target: Path) -> None:
-        """Render one preview job with caches local to its worker."""
         match work.render:
             case PreparedRender() as prepared:
                 RenderStage._render_prepared(workspace, work, prepared, target)

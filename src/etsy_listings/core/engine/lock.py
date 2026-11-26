@@ -75,7 +75,6 @@ class Lockfile(BaseModel):
         return canonical_hash(self.applied)
 
     def applied_for(self, stage: str) -> dict[str, Any] | None:
-        """One stage's last-applied document, or ``None`` if it has never run."""
         data: dict[str, Any] | None = self.applied.get(stage)
         return data
 

@@ -54,8 +54,6 @@ interface Props {
   onPrepare: () => void;
   onPreviewPending?: (pending: boolean) => void;
 }
-/** The view tabs and the calibrate view's pickers: colour (for a colour
- * matrix with a choice) and the design box toggle. */
 function PreviewBar({
   tab,
   onTabChange,

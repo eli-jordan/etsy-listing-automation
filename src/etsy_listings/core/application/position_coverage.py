@@ -105,7 +105,6 @@ def cover_recalibrated(preparations: Preparations, template: str) -> list[Job]:
 class PositionReadiness:
     ready: bool
     preparing: bool
-    """A job for it is queued or running, so there is nothing to start."""
 
 
 def position_readiness(preparations: Preparations, template: str) -> PositionReadiness:

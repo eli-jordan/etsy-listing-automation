@@ -29,8 +29,6 @@ export async function getListing(name: string): Promise<ListingDetail> {
   return withTuples<ListingDetail>(data);
 }
 
-/** The same, but `null` on a 404 rather than a thrown error, so the deploy
- * view can tell a listing that no longer exists from a failure. */
 export async function tryGetListing(name: string): Promise<ListingDetail | null> {
   const { data, error, response } = await api.GET("/api/listings/{name}", {
     params: { path: { name } },
@@ -66,8 +64,7 @@ export async function describeListingDraft(
   return withTuples<ListingDetail>(data);
 }
 
-/** An empty `name` in the answer is the "not created" signal; it rejects only
- * for a refused name. */
+/** An empty `name` in the answer means nothing was created. */
 export async function createListing(body: CreateListingRequest): Promise<ListingDetail> {
   const { data, error } = await api.POST("/api/listings", { body });
   if (error || !data) throw new ListingsApiError("could not create listing");
@@ -120,12 +117,11 @@ export async function listListingMediaFiles(listing: string): Promise<MediaFileS
   return data;
 }
 
-function escapedEachSegment(name: string): string {
+export function escapedEachSegment(name: string): string {
   return name.split("/").map(encodeURIComponent).join("/");
 }
 
-/** One of the listing's own files, downscaled for a list. Images only: a
- * video answers `415`, since a `<video>` element draws its own poster. */
+/** Images only: a video answers 415, since a `<video>` draws its own poster. */
 export function listingMediaThumbnailUrl(listing: string, name: string): string {
   return `/api/listings/${encodeURIComponent(listing)}/media-files/${escapedEachSegment(name)}/thumbnail`;
 }
@@ -146,8 +142,7 @@ export function listingScenePreviewUrl(
   return `/api/listings/${encodeURIComponent(listing)}/scene-preview?${params.toString()}`;
 }
 
-/** Whether the scene a `listingScenePreviewUrl` showed was drawn from stale
- * remembered pixel digests. Any other URL, and any failure, is "unchanged". */
+/** Whether the scene behind `url` was drawn from stale remembered pixel digests. */
 export async function scenePreviewChanged(url: string): Promise<boolean> {
   const match = /^\/api\/listings\/([^/?]+)\/scene-preview\?(.*)$/.exec(url);
   const [, name, query] = match ?? [];
@@ -186,8 +181,6 @@ export function commonMediaFileUrl(name: string): string {
   return `/api/common-media/${escapedEachSegment(name)}/file`;
 }
 
-/** Empty, never an error: an editor with nothing to pick from is an ordinary
- * state, as `listEtsySections` treats an unconfigured shop. */
 export async function listCommonCopy(): Promise<CommonCopySummary[]> {
   try {
     const { data, error } = await api.GET("/api/common-copy");

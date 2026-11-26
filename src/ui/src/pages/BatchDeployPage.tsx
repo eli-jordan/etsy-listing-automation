@@ -319,9 +319,8 @@ export function BatchDeployPage() {
     };
   }, [state]);
 
-  // Until this URL's detail has arrived, keep a previous route's plan out of
-  // the approval surface. The state itself is reset by the detail replay, so
-  // this also avoids synchronous setState calls in the route effect.
+  // Until this URL's detail arrives, keep a previous route's plan out of the
+  // approval surface; the detail replay resets the state itself.
   const visibleState = run?.id === runId ? state : initialBatchDeployState;
   const batchId = runBatchId(run, runId);
   const copy = scopeCopy(batchId);

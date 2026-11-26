@@ -376,7 +376,6 @@ def _descriptor_digest(
 
 
 def _manifest_digest(manifest: Manifest) -> str:
-    """The content digest ``manifest``'s descriptors imply."""
     return _descriptor_digest(
         {p.id: p.arrays for p in manifest.placements},
         extents={p.id: p.extent for p in manifest.placements},
@@ -524,10 +523,7 @@ def _no_checkpoint(_step: str) -> None:
 
 @dataclass(frozen=True)
 class PublishOptions:
-    """How :meth:`Artifacts.publish` records and paces a generation."""
-
     provenance: Provenance = field(default_factory=Provenance)
-    """Stored in the generation's manifest."""
     checkpoint: Callable[[str], None] = _no_checkpoint
     """Told each durable step; may raise to stop before the next."""
     copy_maps: bool = True

@@ -236,7 +236,7 @@ def test_cancel_is_refused_for_an_apply_run(executor: RunExecutor) -> None:
 
     result = executor.registry.cancel(run.id)
 
-    assert result is False
+    assert result == "refused"
     _wait_until(run)
 
 
@@ -254,7 +254,7 @@ def test_cancelling_a_queued_plan_run_marks_it_cancelled_and_it_never_executes(
 
     cancelled = executor.registry.cancel(second.id)
 
-    assert cancelled is True
+    assert cancelled == "cancelled"
     _wait_until(first)
     _wait_until(second)
     assert second.phase == "cancelled"

@@ -181,7 +181,6 @@ def destination_name(path: Path) -> str:
 
 
 def short_problem(problem: str | None) -> str | None:
-    """A copy's problem as its pill says it."""
     if problem is None:
         return None
     first = re.split(r"[.:]", problem, maxsplit=1)[0].strip()

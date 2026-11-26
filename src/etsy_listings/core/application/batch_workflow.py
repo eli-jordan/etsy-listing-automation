@@ -52,10 +52,7 @@ def confirm_batch(
     *,
     queue: BatchQueue,
 ) -> Batch:
-    """Create one listing per creatable row of staging session
-    ``session_id`` -- or finish the batch a previous confirm began -- and
-    wake the queue for the rows now queued."""
-    workspace.staging_dir(session_id)
+    workspace.staging_dir(session_id)  # refuses an id that is not a path segment
     if records.batches.load(session_id) is None:
         blocked = queue.blocked()
         if blocked is not None:
@@ -141,7 +138,6 @@ def delete_batch(
 
 
 def rename_batch(workspace: Workspace, batches: BatchStore, batch_id: str, label: str) -> Batch:
-    """The label only, so its id -- and every link to it -- stays."""
     with batches.lock(batch_id):
         batch = read_batch(workspace, batches, batch_id)
         label = label.strip()
@@ -164,9 +160,7 @@ def mark_reviewed(
 
 
 def read_batch(workspace: Workspace, batches: BatchStore, batch_id: str) -> Batch:
-    """``InvalidNameError`` for an id that is not a path segment;
-    :class:`BatchMissingError` for one nobody holds."""
-    workspace.batch_file(batch_id)
+    workspace.batch_file(batch_id)  # refuses an id that is not a path segment
     batch = batches.load(batch_id)
     if batch is None:
         raise BatchMissingError(batch_id)
@@ -174,7 +168,6 @@ def read_batch(workspace: Workspace, batches: BatchStore, batch_id: str) -> Batc
 
 
 def batch_row_upload(workspace: Workspace, batches: BatchStore, batch_id: str, row_id: str) -> Path:
-    """The upload a row was made from, kept beside the batch."""
     batch = read_batch(workspace, batches, batch_id)
     try:
         path = row_upload(workspace, batch, row_id)
@@ -197,8 +190,6 @@ def deployable(workspace: Workspace, row: BatchRow) -> bool:
 def batch_deploy_listings(
     workspace: Workspace, batches: BatchStore, batch_id: str
 ) -> tuple[str, ...]:
-    """The listings a batch plan deploys, in the batch's row order: every
-    :func:`deployable` row, refusing an empty plan."""
     batch = read_batch(workspace, batches, batch_id)
     names = tuple(dict.fromkeys(row.name for row in batch.rows if deployable(workspace, row)))
     if not names:
@@ -213,9 +204,8 @@ class ListingMembership:
 
 
 def listing_batch(workspace: Workspace, batches: BatchStore, name: str) -> ListingMembership | None:
-    """The newest batch whose live row names listing ``name`` exactly, as
-    the rename and delete hooks match it, or ``None``."""
-    workspace.listing_dir(name)
+    """Matches ``name`` exactly, as the rename and delete hooks do."""
+    workspace.listing_dir(name)  # refuses a name that is not a path segment
     newest = sorted(batches.all(), key=lambda b: (b.created_at, b.id), reverse=True)
     for batch in newest:
         for row in batch.rows:
@@ -226,9 +216,7 @@ def listing_batch(workspace: Workspace, batches: BatchStore, name: str) -> Listi
 
 @dataclass(frozen=True)
 class RecentBatch:
-    """One row of Recent batches: a confirmed batch, with where
-    it stands, or a staging session not confirmed yet (``standing`` ``None``),
-    which reopens staging and expires."""
+    """``standing`` is set for a batch, ``expires_at`` for a staging session."""
 
     kind: Literal["staging", "batch"]
     id: str
@@ -247,9 +235,7 @@ def recent_batches(
     *,
     now: datetime | None = None,
 ) -> list[RecentBatch]:
-    """Every batch, and every staging session not confirmed yet, newest
-    first. A confirmed session shares its batch's id and is listed as the
-    batch."""
+    """A confirmed session shares its batch's id and is listed as the batch."""
     staging.sweep(now=now or datetime.now(UTC))
     recorded = batches.all()
     confirmed = {batch.id for batch in recorded}
@@ -285,9 +271,7 @@ def recent_batches(
 def row_proposal(
     workspace: Workspace, proposals: ProposalStore, row: BatchRow, *, facts: WorkspaceFacts
 ) -> tuple[ProposalState | None, list[str]]:
-    """The row's listing's cached proposal, judged as the editor judges it
-    (ADR-0049); ``None`` without a listing or a proposal, or when the
-    listing will not read."""
+    """Judged as the editor judges it (ADR-0049)."""
     record = proposals.load(row.name) if has_listing(row) else None
     if record is None:
         return None, []

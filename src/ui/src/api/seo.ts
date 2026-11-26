@@ -20,7 +20,6 @@ export async function getListingProposal(name: string): Promise<ListingProposal 
   return data;
 }
 
-/** `null` when the proposal is gone or replaced: the caller reads the current one again. */
 export async function resolveListingProposal(
   name: string,
   patch: ProposalResolutionPatch,

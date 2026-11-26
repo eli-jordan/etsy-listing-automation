@@ -6,7 +6,6 @@ import type { Placement, TemplateConfigState } from "../types";
 /** The id of the one placement a single-box template is drawn as. */
 export const IMPLICIT_PLACEMENT_ID = "implicit";
 
-/** `selected` while it is still one of `options`, else the first option. */
 export function pickOrFirst(selected: string | null, options: readonly string[]): string {
   return selected !== null && options.includes(selected) ? selected : (options[0] ?? "");
 }

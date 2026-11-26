@@ -127,22 +127,9 @@ function ColourMatrixBody({
   return (
     <>
       <div className="cchips">
-        {/* The listing's own colours, not `t.colours`:
-            a colour-matrix set's photos are named for
-            ADR-0004's slug, but a template with a shared
-            filename prefix (`{template}-{colour}.png`)
-            reports that whole prefixed stem as its
-            "colour" (`template_colours`'s enumeration
-            direction has no slug to match against,
-            unlike `template_base_image`'s lookup
-            direction, which resolves a bare slug against
-            exactly this fallback) -- so comparing against
-            `detail.colors` by string equality showed
-            nothing at all for such a template. `media[]`
-            always stores the listing's own bare slug
-            (confirmed by `isInMedia`), so that is what a
-            chip must offer, regardless of what the
-            template's own photos happen to be named. */}
+        {/* The listing's own colours, not `t.colours`: a template whose photos
+            share a filename prefix reports each whole stem (`{template}-{colour}`)
+            as its colour, while `media[]` stores the listing's bare slug. */}
         {detail.colors.map((colour) => (
           <ColourChip
             key={colour}

@@ -31,14 +31,7 @@ function isListingLocal(ref: string): boolean {
   return ref.startsWith("./");
 }
 
-/** Whether an entry is a picture or a clip -- `core/config/media.py`'s
- * `media_kind`, mirrored.
- *
- * A template entry is always an image (a render is a PNG) and a file ref is a
- * video by its extension alone, case-insensitively, since a phone names its
- * clips `IMG_1234.MOV`. Every other ref is an image: a listing whose `media:`
- * names an unknown type is refused on load, so it never reaches the browser.
- */
+/** `core/config/media.py`'s `media_kind`, mirrored. */
 export function mediaKind(entry: MediaEntry): "image" | "video" {
   if (typeof entry !== "string") return "image";
   return /\.(mp4|mov)$/i.test(entry) ? "video" : "image";
@@ -67,12 +60,6 @@ export function mediaLabel(entry: MediaEntry): string {
   return entry.colour ? `${entry.template} · ${entry.colour}` : entry.template;
 }
 
-/** Is this template/colour pair already in `media:`?
- *
- * `(entry.colour ?? null) === colour` rather than `==`, because a
- * `multiple`/`single` entry's absent colour and an explicit `null` are the
- * same thing and `undefined` is not.
- */
 export function isInMedia(
   media: readonly MediaEntry[],
   template: string,
@@ -101,13 +88,10 @@ export function pictureFor(
   return templatePicture(entry.template, entry.colour ?? null, artwork, size);
 }
 
-/** What a render composites onto a template's photo: a saved listing, each
- * layer printing the file its colour resolves to ({@link SceneSource}); or,
- * in the listing-template editor where there is no artwork, one
- * design picked only to preview with -- a workspace design by name, or a
- * calibrator test design by its library id. An object for the test design so
- * the two names cannot be mistaken for each other: they name files in
- * different directories. */
+/** What a render composites onto a template's photo: a saved listing's
+ * artwork, or, in the listing-template editor, one design picked to preview
+ * with. The test design is an object so its library id cannot pass for a
+ * workspace design's name: they name files in different directories. */
 export type Artwork = SceneSource | string | { testDesign: string };
 
 /** Whose directory a `./` ref is resolved against (ADR-0047). `copies`: an unsaved
@@ -133,8 +117,6 @@ function ownFilePicture(owner: MediaOwner, name: string, tile: boolean): string 
   return tile ? listingMediaThumbnailUrl(owner.name, name) : listingMediaFileUrl(owner.name, name);
 }
 
-/** A `./` ref with no owner (an unnamed draft has no directory) names nothing:
- * the empty string, not a URL that would 404. */
 function filePicture(ref: string, size: PictureSize, owner: MediaOwner | null): string {
   const tile = size === "tile" && mediaKind(ref) === "image";
   if (isListingLocal(ref)) {
@@ -165,7 +147,6 @@ export function templatePicture(
   return listingScenePreviewUrl(artwork.listing, template, colour, version);
 }
 
-/** The server's photo path wins: it knows vendor packs' `{template}-{colour}.png`. */
 export function scenePath(
   template: TemplateSummary | undefined,
   templateName: string,

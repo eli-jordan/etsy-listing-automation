@@ -204,7 +204,6 @@ class AutomaticMask:
 
 
 def _damaged(message: str) -> NoReturn:
-    # S01 TRY301: the handler wraps this as a repair refusal.
     raise ValueError(message)
 
 

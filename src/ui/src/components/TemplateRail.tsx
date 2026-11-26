@@ -6,17 +6,13 @@ import { LabelSearch } from "./LabelSearch";
 import { holdsLabels } from "./labelRules";
 import type { TemplateKind, TemplateSummary } from "../types";
 
-/** Status is server-derived (`TemplateSummary.status`); the rail only
- * arranges what it is told. */
-
 const KIND_LABELS: Record<TemplateKind, string> = {
   "colour-matrix": "Colour Matrix",
   multiple: "Multiple",
   single: "Single",
 };
 
-/** Rows shown per group before "+ N more", so a big workspace does not push
- * the calibrate button off screen. */
+/** Rows per group before "+ N more", so a big workspace keeps the calibrate button on screen. */
 const VISIBLE_LIMIT = 5;
 
 type StatusFilter = "needs" | "all" | "done";

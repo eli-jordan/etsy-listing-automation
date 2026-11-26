@@ -56,10 +56,8 @@ export function ListingTemplateEditorPage() {
   const sourceKey = source === null ? null : `${source.kind}:${source.name}`;
   const key = routeName ?? sourceKey;
 
-  // The template as the editor that just named it had it: naming crosses
-  // from `/new` to `/:name`, a different route pattern, so this remounts.
-  // `ListingEditorPage` hands its listing across for the same reason: no GET
-  // that could answer older than the save the unmounting editor flushed.
+  // The template as the editor that just named it had it: `/new` to `/:name`
+  // remounts, so it is handed across as `ListingEditorPage` hands its listing.
   const handed =
     (useLocation().state as { listingTemplate?: ListingDetail } | null)?.listingTemplate ?? null;
   const [fetched, setFetched] = useState<Loaded | null>(null);

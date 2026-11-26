@@ -1,13 +1,9 @@
 import type { components } from "./schema";
 
 /**
- * How a revision-checked write refuses, so every page words a refusal one way.
- *
- * - `stale`: the file changed since the page read it. Nothing was written;
- *   reload, then try again.
- * - `refused`: the server says what is wrong, in `message` and the fields it
- *   names. `connectFrom` is a destination holding a repository's copy, which
- *   Create refused: connect it instead.
+ * How a revision-checked write refuses. `stale`: nothing was written; reload,
+ * then try again. `connectFrom`: a destination holding a copy of the
+ * repository, which Create refused: connect it instead.
  */
 export type Refusal =
   | { kind: "stale"; message: string }
@@ -20,7 +16,6 @@ export type Refusal =
 
 type Body = Partial<components["schemas"]["BackupRefusal"]>;
 
-/** `stale` (412) means reload; these say what is wrong. */
 const REFUSED = new Set<Body["kind"]>(["conflict", "invalid"]);
 
 export function refusalOf(error: unknown): Refusal | null {

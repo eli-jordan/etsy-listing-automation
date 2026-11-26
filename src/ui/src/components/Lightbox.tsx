@@ -5,8 +5,8 @@ import { useCarousel } from "../phone/useCarousel";
 import { useIsPhone } from "../phone/usePhone";
 import { useSheetDrag } from "../phone/useSheetDrag";
 
-/** Has a 1:1 view because at fit-to-screen the browser downsamples a 4000px
- * render, which hides exactly the resampling artefacts calibration looks for. */
+/** Has a 1:1 view: at fit-to-screen the browser's downsampling hides the
+ * resampling artefacts calibration looks for. */
 
 export interface LightboxItem {
   id: string;
