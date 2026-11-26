@@ -36,17 +36,12 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 @dataclass(frozen=True)
 class PricingPlanOption:
-    """A loadable plan and whether it was built for the garment asked about."""
-
     path: Path
     plan: PricingPlan
     compatible: bool
 
 
 def load_candidate_pricing_plans(workspace: Workspace) -> list[tuple[Path, PricingPlan]]:
-    """Every discovered plan that actually loads. A plan that won't parse or
-    fails currency validation is skipped, not fatal -- one broken file costs
-    its own row, not the whole picker."""
     result: list[tuple[Path, PricingPlan]] = []
     for path in workspace.pricing_plan_files():
         try:
@@ -59,14 +54,6 @@ def load_candidate_pricing_plans(workspace: Workspace) -> list[tuple[Path, Prici
 def pricing_plan_options(
     plans: list[tuple[Path, PricingPlan]], garment_profile: str
 ) -> list[PricingPlanOption]:
-    """``plans``, those declaring exactly this garment profile first, each
-    group by file stem, case-insensitively.
-
-    An *exact* ``plan.garment_profile == garment_profile`` match: a plan
-    declares its garment directly, so nothing is inferred. An empty
-    ``garment_profile`` -- a listing that has not chosen one yet -- therefore
-    marks no plan that names a garment.
-    """
     options = [
         PricingPlanOption(path=path, plan=plan, compatible=plan.garment_profile == garment_profile)
         for path, plan in plans
@@ -76,11 +63,6 @@ def pricing_plan_options(
 
 
 def pricing_plan_ref(plan_path: Path, *, root: Path) -> str:
-    """The write-side counterpart to :meth:`Workspace.resolve_ref` -- a
-    workspace-rooted POSIX ref, e.g. ``'pricing-plans/tee-basic.yaml'``
-    (ADR-0046). Needed because discovery under ``pricing-plans/`` allows
-    nesting, so the ref can't be hardcoded the way ``designs/{name}.png``
-    is."""
     return plan_path.resolve().relative_to(root.resolve()).as_posix()
 
 
@@ -114,17 +96,6 @@ def compute_starting_prices(
     costs: LiveCosts,
     target_currency: str,
 ) -> tuple[dict[str, Money], list[str]]:
-    """size -> starting ``Money``, plus human-readable note lines for the
-    generated file's comment block. Never raises -- every failure mode
-    (missing cost, missing shipping, no fx rate) degrades to a 0-price entry
-    and a note explaining why.
-
-    Manufacturing + shipping cost is per (colour, size) variant, but a plan
-    has no colour axis: usually every colour offering a size costs the same,
-    so that shared figure is used; where colours disagree, the max is used
-    and the disagreement is called out in the notes, so the generated file
-    is honest about the simplification.
-    """
     prices: dict[str, Money] = {}
     notes: list[str] = [PORTAL_VERIFICATION_NOTE, ""]
     for size in sizes:
@@ -198,13 +169,8 @@ def write_pricing_plan(
     prices: dict[str, Money],
     notes: list[str],
 ) -> Path:
-    """Writes ``pricing-plans/{slugify(name)}.yaml``, refusing to overwrite
-    (as ``ListingDocuments.create`` refuses a taken name). ``price_overrides``
-    is written empty -- the wizard never guesses a per-colour markup, only
-    the flat table."""
     path = workspace.pricing_plans_dir() / f"{slugify(name)}.yaml"
     if path.is_file():
-        # Never edited either: a plan is the seller's once written (ADR-0055).
         raise FileExistsError(f"a pricing plan already exists at {path}")
     header = "\n".join(
         [
