@@ -354,11 +354,12 @@ def delete_batch(request: Request, batch_id: str) -> Response:
 @router.put(
     "/api/batches/{batch_id}/rows/{row}/reviewed",
     response_model=BatchDetail,
-    responses={409: {"description": "The row has no listing to review yet"}},
+    responses={
+        409: {"description": "The row is still queued or drafting, deleted, or never created"}
+    },
 )
 def set_reviewed(request: Request, batch_id: str, row: str, body: ReviewedRequest) -> BatchDetail:
-    """Mark reviewed / Mark needs review (spec, *Review workflow*). Refused
-    for a row still queued or drafting, deleted, or never created."""
+    """Mark reviewed / Mark needs review."""
     batch = batch_workflow.mark_reviewed(
         app_state.workspace(request),
         app_state.batch_store(request),

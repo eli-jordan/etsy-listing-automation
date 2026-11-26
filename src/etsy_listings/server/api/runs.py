@@ -35,6 +35,7 @@ from etsy_listings.core.application.deploy.registry import (
 )
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import app_state
+from etsy_listings.server.api.refusal_status import Refusal, refusals
 from etsy_listings.server.api.schemas import (
     ApplyRunDetail,
     ApplyRunSummary,
@@ -45,6 +46,7 @@ from etsy_listings.server.api.schemas import (
     ListingPlanRequest,
     PlanRunDetail,
     PlanRunSummary,
+    RunConflict,
     RunDetail,
     RunSummary,
     WorkspaceApplyRequest,
@@ -116,14 +118,21 @@ def _detail(run: Run, deployments: Deployments) -> RunDetail:
     return ApplyRunDetail(**summary.model_dump(), events=list(run.events))
 
 
-@router.post("", status_code=202, response_model=RunSummary)
+@router.post(
+    "",
+    status_code=202,
+    response_model=RunSummary,
+    responses={
+        **refusals({404: "No such batch"}),
+        409: {
+            "model": RunConflict | Refusal,
+            "description": "The run already holding one of these listings, to reattach to; or "
+            "an apply that is not exactly its review, or a batch plan with nothing to deploy",
+        },
+    },
+)
 def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONResponse:
-    """A ``409`` names the run already holding one of these listings, so the
-    caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-    retrying into the same refusal. A workspace or batch apply that is not
-    exactly its review is a ``409`` too, carrying the refusal's message, and
-    so is a batch plan with nothing to deploy; a batch nobody holds is a
-    ``404``."""
+    """Queue a plan or apply run."""
     deployments = _deployments(request)
     result = deployments.submit(_run_command(request, body))
     if isinstance(result, Conflict):
@@ -181,10 +190,14 @@ def get_run(target: Annotated[Target, Depends(target)]) -> RunDetail:
     return _detail(target.run, target.deployments)
 
 
-@router.delete("/{run_id}", response_model=RunSummary)
+@router.delete(
+    "/{run_id}",
+    response_model=RunSummary,
+    responses=refusals({404: "No such run", 409: "An apply, or a finished run"}),
+)
 def cancel_run(target: Annotated[Target, Depends(target)]) -> RunSummary:
-    """Cancel a queued or running **plan**. An ``apply`` is always refused
-    (leaving the page never cancels one), and so is a finished run."""
+    """Cancel a queued or running plan. Leaving the page never cancels an
+    apply."""
     result = target.deployments.cancel(target.run.id)
     if result is False:
         raise HTTPException(status_code=409, detail="this run cannot be cancelled")

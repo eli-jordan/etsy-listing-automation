@@ -21,6 +21,7 @@ from etsy_listings.core.config.listing_validation import Issue as ValidationIssu
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
+from etsy_listings.server.api.refusal_status import refusals
 from etsy_listings.server.api.schemas import (
     CreateListingTemplateRequest,
     Issue,
@@ -118,12 +119,15 @@ def listing_template_draft(
     return _detail(workspace, view)
 
 
-@router.post("", response_model=ListingTemplateSaveResult)
+@router.post(
+    "",
+    response_model=ListingTemplateSaveResult,
+    responses=refusals({400: "An unusable name, refused before any source is read"}),
+)
 def create_listing_template(
     request: Request, body: CreateListingTemplateRequest
 ) -> ListingTemplateSaveResult:
-    """Naming the draft is what writes it (UI doc §1). The name is checked
-    first, so a bad one is a 400 before any source is read."""
+    """Naming the draft is what writes it."""
     workspace = app_state.workspace(request)
     outcome = library.create_listing_template(
         workspace,
@@ -154,15 +158,16 @@ def put_listing_template(
     return _save_result(workspace, outcome)
 
 
-@router.post("/{name}/rename", response_model=ListingTemplateDetail)
+@router.post(
+    "/{name}/rename",
+    response_model=ListingTemplateDetail,
+    responses=refusals({409: "A taken name; it is never suffixed"}),
+)
 def rename_listing_template(
     request: Request, name: str, body: RenameListingRequest
 ) -> ListingTemplateDetail:
-    """Move a listing template, whole, to a new name -- double-click the
-    name, exactly as a listing (UI doc §3). A taken name is a 409 and never
-    suffixed (spec, *Storage and identity*); the staging sessions and
-    batches made from it follow it by name
-    (:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`)."""
+    """Move a listing template, whole, to a new name. The staging sessions
+    and batches made from it follow it."""
     workspace = app_state.workspace(request)
     library.rename_listing_template(
         workspace,

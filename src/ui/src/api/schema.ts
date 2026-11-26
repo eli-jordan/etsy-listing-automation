@@ -20,10 +20,8 @@ export interface paths {
     head?: never;
     /**
      * Edit Settings
-     * @description Save ``changes`` against ``revision``: 412 when the file changed since,
-     *     422 for an edit it refuses. What the save sets off is ``settings_save``'s;
-     *     this hands it the host's coordinators, and coverage jobs it queues are
-     *     queued after the response.
+     * @description Save ``changes`` against ``revision``. Coverage jobs the save queues
+     *     run after the response.
      */
     patch: operations["edit_settings_api_admin_settings_patch"];
     trace?: never;
@@ -139,8 +137,7 @@ export interface paths {
     put?: never;
     /**
      * Create Ai Run
-     * @description Start a run for a saved listing. A ``409`` either names the active run
-     *     to reattach to, or gives the readiness rule that failed.
+     * @description Start a run for a saved listing.
      */
     post: operations["create_ai_run_api_ai_runs_post"];
     delete?: never;
@@ -218,8 +215,8 @@ export interface paths {
     /**
      * Connect Repository
      * @description Copy an existing repository to local disk, check the password opens
-     *     it, then use it; answers once it is connected. A wrong password or a
-     *     folder that is not a repository is a 422, and nothing is saved.
+     *     it, then use it; answers once it is connected and saves nothing on a
+     *     refusal.
      */
     post: operations["connect_repository_api_backup_connect_post"];
     delete?: never;
@@ -278,8 +275,7 @@ export interface paths {
     /**
      * Create Repository
      * @description Create a new repository while the configured one is missing, save
-     *     its folder, and start the first backup. Refuses a folder that holds
-     *     files (409) and a missing or short password (422).
+     *     its folder, and start the first backup.
      */
     post: operations["create_repository_api_backup_repository_post"];
     delete?: never;
@@ -299,8 +295,7 @@ export interface paths {
     put?: never;
     /**
      * Start Restore
-     * @description Restore a snapshot into a new folder; 409 for the live workspace, a
-     *     folder that holds files or a restore already running.
+     * @description Restore a snapshot into a new folder.
      */
     post: operations["start_restore_api_backup_restore_post"];
     delete?: never;
@@ -340,7 +335,7 @@ export interface paths {
     put?: never;
     /**
      * Back Up Now
-     * @description Start a backup; 409 while another backup operation runs.
+     * @description Start a backup.
      */
     post: operations["back_up_now_api_backup_run_post"];
     delete?: never;
@@ -361,14 +356,12 @@ export interface paths {
     /**
      * Set Up
      * @description Write the ``backup:`` block and the password, create the repository
-     *     and the destination folders, then start the first backup. Refuses a
-     *     short password (422), a folder that holds files (409) and a destination
-     *     whose parent is missing (422), writing nothing.
+     *     and the destination folders, then start the first backup. A refusal
+     *     writes nothing.
      *
      *     When a destination already holds a backup, connects it instead, as
      *     ``/connect`` does, answering once it is copied: ``connected`` names the
-     *     destination. Refuses a password that does not open it (422, field
-     *     ``password``), part of a copy, and two different repositories (422).
+     *     destination.
      */
     post: operations["set_up_api_backup_setup_post"];
     delete?: never;
@@ -539,8 +532,7 @@ export interface paths {
     get?: never;
     /**
      * Set Reviewed
-     * @description Mark reviewed / Mark needs review (spec, *Review workflow*). Refused
-     *     for a row still queued or drafting, deleted, or never created.
+     * @description Mark reviewed / Mark needs review.
      */
     put: operations["set_reviewed_api_batches__batch_id__rows__row__reviewed_put"];
     post?: never;
@@ -878,8 +870,7 @@ export interface paths {
     put?: never;
     /**
      * Create Listing Template
-     * @description Naming the draft is what writes it (UI doc §1). The name is checked
-     *     first, so a bad one is a 400 before any source is read.
+     * @description Naming the draft is what writes it.
      */
     post: operations["create_listing_template_api_listing_templates_post"];
     delete?: never;
@@ -950,11 +941,8 @@ export interface paths {
     put?: never;
     /**
      * Rename Listing Template
-     * @description Move a listing template, whole, to a new name -- double-click the
-     *     name, exactly as a listing (UI doc §3). A taken name is a 409 and never
-     *     suffixed (spec, *Storage and identity*); the staging sessions and
-     *     batches made from it follow it by name
-     *     (:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`).
+     * @description Move a listing template, whole, to a new name. The staging sessions
+     *     and batches made from it follow it.
      */
     post: operations["rename_listing_template_api_listing_templates__name__rename_post"];
     delete?: never;
@@ -1043,13 +1031,8 @@ export interface paths {
     put?: never;
     /**
      * Create Listing
-     * @description Naming a listing is what creates it.
-     *
-     *     Mirrors PATCH exactly, one level up: a document that fails
-     *     ``Listing.model_validate`` is a **200** carrying ``field_errors`` with
-     *     nothing written. The two things a *name* can be wrong about keep their
-     *     status codes instead -- not a single path segment is the 400, and
-     *     already taken (the directory, not just ``listing.yaml``) is a 409.
+     * @description Naming a listing is what creates it. As with PATCH, a document that
+     *     will not validate writes nothing and answers 200 with ``field_errors``.
      */
     post: operations["create_listing_api_listings_post"];
     delete?: never;
@@ -1068,9 +1051,7 @@ export interface paths {
     /**
      * List Listing Media Files
      * @description The *This listing* group: the listing's own files, each with the
-     *     ``./`` ref that names it. A ``404`` for a listing that does not
-     *     exist, rather than an empty group that would look like one with nothing
-     *     in it.
+     *     ``./`` ref that names it.
      */
     get: operations["list_listing_media_files_api_listings__listing__media_files_get"];
     put?: never;
@@ -1129,11 +1110,6 @@ export interface paths {
     /**
      * Delete Listing
      * @description Delete from the listings table.
-     *
-     *     No remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering
-     *     with the row left pending. Published: 409 -- retire it instead. Confirm
-     *     is the UI's. What goes with the listing either way is
-     *     :func:`~etsy_listings.core.application.listing_identity.delete_listing`'s.
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
@@ -1204,10 +1180,8 @@ export interface paths {
     /**
      * Get Market Snapshot
      * @description The listing's latest market research, as the top listings panel shows
-     *     it after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose
-     *     search succeeded, so a failed run leaves the previous one here. 404 until
-     *     the first search -- the panel is not rendered then -- and for a snapshot
-     *     that no longer reads as one, which the next run replaces.
+     *     it after a reload. Written only by an AI run whose search succeeded, so a
+     *     failed run leaves the previous one here.
      */
     get: operations["get_market_snapshot_api_listings__name__market_get"];
     put?: never;
@@ -1341,7 +1315,6 @@ export interface paths {
      *     Position mode draws it: downscaled and with its transparency, unlike a list
      *     thumbnail. Resolved here for the reason :func:`scene_preview` is, so the
      *     picture under a drag and the render that replaces it print the same file.
-     *     ``404`` for a layer left bare.
      */
     get: operations["scene_artwork_picture_api_listings__name__scene_artwork_get"];
     put?: never;
@@ -1543,12 +1516,7 @@ export interface paths {
     put?: never;
     /**
      * Create Run
-     * @description A ``409`` names the run already holding one of these listings, so the
-     *     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-     *     retrying into the same refusal. A workspace or batch apply that is not
-     *     exactly its review is a ``409`` too, carrying the refusal's message, and
-     *     so is a batch plan with nothing to deploy; a batch nobody holds is a
-     *     ``404``.
+     * @description Queue a plan or apply run.
      */
     post: operations["create_run_api_runs_post"];
     delete?: never;
@@ -1570,8 +1538,8 @@ export interface paths {
     post?: never;
     /**
      * Cancel Run
-     * @description Cancel a queued or running **plan**. An ``apply`` is always refused
-     *     (leaving the page never cancels one), and so is a finished run.
+     * @description Cancel a queued or running plan. Leaving the page never cancels an
+     *     apply.
      */
     delete: operations["cancel_run_api_runs__run_id__delete"];
     options?: never;
@@ -1832,8 +1800,7 @@ export interface paths {
     /**
      * Assign Kind
      * @description The first calibration step: say what this template is, and get the
-     *     starting ``template.yaml`` for that shape. Refused for a template that
-     *     already has one -- changing kind would discard its calibration.
+     *     starting ``template.yaml`` for that shape.
      */
     post: operations["assign_kind_api_templates__name__kind_post"];
     delete?: never;
@@ -2001,10 +1968,7 @@ export interface paths {
     put?: never;
     /**
      * Rename Template
-     * @description Move a template, and everything naming it, to a new name
-     *     (:mod:`~etsy_listings.core.application.template_rename`). A taken name, a
-     *     running deploy or a preparing template is a ``409``; an unusable name is a
-     *     ``400``.
+     * @description Move a template, and everything naming it, to a new name.
      */
     post: operations["rename_template_api_templates__name__rename_post"];
     delete?: never;
@@ -4999,6 +4963,14 @@ export interface components {
        */
       stage: "publish";
     };
+    /**
+     * Refusal
+     * @description A refusal :data:`REFUSAL_STATUS` answers: ``detail`` is its message.
+     */
+    Refusal: {
+      /** Detail */
+      detail: string;
+    };
     /** RenameListingRequest */
     RenameListingRequest: {
       /** New Name */
@@ -5214,6 +5186,15 @@ export interface components {
     ReviewedRequest: {
       /** Reviewed */
       reviewed: boolean;
+    };
+    /**
+     * RunConflict
+     * @description The run already holding one of the listings: reattach to it with
+     *     ``GET /api/runs/{active_run}`` rather than retrying.
+     */
+    RunConflict: {
+      /** Active Run */
+      active_run: string;
     };
     /**
      * RunRecord
@@ -6190,7 +6171,7 @@ export interface operations {
           "application/json": components["schemas"]["WorkspaceSettingsResponse"];
         };
       };
-      /** @description Precondition Failed */
+      /** @description settings.yaml changed since `revision` */
       412: {
         headers: {
           [name: string]: unknown;
@@ -6199,7 +6180,7 @@ export interface operations {
           "application/json": components["schemas"]["SettingsSaveRefusal"];
         };
       };
-      /** @description Unprocessable Entity */
+      /** @description An edit it refuses */
       422: {
         headers: {
           [name: string]: unknown;
@@ -6396,12 +6377,14 @@ export interface operations {
           "application/json": components["schemas"]["AiRunSummary"];
         };
       };
-      /** @description Not Found */
+      /** @description No run for this listing */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6436,14 +6419,16 @@ export interface operations {
           "application/json": components["schemas"]["AiRunSummary"];
         };
       };
-      /** @description Not Found */
+      /** @description No such listing */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
-      /** @description Conflict */
+      /** @description The active run to reattach to, or the readiness rule that failed */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6483,12 +6468,14 @@ export interface operations {
           "application/json": components["schemas"]["AiRunDetail"];
         };
       };
-      /** @description Not Found */
+      /** @description No such run */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6521,19 +6508,23 @@ export interface operations {
           "application/json": components["schemas"]["AiRunSummary"];
         };
       };
-      /** @description Not Found */
+      /** @description No such run */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
-      /** @description Conflict */
+      /** @description The run has already finished */
       409: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6566,12 +6557,14 @@ export interface operations {
           "application/json": unknown;
         };
       };
-      /** @description Not Found */
+      /** @description No such run */
       404: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6626,7 +6619,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupOverview"];
         };
       };
-      /** @description Conflict */
+      /** @description What the workspace holds now forbids it */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6635,7 +6628,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Precondition Failed */
+      /** @description settings.yaml changed since the page read it */
       412: {
         headers: {
           [name: string]: unknown;
@@ -6644,7 +6637,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Unprocessable Entity */
+      /** @description A wrong password or a folder that is not a repository */
       422: {
         headers: {
           [name: string]: unknown;
@@ -6730,7 +6723,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupOverview"];
         };
       };
-      /** @description Conflict */
+      /** @description A folder that holds files */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6739,7 +6732,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Precondition Failed */
+      /** @description settings.yaml changed since the page read it */
       412: {
         headers: {
           [name: string]: unknown;
@@ -6748,7 +6741,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Unprocessable Entity */
+      /** @description A missing or short password */
       422: {
         headers: {
           [name: string]: unknown;
@@ -6779,6 +6772,15 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+      /** @description The target is the live workspace or holds files, or a restore is running */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -6830,6 +6832,15 @@ export interface operations {
           "application/json": components["schemas"]["BackupOverview"];
         };
       };
+      /** @description Another backup operation is running */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
     };
   };
   set_up_api_backup_setup_post: {
@@ -6854,7 +6865,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupSetUpResponse"];
         };
       };
-      /** @description Conflict */
+      /** @description A folder that holds files */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6863,7 +6874,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Precondition Failed */
+      /** @description settings.yaml changed since the page read it */
       412: {
         headers: {
           [name: string]: unknown;
@@ -6872,7 +6883,7 @@ export interface operations {
           "application/json": components["schemas"]["BackupRefusal"];
         };
       };
-      /** @description Unprocessable Entity */
+      /** @description A short password, a destination whose parent is missing, or a destination that holds part of a backup, another repository, or one the password does not open (field `password`) */
       422: {
         headers: {
           [name: string]: unknown;
@@ -7175,7 +7186,7 @@ export interface operations {
           "application/json": components["schemas"]["BatchDetail"];
         };
       };
-      /** @description The row has no listing to review yet */
+      /** @description The row is still queued or drafting, deleted, or never created */
       409: {
         headers: {
           [name: string]: unknown;
@@ -7716,6 +7727,15 @@ export interface operations {
           "application/json": components["schemas"]["ListingTemplateSaveResult"];
         };
       };
+      /** @description An unusable name, refused before any source is read */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -7880,6 +7900,15 @@ export interface operations {
           "application/json": components["schemas"]["ListingTemplateDetail"];
         };
       };
+      /** @description A taken name; it is never suffixed */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -8028,6 +8057,24 @@ export interface operations {
           "application/json": components["schemas"]["ListingDetail"];
         };
       };
+      /** @description Not a single path segment */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description A listing directory of that name exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -8057,6 +8104,15 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["MediaFileSummary"][];
+        };
+      };
+      /** @description No such listing (an empty list is a listing with no files) */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -8176,13 +8232,29 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Successful Response */
+      /** @description Remote copies: marked `lifecycle: deleted`, the row left pending */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": unknown;
+          "application/json": components["schemas"]["ListingSummary"];
+        };
+      };
+      /** @description No remote copies: wiped */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Published: retire it instead */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -8315,7 +8387,7 @@ export interface operations {
           "application/json": components["schemas"]["MarketSnapshot"];
         };
       };
-      /** @description No such listing, or no market search for it yet */
+      /** @description No such listing, no market search for it yet, or a snapshot that no longer reads, which the next run replaces */
       404: {
         headers: {
           [name: string]: unknown;
@@ -8546,6 +8618,15 @@ export interface operations {
         };
         content: {
           "application/json": unknown;
+        };
+      };
+      /** @description No such listing, or a layer that prints nothing */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -8929,6 +9010,25 @@ export interface operations {
             components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];
         };
       };
+      /** @description No such batch */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description The run already holding one of these listings, to reattach to; or an apply that is not exactly its review, or a batch plan with nothing to deploy */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            components["schemas"]["RunConflict"] | components["schemas"]["Refusal"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -8991,6 +9091,24 @@ export interface operations {
         content: {
           "application/json":
             components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];
+        };
+      };
+      /** @description No such run */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description An apply, or a finished run */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */
@@ -9515,13 +9633,22 @@ export interface operations {
             | components["schemas"]["SingleTemplate"];
         };
       };
-      /** @description Validation Error */
+      /** @description The template already has a kind; changing it would discard its calibration */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description No photos, or a photo count the kind does not take */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["Refusal"];
         };
       };
     };
@@ -9813,6 +9940,24 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["TemplateRenameResponse"];
+        };
+      };
+      /** @description An unusable name */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
+        };
+      };
+      /** @description A taken name, a running deploy, or a template still preparing */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Refusal"];
         };
       };
       /** @description Validation Error */

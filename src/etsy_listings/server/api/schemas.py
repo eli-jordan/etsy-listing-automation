@@ -824,6 +824,13 @@ class ApplyRunDetail(ApplyRunSummary):
 RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind")]
 
 
+class RunConflict(BaseModel):
+    """The run already holding one of the listings: reattach to it with
+    ``GET /api/runs/{active_run}`` rather than retrying."""
+
+    active_run: str
+
+
 class SeoReadinessResponse(BaseModel):
     """Whether AI Mode can be enabled for one saved listing right now
     (implementation plan, "Entry point"). The frontend leaves the control
