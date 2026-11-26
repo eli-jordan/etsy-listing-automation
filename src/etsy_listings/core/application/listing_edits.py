@@ -28,18 +28,8 @@ def edit_listing(
     *,
     batches: BatchStore,
 ) -> InvalidListing | None:
-    """Merge ``patch`` into listing ``name`` and write it. Returns ``None``
-    once written.
-
-    Raises :class:`ListingMissingError` when there is no listing to edit, whether
-    before or after waiting for its lock. Returns :class:`InvalidListing`,
-    writing nothing, when the merged document does not validate
-    structurally. An incomplete one is written (ADR-0043).
-
-    Cancelling a pending delete, by clearing ``lifecycle: deleted``, means the
-    listing never went. The batch rows the delete marked therefore come back
-    (ADR-0036; batch spec, rename and delete hooks).
-    """
+    """Returns ``None`` once written, or :class:`InvalidListing`, writing
+    nothing."""
     before: Document = {}
 
     def merge(raw: Document) -> Document:
@@ -53,11 +43,19 @@ def edit_listing(
     except ValidationError as exc:
         return InvalidListing.of(exc)
     assert merged is not None
+    _restore_rows_if_undeleted(batches, name, before, merged)
+    return None
+
+
+def _restore_rows_if_undeleted(
+    batches: BatchStore, name: str, before: Document, merged: Document
+) -> None:
+    """Cancelling a pending delete means the listing never went, so the batch
+    rows the delete marked come back (ADR-0036)."""
     if before.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
         design = merged.get("design")
         default = design.get("default") if isinstance(design, dict) else None
         batches.restore_listing(name, default)
-    return None
 
 
 def _merge(base: Document, patch: Mapping[str, Any]) -> Document:
