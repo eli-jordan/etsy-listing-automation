@@ -194,7 +194,10 @@ def test_worker_protocol_rejects_unsafe_paths_and_malformed_requests(tmp_path):
         input="".join(json.dumps(message) + chr(10) for message in requests),
         capture_output=True,
         text=True,
-        timeout=5,
+        # Only a hang bound: nothing here is timed. A cold worker start
+        # (numpy, pydantic, the worker package) takes about 0.6s alone and
+        # went past the old 5s under a loaded `poe check`.
+        timeout=GATE_TIMEOUT,
         check=False,
     )
     messages = [json.loads(line) for line in result.stdout.splitlines()]
