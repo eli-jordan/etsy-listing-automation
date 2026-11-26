@@ -208,7 +208,6 @@ export function StagingPage() {
   return (
     <>
       <div className="page-head">
-        {/* A phone's head carries one way back: the page this one came from. */}
         {!isPhone && (
           <>
             <Link className="page-head__crumb" to="/listing-templates">

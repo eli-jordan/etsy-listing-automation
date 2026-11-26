@@ -207,9 +207,6 @@ function ReviewedCell({ row, onReview }: { row: BatchRow; onReview: (next: boole
   );
 }
 
-/** The phone card's Reviewed: a labelled switch, since the desktop's
- * "✓ Reviewed" reads as a status and only a hover title says a click
- * clears it. */
 function ReviewedSwitch({ row, onReview }: { row: BatchRow; onReview: (next: boolean) => void }) {
   return (
     <button
@@ -227,11 +224,6 @@ function ReviewedSwitch({ row, onReview }: { row: BatchRow; onReview: (next: boo
   );
 }
 
-/** The Listings table's summary of each of the batch's listings, for the
- * name's hover card (the same one the Listings page shows). Asked once per
- * set of names, not on every poll: a row's name changes only when it is
- * created, renamed or deleted, and the card is extra -- if the summaries
- * will not load, the names are plain links. */
 function useListingSummaries(names: string[]): Map<string, ListingSummary> {
   const [summaries, setSummaries] = useState<Map<string, ListingSummary>>(new Map());
   const key = [...names].sort().join("\n");

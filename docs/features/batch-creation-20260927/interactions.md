@@ -321,6 +321,15 @@ Not obvious from the designs:
   resumes onto the deployed listing. After a fully successful deploy, the
   listing's cached proposal is removed.
 
+## On a phone
+
+The batch summary's rows become cards, and a card's Reviewed is a labelled
+switch. The desktop's **✓ Reviewed** reads as a status, and only its hover title
+says a click clears it; a phone has no hover to tell it.
+
+The staging page's head carries one way back, to New batch, the page it came
+from. The desktop's Listing templates crumb before it is left out.
+
 ## Departures from the spec
 
 Review changed these decisions after
