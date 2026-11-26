@@ -944,6 +944,29 @@ describe("ListingEditorPage at /listings/new", () => {
     );
   });
 
+  it("keeps the AI chain armed across the naming its design pick sets off", async () => {
+    /* ADR-0003: the pick arms the chain before the draft has a name, and the
+       create that names it is the save that fires it. */
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(
+      detail({ name: "", design: {}, media: [] }),
+    );
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    vi.spyOn(listingsApi, "createListing").mockResolvedValue(
+      detail({ name: "cosmic-cat", design: { default: "designs/cosmic-cat.png" } }),
+    );
+    renderAt("/listings/new");
+    await screen.findByLabelText("Listing name");
+
+    fireEvent.click(screen.getByRole("button", { name: /Choose design for all shirts/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() =>
+      expect(runs.start).toHaveBeenCalledWith("cosmic-cat", { draftBrief: true }),
+    );
+  });
+
   it("shows the picked name even while the listing still cannot be written", async () => {
     /* A create is refused until the document validates -- no price source,
        usually. Without this the seller picks a design, watches the name field

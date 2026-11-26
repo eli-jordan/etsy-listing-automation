@@ -33,13 +33,11 @@ import { isNullableString, useViewScroll, useViewState, viewScope } from "./edit
 
 type Tab = IssueTab;
 
-/** `lead` is the part of a label the phone's one-row tab strip drops
- * ("Listing Images" reads "Images" there); the desktop shows it all. */
-const TABS: { id: Tab; lead?: string; label: string }[] = [
+const TABS: { id: Tab; desktopPrefix?: string; label: string }[] = [
   { id: "variants", label: "Variants" },
   { id: "pricing", label: "Pricing" },
-  { id: "images", lead: "Listing ", label: "Images" },
-  { id: "details", lead: "Listing ", label: "Details" },
+  { id: "images", desktopPrefix: "Listing ", label: "Images" },
+  { id: "details", desktopPrefix: "Listing ", label: "Details" },
 ];
 
 const TAB_IDS = TABS.map((t) => t.id);
@@ -48,12 +46,12 @@ function isTab(value: unknown): value is Tab {
   return TABS.some((t) => t.id === value);
 }
 
-function badgeFor(issues: Issue[], tab: Tab): { block: number; warn: number } {
-  const scoped = issues.filter((i) => i.tab === tab);
-  return {
-    block: scoped.filter((i) => i.severity === "block").length,
-    warn: scoped.filter((i) => i.severity === "warn").length,
-  };
+function issueCount(issues: Issue[], tab: Tab): number {
+  return issues.filter((i) => i.tab === tab && i.severity !== "info").length;
+}
+
+function forRoute(doc: ListingDetail | null, routeName: string | null): ListingDetail | null {
+  return doc !== null && (doc.name || null) === routeName ? doc : null;
 }
 
 export function ListingEditorPage() {
@@ -85,12 +83,7 @@ export function ListingEditorPage() {
   const [fetched, setFetched] = useState<ListingDetail | null>(null);
   const [loadError, setLoadError] = useState("");
 
-  // Whichever of the two is about the listing the URL currently names. Matching
-  // rather than clearing on change is what makes showing a stale document
-  // impossible: one left over from a previous listing simply does not match. (A
-  // draft's name is `""`, which is never a route name.)
-  const matchingFetched = fetched !== null && (fetched.name || null) === routeName ? fetched : null;
-  const initial = handed !== null && handed.name === routeName ? handed : matchingFetched;
+  const initial = forRoute(handed, routeName) ?? forRoute(fetched, routeName);
 
   useEffect(() => {
     if (initial !== null) return;
@@ -121,16 +114,6 @@ export function ListingEditorPage() {
 
   return (
     <ListingEditorPageContent
-      // Deliberately unkeyed. A genuine listing switch already remounts --
-      // `initial` goes `null` above while the new one loads, which unmounts
-      // this whole subtree -- so the key only ever forced the *extra*
-      // remount that naming a draft caused, where `handed` keeps `initial`
-      // non-null. `useAutosave` handles a name change itself (`commitName`
-      // updates its own name, `detail` and `save` before `onNamed`
-      // fires), so that remount threw away state for nothing. It is not
-      // nothing any more: ADR-0003's chain is armed when a design is attached,
-      // which on a new listing is usually *before* it is named, and a
-      // remount there would disarm it before the save that fires it.
       name={routeName}
       initial={initial}
       onBack={() => navigate("/listings")}
@@ -161,8 +144,7 @@ function ListingEditorPageContent({
   const navigate = useNavigate();
   const fromBatch = useSearchParams()[0].get("batch");
   const [member, setMember] = useListingBatch(detail.name);
-  /** A name the design pick chose, before the listing exists under it. */
-  const [pickedName, setPickedName] = useState("");
+  const [nameFromDesign, setNameFromDesign] = useState("");
   /** A name the seller has started typing but not committed. `detail.name` is
    * still `""` at that point -- an uncommitted name is not the listing's name
    * -- so without this a design pick would overwrite what they were typing. */
@@ -176,17 +158,15 @@ function ListingEditorPageContent({
     if (chosen === null || chosen === representative(detail.design)) return;
     if (detail.name === "" && typedName.trim() === "") {
       const named = refName(chosen);
-      setPickedName(named);
+      setNameFromDesign(named);
       commitName(named);
     }
     aiSeo.run.arm();
   }
 
-  /** Goes to `url` once the file holds what is on screen. Whatever is there
-   * reads the file, and this editor is the one place the edit still exists,
-   * so an edit that cannot be written keeps the seller here, where the page
-   * head says why. */
-  function whenWritten(url: string) {
+  // An edit that cannot be written keeps the seller here, the one place it
+  // still exists, where the page head says why.
+  function navigateOnceWritten(url: string) {
     void flush().then((settled) => {
       if (settled.written) navigate(url);
     });
@@ -209,7 +189,7 @@ function ListingEditorPageContent({
               <BackToBatch
                 batch={fromBatch}
                 member={member}
-                onBack={(batch) => whenWritten(`/batches/${encodeURIComponent(batch)}`)}
+                onBack={(batch) => navigateOnceWritten(`/batches/${encodeURIComponent(batch)}`)}
               />
             )
           }
@@ -222,12 +202,12 @@ function ListingEditorPageContent({
                 update={update}
                 adopt={adopt}
                 flush={flush}
-                onCreateTemplate={() => whenWritten(saveAsUrl(detail.name))}
+                onCreateTemplate={() => navigateOnceWritten(newTemplateFromListingUrl(detail.name))}
                 onDeleted={() => navigate(afterDelete(fromBatch), { replace: true })}
               />
             )
           }
-          review={
+          phoneReview={
             phone &&
             member !== null &&
             detail.name !== "" && <ReviewButton member={member} setMember={setMember} />
@@ -235,7 +215,7 @@ function ListingEditorPageContent({
           activity={<AiWorkflowIndicator steps={aiSeo.run.steps} running={aiSeo.run.busy} />}
           title={
             <EditableName
-              value={name ?? pickedName}
+              value={name ?? nameFromDesign}
               onCommit={commitName}
               onDraftChange={setTypedName}
               error={
@@ -257,8 +237,7 @@ function afterDelete(fromBatch: string | null): string {
   return fromBatch === null ? "/listings" : `/batches/${encodeURIComponent(fromBatch)}`;
 }
 
-/** Where Create listing template opens the unsaved template (UI doc §1). */
-function saveAsUrl(listing: string): string {
+function newTemplateFromListingUrl(listing: string): string {
   return `/listing-templates/new?from_listing=${encodeURIComponent(listing)}`;
 }
 
@@ -271,7 +250,7 @@ export function EditorHead({
   activity,
   crumb,
   actions,
-  review,
+  phoneReview,
   kind = "listing",
 }: {
   detail: ListingDetail;
@@ -282,9 +261,7 @@ export function EditorHead({
   activity?: ReactNode;
   crumb?: ReactNode;
   actions?: ReactNode;
-  /** Mark reviewed, beside Deploy, on a phone (`ReviewButton`); the desktop
-   * keeps it in the action row. */
-  review?: ReactNode;
+  phoneReview?: ReactNode;
   kind?: "listing" | "listing-template";
 }) {
   const listing = kind === "listing";
@@ -311,7 +288,7 @@ export function EditorHead({
 
           {listing && detail.name !== "" && (
             <div className="page-head__actions dv-head-actions">
-              {review}
+              {phoneReview}
               <DeployControl name={detail.name} flush={flush} />
             </div>
           )}
@@ -372,9 +349,7 @@ function ShellIssues({
       />
     );
   }
-  // A block is what stops the save; warnings alone stop
-  // nothing, so they are not told the file is being held back.
-  const blocked = issues.some((issue) => issue.severity === "block");
+  const saveWithheld = issues.some((issue) => issue.severity === "block");
   return (
     <IssuesBanner
       issues={issues}
@@ -382,7 +357,7 @@ function ShellIssues({
       onJumpTo={onJumpTo}
       subject="listing-template"
       when={
-        blocked
+        saveWithheld
           ? "Last complete version is kept until then"
           : "Checked against this template’s own configuration"
       }
@@ -433,37 +408,23 @@ export function ListingEditorShell(props: ShellProps) {
 
   function pickTab(next: Tab) {
     flush();
-    if (isPhone && next !== tab) toTabTop();
+    if (isPhone && next !== tab) scrollUnderStrip(tabStrip.current, pager.current, "up");
     setTab(next);
   }
 
-  /** A phone tab change starts the new tab at its top -- under the stuck tab
-   * strip when the page had scrolled past it. The pager slides it in. */
-  function toTabTop() {
-    const strip = tabStrip.current;
-    const content = pager.current;
-    if (strip !== null && content !== null) {
-      // Where the content starts once it sits just under the strip: the
-      // strip's own position says nothing while it is stuck.
-      const gap = Number.parseFloat(window.getComputedStyle(strip).marginBottom) || 0;
-      const top =
-        window.scrollY +
-        content.getBoundingClientRect().top -
-        strip.getBoundingClientRect().bottom -
-        gap;
-      if (top < window.scrollY) window.scrollTo({ top });
+  function jumpToIssue(next: Tab) {
+    pickTab(next);
+    // The banner sits above the tabs, so a Fix would leave the phone's tab
+    // starting near the bottom of the screen. Once the banner has folded and
+    // the tab has rendered, start it under the strip.
+    if (isPhone) {
+      requestAnimationFrame(() => scrollUnderStrip(tabStrip.current, pager.current, "either"));
     }
   }
 
-  /** The issues banner's Fix. On a phone, the tab is also scrolled so it
-   * starts right under the tab strip, whichever way that is: the banner sits
-   * above the tabs, so without this a Fix leaves the seller looking at the
-   * banner with the tab they asked for starting near the bottom of the
-   * screen. Run once the banner has folded and the tab has rendered. The
-   * desktop has no pager element, so the scroll does nothing there. */
-  function jumpToIssue(next: Tab) {
-    pickTab(next);
-    requestAnimationFrame(() => scrollUnderStrip(tabStrip.current, pager.current));
+  function commit(patch: Record<string, unknown>) {
+    update(patch);
+    flush();
   }
 
   usePager(pager, { items: TAB_IDS, current: tab, onPick: pickTab });
@@ -489,13 +450,11 @@ export function ListingEditorShell(props: ShellProps) {
         issues={detail.issues}
         tab={tab}
         onJumpTo={jumpToIssue}
-        onRemovePosition={(name, placement) => {
-          // An explicit action, so it saves now rather than after the debounce.
-          update({
+        onRemovePosition={(name, placement) =>
+          commit({
             template_positions: withoutPosition(detail.template_positions, name, placement),
-          });
-          flush();
-        }}
+          })
+        }
       />
 
       {props.kind === "listing-template" ? (
@@ -514,7 +473,7 @@ export function ListingEditorShell(props: ShellProps) {
 
       <div className="tabs seg" ref={tabStrip}>
         {TABS.map((t) => {
-          const badge = badgeFor(detail.issues, t.id);
+          const count = issueCount(detail.issues, t.id);
           return (
             <div
               key={t.id}
@@ -522,13 +481,8 @@ export function ListingEditorShell(props: ShellProps) {
               onClick={() => pickTab(t.id)}
             >
               <TabLabel tab={t} phone={isPhone} />
-              {/* One warning-coloured count, however many of them stop a
-                  deploy: none of them stops the save (ADR-0043), and the tab
-                  is only saying there is something to look at. The banner
-                  says which ones matter for deploying. */}
-              {badge.block + badge.warn > 0 && (
-                <span className="tab-badge tab-badge--warn">{badge.block + badge.warn}</span>
-              )}
+              {/* Warning-coloured however many block: none stops the save (ADR-0043). */}
+              {count > 0 && <span className="tab-badge tab-badge--warn">{count}</span>}
             </div>
           );
         })}
@@ -567,15 +521,19 @@ export function ListingEditorShell(props: ShellProps) {
 }
 
 /** Scrolls the page so `content` starts just under the tab strip at its
- * stuck position, up or down. `content` is the phone's pager: `null` on the
- * desktop. */
-function scrollUnderStrip(strip: HTMLElement | null, content: HTMLElement | null) {
+ * stuck position: the strip's own position says nothing while it is stuck. */
+function scrollUnderStrip(
+  strip: HTMLElement | null,
+  content: HTMLElement | null,
+  direction: "up" | "either",
+) {
   if (strip === null || content === null) return;
   const style = window.getComputedStyle(strip);
   const gap = Number.parseFloat(style.marginBottom) || 0;
   const stuck = Number.parseFloat(style.top) || 0;
   const top =
     window.scrollY + content.getBoundingClientRect().top - stuck - strip.offsetHeight - gap;
+  if (direction === "up" && top >= window.scrollY) return;
   window.scrollTo({ top: Math.max(0, top) });
 }
 
@@ -597,11 +555,11 @@ function TabPanel({
 }
 
 function TabLabel({ tab, phone }: { tab: (typeof TABS)[number]; phone: boolean }) {
-  if (tab.lead === undefined) return tab.label;
-  if (!phone) return `${tab.lead}${tab.label}`;
+  if (tab.desktopPrefix === undefined) return tab.label;
+  if (!phone) return `${tab.desktopPrefix}${tab.label}`;
   return (
     <>
-      <span className="seg-opt__lead">{tab.lead}</span>
+      <span className="seg-opt__lead">{tab.desktopPrefix}</span>
       {tab.label}
     </>
   );
