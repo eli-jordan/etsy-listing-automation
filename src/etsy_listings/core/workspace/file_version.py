@@ -58,11 +58,11 @@ if sys.platform == "win32":
         return api
 
     def _windows_usn(path: Path) -> int | None:
-        # Attribute-only handles bypass Windows sharing checks. USN reasons
-        # coalesce while another writable handle remains open, so a USN alone
-        # cannot detect every overwrite then. Denying write sharing for this short
-        # metadata read proves quiescence; if another writer is open, fall back to
-        # the content hash instead. Atomic replacement is still shared/allowed.
+        # USN reasons coalesce while another writable handle is open, so a USN
+        # alone misses an overwrite then. Denying write sharing (an
+        # attribute-only handle would skip the check) proves no writer is open;
+        # when one is, this fails and the caller hashes the content. Delete
+        # sharing still lets an atomic replace through.
         api = _kernel_api()
         handle = api.CreateFileW(
             str(path),
@@ -113,18 +113,8 @@ TreeVersion = tuple[tuple[str, int, int], ...]
 
 
 def tree_version(directory: Path) -> TreeVersion:
-    """A cache token for everything under ``directory``: each file's path,
-    size and modification time, from one stat-only walk.
-
-    Far cheaper than :func:`file_version` per file -- a scan of a few hundred
-    files costs milliseconds, where reading what they decide can cost a
-    second -- at the price of its guarantee: a same-size rewrite inside one
-    timestamp tick goes unseen. Use it only where an answer one such write
-    late is harmless and the reader that acts on it re-reads the files.
-    Symlinked directories are followed, once each, so a template aliased to
-    another's files still sees them change. A directory that is missing, or
-    an entry that vanishes mid-walk, simply contributes nothing.
-    """
+    """Stat-only, so a same-size rewrite within one timestamp tick goes unseen:
+    use it only where the reader that acts on the answer re-reads the files."""
     found: list[tuple[str, int, int]] = []
     visited: set[tuple[int, int]] = set()
     pending = [directory]
@@ -160,7 +150,6 @@ def _version_entry(
 
 
 def file_version(path: Path) -> tuple[int | str, ...]:
-    """Return a cache token that changes after a completed file modification."""
     stat = path.stat()
     stamp: tuple[int | str, ...] = (
         stat.st_dev,

@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+
+import pytest
 
 from etsy_listings.core.workspace.file_version import file_version, tree_version
 
@@ -41,6 +44,25 @@ def test_a_tree_version_holds_until_a_file_under_it_is_added_changed_or_removed(
 
 def test_a_missing_directory_has_an_empty_tree_version(tmp_path):
     assert tree_version(tmp_path / "gone") == ()
+
+
+def test_a_symlinked_directory_is_followed_once_and_sees_its_files_change(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "photo.png").write_bytes(b"one")
+    template = tmp_path / "template"
+    template.mkdir()
+    try:
+        (template / "alias").symlink_to(real, target_is_directory=True)
+        (template / "loop").symlink_to(template, target_is_directory=True)
+    except OSError:
+        pytest.skip("this machine cannot create symlinks")
+    before = tree_version(template)
+
+    (real / "photo.png").write_bytes(b"three")
+
+    assert [Path(path).name for path, _, _ in before] == ["photo.png"]
+    assert tree_version(template) != before
 
 
 def test_file_versions_detect_overwrites_while_another_writer_remains_open(tmp_path):
