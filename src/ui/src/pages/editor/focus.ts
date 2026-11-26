@@ -71,7 +71,15 @@ export function restoreFocus(
   }
   const summary = templates.find((template) => template.name === ref.template);
   if (summary === undefined) return null;
-  return ref.colour === null || summary.colours.includes(ref.colour) ? ref : null;
+  return ref.colour === null || hasColour(summary, ref.colour) ? ref : null;
+}
+
+/** Whether a template has a photo for the listing's bare colour slug. A
+ * template whose photos share a filename prefix (`{template}-{colour}.png`)
+ * lists each whole stem as its colour, so `white` is there as
+ * `{template}-white` (see `LocatorTemplate`'s chips). */
+function hasColour(summary: TemplateSummary, colour: string): boolean {
+  return summary.colours.includes(colour) || summary.colours.includes(`${summary.name}-${colour}`);
 }
 
 /** The reel's first picture, as a focus: what the stage opens on when the

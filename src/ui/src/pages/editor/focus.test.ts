@@ -175,3 +175,27 @@ describe("the focus the stage opens on", () => {
     expect(firstFocus([{ template: "flat-lay-01", colour: "black" }], [], [])).toBeNull();
   });
 });
+
+describe("a template whose photos share a filename prefix", () => {
+  // It lists each photo's whole stem as its colour; media stores the slug.
+  const PREFIXED: TemplateSummary = {
+    ...FLAT_LAY,
+    name: "hanging",
+    colours: ["hanging-white", "hanging-black"],
+  };
+
+  it("still opens the stage on the reel's first entry", () => {
+    expect(firstFocus([{ template: "hanging", colour: "white" }], [PREFIXED], [])).toEqual({
+      kind: "template",
+      template: "hanging",
+      colour: "white",
+    });
+  });
+
+  it("restores a remembered colour, and still nothing for one it lacks", () => {
+    const white = { kind: "template", template: "hanging", colour: "white" } as const;
+    const teal = { kind: "template", template: "hanging", colour: "teal" } as const;
+    expect(restoreFocus(white, [PREFIXED], [])).toEqual(white);
+    expect(restoreFocus(teal, [PREFIXED], [])).toBeNull();
+  });
+});
