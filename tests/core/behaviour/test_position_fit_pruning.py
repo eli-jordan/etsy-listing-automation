@@ -50,3 +50,17 @@ def test_prune_spares_a_fit_a_scene_still_holds(workspace_root):
     with PositionFits(workspace).lease([old]):
         assert prune_position_fits(workspace) == []
     assert prune_position_fits(workspace) == [old]
+
+
+def test_prune_removes_nothing_when_the_listings_cannot_be_read(workspace_root, monkeypatch):
+    workspace = listing_with_prepared_marigold(workspace_root)
+    old = fitted(workspace, OLD)
+    fitted(workspace, NEW)
+
+    def unreadable() -> list[str]:
+        raise OSError("listings/ is offline")
+
+    monkeypatch.setattr(workspace, "listing_names", unreadable)
+
+    assert prune_position_fits(workspace) == []
+    assert old in workspace.position_fits()

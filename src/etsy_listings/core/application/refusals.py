@@ -1,19 +1,9 @@
-"""What a listing operation answers instead of doing what it was asked.
-
-Application meaning only, no status codes (module-structure spec,
-*Responsibility and dependency rules*): each refusal inherits a category from
-``core/errors.py`` -- missing, conflict, stale or refused -- and an adapter
-decides once what each category becomes (the HTTP app's ``REFUSAL_STATUS``).
-:class:`InvalidListing` stays an ordinary answer carrying field errors
-(``ListingDetail.field_errors``).
-
-Two shapes, because there are two kinds of "no". A refusal that ends the
+"""Two shapes, because there are two kinds of "no". A refusal that ends the
 operation is raised: nothing was written, and the caller has nothing else to
 report. A malformed document is *returned*, because the caller still has a
-listing (or an empty draft) to describe alongside it -- the contract the
-editor has always relied on, where invalid input is a 200 with the listing
-unchanged. Incompleteness is neither: ADR-0043 writes an incomplete listing
-and leaves its gaps to ``config/listing_validation.py``.
+listing (or an empty draft) to describe alongside it: invalid input is a 200
+with the listing unchanged. Incompleteness is neither: ADR-0043 writes an
+incomplete listing and leaves its gaps to ``config/listing_validation.py``.
 """
 
 from __future__ import annotations
@@ -31,9 +21,6 @@ from etsy_listings.core.errors import (
     StaleError,
     UserFacingError,
 )
-
-# The listing document module raises these two itself, and the listing operations
-# let them through, so they are defined there and listed here with the rest.
 from etsy_listings.core.workspace.listing_documents import (
     ListingMissingError as ListingMissingError,
 )
@@ -44,7 +31,7 @@ from etsy_listings.core.workspace.workspace import InvalidNameError
 
 
 class PublishedListingDeletionError(ConflictError, ValueError):
-    """ADR-0035: a listing Etsy has published is retired, never deleted."""
+    """ADR-0035."""
 
     def __init__(self, name: str) -> None:
         super().__init__(DELETED_ON_PUBLISHED)
@@ -53,10 +40,6 @@ class PublishedListingDeletionError(ConflictError, ValueError):
 
 @dataclass(frozen=True)
 class InvalidListing:
-    """A candidate document that does not structurally validate as a
-    ``Listing``: each failed field, dotted, to pydantic's message. Nothing was
-    written."""
-
     field_errors: dict[str, str]
 
     @classmethod
@@ -65,8 +48,6 @@ class InvalidListing:
 
 
 def field_errors_of(exc: ValidationError) -> dict[str, str]:
-    """Each failed field, dotted, to pydantic's message -- for a listing, and
-    for a listing template's refused save."""
     result: dict[str, str] = {}
     for error in exc.errors():
         loc = ".".join(str(part) for part in error["loc"]) or "__root__"
@@ -74,127 +55,81 @@ def field_errors_of(exc: ValidationError) -> dict[str, str]:
     return result
 
 
-# ---------------------------------------------------------- mockup templates
-#
-# The calibrator's (module-structure plan, PR 7). A mockup template is a
-# folder of photos the seller put in the workspace; nothing creates one, so
-# every operation names one that must already exist.
-
-
 class TemplateMissingError(MissingError):
-    """No ``mockup-templates/{name}/`` directory."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"no template {name!r}")
         self.name = name
 
 
 class TemplateAlreadyCalibratedError(ConflictError, ValueError):
-    """Kind decides the whole ``template.yaml`` shape, so assigning another
-    would silently discard the calibration done in the old one's fields."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"{name!r} already has a template.yaml; delete it to change kind")
         self.name = name
 
 
 class TemplateNameTakenError(ConflictError, ValueError):
-    """A rename named a template directory that already exists. Names that
-    differ only in case count as taken, as Windows makes them one directory."""
+    """On Windows a name differing only in case is the same directory, so it is taken."""
 
     def __init__(self, name: str) -> None:
         super().__init__(f"a template already exists named {name!r}")
         self.name = name
 
 
-class TemplateInUseError(ConflictError):
-    """Something is reading or writing the template, so it cannot move yet."""
+class TemplateInUseError(ConflictError): ...
 
 
-class TemplateKindRefusedError(RefusedError):
-    """The folder's photos cannot be the kind asked for: none at all, or a
-    set where a fixed scene takes exactly one."""
+class TemplateKindRefusedError(RefusedError): ...
 
 
 class TemplatePreviewKindMismatchError(RefusedError):
-    """Unsaved preview geometry shaped for another kind than the template
-    is -- a well-formed request that is wrong for this template."""
-
     def __init__(self, kind: str) -> None:
         super().__init__(f"expected a {kind} preview body")
         self.kind = kind
 
 
-class TemplatePhotoMissingError(MissingError):
-    """There is no one photo to show, sample or composite over: none for the
-    colour asked about, an ambiguous colour suffix, or a template kind that
-    has no per-colour photos at all. The message names what was asked for."""
+class TemplatePhotoMissingError(MissingError): ...
 
 
-class DesignUploadRefusedError(RefusedError):
-    """A test-design upload the library will not take: no filename, a name
-    that is not a plain filename, or bytes that are not an image. Nothing is
-    written."""
+class DesignUploadRefusedError(RefusedError): ...
 
 
-class ListingDesignUploadRefusedError(RefusedError):
-    """An upload ``designs/`` will not take: no filename, a name that is not
-    a plain filename, or bytes that are not a PNG. Nothing is written."""
+class ListingDesignUploadRefusedError(RefusedError): ...
 
 
 class CalibrationDesignMissingError(MissingError):
-    """No uploaded test design by that id. The id came from a list the
-    library handed out, so a missing one means the list moved on."""
-
     def __init__(self, design: str) -> None:
         super().__init__(f"unknown test design {design!r}")
         self.design = design
 
 
 # --------------------------------------------------------- listing templates
-#
-# ADR-0047, template completeness. A name already taken is the domain's own
-# ``listing_templates.ListingTemplateExistsError``, for a create and a rename
-# alike; a refused *document* is not raised but answered (``TemplateSave``).
+# A taken name is ``listing_templates.ListingTemplateExistsError``.
 
 
 class ListingTemplateMissingError(MissingError):
-    """No ``listing-templates/{name}/template.yaml`` -- never was, or a rename
-    or delete holding the template's lock moved it first."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"no listing template {name!r}")
         self.name = name
 
 
 class ReservedListingTemplateNameError(UserFacingError, InvalidNameError):
-    """``draft`` names the *name it* page's unsaved template, so a listing
-    template called that could be created and never opened. A name the
-    server will not take, like one that is not a path segment."""
-
     def __init__(self, name: str) -> None:
         super().__init__(name, f"{name!r} is reserved; pick another name")
         self.name = name
 
 
-class ListingTemplateSourceRefusedError(RefusedError):
-    """What a new listing template is made from cannot become one: not
-    exactly one source, a ``./`` file that cannot be read, a source document
-    that will not load, or an edit naming a ``./`` file the template does
-    not copy."""
+class ListingTemplateSourceRefusedError(RefusedError): ...
 
 
 # ------------------------------------------------------- staging and batches
-#
-# Batch creation's own refusals stay the domain's: ``batches.StagingRefusedError``
-# for an upload refused before staging (ADR-0051's limits and archive
-# safety), ``batches.ConfirmRefusedError`` for a session that cannot be confirmed
-# yet. These are the ones the operations around them add.
+# ``batches.StagingRefusedError`` and ``ConfirmRefusedError`` stay in ``batches``.
 
 
 class StagingMissingError(MissingError):
     """No staging session by this id: never staged, cancelled, confirmed and
-    materialised, or swept seven days after its last edit."""
+    materialised, or swept
+    :data:`~etsy_listings.core.batches.records.STAGING_LIFETIME` after its
+    last edit."""
 
     def __init__(self, session_id: str) -> None:
         super().__init__(f"no staging session {session_id!r}")
@@ -220,34 +155,25 @@ class BatchRowMissingError(MissingError):
 
 
 class BatchRowUploadMissingError(MissingError):
-    """A never-created row whose upload is no longer kept anywhere."""
-
     def __init__(self, row: str) -> None:
         super().__init__(f"batch row {row!r} has no upload kept")
         self.row = row
 
 
 class NothingToRetryError(ConflictError, ValueError):
-    """The row was created and its AI is neither failed nor stopped -- or
-    its listing was deleted, leaving nothing to draft."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"{name} has nothing to retry")
         self.name = name
 
 
 class BatchRowNotReviewableError(ConflictError, ValueError):
-    """Mark reviewed on a row still queued or drafting, deleted, or never
-    created (spec, *Review workflow*)."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"{name} has no listing to review yet")
         self.name = name
 
 
 class NothingToDeployError(ConflictError, ValueError):
-    """A batch deploy with no reviewed row that has changes to deploy
-    (ADR-0059): nothing is queued."""
+    """ADR-0059."""
 
     def __init__(self, label: str) -> None:
         super().__init__(f"{label} has no reviewed listings with changes to deploy")
@@ -255,17 +181,13 @@ class NothingToDeployError(ConflictError, ValueError):
 
 
 class AiDraftingBlockedError(ConfirmRefusedError):
-    """Spec, *Design validation*: a batch is not knowingly created into a
-    queue that cannot run. Nothing is created and the staging stays."""
-
     def __init__(self, reason: str) -> None:
         super().__init__(f"AI drafting can't run yet. {reason}")
         self.reason = reason
 
 
 class AiRunRefusedError(ConflictError, ValueError):
-    """An AI run may not start for this listing now; the message says why,
-    in words the editor shows as AI Mode's hint. One of the three below."""
+    """The message is shown as AI Mode's hint."""
 
     def __init__(self, name: str, message: str) -> None:
         super().__init__(message)
@@ -273,8 +195,7 @@ class AiRunRefusedError(ConflictError, ValueError):
 
 
 class ListingDeployingError(AiRunRefusedError):
-    """ADR-0050: a UI plan or apply holds the listing, and deploying takes
-    precedence over AI. AI Mode is back once the deploy ends."""
+    """ADR-0050."""
 
     def __init__(self, name: str) -> None:
         super().__init__(
@@ -283,8 +204,7 @@ class ListingDeployingError(AiRunRefusedError):
 
 
 class ListingDraftingInBatchError(AiRunRefusedError):
-    """ADR-0048: a queued or running batch row owns the listing's AI, even
-    while no run holds it yet -- two runs must never own one listing."""
+    """ADR-0048."""
 
     def __init__(self, name: str) -> None:
         super().__init__(
@@ -293,19 +213,13 @@ class ListingDraftingInBatchError(AiRunRefusedError):
 
 
 class AiNotReadyError(AiRunRefusedError):
-    """A readiness rule failed (``ai/readiness.py``): the listing lacks a
-    design, a brief or a usable garment profile, a prompt file is missing,
-    or no provider is ready."""
-
     def __init__(self, name: str, reason: str) -> None:
         super().__init__(name, reason)
         self.reason = reason
 
 
 class ProposalMissingError(MissingError):
-    """No proposal is cached for the listing: none was generated, or a
-    replacement, deletion, fully successful apply or cache clearing removed
-    it (ADR-0049)."""
+    """ADR-0049."""
 
     def __init__(self, name: str) -> None:
         super().__init__(f"no proposal for {name!r}")
@@ -313,51 +227,27 @@ class ProposalMissingError(MissingError):
 
 
 class ProposalReplacedError(StaleError, ValueError):
-    """A resolution named a proposal regenerated since the page read it;
-    nothing was recorded."""
-
     def __init__(self, name: str) -> None:
         super().__init__("this proposal was replaced by a newer one")
         self.name = name
 
 
 class ReviewedPlanRefusedError(ConflictError, ValueError):
-    """ADR-0042: a workspace apply names exactly the listings and plan
-    fingerprints of a ready workspace plan the seller reviewed, or it is not
-    queued. The message says which part did not hold."""
-
-
-# --------------------------------------------------------------------- shop
-#
-# The Admin page's Shop tab (Admin plan, PR 3). Both are raised: nothing was
-# written, and the page keeps the seller's edit visible with the reason.
+    """ADR-0042."""
 
 
 class ShopRevisionConflictError(StaleError, RuntimeError):
-    """``shop.yaml`` changed since the page read it; the seller reloads."""
-
     def __init__(self) -> None:
         super().__init__("shop.yaml changed on disk since this page loaded it. Reload to continue.")
 
 
 class InvalidShopEditError(RefusedError):
-    """The edited ``shop.yaml`` would not load: each refused dotted key to
-    the reason, as ``field_errors_of`` names a listing's."""
-
     def __init__(self, field_errors: dict[str, str]) -> None:
         super().__init__("; ".join(f"{key}: {message}" for key, message in field_errors.items()))
         self.field_errors = field_errors
 
 
-# ----------------------------------------------------------------- settings
-#
-# The Admin page's Settings tab (Admin plan, PR 4): the same two refusals for
-# settings.yaml, which has its own revision.
-
-
 class SettingsRevisionConflictError(StaleError, RuntimeError):
-    """``settings.yaml`` changed since the page read it; the seller reloads."""
-
     def __init__(self) -> None:
         super().__init__(
             "settings.yaml changed on disk since this page loaded it. Reload to continue."
@@ -365,9 +255,6 @@ class SettingsRevisionConflictError(StaleError, RuntimeError):
 
 
 class InvalidSettingsEditError(RefusedError):
-    """The edited ``settings.yaml`` would not load: each refused dotted key
-    to the reason."""
-
     def __init__(self, field_errors: dict[str, str]) -> None:
         super().__init__("; ".join(f"{key}: {message}" for key, message in field_errors.items()))
         self.field_errors = field_errors

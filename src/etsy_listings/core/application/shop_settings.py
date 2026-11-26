@@ -1,28 +1,3 @@
-"""The Admin page's Shop tab: ``shop.yaml`` read and edited, and what it names.
-
-Admin plan, PR 3, *Shop*. Three operations, each a caller's whole job:
-
-- :func:`read_shop` and :func:`edit_shop` -- the file with a revision of its
-  exact bytes, and a revision-checked edit of the keys the page offers. The
-  candidate document is validated as a whole ``Defaults`` before anything is
-  written; an edit that changes nothing leaves the file byte-identical
-  (``workspace.revisions``, ADR-0055). A save adopts the new defaults in the
-  running ``Workspace`` so the next plan or deploy reads them, under the
-  file's lock so saves are adopted in the order they were written;
-  a run already under way keeps the ``Workspace.snapshot`` it took.
-- :func:`shop_connections` -- the configured Etsy and Printify shops, and
-  whether a live lookup agrees, without ever erasing a configured identity
-  because a service could not be reached.
-- :func:`shop_lookups` -- the shop's live lists for the defaults' selectors.
-  Etsy's are fetched fresh on every call, never disk-cached (ADR-0033).
-
-An edit copies nothing into listing files, lockfiles or remote state: those
-inherit the defaults when a listing is next planned, and names still resolve
-against the shop's live lists at deploy time (``EtsyShopCatalog``). A currency
-edit converts no price: a saved explicit price keeps its own currency
-(ADR-0006, ADR-0019) and may need a seller edit before the next deploy.
-"""
-
 from __future__ import annotations
 
 import copy
@@ -87,9 +62,6 @@ LookupFailure = (UserFacingError, httpx.HTTPError)
 missing or expired credentials, and the network itself."""
 
 
-# ------------------------------------------------------------- the file
-
-
 @dataclass(frozen=True)
 class ShopView:
     revision: str
@@ -98,8 +70,6 @@ class ShopView:
 
 
 def read_shop(workspace: Workspace) -> ShopView:
-    """``shop.yaml`` as it is now. A file that does not load raises
-    ``ConfigLoadError`` naming it, like every other reader."""
     path = workspace.root / layout.SHOP_FILE
     data, revision = read_revisioned(path)
     raw = parse_yaml(path, data.decode("utf-8-sig")) or {}
@@ -112,12 +82,6 @@ def read_shop(workspace: Workspace) -> ShopView:
 def edit_shop(
     workspace: Workspace, *, expected_revision: str, changes: Mapping[str, object]
 ) -> ShopView:
-    """Apply ``changes`` (dotted key to value; ``None`` removes an optional
-    key) if ``shop.yaml`` is still at ``expected_revision``.
-
-    Refuses with :class:`ShopRevisionConflictError` or :class:`InvalidShopEditError`,
-    writing nothing either way.
-    """
     refused = _refusals(changes)
     if refused:
         raise InvalidShopEditError(refused)
@@ -150,7 +114,6 @@ def edit_shop(
 
 
 def _refusals(changes: Mapping[str, object]) -> dict[str, str]:
-    """Why each refused key in ``changes`` cannot be saved, before the file is read."""
     refused = {
         key: "not editable from the Admin page" for key in changes if key not in EDITABLE_KEYS
     }
@@ -164,7 +127,6 @@ def _refusals(changes: Mapping[str, object]) -> dict[str, str]:
 
 
 def _candidate(path: Path, source: bytes, changes: Mapping[str, object]) -> dict[str, Any]:
-    """``shop.yaml``'s document with ``changes`` applied; ``None`` removes a key."""
     raw = parse_yaml(path, source.decode("utf-8-sig")) or {}
     if not isinstance(raw, dict):
         raise InvalidShopEditError({"__root__": "shop.yaml is not a mapping"})
@@ -177,8 +139,6 @@ def _candidate(path: Path, source: bytes, changes: Mapping[str, object]) -> dict
             node[leaf] = value
     return candidate
 
-
-# ------------------------------------------------------------- connections
 
 ConnectionState = Literal["connected", "not_connected", "lookup_failed"]
 
@@ -216,8 +176,7 @@ SETUP = "etsy-listings setup"
 def shop_connections(
     workspace: Workspace, *, etsy: EtsyShopClient, printify: PrintifyClient
 ) -> ShopConnections:
-    """Both rows. Credentials are checked on disk without reading their
-    values out; only a fully configured service is looked up live."""
+    """Credentials are checked for presence on disk, never read out."""
     return ShopConnections(_etsy_row(workspace, etsy), _printify_row(workspace, printify))
 
 
@@ -248,7 +207,6 @@ def _etsy_row(workspace: Workspace, client: EtsyShopClient) -> ConnectionRow:
 
 
 def _etsy_commands(workspace: Workspace, *, signed_in: bool) -> list[str]:
-    """What to run, in order, before the Etsy shop can be looked up."""
     commands: list[str] = []
     if connections.etsy_app_key(workspace.root) is None or not signed_in:
         commands.append("etsy-listings auth etsy")
@@ -294,9 +252,6 @@ def _failed(row: ConnectionRow, problem: str) -> ConnectionRow:
     )
 
 
-# ----------------------------------------------------------------- lookups
-
-
 @dataclass(frozen=True)
 class ReturnPolicyChoice:
     terms: dict[str, Any]
@@ -331,9 +286,6 @@ class ShopLookups:
 def shop_lookups(
     workspace: Workspace, *, etsy: EtsyListingClient, catalog: CatalogClient
 ) -> ShopLookups:
-    """The selectors' choices, each service failing on its own. A failure
-    reports a problem and no choices; it never touches ``shop.yaml``, and
-    the page keeps showing the saved value."""
     return ShopLookups(_etsy_lookups(workspace, etsy), _printify_lookups(workspace, catalog))
 
 
@@ -343,7 +295,7 @@ def _etsy_lookups(workspace: Workspace, client: EtsyListingClient) -> EtsyLookup
         return EtsyLookups(
             available=False, problem=f"No Etsy shop is configured yet. Run `{SETUP}`."
         )
-    # A fresh catalog per call: one in-memory fetch of each list (ADR-0033).
+    # Fresh per call (ADR-0033).
     shop = EtsyShopCatalog(client, shop_id)
     try:
         partners = shop.production_partners()

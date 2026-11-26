@@ -1,14 +1,3 @@
-"""Workspace-owned durable preparation queue (ADR-0054).
-
-Async hosts offload synchronous request operations. GPU and CPU work each own a
-single executor lane; installation inspection never runs on their event loop.
-
-A backup's pause (workspace-backup spec, *Pausing jobs*) dispatches nothing:
-queued jobs, and a job waiting for the CPU lane, stay as they are and report
-waiting for backup until resume schedules them again. Each job's turn on a
-lane runs inside its gate ticket, which a backup's wait for quiet counts.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -51,10 +40,11 @@ MAX_JOB_PAGE = 1000
 MAX_EVENT_WAIT_S = 30
 """The longest :meth:`Preparations.events` holds a request open for new events."""
 MAX_REQUEST_ID_LENGTH = 256
+_NO_COMPLETE_REPLACEMENT = 0
 
 
 class PreparationRefusedError(ConflictError, ValueError):
-    """Actionable refusal without any inference or installation side effect."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -103,7 +93,6 @@ class Preparations:
 
     @property
     def closing(self) -> bool:
-        """Whether :meth:`close` has begun: running phases stop at their next check."""
         return self._closing
 
     def status(self, identity: str) -> Job:
@@ -135,44 +124,33 @@ class Preparations:
             return tuple(e for e in job.events if e.sequence > after)
 
     def submit(self, template: str, request: PreparationRequest) -> Job:
+        _refuse_malformed(request)
         submission = _Submission.of(
-            template, request, reset_masks_for_photo=self._checked_reset(request)
+            template, request, reset_masks_for_photo=self._mask_reset(request)
         )
         with self.calibration.lock(template), self.store.condition:
             existing = self._admit(submission)
         if existing is not None:
             return existing
-        # Deep inspection may take 25 seconds. Never hold a journal or template
-        # lock while probing packages/models; unrelated status and Cancel stay live.
-        selected = self.runtime.inspect()
+        selected = self._inspect_unlocked()
         with self.calibration.lock(template), self.store.condition:
             job, created = self._enqueue(submission, selected)
         if created:
             self._schedule()
         return job
 
-    def _checked_reset(self, request: PreparationRequest) -> bool:
-        """Refuse a malformed request; the photo mask reset it runs with. A
-        Retry repeats its previous job's reset."""
-        action, request_id = request.action, request.request_id
-        if (
-            action not in ("prepare", "prepare_again", "retry")
-            or not request_id
-            or len(request_id) > MAX_REQUEST_ID_LENGTH
-        ):
-            raise PreparationRefusedError("Invalid preparation action or request ID")
-        if (action == "retry") != (request.previous_job is not None):
-            raise PreparationRefusedError("Retry requires a previous job")
-        if request.reset_masks_for_photo and action != "prepare_again":
-            raise PreparationRefusedError("Photo mask reset requires explicit Prepare again")
+    def _mask_reset(self, request: PreparationRequest) -> bool:
         if request.previous_job is not None:
             return self.status(request.previous_job).reset_masks_for_photo
         return request.reset_masks_for_photo
 
+    def _inspect_unlocked(self) -> Capability:
+        """Deep inspection may take 25 seconds. Call it holding no journal or
+        template lock, so unrelated status and Cancel stay live."""
+        return self.runtime.inspect()
+
     def _admit(self, submission: _Submission) -> Job | None:
-        """Under the template and journal locks, before runtime inspection:
-        the job that already answers the request, or None to go on and
-        inspect the runtime. Refuses a request that cannot be prepared."""
+        """Caller holds the template and journal locks; runs before runtime inspection."""
         template, request = submission.template, submission.request
         known = self._receipted(submission)
         if known is not None:
@@ -196,9 +174,7 @@ class Preparations:
         return self._join(submission, snapshot)
 
     def _enqueue(self, submission: _Submission, selected: Capability) -> tuple[Job, bool]:
-        """Under the template and journal locks, after runtime inspection:
-        recheck what may have changed meanwhile, then write a new job. True
-        when the job is new."""
+        """Caller holds the template and journal locks; rechecks after runtime inspection."""
         template, request = submission.template, submission.request
         known = self._receipted(submission)
         if known is not None:
@@ -233,8 +209,6 @@ class Preparations:
         return self.store.write(job), True
 
     def _receipted(self, submission: _Submission) -> Job | None:
-        """The job that already received this request ID; refuses the same ID
-        with different content."""
         request_id = submission.request.request_id
         for job in self.store.jobs():
             if request_id in job.receipts:
@@ -253,8 +227,6 @@ class Preparations:
         return snapshot
 
     def _join(self, submission: _Submission, snapshot: PreparationInputs) -> Job | None:
-        """An active job already preparing the same geometry, now holding a
-        receipt for this request too."""
         for job in self.store.jobs():
             if (
                 job.template == submission.template
@@ -301,7 +273,6 @@ class Preparations:
         )
 
     def reconcile_saved(self, template: str) -> Job | None:
-        """CPU work only. Missing complete evidence never authorizes inference."""
         with self.calibration.lock(template):
             rebuild = self._planned_rebuild(template)
             if rebuild is None:
@@ -313,9 +284,7 @@ class Preparations:
         return job
 
     def _planned_rebuild(self, template: str) -> _Rebuild | None:
-        """Under the template lock: the saved inputs a CPU rebuild would fit,
-        with the existing evidence that covers every placement; None when the
-        maps are current, a retry is owed, or evidence is incomplete."""
+        """Caller holds the template lock."""
         calibration = self.calibration.read(template)
         if not isinstance(calibration.config.renderer, MarigoldRenderer):
             return None
@@ -344,9 +313,7 @@ class Preparations:
         return _Rebuild(calibration.revision, inputs, selected)
 
     def _queue_rebuild(self, template: str, rebuild: _Rebuild) -> tuple[Job | None, bool]:
-        """Under the journal lock: the active job already fitting these inputs,
-        or a new rebuild job superseding idle obsolete rebuilds. True when the
-        job is new."""
+        """Caller holds the journal lock."""
         inputs = rebuild.inputs
         jobs = self.store.jobs()
         if self._requires_retry(template, inputs, jobs):
@@ -375,20 +342,11 @@ class Preparations:
         return self.store.write(job), True
 
     def cover(self, template: str, limits: PositionLimits) -> Job | None:
-        """Queue background inference so ``template``'s evidence covers every
-        listing position ``limits`` allow (spec *Rendering -> Marigold (option
-        B)*, *Evidence coverage*): the job already doing so, a new one, or
-        None when it is covered, not Marigold, or no worker is installed.
-
-        Callers queue it for an explicit seller action -- saving a position on
-        the template, widening the limits, or saving its geometry -- which
-        ADR-0058 records as authority for this inference (ADR-0054)."""
         with self.calibration.lock(template), self.store.condition:
             planned = self._planned_coverage(template, limits)
             if planned is None or isinstance(planned, Job):
                 return planned
-        # Never hold a template or journal lock while inspecting the runtime.
-        selected = self.runtime.inspect()
+        selected = self._inspect_unlocked()
         if not selected.available or not selected.engine_version or not selected.installation_id:
             return None
         with self.calibration.lock(template), self.store.condition:
@@ -422,9 +380,7 @@ class Preparations:
     def _planned_coverage(
         self, template: str, limits: PositionLimits
     ) -> tuple[str, PreparationInputs, dict[str, Quad]] | Job | None:
-        """Under the template and journal locks: the active coverage job for
-        the same padded quads, what a new one would infer, or None when
-        nothing need be inferred."""
+        """Caller holds the template and journal locks."""
         calibration = self.calibration.read(template)
         if not isinstance(calibration.config.renderer, MarigoldRenderer):
             return None
@@ -480,14 +436,13 @@ class Preparations:
                     error=None if isinstance(exc, StoppedError) else str(exc),
                 )
         for name in self.workspace.template_names(include_uncalibrated=True):
-            # A damaged or changed-photo template remains an actionable reader
-            # refusal; it must not stop recovery of unrelated saved templates.
+            # One damaged template must not stop recovery of the others.
             with suppress(UserFacingError, ValueError, OSError):
                 self.reconcile_saved(name)
             self.cleanup(name)
 
     def start(self) -> None:
-        """Recover and reconcile before scheduling. Hosts run this off the event loop."""
+        """Blocks on recovery: hosts run it off the event loop."""
         if self._started:
             return
         self.recover()
@@ -495,7 +450,6 @@ class Preparations:
         self._schedule()
 
     def close(self) -> None:
-        """Finish active phases and retain resumable records; do not imply Cancel."""
         with self.store.condition:
             self._closing = True
             futures = list(self._futures)
@@ -511,8 +465,6 @@ class Preparations:
     def _supersede_rebuilds(
         self, template: str, inputs: PreparationInputs, jobs: list[Job]
     ) -> Job | None:
-        """Walk the template's active jobs in order: return the first already
-        fitting ``inputs``, superseding idle rebuilds of other inputs before it."""
         for job in jobs:
             if job.template != template or job.phase in TERMINAL or job.kind == "coverage":
                 continue
@@ -535,8 +487,6 @@ class Preparations:
                     self._dispatch(job, lane)
 
     def _runnable(self, job: Job, lane: str) -> bool:
-        """Whether idle ``lane`` may start ``job``: queued rebuilds and CPU
-        steps run on the CPU lane, other queued jobs on the GPU lane."""
         if job.id in self._active or job.phase in TERMINAL:
             return False
         cpu_work = (job.kind == "rebuild" and job.phase == "queued") or job.step == "cpu_queued"
@@ -545,8 +495,7 @@ class Preparations:
         return not cpu_work and job.phase == "queued"
 
     def _dispatch(self, job: Job, lane: str) -> None:
-        """Under the journal lock: mark ``lane`` busy and submit ``job`` to
-        it, unless a backup's pause holds it queued."""
+        """Caller holds the journal lock."""
         ticket = self.gate.admit(f"Prepare job for {job.template}")
         if ticket is None:
             return
@@ -556,7 +505,6 @@ class Preparations:
             )
             future = getattr(self, lane).submit(self._run, job.id, lane, ticket)
         except BaseException:
-            # The turn never began, so neither did its ticket's work.
             ticket.release()
             raise
         self._active.add(job.id)
@@ -565,8 +513,6 @@ class Preparations:
         self._futures.append(future)
 
     def _run(self, identity: str, lane: str, ticket: Ticket) -> None:
-        """``identity``'s turn on ``lane``, and what it leaves to do, under
-        the gate's ``ticket``."""
         with ticket:
             try:
                 self.execution.run(identity, lane)
@@ -578,9 +524,6 @@ class Preparations:
         self._schedule()
 
     def _settle(self, identity: str) -> None:
-        """What a job's turn on a lane leaves to do: rebuild a superseded
-        template, release terminal scratch, queue coverage. Part of the
-        job's turn, so a backup waits for it."""
         job = self.status(identity)
         if job.phase == "superseded" and not self._closing:
             self.reconcile_saved(job.template)
@@ -590,17 +533,11 @@ class Preparations:
             self._cover_prepared(job.template)
 
     def waiting_for_backup(self, job: Job) -> bool:
-        """Whether ``job`` is held by a backup's pause (plan decision P4):
-        queued, or waiting for the CPU lane, while the gate is paused.
-        Never stored in the journal."""
         return self.gate.holds(queued=job.phase == "queued" or job.step == "cpu_queued")
 
     def _cover_prepared(self, template: str) -> None:
-        """Queue ``template``'s coverage now its preparation has finished, so
-        a seller's first position does not wait on inference (ADR-0058,
-        amendment *coverage belongs to preparation*). Queued while closing
-        too: the job is durable and runs on the next start. A failure leaves
-        saving a position to queue it."""
+        """Queued while closing too: the job is durable and runs on the next
+        start."""
         settings = self.workspace.settings_if_readable(
             skipping=f"covering prepared template {template!r}"
         )
@@ -612,11 +549,6 @@ class Preparations:
             logger.warning("not covering prepared template %r: %s", template, exc)
 
     def rename_template(self, old: str, new: str, move: Callable[[], None]) -> None:
-        """Run ``move``, which moves the template's directory, and bring what
-        this queue keeps by the template's name along: its retained
-        predictions, and the job records the rail and a rebuild read them
-        through. Refuses, before ``move``, while a job for ``old`` is queued or
-        running, because it holds the old name and would fail part-way."""
         with self.calibration.lock(old, new), self.store.condition:
             jobs = [job for job in self.store.jobs() if job.template == old]
             if any(job.phase not in TERMINAL for job in jobs):
@@ -627,13 +559,10 @@ class Preparations:
                 self.store.write(job, template=new, evidence=tuple(map(follow, job.evidence)))
 
     def cleanup(self, template: str) -> dict[str, list[str]]:
-        """Release terminal scratch, retaining cancelled/failed retry evidence."""
 
         with self.calibration.lock(template):
             jobs = self.store.jobs()
             current, replacement_order = self._replacement(template)
-            # Completed and superseded jobs cease holding obsolete complete sets.
-            # Retire those references in their authoritative records before deletion.
             with self.store.condition:
                 self._retire_references(template, jobs, replacement_order)
                 jobs = self.store.jobs()
@@ -646,15 +575,13 @@ class Preparations:
             removed_sets = self._remove_prediction_sets(template, current, referenced_paths)
             removed_work = self._remove_work(template, jobs, replacement_order, referenced_paths)
             removed_maps: list[str] = []
-            # An unreadable pointer cannot identify the last valid generation.
-            # Preserve every generation, but allow explicit preparation to repair it.
+            # An unreadable pointer names no valid generation: keep them all.
             with suppress(ValueError, OSError):
                 removed_maps = self.artifacts.cleanup(template)
         return {"prediction_sets": removed_sets, "work": removed_work, "generations": removed_maps}
 
     def _retire_references(self, template: str, jobs: list[Job], replacement_order: int) -> None:
-        """Under the journal lock: drop the evidence and CPU checkpoints of the
-        template's idle retired jobs."""
+        """Caller holds the journal lock."""
         for job in jobs:
             if job.template != template or job.id in self._active:
                 continue
@@ -662,19 +589,16 @@ class Preparations:
                 self.store.write(job, evidence=(), cpu_checkpoints={})
 
     def _replacement(self, template: str) -> tuple[set[str], int]:
-        """The current prediction set, and the order of the job that wrote it
-        when it is a complete replacement (0 otherwise): failed and cancelled
-        jobs before that one no longer need their evidence."""
         pointer = self.execution.evidence.pointer(template)
         if pointer is None:
-            return set(), 0
+            return set(), _NO_COMPLETE_REPLACEMENT
         try:
             selected = self.execution.evidence.select(pointer.inputs, pointer.evidence)
         except (OSError, ValueError):
-            return {pointer.id}, 0
+            return {pointer.id}, _NO_COMPLETE_REPLACEMENT
         if len(selected) == len(pointer.inputs.placements):
             return {pointer.id}, pointer.job_order
-        return {pointer.id}, 0
+        return {pointer.id}, _NO_COMPLETE_REPLACEMENT
 
     def _remove_prediction_sets(
         self, template: str, current: set[str], referenced_paths: list[Path]
@@ -694,7 +618,6 @@ class Preparations:
     def _remove_work(
         self, template: str, jobs: list[Job], replacement_order: int, referenced_paths: list[Path]
     ) -> list[str]:
-        """Remove retired jobs' work directories, then any no job owns."""
         removed = []
         for job in jobs:
             directory = self.workspace.preparation_work(job.id)
@@ -717,9 +640,6 @@ class Preparations:
 
 @dataclass(frozen=True)
 class _Rebuild:
-    """What a planned CPU rebuild fits: the calibration revision it read, the
-    saved inputs with accepted evidence identity, and that evidence."""
-
     config_revision: str
     inputs: PreparationInputs
     evidence: dict[str, CropEvidence]
@@ -727,9 +647,6 @@ class _Rebuild:
 
 @dataclass(frozen=True)
 class _Submission:
-    """A checked request for ``template``, with the photo mask reset it runs
-    with and the digest its receipt records."""
-
     template: str
     request: PreparationRequest
     reset_masks_for_photo: bool
@@ -753,6 +670,20 @@ class _Submission:
         return cls(template, request, reset_masks_for_photo, digest)
 
 
+def _refuse_malformed(request: PreparationRequest) -> None:
+    action, request_id = request.action, request.request_id
+    if (
+        action not in ("prepare", "prepare_again", "retry")
+        or not request_id
+        or len(request_id) > MAX_REQUEST_ID_LENGTH
+    ):
+        raise PreparationRefusedError("Invalid preparation action or request ID")
+    if (action == "retry") != (request.previous_job is not None):
+        raise PreparationRefusedError("Retry requires a previous job")
+    if request.reset_masks_for_photo and action != "prepare_again":
+        raise PreparationRefusedError("Photo mask reset requires explicit Prepare again")
+
+
 def _check_capability(selected: Capability, snapshot: PreparationInputs) -> None:
     if not selected.available or not selected.engine_version or not selected.installation_id:
         raise PreparationRefusedError(selected.problem or "Run etsy-listings marigold setup first")
@@ -764,8 +695,6 @@ def _check_capability(selected: Capability, snapshot: PreparationInputs) -> None
 
 
 def _retired(job: Job, replacement_order: int) -> bool:
-    """Whether a job no longer needs its evidence or work: it completed or was
-    superseded, or it failed or was cancelled before a complete replacement."""
     return job.phase in {"completed", "superseded"} or (
         job.phase in {"failed", "cancelled"} and job.order < replacement_order
     )

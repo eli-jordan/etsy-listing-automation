@@ -1,27 +1,4 @@
-"""Renaming a mockup template, and everything that follows it.
-
-A template's name is its directory, and nothing else identifies it, so a move
-alone would leave every reference pointing at a folder that is gone. The
-directory goes first, because it is the one step that can fail for reasons a
-retry fixes (a photo open elsewhere, a taken name), and at that point nothing
-has changed. Then, in the order that keeps a batch from making a listing out
-of a stale frozen document:
-
-1. batch and staging records, whose frozen documents name the template;
-2. listing templates and garment profiles;
-3. each listing: its ``listing.yaml``, its render and preview caches, and the
-   Etsy image refs in its lockfile (:mod:`~etsy_listings.core.engine.template_refs`).
-
-Marigold maps live inside the directory and are template-relative, so they
-move with it and stay valid; the preparation queue brings its own records
-(:meth:`Preparations.rename_template`).
-
-Every reference file is tried, and one that cannot be read or written is
-reported rather than stopping the rest: by then the directory has moved, so
-stopping would only leave more to fix by hand. A rename does not touch the
-photos, whose filenames may carry any prefix (ADR-0004).
-
-The template's lock covers only the move. It is not held across the listing
+"""The template's lock covers only the move. It is not held across the listing
 edits, because a listing's lock is taken first everywhere else. The check for
 active deploys is a check, not a lock: the second-process caveat in
 :mod:`etsy_listings.core.workspace.locks` applies here too.
@@ -56,15 +33,11 @@ Change = Callable[[dict[str, Any]], dict[str, Any] | None]
 
 
 class TemplateMover(Protocol):
-    """The preparation queue's side of a rename."""
-
     def rename_template(self, old: str, new: str, move: Callable[[], None]) -> None: ...
 
 
 @dataclass(frozen=True)
 class RenameHosts:
-    """What a rename asks of the running process."""
-
     preparations: TemplateMover
     records: BatchRecords
     deploying: Callable[[], bool]
@@ -72,9 +45,6 @@ class RenameHosts:
 
 @dataclass(frozen=True)
 class TemplateRename:
-    """What followed a rename, as workspace-relative files. ``unresolved`` may
-    still name the old template, and the seller has to look at them."""
-
     updated: tuple[str, ...] = ()
     unresolved: tuple[str, ...] = ()
 
@@ -86,14 +56,6 @@ class _Outcome:
 
 
 def rename_template(workspace: Workspace, old: str, new: str, hosts: RenameHosts) -> TemplateRename:
-    """Move mockup template ``old``, and everything naming it, to ``new``.
-
-    Renaming to the same name changes nothing. Refusals, all before anything
-    changes: ``InvalidNameError``, :class:`TemplateMissingError`,
-    :class:`TemplateNameTakenError`, and :class:`TemplateInUseError` while a
-    deploy runs, while the template is being prepared, or while Windows holds
-    one of its files open.
-    """
     require_template(workspace, old)
     destination = workspace.template_dir(new)
     if new != new.strip(" ."):  # Windows drops these, so the refs would not match the folder.
@@ -112,8 +74,8 @@ def rename_template(workspace: Workspace, old: str, new: str, hosts: RenameHosts
 
 
 def _move(workspace: Workspace, old: str, new: str, destination: Path) -> None:
-    """Under both templates' locks. A name Windows will not take surfaces only
-    here, as an ``OSError`` that is not about permissions."""
+    """Caller holds both templates' locks. A name Windows refuses surfaces
+    only here, as a non-permission ``OSError``."""
     require_template(workspace, old)
     if destination.exists():
         raise TemplateNameTakenError(new)
@@ -147,8 +109,7 @@ def _follow_garment_profiles(workspace: Workspace, old: str, new: str, outcome: 
 
 
 def _follow_file(workspace: Workspace, path: Path, change: Change, outcome: _Outcome) -> None:
-    """``path``'s references, edited in place (ADR-0055). The caller holds
-    whatever lock guards it."""
+    """ADR-0055. The caller holds whatever lock guards ``path``."""
     relative = workspace.relative_path(path)
     try:
         document = yaml.safe_load(read_bytes_retrying(path))
@@ -179,8 +140,7 @@ def _follow_listings(workspace: Workspace, old: str, new: str, outcome: _Outcome
 def _follow_listing(
     workspace: Workspace, documents: ListingDocuments, listing: str, old: str, new: str
 ) -> bool:
-    """Under the listing's lock; whether ``listing.yaml`` changed. A listing
-    awaiting retraction may have only a lockfile, which follows all the same."""
+    """Caller holds the listing's lock. A listing awaiting retraction may be only a lockfile."""
     written = None
     if documents.exists(listing):
         written = documents.edit(listing, lambda document: rename_template_refs(document, old, new))

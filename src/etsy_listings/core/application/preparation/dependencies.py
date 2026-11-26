@@ -1,5 +1,3 @@
-"""Host-injected native runtime and worker boundaries."""
-
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path

@@ -2,14 +2,11 @@
 
 Import coordinator.Preparations for submit/status/list_jobs/cancel/events,
 reconcile_saved and lifecycle start/close/recover/cleanup. Models are immutable
-public request results. Store and execution are implementation details reached
-only through Preparations. Hosts offload synchronous operations to their request
-executor; neither capability inspection nor numerical work belongs on an async
-HTTP event loop. start also reconciles saves interrupted before job creation.
+public request results. Store, execution and evidence are implementation details
+reached only through Preparations.
 
-previews.editor_preview is the revision-bound transient editor operation, reached
-through application.scene_previews; previews also holds every rule a draft answers to.
-It uses core.preparation.evidence_reader.EvidenceReader for validated retained evidence without
-publishing maps or invoking models. Prediction publication remains job-owned.
-activity scopes foreground priority to a workspace at CPU phase and solver boundaries.
+previews.editor_preview is the transient editor composite, reached through
+application.scene_previews, and draft_rules holds every rule a draft answers to;
+neither publishes maps nor invokes models. activity scopes foreground priority
+to a workspace.
 """

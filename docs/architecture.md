@@ -393,7 +393,7 @@ and `draft_scene` take a size and a decoder (`SceneImages`) and answer with a
 finished picture for either renderer, a `RenderedScene` (the PNG the render stage
 writes, with its identity) or an editor-size `SceneFrame`. It owns whether a draft
 still matches what is saved, through the rules gathered in
-`application.preparation.previews`, and turns prepared files it cannot use into
+`application.preparation.draft_rules`, and turns prepared files it cannot use into
 `PreparationRequiredError`. The decoder is a real seam: the server's memo
 (`server/api/imagecache.py`, request-serving state that stays out of core) and
 `DISK_IMAGES`, which the scene warmer uses. `server/api/scene_responses.py` turns a

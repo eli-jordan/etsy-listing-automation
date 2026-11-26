@@ -1,17 +1,3 @@
-"""Prune position fits no listing references (spec *Rendering → Marigold
-(option B)*: "Fits no listing references are pruned with the cache").
-
-A fit is kept while some listing's saved position, against its template's
-*current* saved inputs and evidence, produces its key -- exactly the key
-``lease_scene`` would ask for. Fits of an old geometry, mask or evidence are
-therefore removed once nothing produces them; they are rebuildable from
-evidence. :meth:`PositionFits.prune` spares fits being written or leased by a
-scene, and anything stored after the scan began.
-
-The scene warmer runs this at startup and each time its queue drains, so a
-saved position change prunes the fit it replaced.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -33,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 def prune_position_fits(workspace: Workspace) -> list[str]:
-    """Remove the fits no listing's current position produces; the removed
-    keys. Nothing is removed when the workspace cannot be read reliably."""
     if not workspace.position_fits():
         return []
     fits = PositionFits(workspace)
@@ -48,7 +32,6 @@ def prune_position_fits(workspace: Workspace) -> list[str]:
 
 
 def _referenced(workspace: Workspace, fits: PositionFits) -> set[str]:
-    """The keys every loadable listing's saved positions produce now."""
     templates = _Templates(workspace)
     keep: set[str] = set()
     for name in workspace.listing_names():
@@ -79,8 +62,6 @@ def _keys(
 
 
 class _Templates:
-    """Each Marigold template's config and saved inputs, read once."""
-
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
         self._loaded: dict[str, tuple[AnyTemplate, PreparationInputs] | None] = {}
@@ -92,8 +73,6 @@ class _Templates:
 
 
 def _template(workspace: Workspace, name: str) -> tuple[AnyTemplate, PreparationInputs] | None:
-    """A Marigold template's config and saved inputs, or None when it is not
-    Marigold or does not load (its listings then keep no fit)."""
     try:
         config = template_state(workspace, name).require()
         if not isinstance(config.renderer, MarigoldRenderer):
