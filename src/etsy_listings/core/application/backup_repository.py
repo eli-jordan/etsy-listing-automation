@@ -71,7 +71,7 @@ def holds_files(folder: Path) -> bool:
 
 
 def has_repository(folder: Path) -> bool:
-    """Whether ``folder`` holds restic's ``config``. Runs no restic."""
+    """Runs no restic."""
     return (folder / "config").is_file()
 
 
@@ -114,9 +114,8 @@ class ConfiguredBackup:
     settings: BackupSettings
     """Its ``repository`` is the storage folder this operation uses."""
     binary: Path | None
-    """The restic to run without installing one; None when there is none."""
+    """None when restic is not installed."""
     store: BackupStateStore
-    """The state and run history in ``~/.etsy-listings`` (or a test's home)."""
     secrets: Secrets
     binaries: ResticBinaries
     restic: OpenRepository | None = None
@@ -187,9 +186,6 @@ class ConfiguredBackup:
     def open(
         self, *, folder: Path | None = None, password: str | None = None, install: bool = False
     ) -> Repository:
-        """The repository in the storage folder, or in ``folder`` (a
-        connect's staging copy). ``install`` downloads the pinned restic when
-        none is found."""
         password = password or self.secrets.require_backup_password()
         binary = self.binaries.ensure(self.settings.restic_binary) if install else self.binary
         if binary is None:
@@ -257,8 +253,6 @@ def workspace_id_for(snapshots: Sequence[Snapshot]) -> WorkspaceId:
 
 
 def ensure_workspace_id(workspace: Workspace, snapshots: Sequence[Snapshot] = ()) -> WorkspaceId:
-    """The workspace ID in ``backup.workspace_id``, writing
-    :func:`workspace_id_for` ``snapshots`` there for a block without one."""
     chosen = workspace_id_for(snapshots)
     for _ in range(3):
         current = workspace_settings.read_settings(workspace)

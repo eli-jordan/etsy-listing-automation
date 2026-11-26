@@ -452,9 +452,8 @@ class BackupCoordinator:
         return [run for run in self._store.runs() if run.repository == str(settings.repository)]
 
     def _cached(self, settings: BackupSettings, runs: list[RunRecord]) -> RepositoryReading:
-        """The last read, unless it was of another repository or a run has
-        been recorded since: a run's history line lands before the run's
-        own refresh, and its snapshot must be listed with it."""
+        """Stale once a run is recorded: a run's history line lands before
+        its own refresh, and its snapshot must be listed with it."""
         cached = self._reading
         newest = runs[-1].finished_at if runs else None
         fresh = cached is not None and (newest is None or newest < cached[1])

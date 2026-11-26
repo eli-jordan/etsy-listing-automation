@@ -29,11 +29,9 @@ class RepositoryPresentError(ConflictError):
 @dataclass(frozen=True)
 class Replacement:
     repository: Path
-    """The local folder, new or empty; saved as ``backup.repository``."""
     password: str | None
     """Used only when none is stored."""
     expected_revision: str
-    """``settings.yaml``'s revision the seller saw."""
 
 
 def create_new_repository(

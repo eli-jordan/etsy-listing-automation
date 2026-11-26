@@ -12,6 +12,7 @@ import typer
 from etsy_listings.cli import prompts
 from etsy_listings.cli.options import RootOption, open_workspace
 from etsy_listings.core.application.backup_provisioning import (
+    Created,
     NewRepository,
     PasswordSource,
     Provisioned,
@@ -95,13 +96,13 @@ def init(root: RootOption = None) -> None:
 
 
 def _report_init(workspace: Workspace, storage: Path, done: Provisioned) -> None:
-    if done.connected is None:
-        repository_id = done.repository_id or ""
-        typer.echo(f"Created the backup repository at {storage} (id {repository_id[:8]}).")
+    brought = done.brought
+    if isinstance(brought, Created):
+        typer.echo(f"Created the backup repository at {storage} (id {brought.repository_id[:8]}).")
     else:
         typer.echo(
-            f"Connected to the backup in {done.connected.source}: "
-            f"{len(done.connected.snapshots)} snapshots, copied to {storage}."
+            f"Connected to the backup in {brought.source}: "
+            f"{len(brought.snapshots)} snapshots, copied to {storage}."
         )
     if done.workspace_id.notice is not None:
         typer.echo(done.workspace_id.notice)

@@ -16,8 +16,10 @@ import pytest
 from etsy_listings.core.application.backup_provisioning import (
     STAGING_MARK,
     BackupsSetUpError,
+    Connected,
     ConnectPasswordError,
     ConnectRefusedError,
+    Created,
     DestinationCopy,
     DestinationHoldsRepositoryError,
     ExistingCopiesError,
@@ -369,7 +371,7 @@ def test_the_password_is_stored_first_the_repository_built_beside_and_the_block_
     assert (storage / "config").is_file()
     assert not any(STAGING_MARK in p.name for p in storage.parent.iterdir())
     assert backup_settings(workspace).repository == storage
-    assert (done.connected, done.repository_id, done.stored_password) == (None, "f00d", True)
+    assert (done.brought, done.stored_password) == (Created("f00d"), True)
 
 
 def test_trying_is_told_before_each_copy_or_before_a_new_repository(
@@ -532,8 +534,8 @@ def test_of_several_copies_it_connects_the_complete_one_that_passes_a_check(
     done = _set_up(workspace, restic, storage, source, destinations=(syncing, failing, passing))
 
     assert source == DestinationCopy((failing, passing))
-    assert done.connected is not None
-    assert done.connected.source == passing
+    assert isinstance(done.brought, Connected)
+    assert done.brought.source == passing
     assert len(checks) == 2
 
 
@@ -621,12 +623,12 @@ def test_set_up_adopts_the_one_workspace_id_a_copy_carries(
     done = _set_up(workspace, restic, storage, DestinationCopy((cloud,)), destinations=(cloud,))
 
     chosen = backup_settings(workspace).workspace_id
-    assert done.connected is not None
+    assert isinstance(done.brought, Connected)
     if adopted:
-        assert (chosen, done.connected.notice) == (OURS, None)
+        assert (chosen, done.brought.notice) == (OURS, None)
     else:
         assert chosen not in (None, OURS, THEIRS)
-        assert done.connected.notice == SEVERAL_WORKSPACES
+        assert done.brought.notice == SEVERAL_WORKSPACES
 
 
 @pytest.mark.parametrize("saved_id", [WORKSPACE_ID, None])
