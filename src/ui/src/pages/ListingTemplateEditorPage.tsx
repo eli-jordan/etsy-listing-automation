@@ -31,8 +31,6 @@ function sourceFrom(params: URLSearchParams): ListingTemplateSource | null {
   return null;
 }
 
-/** Whose `./` files the Images tab draws. A saved template's are its own;
- * an unsaved one's are only planned copies, still at the source. */
 function ownerOf(template: ListingTemplateDetail): MediaOwner | null {
   if (template.name !== "") return { kind: "listing-template", name: template.name };
   if (template.source === null || template.source === undefined) return null;
@@ -149,8 +147,6 @@ function ListingTemplateEditor({
   const savedName = detail.name || name;
 
   function clone(template: string) {
-    // The clone is of the file, so an edit not in it would be left behind. The
-    // page head says why it stayed.
     void flush().then((settled) => {
       if (settled.written) {
         navigate(`/listing-templates/new?from_template=${encodeURIComponent(template)}`);

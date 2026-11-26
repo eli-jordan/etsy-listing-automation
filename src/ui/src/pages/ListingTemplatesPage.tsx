@@ -20,8 +20,7 @@ function plural(count: number, one: string, many: string): string {
 
 const ZIP_TYPES = new Set(["application/zip", "application/x-zip-compressed"]);
 
-/** What a drag over a card is carrying, as far as a drag can tell: only the
- * kinds and types of its items, never their names, until the drop. */
+/** Until the drop, a drag exposes only its items' kinds and types, not their names. */
 function dragged(transfer: DataTransfer): { count: number; allPngs: boolean; zip: boolean } {
   const files = Array.from(transfer.items ?? []).filter((item) => item.kind === "file");
   return {
@@ -49,9 +48,7 @@ function TemplateCard({
   const owner = { kind: "listing-template", name: template.name } as const;
   const pricing = template.pricing_plan_name ?? "Prices set per size";
   const encoded = encodeURIComponent(template.name);
-  // Every card is a drop target, and the overlay exists only during a drag
-  // (UI doc §2). A counter, not a flag: entering a child fires `dragleave`
-  // on the card before `dragenter` on the child.
+  // A depth counter: entering a child fires the card's dragleave before the child's dragenter.
   const [over, setOver] = useState<(ReturnType<typeof dragged> & { depth: number }) | null>(null);
 
   function enter(event: DragEvent<HTMLElement>) {
@@ -98,8 +95,7 @@ function TemplateCard({
               >
                 {mediaKind(entry) === "video" ? (
                   <>
-                    {/* A clip has no tile to ask for: its own first frames
-                        are the poster, as everywhere else a video shows. */}
+                    {/* Videos have no tile; the clip's first frames are its poster. */}
                     <MutedClip src={pictureFor(entry, null, "full", owner)} />
                     <span className="bc-deck__play" aria-label="Video">
                       <PlayIcon weight="fill" aria-hidden="true" />
