@@ -88,7 +88,7 @@ EngineEventSink = Callable[[EngineRunEvent], None]
 
 
 def ignore_engine_event(event: EngineRunEvent) -> None:
-    """The default sink for callers interested only in the final report."""
+    del event
 
 
 def never_stop() -> bool:
