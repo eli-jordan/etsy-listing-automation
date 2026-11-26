@@ -115,7 +115,7 @@ def edit_settings(
 def template_positions_impact(
     request: Request, body: TemplatePositionImpactRequest
 ) -> TemplatePositionImpactResponse | JSONResponse:
-    """A read for Settings' confirmation (template positions PR 5): who the
+    """A read for Settings' confirmation: who the
     candidate limits would block, and which Marigold templates would need
     model inference to cover them."""
     try:

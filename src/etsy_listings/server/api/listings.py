@@ -241,7 +241,7 @@ def patch_listing(
     that will not validate writes nothing and answers 200 with
     ``field_errors`` beside the listing as it still is. Saved positions
     queue any Marigold coverage inference they need after the response, since
-    finding the installed worker can take seconds (option B)."""
+    finding the installed worker can take seconds (ADR-0058)."""
     workspace, name = target.workspace, target.name
     refused = edit_listing(workspace, name, body, batches=app_state.batch_store(request))
     if refused is None:
@@ -299,10 +299,6 @@ def rename_listing(
 ) -> ListingDetail:
     """Move a listing, whole, to a new name -- with everything keyed by it
     (:func:`~etsy_listings.core.application.listing_identity.rename_listing`).
-
-    POST rather than PUT: the body is neither the listing nor its new
-    representation, and a second call 404s. `POST /api/templates/{name}/kind` is
-    the same shape.
     """
     rename(
         target.workspace,
@@ -317,13 +313,11 @@ def rename_listing(
 def _preview_response(
     request: Request, target: Target, template: str, colour: str | None, scene_hash: str | None
 ) -> Response:
-    """ADR-0040, ADR-0041: the preview a plan run already rendered for this scene.
+    """The preview a plan run already rendered for this scene (ADR-0040, ADR-0041).
 
-    With ``hash``, the scene hash the plan under review reported for it
-    (``RenderSceneSnapshot.scene_hash``), that plan's file is served as it
-    stands -- the review shows that plan, and apply runs exactly it. Without,
-    :func:`~etsy_listings.core.engine.preview.lookup_preview` recomputes the
-    *current* hash, which plans the whole listing again.
+    With ``hash`` (the reviewed plan's ``RenderSceneSnapshot.scene_hash``) that
+    plan's file is served as it stands; without, the current hash is
+    recomputed, which plans the whole listing again.
     """
     if scene_hash is not None:
         path = target.workspace.preview_file(target.name, template, colour, scene_hash)
@@ -380,11 +374,10 @@ def scene_preview(
     query: Annotated[ScenePreviewQuery, Depends()],
 ) -> Response:
     """One of this listing's scenes, each layer printing the file its depicted
-    colour resolves to in the *saved* listing (A35) -- the Variants stage and
+    colour resolves to in the *saved* listing -- the Variants stage and
     every Listing Images picture, multi-colour scenes included (spec:
-    *Previews*). Resolved here rather than from a design name in the URL,
-    because the editor showing one file while Printify prints another is the
-    thing a single resolver exists to prevent.
+    *Previews*). Resolved here rather than from a design name in the URL, so
+    the editor shows the file Printify prints.
 
     A layer that resolves to nothing is left bare rather than failing the
     picture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).
@@ -440,28 +433,17 @@ def scene_artwork_picture(
 def listing_draft(request: Request) -> ListingDetail:
     """The listing `+ New listing` opens the editor on, before it has a name.
 
-    There is no separate create *form* -- the editor itself is the form, and a
-    listing is written the moment it is named and priced. What the editor needs
-    first is a document to render, and inventing one in the browser would put
-    the starting shape of a listing in two places, so the server hands over
-    `EMPTY_DRAFT`: nothing chosen, nothing invented, and a block issue for each
-    thing still to pick.
-
-    ``name`` comes back empty, which is exactly the state the editor refuses to
-    save in.
+    The server hands over `EMPTY_DRAFT`: nothing chosen, nothing invented, and
+    a block issue for each thing still to pick. ``name`` comes back empty,
+    which the editor refuses to save.
     """
     return _describe_draft(app_state.workspace(request), EMPTY_DRAFT)
 
 
 @support_router.post("/api/listing-draft", response_model=ListingDetail)
 def describe_listing_draft(request: Request, body: DraftListingRequest) -> ListingDetail:
-    """The same, for a candidate the editor has since edited. Writes nothing.
-
-    The mount-time draft above answers once; this is what keeps the issues
-    banner true for every edit made before the listing has a name. Without it
-    the banner would still be saying "no colours enabled" about a listing whose
-    colours were picked a minute ago -- and the banner is the only way an
-    unsaved listing can be told what it is still missing.
+    """The same, for a candidate the editor has since edited, so its issues
+    stay current before the listing has a name. Writes nothing.
     """
     return _describe_draft(app_state.workspace(request), body.document)
 
@@ -557,17 +539,12 @@ def create_etsy_section(request: Request, body: CreateEtsySectionRequest) -> Ets
 
 @support_router.get("/api/common-copy", response_model=list[CommonCopySummary])
 def list_common_copy(request: Request) -> list[CommonCopySummary]:
-    """The Description tab's common-copy selector (AI SEO implementation
-    plan, PR6): every reusable description body, with the title and summary
-    its front matter carries, so the picker can show something readable
-    rather than a bare filename.
+    """The Description tab's common-copy selector: every reusable description
+    body, with the title and summary its front matter carries.
 
-    A file whose front matter will not parse is left out -- read-only, so
-    there is nowhere here to report the problem, and offering it would only
-    produce a pick that immediately fails to resolve. (A *stored* ref that
-    fails to resolve still surfaces as a details-tab issue -- see
-    `Workspace.resolve_description` -- this is only the list of things one
-    could newly pick.)
+    A file whose front matter will not parse is left out, since picking it
+    would fail to resolve. A stored ref that fails to resolve is still a
+    details-tab issue.
     """
     workspace = app_state.workspace(request)
     summaries: list[CommonCopySummary] = []
@@ -615,13 +592,7 @@ def listing_design_thumbnail(request: Request, name: str) -> Response:
     """The artwork itself, downscaled -- what the listings table, its hover
     card and the editor's design strip all show.
 
-    Distinct from ``designs.py``'s calibrator library for the same reason
-    ``GET /api/listing-designs`` is: ``designs/`` holds artwork that ships,
-    ``test-designs/`` holds calibration targets, and a listing's design is
-    never one of the latter.
-
-    An unusable *name* needs nothing here: ``InvalidNameError`` out of
-    ``design_file`` becomes a 400 through the app-wide handler in ``app.py``.
+    Served from ``designs/``, never the calibrator's ``test-designs/``.
     """
     workspace = app_state.workspace(request)
     path = workspace.design_file(name)

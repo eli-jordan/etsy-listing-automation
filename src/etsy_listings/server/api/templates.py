@@ -126,7 +126,7 @@ def rename_template(
     """Move a template, and everything naming it, to a new name
     (:mod:`~etsy_listings.core.application.template_rename`). A taken name, a
     running deploy or a preparing template is a ``409``; an unusable name is a
-    ``400``. POST for the reason a listing's rename is."""
+    ``400``."""
     deployments: Deployments = request.app.state.deployments
     done = rename(
         template.workspace,
@@ -168,12 +168,9 @@ def _photo(template: Target, colour: str | None) -> Path:
 
 @router.get("/{name}/thumbnail")
 def thumbnail(template: Annotated[Target, Depends(target)], colour: str | None = None) -> Response:
-    """The template's own photo, downscaled, for the rail -- not a render,
-    which once per row would make opening the calibrator cost as much as
-    calibrating. ``colour`` narrows it to one photo of a colour-matrix set,
-    for the listings editor's reel. Which photo is
-    :func:`~etsy_listings.core.application.mockup_templates.template_photo`'s
-    question; how it is downscaled is :mod:`.thumbnails`'."""
+    """The template's own photo, downscaled, for the rail -- not a render, so
+    opening the calibrator stays cheap. ``colour`` narrows it to one photo of
+    a colour-matrix set, for the listings editor's reel."""
     return thumbnail_response(_photo(template, colour))
 
 
@@ -234,9 +231,8 @@ def put_config(
 
 
 def _geometry(body: PreviewRequest) -> PreviewGeometry:
-    """The request's unsaved geometry, in the shape it was posted in. Which
-    shape a template takes is decided by the kind it already is, not by
-    sniffing the body (``unsaved_preview`` refuses another kind's)."""
+    """The request's unsaved geometry, as posted; ``unsaved_preview`` refuses
+    a shape other than the template's kind."""
     if isinstance(body, MultiplePreviewRequest):
         return PreviewGeometry(
             kind="multiple",
@@ -315,13 +311,10 @@ def design_preview(
     ``design`` is a name from ``GET /api/listing-designs``, resolved through
     ``Workspace.design_file``; ``test_design`` is the calibrator library's id
     instead, through :func:`resolve_design`, bundled grid by default. Exactly
-    one of the two -- they name files in different places, and guessing which
-    one a bare name meant is how a test target would end up judged as artwork.
+    one of the two: they name files in different places, and guessing would
+    judge a test target as artwork.
 
-    A *listing's* scenes are not previewed here: ``GET
-    /api/listings/{name}/scene-preview`` resolves each layer's file from the
-    saved listing (A35), so its editor cannot show one file while Printify
-    prints another.
+    A listing's scenes are previewed by ``GET /api/listings/{name}/scene-preview``.
     """
     workspace, colour, scale = template.workspace, query.colour, query.scale
     design_resolved_once = cache(_preview_design(workspace, design, test_design))

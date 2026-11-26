@@ -221,8 +221,8 @@ def cover_prepared(request: Request) -> list[PreparationJobResponse]:
 
 @router.get("/templates/{name}/coverage")
 def coverage(request: Request, name: str, response: Response) -> PositionReadinessResponse:
-    """Whether the editor may adjust this template yet. Apart from the status
-    above, which the catalog reads for every template."""
+    """Whether the editor may adjust this template yet. Separate from the
+    preparation status, which the catalog reads for every template."""
     response.headers["Cache-Control"] = "no-store"
     preparations = coordinator(request)
     preparations.workspace.template_dir(name)

@@ -376,9 +376,8 @@ class MediaFileSummary(BaseModel):
 
 class CommonCopySummary(BaseModel):
     """One `common-copy/*.md` file, for the Description tab's body-source
-    selector (AI SEO implementation plan, PR6). A common-copy ref is
-    workspace-relative, like every other ref, so it is exactly what
-    `description.ref` stores, already usable as-is."""
+    selector. ``ref`` is workspace-relative, exactly what `description.ref`
+    stores."""
 
     ref: str
     """Workspace-relative, e.g. ``common-copy/comfort-colors.md`` -- what
@@ -452,12 +451,8 @@ class DraftListingRequest(BaseModel):
 
 
 class CreateListingRequest(BaseModel):
-    """The whole document, not a handful of fields to build one from.
-
-    The editor is the create form, so by the time a name is typed the user may
-    have chosen a design, colours and images -- and the shape they edited is the
-    shape that should be written. A server-built stub here would be a second
-    opinion about what a new listing starts as."""
+    """The whole document the editor built, written as edited -- not a
+    handful of fields to build one from."""
 
     name: str
     document: dict[str, Any]

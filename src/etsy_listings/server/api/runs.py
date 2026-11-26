@@ -169,9 +169,8 @@ def list_runs(
     batch: str | None = None,
 ) -> list[RunSummary]:
     """``listing`` narrows to that listing's current run (active, or finished
-    and not yet superseded -- decision 7's retention); ``scope=batch&batch=``
-    to that listing batch's. Omitted, every run this process still
-    remembers, for a future workspace-wide view."""
+    and not yet superseded); ``scope=batch&batch=`` to that listing batch's.
+    Omitted, every run this process still remembers."""
     deployments = _deployments(request)
     runs = deployments.runs(listing=listing, scope=scope, batch=batch)
     return [_summary(run, deployments) for run in runs]
@@ -184,9 +183,8 @@ def get_run(target: Annotated[Target, Depends(target)]) -> RunDetail:
 
 @router.delete("/{run_id}", response_model=RunSummary)
 def cancel_run(target: Annotated[Target, Depends(target)]) -> RunSummary:
-    """Cancel a queued or running **plan**. An ``apply`` is refused
-    unconditionally (decision 8: Back leaves, it never cancels one), and so is
-    a run that has already finished."""
+    """Cancel a queued or running **plan**. An ``apply`` is always refused
+    (leaving the page never cancels one), and so is a finished run."""
     result = target.deployments.cancel(target.run.id)
     if result is False:
         raise HTTPException(status_code=409, detail="this run cannot be cancelled")
