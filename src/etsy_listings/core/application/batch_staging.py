@@ -27,14 +27,8 @@ def stage_upload(
     *,
     now: datetime | None = None,
 ) -> StagingSession:
-    """Stage one ZIP or loose PNGs against ``listing_template``.
-
-    Refusals, nothing on disk: :class:`ListingTemplateMissingError`, before any
-    upload is read; ``batches.StagingRefusedError`` for an upload the limits or
-    archive checks refuse; ``ConfigLoadError`` for a template whose file will
-    not load. The template is captured under its write lock, which is never
-    held while the upload streams in (``FrozenListingTemplate.capture``).
-    """
+    """Stage one ZIP or loose PNGs against ``listing_template``. The
+    template's write lock is never held while the upload streams in."""
     if not staging.workspace.listing_template_file(listing_template).is_file():
         raise ListingTemplateMissingError(listing_template)
     return stage_pngs(staging, listing_template, uploads, now=now)
@@ -53,8 +47,8 @@ def read_staging(workspace: Workspace, staging: StagingStore, session_id: str) -
 
 @dataclass(frozen=True)
 class StagingEdit:
-    """One edit of a staging session: a new label (``None`` keeps it), names
-    typed for rows, and rows to remove."""
+    """One edit of a staging session: a new label, names typed for rows, and
+    rows to remove."""
 
     label: str | None = None
     names: Mapping[str, str] = field(default_factory=dict)
@@ -70,9 +64,7 @@ def edit_staging(
     now: datetime | None = None,
 ) -> StagingSession:
     """Relabel, type names, remove rows -- in that order, under the
-    session's lock. A blank label keeps the one it had. Every edit moves the
-    session's expiry to seven days from ``now``. A row nobody staged refuses
-    the whole edit with :class:`StagedRowMissingError`, saving none of it."""
+    session's lock, saving all of it or none."""
     now = now or datetime.now(UTC)
     with staging.lock(session_id):
         session = read_staging(workspace, staging, session_id)

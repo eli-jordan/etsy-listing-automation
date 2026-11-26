@@ -54,14 +54,7 @@ def confirm_batch(
 ) -> Batch:
     """Create one listing per creatable row of staging session
     ``session_id`` -- or finish the batch a previous confirm began -- and
-    wake the queue for the rows now queued.
-
-    Only a *new* batch asks whether the queue could draft: one that exists
-    already has listings half made, and is finished whatever AI's state.
-    Refusals, with nothing created: :class:`AiDraftingBlockedError`,
-    ``batches.ConfirmRefusedError`` (names to fix, nothing creatable, a shared ref
-    broken since staging), :class:`StagingMissingError`, ``InvalidNameError``.
-    """
+    wake the queue for the rows now queued."""
     workspace.staging_dir(session_id)
     if records.batches.load(session_id) is None:
         blocked = queue.blocked()
@@ -148,8 +141,7 @@ def delete_batch(
 
 
 def rename_batch(workspace: Workspace, batches: BatchStore, batch_id: str, label: str) -> Batch:
-    """The label only, so its id -- and every link to it -- stays. A blank
-    label keeps the one it had."""
+    """The label only, so its id -- and every link to it -- stays."""
     with batches.lock(batch_id):
         batch = read_batch(workspace, batches, batch_id)
         label = label.strip()
@@ -182,9 +174,7 @@ def read_batch(workspace: Workspace, batches: BatchStore, batch_id: str) -> Batc
 
 
 def batch_row_upload(workspace: Workspace, batches: BatchStore, batch_id: str, row_id: str) -> Path:
-    """The upload a row was made from: what a row that was never created
-    shows on the summary, having no listing design. Kept beside the batch
-    for Retry once the staging session has gone."""
+    """The upload a row was made from, kept beside the batch."""
     batch = read_batch(workspace, batches, batch_id)
     try:
         path = row_upload(workspace, batch, row_id)
@@ -208,8 +198,7 @@ def batch_deploy_listings(
     workspace: Workspace, batches: BatchStore, batch_id: str
 ) -> tuple[str, ...]:
     """The listings a batch plan deploys, in the batch's row order: every
-    :func:`deployable` row. :class:`NothingToDeployError` when there are
-    none, so no empty plan is queued."""
+    :func:`deployable` row, refusing an empty plan."""
     batch = read_batch(workspace, batches, batch_id)
     names = tuple(dict.fromkeys(row.name for row in batch.rows if deployable(workspace, row)))
     if not names:
@@ -224,10 +213,8 @@ class ListingMembership:
 
 
 def listing_batch(workspace: Workspace, batches: BatchStore, name: str) -> ListingMembership | None:
-    """The batch that made listing ``name``, for the editor's row above the
-    head, or ``None``. A row names its listing exactly, as the
-    rename and delete hooks match it; a deleted row is not the listing's.
-    Should two batches both claim it, the newer wins."""
+    """The newest batch whose live row names listing ``name`` exactly, as
+    the rename and delete hooks match it, or ``None``."""
     workspace.listing_dir(name)
     newest = sorted(batches.all(), key=lambda b: (b.created_at, b.id), reverse=True)
     for batch in newest:
@@ -261,9 +248,7 @@ def recent_batches(
     now: datetime | None = None,
 ) -> list[RecentBatch]:
     """Every batch, and every staging session not confirmed yet, newest
-    first. Expired staging is swept first, so the list never offers a
-    session that has gone. A confirmed session stays until every row is
-    materialised and shares its batch's id: that one is listed as the
+    first. A confirmed session shares its batch's id and is listed as the
     batch."""
     staging.sweep(now=now or datetime.now(UTC))
     recorded = batches.all()
@@ -301,10 +286,8 @@ def row_proposal(
     workspace: Workspace, proposals: ProposalStore, row: BatchRow, *, facts: WorkspaceFacts
 ) -> tuple[ProposalState | None, list[str]]:
     """The row's listing's cached proposal, judged as the editor judges it
-    (ADR-0049), so the summary's *Stale: ...* is the drawer's: sections
-    waiting and current, waiting but out of date (with why), or every
-    section dealt with. ``None`` without a listing or a proposal, or when
-    the listing will not read."""
+    (ADR-0049); ``None`` without a listing or a proposal, or when the
+    listing will not read."""
     record = proposals.load(row.name) if has_listing(row) else None
     if record is None:
         return None, []

@@ -625,8 +625,12 @@ owned assets under its write lock. The server decodes multipart uploads into
 byte streams; bounded loose-PNG/ZIP inspection in `core/batches` precedes
 review. Confirm and retry revalidate shared references and allocate names
 under the listing's document lock. They create ordinary listings and retained batch records,
-idempotently, without deploying (ADR-0047, ADR-0051). Staging expires seven
-days after its last edit and is swept at startup. `BatchQueue` dispatches
+idempotently, without deploying (ADR-0047, ADR-0051). Only a new batch asks
+whether AI could draft; a confirm finishing a batch an earlier one began does
+not, because its listings are already half made. Each row's upload is kept
+beside the batch, so Retry and the summary of a never-created row still have it
+after the staging session has gone. Staging expires seven days after its last
+edit and is swept at startup and before Recent batches is listed. `BatchQueue` dispatches
 queued rows through the existing AI runner, defaults to one concurrent batch
 row, reads the workspace concurrency setting, round-robins across batches and
 recovers interrupted rows on restart (ADR-0048).
