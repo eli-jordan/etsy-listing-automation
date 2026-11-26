@@ -275,7 +275,10 @@ rather than overwrite it.
 
 If a destination is unreachable (the folder is missing, or the drive or share
 is offline), skip it and report it. The local backup counts as successful. The
-next run catches the destination up.
+next run catches the destination up. A copy never creates a missing destination
+folder, even when its parent exists: with iCloud signed out, `iCloudDrive\` can
+remain, and a new folder there would fill with a copy nothing syncs while the
+copy reports itself up to date. Only set-up creates a destination folder.
 
 The copy is plain Python file operations, so a NAS mounted as a folder works
 unchanged. A later NAS destination may instead use restic's `rest-server` with

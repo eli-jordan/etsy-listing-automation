@@ -48,11 +48,6 @@ class CopyStep:
 
 @dataclass(frozen=True)
 class CopyHooks:
-    """Observation points, for progress and for tests: ``after_listing``
-    runs once both folders are listed, before anything is written;
-    ``planned`` then hears how many files the destination lacks;
-    ``observe`` hears each operation as it completes."""
-
     after_listing: Callable[[], None] = lambda: None
     planned: Callable[[int], None] = lambda _: None
     observe: Callable[[CopyStep], None] = lambda _: None
@@ -60,9 +55,6 @@ class CopyHooks:
 
 @dataclass(frozen=True)
 class ChangedFile:
-    """A destination file that differs from the local one of its name. For
-    ``config``, or a change the sample check found, the sizes can match."""
-
     name: str
     expected_size: int
     actual_size: int
@@ -104,8 +96,6 @@ def _walk(path: Path) -> Iterator[tuple[Path, os.stat_result]]:
 
 
 def list_repository(root: Path) -> dict[str, int]:
-    """``/`` path to size, in restic's read order, without ``locks/`` and
-    restic's temporary names."""
     before = _reference_directories(root)
     listing: dict[str, int] = {}
     for top in READ_ORDER:
@@ -114,7 +104,7 @@ def list_repository(root: Path) -> dict[str, int]:
             if stat.S_ISREG(info.st_mode) and restic_name(name):
                 listing[name] = info.st_size
     if _reference_directories(root) != before:
-        # Forget or prune may remove snapshots or indexes before deleting packs.
+        # A concurrent forget or prune removes snapshots or indexes before packs.
         raise OSError(f"{root} changed while it was being listed. Try the copy again.")
     return listing
 
@@ -168,8 +158,6 @@ class DestinationPlan:
 def sort_destination(
     repository: Path, destination: Path, local: dict[str, int], suspect: frozenset[str]
 ) -> DestinationPlan:
-    """Sort ``destination``'s files. ``suspect`` names present files known
-    to be changed although their size matches."""
     found = list_destination(destination)
     config = found.get(CONFIG)
     result = DestinationPlan(
@@ -222,8 +210,6 @@ class DestinationNotFoundError(UserFacingError):
 
 
 def create_destination(destination: Path) -> None:
-    """Set-up's one way to make a destination folder: inside a folder that
-    exists, and never over one that is already there."""
     if destination.is_dir():
         return
     if not destination.parent.is_dir():
@@ -235,9 +221,6 @@ def create_destination(destination: Path) -> None:
 
 
 def _unreachable(destination: Path) -> CopyResult:
-    """A copy never creates its destination: a missing folder can mean a
-    sync client signed out with its folder left behind, where a new folder
-    would fill up and never sync."""
     return CopyResult(
         destination,
         "unreachable",
@@ -253,8 +236,6 @@ def copy_repository(
     hooks: CopyHooks | None = None,
     cancel: threading.Event | None = None,
 ) -> CopyResult:
-    """Bring ``destination`` up to ``repository`` (spec steps 1 to 6).
-    ``suspect`` names files the sample check found changed."""
     hooks = hooks or CopyHooks()
     try:
         local = list_repository(repository)
@@ -294,7 +275,6 @@ class _Copy:
         return self.apply()
 
     def apply(self) -> CopyResult:
-        """Copy in write order, delete in reverse, then drop leftovers."""
         try:
             for name in self.plan.missing:
                 self._continue()
@@ -363,7 +343,7 @@ class _Copy:
 
 
 def _failure(exc: OSError, repository: Path, destination: Path) -> str:
-    # A rename's error names the target second.
+    # A failed rename's OSError carries its target as filename2.
     path = Path(exc.filename2 or exc.filename or "")
     if isinstance(exc, FileNotFoundError) and path.is_relative_to(repository):
         return (
@@ -414,7 +394,7 @@ def _destination_path(root: Path, name: str) -> Path:
 
 
 class DamagedError(Exception):
-    """A local repository file whose contents no longer match its name."""
+    pass
 
 
 def _copy_file(repository: Path, destination: Path, name: str) -> None:
@@ -437,7 +417,6 @@ def _copy_file(repository: Path, destination: Path, name: str) -> None:
 
 @contextmanager
 def _temporary(target: Path) -> Iterator[tuple[Path, BinaryIO]]:
-    """A new temporary name beside ``target``, removed unless renamed."""
     temp = target.with_name(f"{target.name}{TEMP_MARK}{secrets.token_hex(4)}")
     writer = temp.open("xb")
     try:
@@ -459,9 +438,8 @@ def _stream(source: Path, writer: BinaryIO) -> str:
 
 
 def _publish(temp: Path, target: Path) -> None:
-    """Give ``temp`` the name ``target`` only while nothing has it. Windows'
-    rename refuses an existing name; elsewhere rename would replace it, so
-    a hard link takes the name instead (``_temporary`` drops ``temp``)."""
+    # Never replace an existing name: Windows' rename refuses one, POSIX rename
+    # would replace it, so a hard link takes the name there (_temporary drops temp).
     if os.name == "nt":
         temp.rename(target)
     else:
@@ -490,9 +468,6 @@ def check_destination(
     fraction: float = SAMPLE_FRACTION,
     rng: random.Random | None = None,
 ) -> DestinationCheck:
-    """Hash a random sample of ``destination``'s files against their names
-    and compare ``config`` with the local one. Reads only: no lock, no
-    password, no restic."""
     try:
         return _sample_destination(repository, destination, fraction, rng)
     except OSError as exc:
@@ -570,15 +545,11 @@ def repair_destination(
     today: date,
     suspect: frozenset[str] = frozenset(),
 ) -> RepairResult:
-    """Move changed and unexpected files to a new sibling folder, deleting
-    nothing, then copy again (spec, *Changed and unexpected files*)."""
     local = list_repository(repository)
     if CONFIG not in local or not destination.is_absolute() or not destination.is_dir():
         return RepairResult(None, (), copy_repository(repository, destination))
     plan = sort_destination(repository, destination, local, suspect)
     if any(file.name == CONFIG for file in plan.changed):
-        # Telling another repository's config from a damaged one needs the
-        # password, so either way nothing moves (plan, PR 8).
         raise ForeignCopyError(destination)
     moving = [file.name for file in plan.changed] + plan.unexpected
     moving.extend(
@@ -598,9 +569,6 @@ def repair_destination(
 
 
 def planned_set_aside(destination: Path, today: date) -> Path:
-    """The folder a repair today would set files aside in: the first of
-    ``<destination>-set-aside-<date>``, ``-2``, ``-3``... not taken yet.
-    Reads only; :func:`repair_destination` creates it."""
     return next(path for path in _set_aside_names(destination, today) if not path.exists())
 
 
@@ -612,8 +580,6 @@ def _set_aside_names(destination: Path, today: date) -> Iterator[Path]:
 
 
 def _new_sibling(destination: Path, today: date) -> Path:
-    """The first free set-aside name, created empty; a race that takes it
-    first moves on to the next."""
     names = _set_aside_names(destination, today)
     while True:
         candidate = next(names)
