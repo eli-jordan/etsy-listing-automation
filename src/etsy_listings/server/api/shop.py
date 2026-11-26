@@ -5,7 +5,7 @@ revision check, validation and lookups; this module builds the clients through
 ``app_state.clients``. A refused save is a :class:`ShopSaveRefusal` body rather
 than ``{"detail": ...}`` so the page can tell a conflict from field errors
 without parsing text, at the status the app's refusal table gives each
-category (``app.py``'s ``REFUSAL_STATUS``): ``412`` stale, ``422`` refused.
+category (``refusal_status.py``'s ``REFUSAL_STATUS``): ``412`` stale, ``422`` refused.
 """
 
 from __future__ import annotations
