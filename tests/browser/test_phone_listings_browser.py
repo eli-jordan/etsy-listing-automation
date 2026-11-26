@@ -223,6 +223,10 @@ def test_new_listing_steps_aside_while_the_list_scrolls_down(phone_page) -> None
     page = phone_page
     page.goto(f"{_origin(page)}/listings")
     fab = page.get_by_role("button", name="New listing", exact=True)
+    # The button shows at once, the list only when /api/listings answers.
+    # Arriving mid-gesture, the row and the status chips above it moved the
+    # page under the swipes and scrolls below.
+    expect(page.get_by_role("button", name="More actions for take-a-hike")).to_be_visible()
     fab.wait_for(state="visible")
     # One fixture listing does not scroll: a spacer over the list makes the
     # page as long as a real shop's.
