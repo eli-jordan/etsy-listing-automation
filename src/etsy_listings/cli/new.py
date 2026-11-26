@@ -57,9 +57,8 @@ def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Bluepr
 
 
 def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> PrintProvider:
-    """The shop's ``preferred_print_provider`` sorts first when it is offered,
-    so the common case is the first row rather than a default the fuzzy
-    backends have no way to express."""
+    """The shop's ``preferred_print_provider`` sorts first: the fuzzy backends
+    have no way to express a default."""
     preferred = workspace.defaults.printify.preferred_print_provider
     ordered = sorted(providers, key=lambda p: (p.title != preferred, p.title.lower()))
     return prompts.pick("Print provider", ordered, label=lambda provider: provider.title)
@@ -68,10 +67,8 @@ def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> Prin
 def _report_print_area_choice(variant_set: VariantSet) -> None:
     """Say so when the garment profile's print area is one of several on offer.
 
-    Printify's print areas are per-variant and genuinely differ by garment
-    size. The garment profile carries exactly one, so `new` records the
-    largest -- a defensible default, but not one worth making silently, since
-    it decides how big the design file has to be.
+    Printify's print areas differ by garment size and the profile records
+    only the largest, which decides how big the design file has to be.
     """
     sizes = variant_set.placeholder_sizes(DEFAULT_PLACEHOLDER)
     if len(sizes) < MIN_SIZES_TO_COMPARE:
@@ -119,13 +116,7 @@ def _pick_template(workspace: Workspace) -> str:
 def _report_media_choice(
     template: str, kind: str, colours: list[str], media: list[dict[str, str]]
 ) -> None:
-    """Say what got a photo and what did not.
-
-    Both branches are surprising in silence: a `single`/`multiple` template
-    renders one image no matter how many colours sell, and a `colour-matrix`
-    one has to stop at Etsy's 20-image limit while the listing still sells
-    every colour.
-    """
+    """Say what got a photo and what did not."""
     if kind != "colour-matrix":
         typer.echo(
             f"{template} is a {kind}-kind template: one image for the listing, "
@@ -141,13 +132,7 @@ def _report_media_choice(
 
 
 def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
-    """A warning, not an error: writing the listing before the artwork exists
-    is a legitimate order to work in. But ``new`` derives the path from the
-    argument without ever looking, so a name that does not match the file on
-    disk -- ``duke-java-developer.png`` saved as ``duke-java-developer.png.png``
-    is the easy way to get there -- surfaces much later as a render failure
-    about a file the user believes they created.
-    """
+    """Warn, and name a near miss such as ``<name>.png.png``."""
     path = workspace.design_file(design_name)
     if path.is_file():
         return
@@ -190,10 +175,7 @@ def _pick_or_create_pricing_plan(
 
 
 def _reject_existing_listing(workspace: Workspace, design_name: str) -> None:
-    """Creating the listing refuses a taken name, but it is the *last* thing
-    ``new`` does, so without this check the whole wizard would run before
-    saying no. It is checked here rather than only on the picked row,
-    because a name given as the argument reaches the same dead end."""
+    """Refuse a taken name before the wizard asks anything."""
     if not ListingDocuments(workspace).is_free(design_name):
         typer.echo(f"a listing already exists at {workspace.listing_dir(design_name)}", err=True)
         raise typer.Exit(code=1)
