@@ -17,27 +17,17 @@ class MissingDefaultError(ValueError):
 
 
 class PrintifyDefaults(BaseModel):
-    """Which Printify shop this workspace creates products in.
-
-    Optional at load, like the Etsy ids: a workspace that only renders mockups
-    has no use for it, and a product call that needs it raises
-    :class:`MissingDefaultError` then.
-    """
+    """Which Printify shop this workspace creates products in: optional, as a workspace that only
+    renders mockups needs none."""
 
     model_config = ConfigDict(extra="forbid")
 
     shop_name: str | None = None
-    """What the shop is called in Printify, stored beside the id.
-
-    Not a resolution key -- `setup` selects the shop and stores its id, and
-    Printify's titles are whatever the owner typed. It is here so that the
-    stored id is *checkable*: "28819281" tells a reader nothing about whether
-    this workspace points at the right place."""
+    """Stored beside the id so a reader can check it; never a resolution key."""
 
     shop_id: int | None = None
     preferred_print_provider: str | None = None
-    """By name, not id. Preselected in `new` when it offers the chosen
-    garment. Under `printify:` because it names a Printify entity."""
+    """By name, not id; preselected in `new` when it offers the chosen garment."""
 
     def require_shop_id(self) -> int:
         if self.shop_id is None:
@@ -82,13 +72,8 @@ class EtsyDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     currency: str
-    """The shop's own currency, read from Etsy by `setup`.
-
-    Under `etsy:` because it describes the Etsy shop, and read rather than
-    typed because a workspace configured in one currency while the shop sells
-    in another is a disagreement nothing surfaces until a price lands wrong.
-    ADR-0006 is unchanged: it remains the only currency a price may be written
-    in."""
+    """The shop's own currency, read from Etsy by `setup` so the workspace cannot disagree with the
+    shop; the only currency a price may be written in (ADR-0006)."""
 
     shop_name: str | None = None
     """The shop's name on Etsy -- the human-readable half of its identity, and
@@ -97,14 +82,8 @@ class EtsyDefaults(BaseModel):
     shop_id: int | None = None
 
     listing_defaults: EtsyListingDefaults = EtsyListingDefaults()
-    """What a listing inherits. Everything outside this block identifies or
-    configures the shop -- a distinction worth drawing because the two have
-    different failure modes: a wrong `shop_id` means nothing works, while a
-    wrong default means every listing is quietly slightly wrong.
-
-    No shop-wide section: which part of the shop a listing belongs in is
-    ``listing.yaml``'s ``etsy.section``.
-    """
+    """What a listing inherits; the rest of this block identifies the shop. The section is per
+    listing (``listing.yaml``'s ``etsy.section``)."""
 
     def require_shop_id(self) -> int:
         if self.shop_id is None:
