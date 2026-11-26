@@ -43,9 +43,8 @@ export async function findAiRun(listing: string): Promise<AiRunSummary | null> {
   return data;
 }
 
-/** Cancels a running run: its provider subprocess tree is killed, and a
- * brief or snapshot already written stays. `false` when the run finished
- * first -- a race with the run ending on its own is not a defect. */
+/** `false` when the run finished first: a race with the run ending on its own
+ * is not a defect. */
 export async function cancelAiRun(id: string): Promise<boolean> {
   const { error, response } = await api.DELETE("/api/ai/runs/{run_id}", {
     params: { path: { run_id: id } },

@@ -48,10 +48,8 @@ export async function getRun(id: string): Promise<RunDetail> {
   return withTuples<RunDetail>(data);
 }
 
-/** Cancels a queued or planning/previewing run. Refuses (`409`) for an
- * apply, which the caller should already know not to try (decision 8: Back
- * leaves, it never cancels an apply) -- resolves `false` rather than
- * throwing, since a race with the run finishing on its own is not a defect. */
+/** `false` rather than a throw when the server refuses: a race with the run
+ * finishing on its own is not a defect. */
 export async function cancelRun(id: string): Promise<boolean> {
   const { error, response } = await api.DELETE("/api/runs/{run_id}", {
     params: { path: { run_id: id } },
