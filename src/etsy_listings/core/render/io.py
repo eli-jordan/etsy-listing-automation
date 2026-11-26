@@ -1,7 +1,3 @@
-"""The renderer's I/O boundary: loading design/template images and saving
-results. Deliberately kept out of:mod:`etsy_listings.core.render.pipeline` so the
-render passes themselves stay pure."""
-
 from __future__ import annotations
 
 import io
@@ -15,10 +11,7 @@ from etsy_listings.core.render.types import RGB, RGBA
 MARIGOLD_PNG_COMPRESSION = 1
 
 
-class DesignValidationError(ValueError):
-    """Validation: design files must be RGB with an alpha channel, never
-    auto-converted -- a design without one is a config mistake to report, not
-    silently paper over."""
+class DesignValidationError(ValueError): ...
 
 
 def load_design(path: Path) -> RGBA:
@@ -38,12 +31,7 @@ def load_template_base(path: Path) -> RGB:
 
 
 def encode_png(image: Image.Image, *, compression: int = 6) -> bytes:
-    """Deterministic PNG encode: 8-bit sRGB, no ``pnginfo`` (so no ``tIME`` or
-    other timestamp/metadata chunk enters the file), fixed compression level so
-    the same pixels always produce the same bytes on a given Pillow version --
-    across versions, a changed byte stream is a real output-hash change that must remain visible,
-    not something to paper over here.
-    """
+    """No ``pnginfo``, so no ``tIME`` chunk: equal pixels give equal bytes on one Pillow."""
     if image.mode != "RGB":
         image = image.convert("RGB")
     buffer = io.BytesIO()

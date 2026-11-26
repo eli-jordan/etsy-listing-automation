@@ -86,7 +86,8 @@ placements:
 that colour in a specific ink regardless of what artwork resolution would
 otherwise pick. `shade`/`displace` are scene-level only — one photo, one
 lighting pass; a placement needing different rendering treatment belongs in
-its own template.
+its own template. Displacement is off by default: too strong, it looks melted, so
+each template tunes it by eye in the calibrator's live preview.
 
 `colour_coverage` governs a mismatch between the chart's placement colours
 and a listing's `colors:`: `exact` (default) fails `plan` if they don't match

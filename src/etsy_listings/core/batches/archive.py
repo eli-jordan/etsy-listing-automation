@@ -1,22 +1,3 @@
-"""Reading design PNGs out of one dropped ZIP (spec *Accepted input*; ADR-0051;
-batch plan PR 7).
-
-A ZIP is vendor-agnostic: every PNG at any folder depth is a candidate
-design, decided by its magic bytes rather than its extension, and every other
-file is ignored and named. :func:`receive` streams the ZIP to disk under the
-compressed limit; :func:`open_archive` then checks the whole central
-directory before the caller stores a byte of any entry, and
-:meth:`Archive.read` streams one entry at a time. There is deliberately no
-``extractall``: an entry never becomes a path, only the bytes the caller
-hashes, so a name is checked for what it says, not trusted to land anywhere.
-
-The size limits are checked against the sizes the central directory
-declares, which is enough: `zipfile` reads an entry's compressed bytes up to
-its declared ``compress_size``, cuts the output at its declared
-``file_size`` and checks the CRC at the end, so a lying header yields fewer
-bytes or a refusal, never more.
-"""
-
 from __future__ import annotations
 
 import re
@@ -48,9 +29,6 @@ password it was not given."""
 
 
 class ArchiveRefusedError(ValueError):
-    """The ZIP cannot be staged. ``message`` is about the archive (*It
-    ...*, under a heading naming it); ``remedy`` says what to do instead."""
-
     def __init__(self, message: str, remedy: str) -> None:
         self.message = message
         self.remedy = remedy
@@ -58,7 +36,6 @@ class ArchiveRefusedError(ValueError):
 
 
 def receive(chunks: Iterable[bytes], path: Path) -> None:
-    """Write the dropped ZIP to ``path`` with a running byte count."""
     size = 0
     with path.open("wb") as out:
         for chunk in chunks:
@@ -72,8 +49,6 @@ def receive(chunks: Iterable[bytes], path: Path) -> None:
 
 @dataclass(frozen=True)
 class Archive:
-    """An opened ZIP whose every entry passed ADR-0051's checks."""
-
     _zip: zipfile.ZipFile
     _pngs: dict[str, zipfile.ZipInfo]
     ignored: list[str]
@@ -81,11 +56,9 @@ class Archive:
 
     @property
     def pngs(self) -> list[str]:
-        """Every PNG's path in the ZIP, in archive order."""
         return list(self._pngs)
 
     def read(self, name: str) -> Iterator[bytes]:
-        """One PNG's bytes, a chunk at a time."""
         try:
             with self._zip.open(self._pngs[name]) as entry:
                 while chunk := entry.read(_CHUNK):
@@ -95,9 +68,7 @@ class Archive:
 
 
 def _unsafe_name(name: str) -> str | None:
-    """Why ``name`` cannot become a plain uploaded file, if it cannot. A
-    backslash is a separator here whatever the platform, since a ZIP made
-    on Windows may use one and `zipfile` converts it only on Windows."""
+    # zipfile turns a backslash into a separator only on Windows.
     posix = name.replace("\\", "/")
     if posix.startswith("/") or _DRIVE.match(posix):
         return "is an absolute path"
@@ -107,15 +78,13 @@ def _unsafe_name(name: str) -> str | None:
 
 
 def _normalised(name: str) -> str:
-    """The name as the file it would be: separators unified, empty and ``.``
-    segments dropped, casefolded as Windows compares it."""
+    # Casefolded, as Windows compares names.
     parts = [part for part in name.replace("\\", "/").split("/") if part not in ("", ".")]
     return "/".join(parts).casefold()
 
 
 def _unsafe_type(info: zipfile.ZipInfo) -> str | None:
-    """A Unix mode in the high bits of ``external_attr`` that is not a plain
-    file or directory. Zero -- a ZIP made on Windows -- is a plain file."""
+    # A ZIP made on Windows leaves the Unix mode zero.
     mode = info.external_attr >> 16
     if stat.S_IFMT(mode) in (0, stat.S_IFREG, stat.S_IFDIR):
         return None
@@ -123,7 +92,6 @@ def _unsafe_type(info: zipfile.ZipInfo) -> str | None:
 
 
 def _check(infos: list[zipfile.ZipInfo]) -> None:
-    """Every entry, before any is read: ADR-0051's per-entry refusals."""
     if len(infos) > MAX_ENTRIES:
         raise ArchiveRefusedError(
             f"It holds {len(infos)} entries, and a ZIP can hold at most {MAX_ENTRIES}.",
@@ -147,10 +115,8 @@ def _check(infos: list[zipfile.ZipInfo]) -> None:
 
 
 def _check_sizes(pngs: list[zipfile.ZipInfo]) -> None:
-    """The size limits, over the PNGs: the only entries ever expanded. The
-    rest are read eight bytes deep to learn they are not PNGs, so an
-    ignored file cannot be a bomb and is not refused for compressing well
-    (a ``.DS_Store`` of zeros is not an attack)."""
+    # Declared sizes suffice: zipfile reads at most compress_size, cuts its output at
+    # file_size and checks the CRC, so a lying header yields fewer bytes or a refusal.
     total = 0
     for info in pngs:
         if info.file_size > MAX_RATIO * max(info.compress_size, 1):
@@ -193,7 +159,6 @@ def _survey(archive: zipfile.ZipFile) -> Archive:
 
 @contextmanager
 def open_archive(path: Path) -> Iterator[Archive]:
-    """The ZIP at ``path``, checked, or :class:`ArchiveRefusedError`."""
     try:
         archive = zipfile.ZipFile(path)
     except _UNREADABLE as exc:

@@ -1,11 +1,3 @@
-"""Derived height/luminance maps, and the ``_renderer/derived/`` disk cache for them.
-
-Pure computation ( :func:`luminance_map`, :func:`height_map`) is separated from
-the cache ( :class:`DerivedMapCache`), which is the one place in this module
-that does I/O -- keeping the split lets the golden harness test the maps
-without touching a filesystem.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -17,13 +9,11 @@ import numpy as np
 
 from etsy_listings.core.render.types import RGB, FloatMap
 
-_FLAT_RANGE = 1e-6  # a map whose values span less than this is flat: mid-grey
+_FLAT_RANGE = 1e-6
 
 
 def luminance_map(base_rgb: RGB) -> FloatMap:
-    """Desaturate -> normalise levels. Derived from the blank mockup's own
-    luminance -- this is why plain flat mockup PNGs are sufficient; no
-    purchased displacement/lighting maps are needed."""
+    """Desaturate, then normalise levels."""
     gray = np.asarray(cv2.cvtColor(base_rgb, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
     normalized = gray.astype(np.float32) / 255.0
     lo, hi = float(normalized.min()), float(normalized.max())
@@ -33,7 +23,6 @@ def luminance_map(base_rgb: RGB) -> FloatMap:
 
 
 def height_map(base_rgb: RGB, blur_ksize: int = 15) -> FloatMap:
-    """Gaussian-blurred luminance, used as the displacement height field."""
     gray = np.asarray(cv2.cvtColor(base_rgb, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
     normalized = gray.astype(np.float32) / 255.0
     ksize = blur_ksize if blur_ksize % 2 == 1 else blur_ksize + 1
@@ -55,11 +44,6 @@ def _cache_key(base_rgb: RGB, kind: str, params: str) -> str:
 
 
 class DerivedMapCache:
-    """Caches maps to ``mockup-templates/{name}/_renderer/derived/``, keyed by
-    ``hash(source image bytes + map params)`` -- a template edit invalidates
-    the cache without a manual clear, since the hash changes with the bytes.
-    """
-
     def __init__(self, derived_dir: Path) -> None:
         self._dir = derived_dir
 

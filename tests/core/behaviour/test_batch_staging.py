@@ -8,6 +8,7 @@ the names the review shows.
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 import time
@@ -144,6 +145,15 @@ class TestNames:
         assert rows["take_a_hike.png"]["name"] == "take-a-hike-3"
         assert rows["take_a_hike.png"]["state"] == "ready"
 
+    def test_a_listing_folder_without_a_listing_yaml_still_takes_its_name(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        workspace.listing_dir("lake-loop").mkdir(parents=True)
+
+        session = _stage(workspace, store, ("lake-loop.png", png(1)))
+
+        assert _rows(workspace, store, session.id)["lake-loop.png"]["name"] == "lake-loop-2"
+
     def test_a_name_with_no_letters_or_digits_must_be_typed(
         self, workspace: Workspace, store: StagingStore
     ) -> None:
@@ -223,6 +233,22 @@ class TestLifetime:
         assert store.load(session.id) is None
         assert _staging_left(workspace) == []
 
+    def test_a_session_folder_with_no_readable_record_expires_by_its_own_age(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        now = datetime.now(UTC)
+        stale, fresh = workspace.staging_dir("stale"), workspace.staging_dir("fresh")
+        for folder in (stale, fresh):
+            folder.mkdir(parents=True)
+            (folder / "upload.png").write_bytes(png(1))
+        eight_days_ago = (now - timedelta(days=8)).timestamp()
+        os.utime(stale, (eight_days_ago, eight_days_ago))
+
+        store.sweep(now=now)
+
+        assert not stale.exists()
+        assert fresh.is_dir()
+
     def test_a_record_with_an_unknown_schema_is_absent(
         self, workspace: Workspace, store: StagingStore
     ) -> None:
@@ -250,6 +276,15 @@ class TestDesignReuse:
             "Same image as designs/fjord-mornings.png. The listing reuses that file"
         )
         assert rows["b.png"]["reuse"] is None
+
+    def test_of_two_designs_with_the_same_bytes_the_first_by_name_is_reused(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        workspace.design_file("fjord-b").write_bytes(png(4))
+        workspace.design_file("fjord-a").write_bytes(png(4))
+        session = _stage(workspace, store, ("fjord.png", png(4)))
+
+        assert _rows(workspace, store, session.id)["fjord.png"]["reuse"] == "fjord-a"
 
     def test_a_same_sized_design_with_other_bytes_is_not_reused(
         self, workspace: Workspace, store: StagingStore

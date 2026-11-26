@@ -1,17 +1,10 @@
 """``render_scene()``: warp -> displace -> shade applied independently per
-layer, in fixed order, then folded over one base.
+layer, in fixed order, then folded over one base. The one Photo warp
+compositor for all three template kinds, so a colour-matrix scene and a chart
+cannot drift apart in how they composite.
 
-One function for all three template kinds. There used to be a second,
-``render()``, for the single-layer case -- but it was the same sequence ending
-in :func:`~etsy_listings.core.render.passes.export` instead of ``export_many``, and
-those perform identical arithmetic over one layer (pinned by
-``test_export_many_with_one_layer_matches_export``, and by the end-to-end
-goldens). Both callers -- the render stage and the calibrator's preview
-endpoint -- now go through here, so a colour-matrix scene and a chart cannot
-drift apart in how they composite.
-
-Pure, per ADR-0012 -- callers own loading the design/template arrays and the derived
-maps; these functions never touch a filesystem.
+Pure, per ADR-0012: callers own loading the design/template arrays and the
+derived maps.
 """
 
 from __future__ import annotations
@@ -63,9 +56,8 @@ def _shaded(layer: RGBA, cfg: RenderConfig, luminance: FloatMap | None) -> RGBA:
         return layer
     if luminance is None:
         raise ValueError("shade is enabled but no luminance map was provided")
-    # Shade only where the layer prints. Outside, alpha is zero and
-    # export_many takes none of the layer's colour, so leaving it unshaded
-    # changes no output pixel and saves float work over the whole photo.
+    # Outside the print, alpha is zero and export_many takes none of the layer's colour,
+    # so shading only the print region changes no output pixel.
     region = print_bounds(layer)
     if region is None:
         return layer

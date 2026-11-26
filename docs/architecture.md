@@ -659,15 +659,27 @@ configuration and media references, while mockup templates define render
 geometry. Upload staging freezes the selected listing-template document and
 owned assets under its write lock. The server decodes multipart uploads into
 byte streams; bounded loose-PNG/ZIP inspection in `core/batches` precedes
-review. Confirm and retry revalidate shared references and allocate names
+review. Staging is the one write: each PNG is streamed to
+`uploads/<sha256>.png`, identical bytes merge into one row, and `session.json`
+is written last; any refusal removes the session's folder. Review writes
+nothing. A row's name and the `designs/` file its bytes already are depend on
+the workspace, which changes between reads, so both are worked out on every
+read from the stored base names. Confirm and retry revalidate shared references and allocate names
 under the listing's document lock. They create ordinary listings and retained batch records,
 idempotently, without deploying (ADR-0047, ADR-0051). Only a new batch asks
 whether AI could draft; a confirm finishing a batch an earlier one began does
 not, because its listings are already half made. Each row's upload is kept
 beside the batch, so Retry and the summary of a never-created row still have it
-after the staging session has gone. Staging expires seven days after its last
-edit and is swept at startup and before Recent batches is listed. `BatchQueue` dispatches
-queued rows through the existing AI runner, defaults to one concurrent batch
+after the staging session has gone. A staging session
+(`.cache/staging/<id>/session.json`) and a batch (`.cache/batches/<id>.json`)
+are schema-versioned JSON written atomically; a record with an unknown
+`schema`, or one that will not parse, is absent, since it is cache. A batch
+keeps its staging session's id, so a second confirm finds the batch the first
+wrote. A failed row keeps its last run's steps, so it still shows where it
+failed after the server that ran it has gone. Staging expires seven days after
+its last edit, a session folder with no readable record by the folder's own
+age, and is swept at startup and before Recent batches is listed. `BatchQueue`
+dispatches queued rows through the existing AI runner, defaults to one concurrent batch
 row, reads the workspace concurrency setting, round-robins across batches and
 recovers interrupted rows on restart (ADR-0048).
 
@@ -1472,9 +1484,13 @@ the repository passes a check. `EXCLUDES` leaves out the temporary names the app
 writers use, and `tests/core/behaviour/test_backup_excludes.py` fails when a
 writer renames its temporaries. A backup that skipped unreadable files (restic's
 exit code 3) still counts, with those files as warnings. `core/backup/state.py` keeps the last prune and check in
-`~/.etsy-listings/backup-state.json`, keyed to the repository path. Every run,
-including a failed one, is appended to `backup-history.jsonl` as one JSON
-line. The last successful backup is read from `restic snapshots`.
+`~/.etsy-listings/backup-state.json`, with each destination's last copy, last
+check and the changed and unexpected files found there. The state names its
+repository, so pointing the app at another one starts afresh instead of
+reusing a prune time that belongs elsewhere. Every run, including a failed
+one, is appended to `backup-history.jsonl` as one JSON line: a run only ever
+adds an entry, so an append rewrites nothing, and a line a crash cut short
+loses only itself. The last successful backup is read from `restic snapshots`.
 
 After a successful run, `BackupRunner` copies the repository to each
 destination with `core/backup/destinations.py`, which is plain file operations

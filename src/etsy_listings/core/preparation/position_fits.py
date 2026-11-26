@@ -1,21 +1,3 @@
-"""Marigold maps fitted directly to a listing's posed quad (option B).
-
-The spike rejected warping a template's maps to a listing position (spec,
-*Spike result*), so a positioned Marigold layer gets its own maps: the fit a
-calibrator geometry change runs, from evidence that covers the posed quad
-(spec *Rendering → Marigold (option B: a fit per position)*).
-
-A fit is a durable, content-addressed artifact under ``.cache/position-fits/``,
-named by the digest of :class:`FitInputs` -- template, placement, posed quad,
-mask, evidence identity, photo and inference settings -- so listings holding
-the same position share one, and any fit is rebuilt from evidence on demand.
-Each load is validated like a published generation (ADR-0054): archive
-checksum, array descriptors, shapes and bounds. :meth:`PositionFits.ensure`
-holds a per-fit lock while it fits, so a plan or preview arriving while the
-scene warmer fits the same position waits for that fit instead of starting a
-second, and never falls back to the template's own maps.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -75,15 +57,10 @@ _MAX_RECORD_BYTES = 1024 * 1024
 
 
 class PositionCoverageError(ArtifactError):
-    """The template's evidence does not reach a listing position, so no fit
-    can be made until preparation infers evidence covering its padded quad."""
-
     reason = "missing_maps"
 
 
 class FitInputs(Record):
-    """Everything a position fit's pixels depend on; its digest is the key."""
-
     template: str
     photo: PhotoIdentity
     placement: PlacementInput
@@ -97,8 +74,6 @@ class FitInputs(Record):
 
 
 class FitRecord(Record):
-    """A fit's ``fit.json``: its inputs and the arrays its archive must hold."""
-
     schema_version: Literal[1]
     inputs: FitInputs
     artifact: PlacementArtifact
@@ -106,8 +81,6 @@ class FitRecord(Record):
 
 @dataclass(frozen=True)
 class FitRequest:
-    """One positioned layer's fit, and the retained evidence it is fitted from."""
-
     inputs: FitInputs
     evidence: CropEvidence
 
@@ -124,9 +97,6 @@ class PositionFit:
 
 
 def scene_map_content(content_digest: str, fits: Mapping[str | None, PositionFit]) -> str:
-    """A prepared scene's map identity: the template generation's content
-    digest alone when no layer is positioned -- so unpositioned scenes and
-    their lockfiles are unchanged -- else that and each fit's digest."""
     if not fits:
         return content_digest
     document = {
@@ -137,14 +107,12 @@ def scene_map_content(content_digest: str, fits: Mapping[str | None, PositionFit
 
 
 def template_boxes(config: AnyTemplate) -> dict[str | None, BoundingBox]:
-    """Each layer's own box, keyed as :data:`LayerBoxes` keys it."""
     if isinstance(config, MultipleTemplate):
         return {p.id: p.bounding_box for p in config.placements}
     return {None: config.bounding_box}
 
 
 def positioned_quads(config: AnyTemplate, boxes: LayerBoxes) -> dict[str | None, BoundingBox]:
-    """The layers ``boxes`` moves off the template's own box."""
     own = template_boxes(config)
     return {key: box for key, box in boxes.items() if key in own and box != own[key]}
 
@@ -179,9 +147,7 @@ def _with_quads(
 _GUARD = threading.Lock()
 _LOCKS: dict[tuple[str, str], threading.Lock] = {}
 _WRITING: set[str] = set()
-# Fits a scene is fitting or composing with; prune leaves them alone.
 _LEASED: Counter[str] = Counter()
-# Validated fits, as the generation reader keeps its maps (ADR-0054).
 _FITS: BoundedCache[tuple[Any, ...], PositionFit] = BoundedCache(
     256 * 1024 * 1024,
     size=lambda fit: sum(a.nbytes for a in arrays_of(fit.maps).values()),
@@ -189,8 +155,6 @@ _FITS: BoundedCache[tuple[Any, ...], PositionFit] = BoundedCache(
 
 
 class PositionFits:
-    """The workspace's position fits: request, read or fit, and prune."""
-
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self.evidence = EvidenceReader(workspace)
@@ -199,9 +163,6 @@ class PositionFits:
     def requests(
         self, template: str, inputs: PreparationInputs, quads: Mapping[str | None, BoundingBox]
     ) -> dict[str | None, FitRequest]:
-        """A fit request per positioned layer, against the template's current
-        evidence. Refuses with :class:`PositionCoverageError` when that
-        evidence does not cover a posed quad."""
         if not quads:
             return {}
         posed = _with_quads(inputs, quads)
@@ -234,17 +195,14 @@ class PositionFits:
         *,
         verify: bool = True,
     ) -> bool:
-        """Whether the template's current evidence covers every one of
-        ``quads`` (its :func:`padded_quads`; spec, *Evidence coverage*).
-        ``verify=False`` takes its files as sound, for a quick answer."""
+        """``verify=False`` takes the evidence files as sound, for a quick answer."""
         posed = _with_quads(inputs, quads)
         selected = self.evidence.select(posed, self.evidence.current(template), verify=verify)
         return len(selected) == len(posed.placements)
 
     @contextmanager
     def lease(self, keys: Iterable[str]) -> Iterator[None]:
-        """Hold the fits named by ``keys`` against :meth:`prune` until exit,
-        whether or not they exist yet."""
+        """Holds ``keys`` against :meth:`prune`, whether or not they exist yet."""
         held = list(keys)
         with _GUARD:
             _LEASED.update(held)
@@ -258,7 +216,6 @@ class PositionFits:
                         del _LEASED[key]
 
     def read(self, request: FitRequest) -> PositionFit | None:
-        """The stored fit, validated, or ``None`` when it is missing or invalid."""
         key = request.key
         directory = self.workspace.position_fit(key)
         try:
@@ -280,8 +237,6 @@ class PositionFits:
         return fit
 
     def ensure(self, request: FitRequest) -> PositionFit:
-        """The fit, fitting and storing it first when it is missing, or
-        waiting for the caller already fitting it."""
         key = request.key
         with _GUARD:
             lock = _LOCKS.setdefault((str(self.workspace.root).casefold(), key), threading.Lock())
@@ -321,7 +276,6 @@ class PositionFits:
         return prepare(base, Placement(quad, visibility), evidence).maps
 
     def _store(self, request: FitRequest, maps: MaterialMaps) -> None:
-        """Write the fit to a staging directory and rename it into place."""
         key = request.key
         final = self.workspace.position_fit(key)
         staging = final.with_name(f".{key}-{uuid4().hex}")
@@ -348,7 +302,6 @@ class PositionFits:
             write_bytes_atomic(
                 staging / _RECORD, json_bytes(record.model_dump(mode="json")), durable=True
             )
-            # Only reached when the stored fit did not validate: replace it.
             if final.exists():
                 self.workspace.remove_position_fit(key)
             with suppress(FileExistsError, PermissionError):
@@ -372,10 +325,6 @@ class PositionFits:
         return PositionFit(maps, numerical_digest({record.artifact.id: maps}))
 
     def prune(self, keep: Collection[str], *, since: float | None = None) -> list[str]:
-        """Remove every stored fit whose key is not in ``keep``, and any
-        abandoned staging directory. Fits being written or leased are left
-        alone, and so is any entry modified at or after ``since`` -- when
-        ``keep`` was computed -- since a position saved meanwhile may need it."""
         removed = []
         for name in self.workspace.position_fits():
             with _GUARD:

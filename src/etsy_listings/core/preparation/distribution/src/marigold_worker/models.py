@@ -13,23 +13,32 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
 
-from .protocol import Capabilities, InferenceMetadata, InferenceSettings, Role, Transforms
+from .protocol import (
+    CHECKPOINT_REVISIONS,
+    PROCESSING_RESOLUTION,
+    SEED,
+    Capabilities,
+    InferenceMetadata,
+    InferenceSettings,
+    Role,
+    Transforms,
+)
 
 MODELS: dict[Role, tuple[str, str, str]] = {
     "normals": (
         "prs-eth/marigold-normals-v1-1",
         "MarigoldNormalsPipeline",
-        "09cfdd258cb281fa006cf1afcd2284376d16687d",
+        CHECKPOINT_REVISIONS["normals"],
     ),
     "lighting": (
         "prs-eth/marigold-iid-lighting-v1-1",
         "MarigoldIntrinsicsPipeline",
-        "08c3930bb641abf786ba44ce92547507ebefbc16",
+        CHECKPOINT_REVISIONS["lighting"],
     ),
     "depth": (
         "prs-eth/marigold-depth-v1-1",
         "MarigoldDepthPipeline",
-        "9571e7123e258cf052b4e54241f17971c290e9a8",
+        CHECKPOINT_REVISIONS["depth"],
     ),
 }
 PACKAGES = (
@@ -105,8 +114,8 @@ class Models:
         with torch.inference_mode():
             result = self.pipe(
                 image,
-                generator=torch.Generator(device="cuda").manual_seed(2026),
-                processing_resolution=768,
+                generator=torch.Generator(device="cuda").manual_seed(SEED),
+                processing_resolution=PROCESSING_RESOLUTION,
                 batch_size=1,
                 output_uncertainty=False,
                 match_input_resolution=True,
@@ -122,7 +131,7 @@ class Models:
             _check_intrinsic_properties(properties)
         processed, padding, original = self.pipe.image_processor.preprocess(
             image,
-            processing_resolution=768,
+            processing_resolution=PROCESSING_RESOLUTION,
             resample_method_input="bilinear",
             device=torch.device("cpu"),
             dtype=torch.float32,
@@ -131,8 +140,8 @@ class Models:
             checkpoint=checkpoint,
             revision=revision,
             role=role,
-            seed=2026,
-            processing_resolution=768,
+            seed=SEED,
+            processing_resolution=PROCESSING_RESOLUTION,
             settings=settings,
             target_properties=properties,
             normal_frame="x right, y up, z toward viewer; image rows down",

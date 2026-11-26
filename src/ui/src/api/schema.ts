@@ -3085,10 +3085,7 @@ export interface components {
     };
     /**
      * ColourMatrixTemplate
-     * @description One photo per colour, same design position in all of them. Scene
-     *     images are ``{colour-slug}.png`` per colour -- there is no
-     *     ``colours:`` list in the YAML, since the filenames present in the
-     *     directory *are* the colour set.
+     * @description One photo per colour, named by colour slug, with the design in the same position.
      */
     ColourMatrixTemplate: {
       /** Bounding Box */
@@ -5518,12 +5515,7 @@ export interface components {
     /**
      * ShadeConfig
      * @description Blends the base mockup photo's own greyscale lighting over the printed
-     *     design, so a flat design picks up the garment's real fold shadows and
-     *     light falloff instead of looking pasted on as a flat rectangle -- this is
-     *     why a plain flat-lay PNG is enough to mock up, with no purchased
-     *     Photoshop lighting map needed. On by default: almost every mockup needs
-     *     it. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a
-     *     mid-grey pivot is used for those instead.
+     *     design. On by default: almost every mockup needs it.
      */
     ShadeConfig: {
       /**
@@ -5669,8 +5661,7 @@ export interface components {
     };
     /**
      * SingleTemplate
-     * @description One photo, one garment -- a lifestyle shot, a folded product photo,
-     *     anything that isn't part of a colour set.
+     * @description One photo, one garment.
      */
     SingleTemplate: {
       /** Bounding Box */
