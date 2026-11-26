@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -123,16 +122,6 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     app.state.batch_store = batch_store
     app.state.proposal_store = proposal_store
     app.state.scene_warmer = scene_warmer
-
-    # Permissive CORS for local dev only -- the Vite dev server proxies /api in
-    # production-shaped use, but running `uvicorn` and `vite` as two separate
-    # processes during development needs this.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     register_refusals(app)
 
