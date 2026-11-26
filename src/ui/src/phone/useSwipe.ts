@@ -1,33 +1,11 @@
 import { type RefObject, useEffect, useEffectEvent } from "react";
 import { classifySwipe, lockAxis, type SwipeDirection } from "./swipe";
 
-/**
- * Touch swipes on one element, for the phone layout. Internal to `phone/`:
- * pages swipe through `usePager` or `useSheetDrag`, which own the motion this
- * only classifies. Only a finger counts
- * (`pointerType === "touch"`): a mouse drag on the desktop never swipes, so
- * the hook can stay mounted at every width and still change nothing there.
- *
- * A swipe that starts on something that owns its own drag -- a slider, a
- * strip that scrolls along the same axis, the text field being typed in, or
- * anything marked `data-swipe-ignore` -- is left to that thing. A field that
- * is not focused does not: on a phone a finger moves a caret only once the
- * field has focus, and a form-heavy page (the editor's Details tab) has
- * nowhere else to start a swipe.
- *
- * While the page is pinch-zoomed nothing swipes: a finger then pans the
- * zoomed page, as it does everywhere else on a phone, so a drag that means
- * "look over there" never pages or dismisses.
- */
+/** Classifies touch swipes for `usePager`, `useSheetDrag` and `useCarousel` (src/ui/AGENTS.md). */
 
 export interface SwipeOptions {
-  /** Which axis the element swipes on. The other axis keeps scrolling. */
   axis: "x" | "y";
-  /** Live offset along the axis while the finger is down, once the move has
-   * locked onto this axis. */
   onDrag: (offset: number) => void;
-  /** The finger lifted: the swipe it made, or null for a release short of
-   * one, a cancelled touch, or a move along the other axis. */
   onEnd: (direction: SwipeDirection | null) => void;
   enabled: boolean;
 }
@@ -54,8 +32,6 @@ function scrollsAlong(element: Element, axis: "x" | "y"): boolean {
     : element.scrollHeight > element.clientHeight + 1;
 }
 
-/** Whether a touch starting at `target` belongs to something between it and
- * the swiping element that handles the same gesture itself. */
 export function ownedElsewhere(
   target: EventTarget | null,
   root: Element,
@@ -87,8 +63,6 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
     const element = ref.current;
     if (!element || !enabled) return;
     let track: Track | null = null;
-    // The browser keeps the other axis's scrolling; this element takes ours,
-    // unless the page is zoomed in, when the browser pans on both.
     const previousTouchAction = element.style.touchAction;
     const ours = axis === "x" ? "pan-y pinch-zoom" : "pan-x pinch-zoom";
     const claim = () => {
@@ -112,7 +86,7 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
     const onDown = (event: PointerEvent) => {
       if (event.pointerType !== "touch" || !event.isPrimary) return;
       if (pinchZoomed()) {
-        // A pinch that ended without a resize event still hands the pan back.
+        // A pinch can end without a visualViewport resize event.
         claim();
         return;
       }
