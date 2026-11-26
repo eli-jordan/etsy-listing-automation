@@ -197,7 +197,6 @@ class SinglePreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["single"] = "single"
     colour: str | None = None
-    artwork: str | None = None
     bounding_box: BoundingBox
     renderer: Renderer
     labels: list[str] = []

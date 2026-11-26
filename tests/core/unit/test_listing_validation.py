@@ -63,7 +63,7 @@ def _listing(
 ) -> Listing:
     return Listing(
         garment_profile=garment_profile,
-        design="designs/take-a-hike.png",
+        design={"default": "designs/take-a-hike.png"},
         colors=colors if colors is not None else ["black", "white"],
         brief="A retro sunset mountain scene.",
         prices={"S": "349 NOK"},

@@ -262,16 +262,6 @@ def auth_etsy(
     _run_auth(root, ["etsy"], check=check)
 
 
-@auth_app.command("anthropic", epilog=EPILOG)
-def auth_anthropic(
-    root: AuthRootOption = None,
-    *,
-    check: CheckOption = False,
-) -> None:
-    """Capture just the optional Anthropic API key, which no command reads."""
-    _run_auth(root, ["anthropic"], check=check)
-
-
 PublishOption = Annotated[
     bool,
     typer.Option(

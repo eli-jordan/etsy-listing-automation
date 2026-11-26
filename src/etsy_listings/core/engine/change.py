@@ -132,13 +132,12 @@ class StageBlocked:
 
 
 StageOutcome = StageIdle | StageWork | StageBlocked
-"""The only three answers a stage can give. The union is the stored truth;
-compatibility properties on :class:`Verdict` and :class:`StagePlan` are derived
-views for renderers."""
+"""The only three answers a stage can give. The union is the stored truth; the
+properties on :class:`Verdict` and :class:`StagePlan` are views of it."""
 
 
 class _OutcomeView:
-    """Compatibility views derived from the same closed stage outcome (S05)."""
+    """Accessors that read ``outcome`` without matching on it."""
 
     outcome: StageOutcome
 

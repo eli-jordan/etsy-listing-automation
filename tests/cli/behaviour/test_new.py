@@ -160,7 +160,6 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
     listing = workspace_root / "listings" / "brand-new-design" / "listing.yaml"
     assert listing.is_file()
     assert "flat-lay-01" in listing.read_text(encoding="utf-8")
-    # The map form, never the bare-string shorthand (multi-artwork plan).
     written = yaml.safe_load(listing.read_text(encoding="utf-8"))
     assert written["design"] == {"default": "designs/brand-new-design.png"}
     assert (workspace_root / "garment-profiles" / "gildan-5000.yaml").is_file()

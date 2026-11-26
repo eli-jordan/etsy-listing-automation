@@ -273,4 +273,4 @@ class TestVideos:
             .values()
         )
         assert isinstance(failure, ProbeFailure)
-        assert "listing-relative form" in failure.reason
+        assert "'..' is not allowed" in failure.reason

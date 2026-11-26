@@ -8459,17 +8459,6 @@
       "SinglePreviewRequest": {
         "additionalProperties": false,
         "properties": {
-          "artwork": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artwork"
-          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,

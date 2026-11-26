@@ -73,7 +73,7 @@ def test_the_preview_of_a_warmed_scene_composes_nothing(
 def test_a_created_listing_is_warmed(client: TestClient, workspace_root: Path) -> None:
     document = {
         "garment_profile": "comfort-colors-1717",
-        "design": DESIGN,
+        "design": {"default": DESIGN},
         "colors": ["black"],
         "brief": "",
         "prices": {"S": "349 NOK"},

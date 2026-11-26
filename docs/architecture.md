@@ -1086,8 +1086,7 @@ later. Each traces to a decision.
   Templates choose no artwork. An artwork group — a render layer's design
   identity, a Printify print area — is the resolved file's **content hash**,
   so renaming a file or reshaping `design:` without changing what any garment
-  prints plans nothing. `design:` is always written as a map
-  (`ListingDocuments` normalises a bare string or `null`).
+  prints plans nothing. `design:` is always a map.
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
   variants sell, not which photos get rendered.
