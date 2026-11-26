@@ -17,6 +17,7 @@ from etsy_listings.core.engine.change import (
     scalar,
     sequence,
 )
+from etsy_listings.core.engine.lock import short_digest
 from etsy_listings.core.engine.stages.product_document import (
     AppliedProduct,
     PrintifyProductDesired,
@@ -153,9 +154,7 @@ def _print_area_changes(wanted: AppliedProduct, was: AppliedProduct) -> list[Cha
 
 
 def _area_path(design_hash: str) -> str:
-    """``print_areas.<first 12 hex digits>`` -- enough to tell two files
-    apart in a plan, without a 64-character key in every line."""
-    return f"print_areas.{design_hash.removeprefix('sha256:')[:12]}"
+    return f"print_areas.{short_digest(design_hash)}"
 
 
 def _drift(was: AppliedProduct | None, live: Product | None) -> tuple[Drift, ...]:

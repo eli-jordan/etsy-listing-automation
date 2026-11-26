@@ -9,7 +9,13 @@ from pydantic import BaseModel, ConfigDict
 from etsy_listings.core.config.media import media_kind
 from etsy_listings.core.engine.change import Action, Drift, FieldChange, Verdict
 from etsy_listings.core.engine.context import RunContext
-from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
+from etsy_listings.core.engine.lock import (
+    HASH_PREFIX,
+    Lockfile,
+    hash_file,
+    short_digest,
+    to_workspace_relative_posix,
+)
 from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_media import IMAGE_IDS_KEY
 from etsy_listings.core.engine.stages.etsy_target import (
@@ -480,9 +486,7 @@ def _same_video_changes(path: str, before: AppliedVideo, after: AppliedVideo) ->
 
 
 def _digest(content_hash: str) -> str:
-    """``sha256:`` and the first twelve hex digits: enough to tell two files
-    apart in a plan, short enough to read."""
-    return content_hash[: len("sha256:") + 12]
+    return HASH_PREFIX + short_digest(content_hash)
 
 
 def _actions(desired: EtsyVideosDesired) -> tuple[Action, ...]:

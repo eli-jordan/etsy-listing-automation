@@ -15,6 +15,14 @@ stage rather than each stage owning a copy of it."""
 
 SCHEMA_VERSION = 1
 
+HASH_PREFIX = "sha256:"
+SHORT_DIGEST_LENGTH = 12
+"""Hex digits a plan shows of a content hash: enough to tell two files apart."""
+
+
+def short_digest(content_hash: str) -> str:
+    return content_hash.removeprefix(HASH_PREFIX)[:SHORT_DIGEST_LENGTH]
+
 
 def to_workspace_relative_posix(root: Path, path: Path) -> str:
     relative = path.resolve().relative_to(root.resolve())
@@ -26,13 +34,13 @@ def hash_file(path: Path) -> str:
 
 
 def hash_bytes(data: bytes) -> str:
-    return f"sha256:{hashlib.sha256(data).hexdigest()}"
+    return f"{HASH_PREFIX}{hashlib.sha256(data).hexdigest()}"
 
 
 def canonical_hash(applied: dict[str, Any]) -> str:
     canonical = json.dumps(applied, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    return f"sha256:{digest}"
+    return f"{HASH_PREFIX}{digest}"
 
 
 @dataclass(frozen=True)
