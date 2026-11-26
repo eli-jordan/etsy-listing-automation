@@ -119,6 +119,7 @@ describe("usePreview", () => {
     await settle(1, "blob:two");
     expect(result.current).toBe("blob:two");
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:one");
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith("blob:two");
   });
 
   it("asks for nothing while the body is null", async () => {

@@ -67,23 +67,14 @@ export function usePreview(
   }, [requestIdentity, strict, onPending]);
   const [url, setUrl] = useState<string | null>(null);
 
-  // The URL currently on screen, for the unmount revoke below. A ref, because
-  // that cleanup must not re-run every time the URL changes -- it would revoke
-  // the image the editor is displaying.
+  // A ref, so the unmount revoke below never re-runs per URL.
   const current = useRef<string | null>(null);
   useEffect(() => {
     current.current = url;
   }, [url]);
 
-  // The job waiting to be sent (at most one -- a newer edit overwrites an
-  // unsent older one), and whether the loop is already running.
   const queued = useRef<Job | null>(null);
   const busy = useRef(false);
-  // Bumped when this hook stops caring about anything already in flight: an
-  // unmount, or a switch to a different template. Not bumped for an ordinary
-  // edit -- that response is still the newest frame there is, and showing it
-  // while the next one renders is what keeps the canvas from flickering back
-  // to a stale image.
   const generation = useRef(0);
 
   const pump = useCallback(async () => {
@@ -106,8 +97,6 @@ export function usePreview(
         setUrl(replacingUrl(next));
         pendingListener.current?.(false);
       } catch {
-        // A refused strict frame must not leave an old material composite
-        // under newly edited geometry. Its caller can show the local overlay.
         const current = sent === generation.current;
         if (current && latest.current === job.identity) pendingListener.current?.(false);
         if (strictMode.current && current) setUrl(replacingUrl(null));
@@ -127,11 +116,8 @@ export function usePreview(
     }
   }, []);
 
-  // Anything still in flight belongs to the previous template, so its result
-  // must not land on this one's canvas.
   useEffect(() => {
-    // Capture this template's listener. A newer render can already have
-    // installed the next template's listener before this cleanup runs.
+    // The next template's render may install its listener before this cleanup runs.
     const notify = pendingListener.current;
     return () => {
       generation.current += 1;
