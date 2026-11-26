@@ -1,7 +1,7 @@
 import { maskDraft } from "./maskDraft";
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import type { MaskOperation } from "../api/preparation";
-import type { BoundingBox } from "../types";
+import type { BoundingBox, PhotoSpace } from "../types";
 import { artworkTransform } from "./artworkTransform";
 
 export type Stroke = Extract<MaskOperation, { type: "stroke" }>;
@@ -27,7 +27,7 @@ export function PlacementOverlay({
   automaticMaskUrl: string | null;
   undoBases: string[];
   operations: MaskOperation[];
-  space: [number, number];
+  space: PhotoSpace;
   editing: boolean;
   mode: "mask" | "unmask";
   diameter: number;

@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import { useIsPhone } from "../../../phone/usePhone";
-import { type Point, type Quad, compose, homography, toPhoto } from "./pose";
+import { type Point, compose, homography, toPhoto } from "./pose";
+import type { BackingPx, PhotoPoint, PhotoQuad } from "../../../pixels";
 import { type LiveSource, useLiveScene } from "./useLiveScene";
 import type { Gesture, Layer, Positioning } from "./usePositioning";
 
@@ -16,7 +17,7 @@ const STEM_SCREEN_PX = 22;
 
 const points = (quad: readonly Point[]) => quad.map((p) => `${p.x},${p.y}`).join(" ");
 
-function safeCompose(layer: Layer): Quad {
+function safeCompose(layer: Layer): PhotoQuad {
   try {
     return compose(layer.templateBox, layer.pose);
   } catch {
@@ -24,14 +25,14 @@ function safeCompose(layer: Layer): Quad {
   }
 }
 
-/** CSS `matrix3d` taking a `w` x `h` element onto `quad` (photo pixels). */
-function warp(quad: Quad, w: number, h: number): string {
+/** CSS `matrix3d` taking a `w` x `h` element onto `quad`. */
+function warp(quad: PhotoQuad, w: number, h: number): string {
   const [a, b, c, d, e, f, g, i, j] = homography(quad);
   const m = [a / w, d / w, 0, g / w, b / h, e / h, 0, i / h, 0, 0, 1, 0, c, f, 0, j];
   return `matrix3d(${m.join(",")})`;
 }
 
-function stemOf(layer: Layer, corners: Quad, photoPxPerScreenPx: number) {
+function stemOf(layer: Layer, corners: PhotoQuad, photoPxPerScreenPx: number) {
   const top = { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 };
   let centre = { x: top.x, y: top.y + 1 };
   try {
@@ -71,8 +72,8 @@ export function PositionStage({ positioning, composite, title, source }: Props) 
     return () => window.removeEventListener("resize", measure);
   }, [size.w, size.h]);
 
-  /** Client to photo pixels, through `preserveAspectRatio`'s default meet. */
-  function photoPoint(event: PointerEvent): Point {
+  /** Through `preserveAspectRatio`'s default meet. */
+  function photoPoint(event: PointerEvent): PhotoPoint {
     const rect = svg.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     const scale = Math.min(rect.width / size.w, rect.height / size.h);
@@ -166,7 +167,10 @@ export function PositionStage({ positioning, composite, title, source }: Props) 
 
 /** The canvas's size for this stage: sharp on
  * this screen, and never more pixels than the photo has. */
-function backingOf(size: { w: number; h: number }, photoPxPerScreenPx: number) {
+function backingOf(
+  size: { w: number; h: number },
+  photoPxPerScreenPx: number,
+): { width: BackingPx; height: BackingPx } {
   const ratio = Math.min(1, window.devicePixelRatio / photoPxPerScreenPx);
   return { width: Math.round(size.w * ratio), height: Math.round(size.h * ratio) };
 }

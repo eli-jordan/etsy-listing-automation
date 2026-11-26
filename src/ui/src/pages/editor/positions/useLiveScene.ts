@@ -5,6 +5,7 @@ import {
   type LiveRenderer,
   createLiveRenderer,
 } from "./liveRenderer";
+import type { BackingPx } from "../../../pixels";
 
 export interface LiveSource {
   photo: string;
@@ -22,8 +23,7 @@ interface Args {
   look: LiveLook;
   layers: readonly SceneLayer[];
   size: { w: number; h: number };
-  /** Canvas pixels: what the stage shows, not the photo's own size. */
-  backing: { width: number; height: number };
+  backing: { width: BackingPx; height: BackingPx };
   /** Pictures load even while false, so a first drag finds them. */
   visible: boolean;
 }

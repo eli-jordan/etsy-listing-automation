@@ -7,7 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { BoundingBox, Point } from "../types";
+import type { CanvasPoint, PhotoPoint, PhotoPx, ScreenPx } from "../pixels";
+import type { BoundingBox, PhotoSpace } from "../types";
 import { useLatest } from "../hooks/useLatest";
 import { useIsPhone } from "../phone/usePhone";
 import {
@@ -24,9 +25,7 @@ interface Props {
   overlay?: ReactNode;
   interactive?: boolean;
   imageUrl: string;
-  /** The template photo's **true** `[width, height]`, from the API, not
-   * `naturalWidth`: the editor shows a downscale (docs/architecture.md). */
-  space: [number, number];
+  space: PhotoSpace;
   boxes: BoundingBox[];
   selectedIndex: number;
   onSelect: (index: number) => void;
@@ -48,15 +47,11 @@ interface Props {
   labelSuggestions?: string[];
 }
 
-interface Menu {
-  /** Where the menu opens, in `.quad-editor` px. */
-  x: number;
-  y: number;
-}
+type Menu = CanvasPoint;
 
 type Drag = { pointerId: number } & (
   | { kind: "corner"; pointIndex: number; start: BoundingBox }
-  | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox }
+  | { kind: "box"; boxIndex: number; origin: PhotoPoint; start: BoundingBox }
 );
 
 const DRAG_TARGETS = ".quad-editor__polygon, .quad-editor__handle, .quad-editor__grip";
@@ -87,8 +82,12 @@ function useTouchClaim(
   }, [svg, enabled, dragging]);
 }
 
-function useGripRadius(svg: SVGSVGElement | null, imageWidth: number, dotRadius: number): number {
-  const [overlayWidth, setOverlayWidth] = useState(0);
+function useGripRadius(
+  svg: SVGSVGElement | null,
+  imageWidth: PhotoPx,
+  dotRadius: PhotoPx,
+): PhotoPx {
+  const [overlayWidth, setOverlayWidth] = useState<ScreenPx>(0);
   useLayoutEffect(() => {
     if (!svg) return;
     const measure = () => setOverlayWidth(svg.getBoundingClientRect().width);
@@ -105,7 +104,7 @@ function isTypingInField(event: React.KeyboardEvent): boolean {
   return (event.target as Element).closest("input, textarea") !== null;
 }
 
-function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
+function menuAnchor(clientX: ScreenPx, clientY: ScreenPx, svg: SVGSVGElement | null): Menu {
   const host = svg?.getBoundingClientRect();
   return { x: clientX - (host?.left ?? 0), y: clientY - (host?.top ?? 0) };
 }
@@ -229,7 +228,7 @@ export function QuadEditor({
     if (menu && menuRef.current) positionMenu(menuRef.current, menu);
   }, [menu]);
 
-  function toImageSpace(clientX: number, clientY: number): Point | null {
+  function toImageSpace(clientX: ScreenPx, clientY: ScreenPx): PhotoPoint | null {
     const svg = svgRef.current;
     if (!svg) return null;
     const ctm = svg.getScreenCTM();
@@ -243,7 +242,7 @@ export function QuadEditor({
 
   const dragging = useLatest(drag !== null);
   useTouchClaim(svgNode, phone && interactive, dragging);
-  const dotRadius = Math.max(space[0], space[1]) * 0.015;
+  const dotRadius: PhotoPx = Math.max(space[0], space[1]) * 0.015;
   const gripR = useGripRadius(phone ? svgNode : null, space[0], dotRadius);
 
   function handleCornerPointerDown(pointIndex: number) {
