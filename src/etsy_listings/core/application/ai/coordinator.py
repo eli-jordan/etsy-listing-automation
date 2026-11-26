@@ -76,11 +76,6 @@ class AiCoordinator:
         self._runner.shutdown()
 
     def start_run(self, listing: str, *, draft_brief: bool) -> AiRun | Conflict:
-        """Start a manual run for saved ``listing``, or answer the active run
-        holding it. Refuses, in this order and starting nothing:
-        :class:`ListingMissingError`, :class:`ListingDeployingError`
-        (ADR-0050), :class:`ListingDraftingInBatchError`, then, after the
-        active-run check, :class:`AiNotReadyError`."""
         if not ListingDocuments(self._workspace).exists(listing):
             raise ListingMissingError(listing)
         refused = self._claimed(listing)
@@ -95,9 +90,8 @@ class AiCoordinator:
         return self._create(listing, draft_brief=draft_brief)
 
     def _create(self, listing: str, *, draft_brief: bool) -> AiRun | Conflict:
-        """Create the run and start it, or hold it while a backup's pause is
-        on. Admitted before the run exists, so a backup waiting for quiet
-        counts it as soon as anyone can see it."""
+        # Admitted before the run exists, so a backup waiting for quiet
+        # counts it as soon as anyone can see it.
         ticket = self._gate.admit(_backup_wait_label(listing))
         # The registry re-checks deploy holds: a deploy may have taken it since.
         run = self._registry.create(
@@ -120,9 +114,7 @@ class AiCoordinator:
             self._runner.start(run)
 
     def blocked(self, listing: str) -> AiRunRefusedError | None:
-        """What :meth:`start_run` would refuse the **AI Mode** button's run
-        with (one that drafts an empty brief), or ``None``. An active run is
-        not a refusal: the button reattaches to it."""
+        """An active run is not a refusal: the AI Mode button reattaches to it."""
         refused = self._claimed(listing)
         if refused is not None:
             return refused

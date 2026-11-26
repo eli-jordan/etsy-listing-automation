@@ -22,16 +22,11 @@ MARKER_WIDTH = 2
 
 @dataclass(frozen=True)
 class Choice[T]:
-    """One row of a picker: the thing itself, and the text offered for it."""
-
     value: T
     label: str
     marked: bool = False
-    """Whether this row is called out, and why is the picker's business: a
-    garment already used in this workspace, a plan whose sizes match, a design
-    that already has a listing. The *rendering* of the callout differs (a
-    marker column, a trailing note) and so does whether it sorts first, which
-    is why those stay with each picker rather than moving in here."""
+    """Whether this row is called out. Why, how the callout renders and whether it sorts first
+    are each picker's business."""
 
 
 def marked_choices[T](
@@ -64,12 +59,9 @@ def build_blueprint_choices(
     *,
     marker: str = LOCAL_MARKER,
 ) -> list[Choice[Blueprint]]:
-    """Blueprints as aligned ``marker brand model title`` rows.
-
-    Brand and model identify a blank ("Gildan 18500"); Printify's titles do
-    not ("Unisex Pullover Hoodie" is sold under several brands). Garments
-    with a local garment profile come first, marked.
-    """
+    """Blueprints as aligned ``marker brand model title`` rows, garments with a local profile
+    first and marked. Brand and model identify a blank ("Gildan 18500"); Printify's titles do
+    not."""
     brand_width = max((len(b.brand) for b in blueprints), default=0)
     model_width = max((len(b.model) for b in blueprints), default=0)
     return marked_choices(
@@ -82,12 +74,9 @@ def build_blueprint_choices(
 
 
 def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Choice[Path]]:
-    """Designs as ``date name`` rows, newest first.
-
-    The date is in the label because fzf reorders rows once a query is
-    typed. A design that already has a listing gets a trailing note, not
-    :func:`marked_choices`, which would sort it to the top.
-    """
+    """Designs as ``date name`` rows, newest first. The date is in the label because fzf reorders
+    rows once a query is typed; a design that already has a listing gets a trailing note, as
+    :func:`marked_choices` would sort it first."""
     entries = sorted(
         ((path, path.stat().st_mtime) for path in paths),
         key=lambda entry: (-entry[1], entry[0].stem.lower()),

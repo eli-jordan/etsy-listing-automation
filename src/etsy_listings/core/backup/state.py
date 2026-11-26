@@ -21,7 +21,7 @@ RunOutcome = Literal["succeeded", "failed", "stopped"]
 
 
 class _Record(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    model_config = ConfigDict(frozen=True, extra="ignore", use_attribute_docstrings=True)
 
 
 class CheckResult(_Record):
@@ -33,7 +33,6 @@ class CheckResult(_Record):
 
 class DestinationState(_Record):
     last_copy: datetime | None = None
-    """The last copy that finished."""
     problem: str | None = None
     """Why the latest copy did not finish; None once one does."""
     last_check: CheckResult | None = None
@@ -63,8 +62,6 @@ class CopyRecord(_Record):
 
 
 class RunRecord(_Record):
-    """One run's outcome, as the history keeps it."""
-
     repository: str
     started_at: datetime
     finished_at: datetime
@@ -81,7 +78,7 @@ class RunRecord(_Record):
     """Each destination's copy, in the configured order."""
     notice: str | None = None
     """Something the run decided that the seller should know, such as a
-    new workspace ID beside several others (ADR-0061)."""
+    new workspace ID beside several others."""
 
 
 class BackupStateStore:

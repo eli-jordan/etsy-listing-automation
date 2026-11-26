@@ -147,38 +147,6 @@ def test_missing_file_is_an_actionable_error(tmp_path: Path) -> None:
         Defaults.load(tmp_path / "nope.yaml")
 
 
-# ------------------------------------------------------- keys that have moved
-
-
-def test_a_top_level_currency_says_where_it_went(tmp_path: Path) -> None:
-    stale = {**MINIMAL, "currency": "NOK"}
-
-    with pytest.raises(ConfigLoadError) as caught:
-        Defaults.load(_write(tmp_path, stale))
-
-    assert "etsy.currency" in str(caught.value)
-    assert "setup" in str(caught.value)
-
-
-def test_a_top_level_print_provider_says_where_it_went(tmp_path: Path) -> None:
-    stale = {**MINIMAL, "preferred_print_provider": "Monster Digital"}
-
-    with pytest.raises(ConfigLoadError) as caught:
-        Defaults.load(_write(tmp_path, stale))
-
-    assert "printify.preferred_print_provider" in str(caught.value)
-
-
-def test_both_moved_keys_are_reported_together(tmp_path: Path) -> None:
-    stale = {**MINIMAL, "currency": "NOK", "preferred_print_provider": "Monster Digital"}
-
-    with pytest.raises(ConfigLoadError) as caught:
-        Defaults.load(_write(tmp_path, stale))
-
-    assert "etsy.currency" in str(caught.value)
-    assert "printify.preferred_print_provider" in str(caught.value)
-
-
 def test_from_document_raises_pydantic_errors_located_at_each_refused_field(
     tmp_path: Path,
 ) -> None:

@@ -1,12 +1,12 @@
 import type { components } from "./api/schema";
+import type { PhotoPx, PhotoQuad } from "./pixels";
 
 export type Point = components["schemas"]["Point"];
-export type BoundingBox = [Point, Point, Point, Point];
+export type BoundingBox = PhotoQuad;
 
-/** A template photo's true pixel size, the space every box in template.yaml is
- * written in. From the API, never measured off the editor's downscaled image.
- * `null` where it is optional: no readable photo, so nothing to calibrate. */
-export type PhotoSpace = [width: number, height: number];
+/** From the API, never measured off the editor's downscaled image. `null`
+ * where it is optional: no readable photo, so nothing to calibrate. */
+export type PhotoSpace = [width: PhotoPx, height: PhotoPx];
 
 export type DisplaceConfig = components["schemas"]["DisplaceConfig"];
 export type ShadeConfig = components["schemas"]["ShadeConfig"];

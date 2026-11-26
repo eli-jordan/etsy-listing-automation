@@ -1,13 +1,8 @@
-"""Backoff policy for every Etsy and Printify request. ADR-0009.
+"""Backoff policy for every Etsy and Printify request.
 
-**The method matters more than the status.** A 429 is a refusal to process --
-Printify rejected the request before touching it, so resending is free
-whatever the verb. A 5xx or a dropped connection is the opposite: the write
-may well have landed, and ``POST products.json`` has no idempotency key and no
-conflict, so a retried create is precisely how one design becomes two products
-(ADR-0023, and ``TestNothingStopsUsCreatingTheSameProductTwice`` in the e2e
-layer). So idempotent methods are retried on both; POST only on 429.
-"""
+A 429 is refused before any processing, so every method retries on it, but
+after a 5xx or a dropped connection a write may have landed and
+``POST products.json`` has no idempotency key, so POST retries only on 429."""
 
 from __future__ import annotations
 
@@ -32,10 +27,7 @@ reason this function takes a method at all."""
 @dataclass(frozen=True)
 class RetryPolicy:
     attempts: int = 4
-    """Total attempts, not retries after the first. Four gives roughly
-    0.5 + 1 + 2 seconds of waiting before giving up -- long enough to ride out
-    a rate-limit window, short enough that a genuinely broken endpoint is
-    reported while the user is still watching."""
+    """Total attempts, not retries: four wait about 0.5 + 1 + 2 seconds before giving up."""
 
     base_delay: float = 0.5
     max_delay: float = 30.0
@@ -107,10 +99,6 @@ def with_retries(
     sleep: Callable[[float], None] = time.sleep,
     random: Callable[[], float] = _random.random,
 ) -> httpx.Response:
-    """Call ``send`` until it succeeds, is refused for a reason retrying cannot
-    fix, or runs out of attempts. The final response is returned, not raised,
-    so the caller decodes the real error; a transport error propagates.
-    """
     last = _send_once(send, method)
     for attempt in range(1, policy.attempts):
         if isinstance(last, httpx.Response) and not should_retry(method, last):

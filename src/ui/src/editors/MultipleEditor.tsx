@@ -35,11 +35,6 @@ function uncolouredWarning(placements: Placement[]): string | null {
   return `${count} ${noun} ${verb} no colour — can't mark calibrated yet`;
 }
 
-/**
- * The one output *is* the live composite of every placement, so there's no
- * separate gallery need here (unlike colour-matrix kind) -- the main preview
- * already shows everything at once.
- */
 function PhotoWarpMultipleEditor(props: Props) {
   const { templateName, config, onChange, design, knownColours } = props;
   const [selectedIndex, setSelectedIndex] = useState(0);

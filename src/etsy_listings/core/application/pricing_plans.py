@@ -1,10 +1,5 @@
-"""Which pricing plans a workspace has, which suit a garment, and a
-starting plan generated from live costs.
-
-Shared by both ways a listing is created: the listings editor's plan picker
-(``GET /api/pricing-plans``) and the ``new`` wizard, each rendering the rows
-its own way.
-"""
+"""Which pricing plans a workspace has, which suit a garment, and a starting plan
+generated from live costs, for the editor's plan picker and the ``new`` wizard."""
 
 from __future__ import annotations
 
@@ -212,10 +207,8 @@ class GarmentOffer:
 
 @dataclass(frozen=True)
 class PriceSources:
-    """Where a starting plan's figures come from: shipping from the
-    documented catalog, manufacturing costs from Printify's undocumented
-    endpoint, and the rate from a one-off FX fetch. The two fetches default
-    to the live ones, looked up at call time."""
+    """Manufacturing costs come from Printify's undocumented endpoint. The
+    fetches default to the live ones, looked up at call time."""
 
     catalog: CatalogClient
     fetch_costs: Callable[[int, int], dict[int, int]] | None = None

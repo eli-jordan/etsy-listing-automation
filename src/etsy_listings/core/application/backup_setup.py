@@ -66,8 +66,6 @@ class PreparedSetUp:
     def run(
         self, *, expected_revision: str, trying: Callable[[Path], None] | None = None
     ) -> Connected | None:
-        """Provision the storage folder and save the ``backup:`` block and
-        the password. What was connected, or None for a new repository."""
         answers = self.answers
         asked = Provisioning(
             storage=answers.repository,
@@ -86,7 +84,7 @@ class PreparedSetUp:
             )
         except ConnectPasswordError as exc:
             raise ExistingBackupPasswordError(exc.source) from None
-        return done.connected
+        return done.brought if isinstance(done.brought, Connected) else None
 
 
 def _copies_only(trying: Callable[[Path], None]) -> Callable[[Path | None], None]:

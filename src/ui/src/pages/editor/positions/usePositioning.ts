@@ -41,7 +41,6 @@ export interface Layer {
   templateBox: Quad;
   pose: Pose;
   stored: Quad | null;
-  /** Spec, *Validation* rules 1-2. */
   refusal: PoseRefusal | null;
 }
 

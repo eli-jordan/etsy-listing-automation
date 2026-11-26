@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { escapedEachSegment } from "./listings";
 import type {
   MediaFileSummary,
   ListingTemplateDetail,
@@ -9,7 +10,6 @@ import type {
 
 export class ListingTemplatesApiError extends Error {}
 
-/** Its own class: the *name it* page shows it beside the name field, not as a page error. */
 export class ListingTemplateNameRefused extends ListingTemplatesApiError {
   constructor(
     readonly name: string,
@@ -44,11 +44,7 @@ export async function getListingTemplateDraft(
   return data;
 }
 
-/** Naming the draft is what writes it. Resolves for a template the server
- * would not write -- `saved: false` with its issues, nothing on disk -- and
- * rejects with {@link ListingTemplateNameRefused} for a name it will not
- * take, which is never suffixed. `document` is the seller's edits made
- * before naming it (UI doc §1: the *name it* state is the editor). */
+/** `document`: the seller's edits made before naming it. */
 export async function createListingTemplate(
   name: string,
   source: ListingTemplateSource,
@@ -114,15 +110,10 @@ export async function listListingTemplateMediaFiles(name: string): Promise<Media
   return data;
 }
 
-/** One of a listing template's own files (a `./` ref without the `./`),
- * downscaled for a card. Escaped a segment at a time, as the listing's own
- * file URLs are. */
 export function listingTemplateMediaThumbnailUrl(template: string, path: string): string {
-  const escaped = path.split("/").map(encodeURIComponent).join("/");
-  return `/api/listing-templates/${encodeURIComponent(template)}/media-files/${escaped}/thumbnail`;
+  return `/api/listing-templates/${encodeURIComponent(template)}/media-files/${escapedEachSegment(path)}/thumbnail`;
 }
 
 export function listingTemplateMediaFileUrl(template: string, path: string): string {
-  const escaped = path.split("/").map(encodeURIComponent).join("/");
-  return `/api/listing-templates/${encodeURIComponent(template)}/media-files/${escaped}/file`;
+  return `/api/listing-templates/${encodeURIComponent(template)}/media-files/${escapedEachSegment(path)}/file`;
 }

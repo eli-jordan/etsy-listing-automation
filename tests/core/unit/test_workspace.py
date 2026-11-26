@@ -163,10 +163,6 @@ class TestResolveRef:
             == ws.root / "pricing-plans" / "tees" / "basic.yaml"
         )
 
-    def test_a_legacy_parent_ref_is_refused_as_the_old_form(self, ws: Workspace) -> None:
-        with pytest.raises(InvalidRefError, match="listing-relative form"):
-            ws.resolve_ref("../../designs/take-a-hike.png", listing_dir=ws.listing_dir("x"))
-
     @pytest.mark.parametrize(
         "ref",
         [
@@ -174,6 +170,7 @@ class TestResolveRef:
             "./shots/../../other/listing.yaml",
             "common-media/..",
             "..",
+            "../../designs/take-a-hike.png",
         ],
     )
     def test_dot_dot_anywhere_is_refused(self, ws: Workspace, ref: str) -> None:

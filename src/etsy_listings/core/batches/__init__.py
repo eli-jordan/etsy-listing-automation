@@ -1,17 +1,7 @@
-"""Batch creation: stage design PNGs against a listing template, then create
-one ordinary local listing per design (spec *Starting a batch* to
-*Confirming a batch*; ADR-0051).
+"""Batch creation: stage design PNGs against a listing template, then create one
+ordinary local listing per design.
 
-Two cache records carry the work: a staging session, which is everything
-uploaded but not yet confirmed, and a batch, which is what confirming made of
-it. The stores are plain classes over `Workspace`; the UI server keeps one of
-each. ``archive``'s ZIP checks are reached only through :func:`stage_pngs`.
-
-Nothing here deploys or calls a provider. A created row is queued for AI
-(``BatchRow.ai``), but the queue that drafts it is the UI server's
-(``core/application/ai/batch_queue.py``, ADR-0048), since only that process
-runs AI.
-"""
+Withheld: ``archive``'s ZIP checks, reached only through :func:`stage_pngs`."""
 
 from etsy_listings.core.batches.creation import (
     ConfirmRefusedError,

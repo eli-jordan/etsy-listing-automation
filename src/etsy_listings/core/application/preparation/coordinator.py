@@ -49,11 +49,7 @@ class PreparationRefusedError(ConflictError, ValueError):
 
 @dataclass(frozen=True)
 class PreparationRequest:
-    """One explicit Prepare, Prepare again or Retry, against the calibration
-    ``config_revision`` it was asked for. ``request_id`` makes a repeated
-    submission idempotent; ``previous_job`` names the job a Retry repeats, and
-    ``reset_masks_for_photo`` is Prepare again's choice to start the masks
-    over."""
+    """``request_id`` makes a repeated submission idempotent."""
 
     config_revision: str
     request_id: str
@@ -129,12 +125,12 @@ class Preparations:
             template, request, reset_masks_for_photo=self._mask_reset(request)
         )
         with self.calibration.lock(template), self.store.condition:
-            existing = self._admit(submission)
+            existing = self._admit_locked(submission)
         if existing is not None:
             return existing
         selected = self._inspect_unlocked()
         with self.calibration.lock(template), self.store.condition:
-            job, created = self._enqueue(submission, selected)
+            job, created = self._enqueue_locked(submission, selected)
         if created:
             self._schedule()
         return job
@@ -145,12 +141,11 @@ class Preparations:
         return request.reset_masks_for_photo
 
     def _inspect_unlocked(self) -> Capability:
-        """Deep inspection may take 25 seconds. Call it holding no journal or
-        template lock, so unrelated status and Cancel stay live."""
+        """Deep inspection may take 25 seconds: holding no lock keeps status
+        and Cancel live."""
         return self.runtime.inspect()
 
-    def _admit(self, submission: _Submission) -> Job | None:
-        """Caller holds the template and journal locks; runs before runtime inspection."""
+    def _admit_locked(self, submission: _Submission) -> Job | None:
         template, request = submission.template, submission.request
         known = self._receipted(submission)
         if known is not None:
@@ -173,8 +168,7 @@ class Preparations:
                 )
         return self._join(submission, snapshot)
 
-    def _enqueue(self, submission: _Submission, selected: Capability) -> tuple[Job, bool]:
-        """Caller holds the template and journal locks; rechecks after runtime inspection."""
+    def _enqueue_locked(self, submission: _Submission, selected: Capability) -> tuple[Job, bool]:
         template, request = submission.template, submission.request
         known = self._receipted(submission)
         if known is not None:
@@ -274,17 +268,16 @@ class Preparations:
 
     def reconcile_saved(self, template: str) -> Job | None:
         with self.calibration.lock(template):
-            rebuild = self._planned_rebuild(template)
+            rebuild = self._planned_rebuild_locked(template)
             if rebuild is None:
                 return None
             with self.store.condition:
-                job, created = self._queue_rebuild(template, rebuild)
+                job, created = self._queue_rebuild_locked(template, rebuild)
         if created:
             self._schedule()
         return job
 
-    def _planned_rebuild(self, template: str) -> _Rebuild | None:
-        """Caller holds the template lock."""
+    def _planned_rebuild_locked(self, template: str) -> _Rebuild | None:
         calibration = self.calibration.read(template)
         if not isinstance(calibration.config.renderer, MarigoldRenderer):
             return None
@@ -312,8 +305,7 @@ class Preparations:
         )
         return _Rebuild(calibration.revision, inputs, selected)
 
-    def _queue_rebuild(self, template: str, rebuild: _Rebuild) -> tuple[Job | None, bool]:
-        """Caller holds the journal lock."""
+    def _queue_rebuild_locked(self, template: str, rebuild: _Rebuild) -> tuple[Job | None, bool]:
         inputs = rebuild.inputs
         jobs = self.store.jobs()
         if self._requires_retry(template, inputs, jobs):
@@ -343,14 +335,14 @@ class Preparations:
 
     def cover(self, template: str, limits: PositionLimits) -> Job | None:
         with self.calibration.lock(template), self.store.condition:
-            planned = self._planned_coverage(template, limits)
+            planned = self._planned_coverage_locked(template, limits)
             if planned is None or isinstance(planned, Job):
                 return planned
         selected = self._inspect_unlocked()
         if not selected.available or not selected.engine_version or not selected.installation_id:
             return None
         with self.calibration.lock(template), self.store.condition:
-            planned = self._planned_coverage(template, limits)
+            planned = self._planned_coverage_locked(template, limits)
             if planned is None or isinstance(planned, Job):
                 return planned
             revision, inputs, quads = planned
@@ -377,10 +369,9 @@ class Preparations:
         self._schedule()
         return job
 
-    def _planned_coverage(
+    def _planned_coverage_locked(
         self, template: str, limits: PositionLimits
     ) -> tuple[str, PreparationInputs, dict[str, Quad]] | Job | None:
-        """Caller holds the template and journal locks."""
         calibration = self.calibration.read(template)
         if not isinstance(calibration.config.renderer, MarigoldRenderer):
             return None
@@ -484,7 +475,7 @@ class Preparations:
                     continue
                 job = next((job for job in jobs if self._runnable(job, lane)), None)
                 if job is not None:
-                    self._dispatch(job, lane)
+                    self._dispatch_locked(job, lane)
 
     def _runnable(self, job: Job, lane: str) -> bool:
         if job.id in self._active or job.phase in TERMINAL:
@@ -494,8 +485,7 @@ class Preparations:
             return cpu_work
         return not cpu_work and job.phase == "queued"
 
-    def _dispatch(self, job: Job, lane: str) -> None:
-        """Caller holds the journal lock."""
+    def _dispatch_locked(self, job: Job, lane: str) -> None:
         ticket = self.gate.admit(f"Prepare job for {job.template}")
         if ticket is None:
             return
@@ -554,7 +544,7 @@ class Preparations:
             if any(job.phase not in TERMINAL for job in jobs):
                 raise TemplateInUseError(f"{old!r} is being prepared; rename it when that finishes")
             move()
-            follow = self.execution.evidence.rehome(old, new)
+            follow = self.execution.evidence.rehome_locked(old, new)
             for job in jobs:
                 self.store.write(job, template=new, evidence=tuple(map(follow, job.evidence)))
 
@@ -564,7 +554,7 @@ class Preparations:
             jobs = self.store.jobs()
             current, replacement_order = self._replacement(template)
             with self.store.condition:
-                self._retire_references(template, jobs, replacement_order)
+                self._retire_references_locked(template, jobs, replacement_order)
                 jobs = self.store.jobs()
             referenced_paths = [
                 self.execution.evidence.path(p.path)
@@ -580,8 +570,9 @@ class Preparations:
                 removed_maps = self.artifacts.cleanup(template)
         return {"prediction_sets": removed_sets, "work": removed_work, "generations": removed_maps}
 
-    def _retire_references(self, template: str, jobs: list[Job], replacement_order: int) -> None:
-        """Caller holds the journal lock."""
+    def _retire_references_locked(
+        self, template: str, jobs: list[Job], replacement_order: int
+    ) -> None:
         for job in jobs:
             if job.template != template or job.id in self._active:
                 continue

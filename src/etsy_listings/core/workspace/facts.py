@@ -1,21 +1,7 @@
-"""What a local listing check reads off the workspace, read once per request.
+"""What a local listing check reads off the workspace, once per request.
 
-* **Templates are gathered eagerly**, in ``gather``, because every check of
-  every listing needs the whole map.
-* **Garment profiles are read on demand and kept**, because a request usually
-  wants one or two of them and a workspace may hold many.
-* **Videos are probed on demand and kept, by file**: a shared clip in
-  ``common-media/`` is named by many listings.
-
-Two of those answers also outlive the request:
-
-* **A template's entry is kept until a file in its directory changes**
-  (:func:`~etsy_listings.core.workspace.file_version.tree_version`). Readiness
-  is advisory here -- a listing issue -- and the render stage asks it again
-  from the files before it acts.
-* **A video's probe is kept until the file changes**
-  (:func:`~etsy_listings.core.workspace.file_version.file_version`).
-"""
+Entries outlive the request until their files change, so readiness here is advisory and the
+render stage asks again before it acts."""
 
 from __future__ import annotations
 
@@ -87,23 +73,9 @@ class WorkspaceFacts:
         return cls(workspace, garment_profile_names=(), templates={})
 
     def garment_profile(self, name: str) -> GarmentProfile | None:
-        """``None`` for a profile that will not load *and* for a name that could
-        never name a file at all -- ``""`` (a new listing, before the Variants
-        dropdown has been touched) or anything that is not a single path
-        segment.
-
-        ``_segment``'s refusal is still the security boundary; all this decides
-        is that an unusable value *stored in a listing* is a business issue
-        (`_check_garment_profile_exists` reports it) rather than a 400 that
-        takes the whole editor down with it.
-
-        Note that this answering ``None`` and ``name`` being absent from
-        :attr:`garment_profile_names` are *different* facts: a profile whose
-        YAML is broken is listed but will not load. The existence check reads
-        the names, so it stays quiet about it; the profile-dependent checks read
-        this, so they skip. That is the behaviour this module inherited, and it
-        is now at least visible in one place.
-        """
+        """``None`` both for a profile that will not load and for a name that cannot name a file
+        (``""`` or more than one path segment), so a bad stored value is a listing issue rather
+        than a 400. A broken profile still appears in :attr:`garment_profile_names`."""
         if name not in self._profiles:
             self._profiles[name] = self._load_garment_profile(name)
         return self._profiles[name]
@@ -134,10 +106,8 @@ class WorkspaceFacts:
 
 
 def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
-    """Every *calibrated* template's real kind and colours, the way
-    ``check_listing`` needs them -- an uncalibrated one has no kind to compare
-    against and is silently skipped, the same as a template name that has
-    since been renamed or deleted from under a listing."""
+    """Calibrated templates only: an uncalibrated, renamed or deleted one has no kind to compare and
+    is skipped."""
     result: dict[str, TemplateInfo] = {}
     root = str(workspace.root).casefold()
     for name in workspace.template_names():

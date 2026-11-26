@@ -15,31 +15,27 @@ FALLBACK_CURRENCY = "NOK"
 
 
 @dataclass(frozen=True)
-class ShopSelection:
-    """The outcome of asking Printify which shops a token can reach.
+class NeedsChoice: ...
 
-    Three outcomes, not two: exactly one shop answers the question outright,
-    several make it a question for the user, and none is a problem no prompt
-    can fix.
-    """
 
-    shop: Shop | None = None
-    needs_choice: bool = False
-    problem: str | None = None
+@dataclass(frozen=True)
+class NoShops:
+    problem: str
+
+
+ShopSelection = Shop | NeedsChoice | NoShops
 
 
 def select_shop(shops: Sequence[Shop]) -> ShopSelection:
     if not shops:
-        return ShopSelection(
-            problem=(
-                "this Printify account has no shops, so there is nowhere to create "
-                "products. Create one at printify.com (My stores -> Add new store); "
-                "an 'API' store is enough for everything up to publishing."
-            )
+        return NoShops(
+            "this Printify account has no shops, so there is nowhere to create "
+            "products. Create one at printify.com (My stores -> Add new store); "
+            "an 'API' store is enough for everything up to publishing."
         )
     if len(shops) == 1:
-        return ShopSelection(shop=shops[0])
-    return ShopSelection(needs_choice=True)
+        return shops[0]
+    return NeedsChoice()
 
 
 @dataclass(frozen=True)
@@ -66,7 +62,7 @@ class FoundShop:
     shop: EtsyShop
     route: Literal["connected", "owner"]
     """``connected``: named after the connected Printify shop. ``owner``: the
-    shop the signed-in Etsy account owns."""
+    signed-in Etsy account's shop."""
 
 
 def find_etsy_shop(access: EtsyAccess, printify_shop: Shop) -> FoundShop | None:
@@ -88,8 +84,6 @@ def find_etsy_shop(access: EtsyAccess, printify_shop: Shop) -> FoundShop | None:
 class ShopLookup:
     exact: EtsyShop | None
     candidates: tuple[EtsyShop, ...]
-    """Everything the search returned, for a caller offering a choice when
-    there is no exact match."""
 
 
 def lookup_etsy_shop(client: EtsyShopClient, name: str) -> ShopLookup:
@@ -108,7 +102,7 @@ def policy_terms(policy: ReturnPolicy) -> dict[str, Any]:
 @dataclass(frozen=True)
 class ReturnPolicyOptions:
     policies: tuple[ReturnPolicy, ...]
-    """The shop's policies, the one ``shop.yaml`` already names first."""
+    """The one ``shop.yaml`` already names first."""
     current: dict[str, Any] | None
 
     def is_current(self, policy: ReturnPolicy) -> bool:

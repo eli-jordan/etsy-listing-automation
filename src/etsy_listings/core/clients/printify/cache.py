@@ -24,14 +24,7 @@ DEFAULT_TTL = timedelta(days=1)
 
 CACHE_SCHEMA = 2
 """Bump whenever a cached model's shape changes, so entries written by an
-older build are ignored rather than decoded into something wrong.
-
-Schema 1 stored a ``VariantSet`` whose print-area placeholders were read from
-a top-level key the Printify response does not have -- so every entry recorded
-zero print areas, and re-validating one under the fixed models would still
-yield zero. The cache is gitignored and fully derivable, so discarding a
-generation of it costs one refetch; leaving a poisoned entry in place costs a
-day of the bug appearing unfixed."""
+older build are ignored rather than decoded into something wrong."""
 
 
 _BLUEPRINTS = TypeAdapter(list[Blueprint])
@@ -75,7 +68,6 @@ class CachedCatalogClient(CatalogClient):
         path.write_text(json.dumps(payload), encoding="utf-8")
 
     def _cached[T](self, name: str, adapter: TypeAdapter[T], fetch: Callable[[], T]) -> T:
-        """``fetch()``, unless ``name`` already holds a live answer."""
         cached = self._read(name)
         if cached is not None:
             return adapter.validate_python(cached)

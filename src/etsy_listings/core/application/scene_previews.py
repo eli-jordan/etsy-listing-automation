@@ -75,12 +75,11 @@ class RenderedScene:
     """The composed scene, encoded as the render stage writes it."""
     render_identity: str
     generation_id: str | None = None
-    """The map generation a prepared scene was composed from, for promotion."""
+    """Kept for promotion."""
     config_revision: str | None = None
-    """The calibration revision a prepared scene was composed against."""
     remembered: bool = False
-    """Found under a digest read from :class:`RememberedDigests` rather than
-    one this process computed: likely right, but not yet checked."""
+    """Found under a digest from :class:`RememberedDigests`, not one this
+    process computed: likely right, but not yet checked."""
 
 
 @dataclass(frozen=True)
@@ -174,20 +173,17 @@ def saved_scene(
 def remembered_scene(
     workspace: Workspace, name: str, layers: SceneLayers, *, images: SceneImages
 ) -> ScenePicture:
-    """:func:`saved_scene` at full size, found under digests kept from before
-    a restart (:class:`RememberedDigests`) when this process has not computed
-    them yet -- for a viewer that checks the answer with
-    :func:`remembered_scene_was_wrong`. Nothing that renders or deploys asks
-    this."""
+    """May answer from digests kept from before a restart, so only a viewer
+    that checks with :func:`remembered_scene_was_wrong` asks; nothing that
+    renders or deploys does."""
     return _saved_scene(workspace, name, layers, _Asked("full", images, remembered=True))
 
 
 def remembered_scene_was_wrong(
     workspace: Workspace, name: str, layers: SceneLayers, *, images: SceneImages
 ) -> bool:
-    """Whether :func:`remembered_scene` shows a different scene from the one
-    the files' pixels name. Computing the true one also corrects the
-    remembered digests, so a wrong answer is given once."""
+    """Computing the true scene also corrects the remembered digests, so a
+    wrong answer is given once."""
     shown = remembered_scene(workspace, name, layers, images=images)
     if not isinstance(shown, RenderedScene) or not shown.remembered:
         return False
@@ -197,9 +193,6 @@ def remembered_scene_was_wrong(
 
 @dataclass(frozen=True)
 class _Asked:
-    """How a saved scene is asked for: its size, how its files decode, and
-    whether remembered digests may find it."""
-
     size: SceneSize
     images: SceneImages
     remembered: bool
@@ -283,9 +276,8 @@ def _photo_warp(
 
 @dataclass
 class _Recall:
-    """Each file's digest as this process computed it, else -- for a viewer
-    that will check -- as :class:`RememberedDigests` kept it. ``used`` says
-    whether any answer came from the latter."""
+    """A digest this process computed, else one :class:`RememberedDigests`
+    kept; ``used`` says whether any came from the latter."""
 
     remembered: RememberedDigests | None
     used: bool = False
@@ -305,8 +297,7 @@ class _Recall:
 
 
 def _remember(workspace: Workspace, photo: Path, designs: list[Path]) -> None:
-    """Keep the digests just computed for a scene's files, for the next
-    restart's first view."""
+    """For the next restart's first view."""
     store = RememberedDigests(workspace)
     store.remember("photo", photo)
     for path in designs:

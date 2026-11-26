@@ -1,12 +1,8 @@
-"""The copy of a design an AI provider actually looks at.
+"""The copy of a design an AI provider looks at, composited onto a contrasting
+background when it is transparent.
 
-The provider CLIs flatten transparency onto black, so black artwork on a
-transparent ground reaches the model as a black square. A transparent design
-is therefore composited onto a background that contrasts with its artwork.
-
-The copy lives in the workspace cache, not a temporary directory, because
-`claude -p`'s Read tool cannot reach outside the workspace.
-"""
+The provider CLIs flatten transparency onto black, and ``claude -p``'s Read tool
+cannot reach outside the workspace, so the copy lives in the workspace cache."""
 
 from __future__ import annotations
 

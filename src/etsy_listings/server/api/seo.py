@@ -58,14 +58,17 @@ def get_seo_readiness(
 @router.get(
     "/{name}/market",
     response_model=MarketSnapshot,
-    responses={404: {"description": "No such listing, or no market search for it yet"}},
+    responses={
+        404: {
+            "description": "No such listing, no market search for it yet, or a snapshot that "
+            "no longer reads, which the next run replaces"
+        }
+    },
 )
 def get_market_snapshot(target: Annotated[Target, Depends(listing_target)]) -> MarketSnapshot:
     """The listing's latest market research, as the top listings panel shows
-    it after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose
-    search succeeded, so a failed run leaves the previous one here. 404 until
-    the first search -- the panel is not rendered then -- and for a snapshot
-    that no longer reads as one, which the next run replaces."""
+    it after a reload. Written only by an AI run whose search succeeded, so a
+    failed run leaves the previous one here."""
     snapshot = market_snapshot.load(target.workspace, target.name)
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"no market snapshot for {target.name!r}")

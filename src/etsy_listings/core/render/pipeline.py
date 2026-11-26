@@ -1,11 +1,5 @@
-"""``render_scene()``: warp -> displace -> shade applied independently per
-layer, in fixed order, then folded over one base. The one Photo warp
-compositor for all three template kinds, so a colour-matrix scene and a chart
-cannot drift apart in how they composite.
-
-Pure, per ADR-0012: callers own loading the design/template arrays and the
-derived maps.
-"""
+"""``render_scene()``: warp, displace and shade per layer in fixed order, folded
+over one base; the one Photo warp compositor for all three template kinds."""
 
 from __future__ import annotations
 

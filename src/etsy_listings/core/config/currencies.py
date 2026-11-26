@@ -1,18 +1,10 @@
-"""The currencies a workspace may be configured in: Etsy Payments' list.
+"""The currencies a workspace may be configured in: Etsy Payments' 22, checked on
+2026-10-30 against
+https://help.etsy.com/hc/en-us/articles/360000337767-Currencies-Supported-for-Etsy-Payments.
 
-Checked 2026-10-30 against
-https://help.etsy.com/hc/en-us/articles/360000337767-Currencies-Supported-for-Etsy-Payments
-(22 currencies; the Admin prototype's list matched it). A shop selling in any
-other currency cannot take Etsy Payments, so the Admin page offers at most these.
-``shop.yaml`` itself is not restricted: ADR-0006's explicit-currency rule is
-what every price is checked against, whatever the file names.
-
-Not all of them are offered. ADR-0019 sends Printify a price as
-``Money.minor_units``, which is the amount times 100: right for a currency with
-two decimal places, 100 times too large for one with none. Until that model
-learns each currency's exponent, the page offers only the currencies it
-handles correctly (:data:`OFFERED_CURRENCIES`).
-"""
+Only :data:`OFFERED_CURRENCIES` are offered, because Printify is sent
+``Money.minor_units``, the amount times 100, which is wrong for a currency
+without two decimal places."""
 
 from __future__ import annotations
 

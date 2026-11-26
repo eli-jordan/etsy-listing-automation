@@ -1,46 +1,5 @@
-"""The Claude Code CLI adapter behind `AiProvider`.
-
-Every flag below was confirmed against the installed `claude -p --help`
-(Claude Code 2.1.273) rather than guessed. In particular:
-
-- ``--no-session-persistence`` is the documented "sessions will not be saved
-  to disk and cannot be resumed" flag -- this feature's own words for "no
-  durable provider session", confirmed as a `--print`-only option.
-- ``--tools Read,Grep,Glob`` is the read-only guarantee itself: Write, Edit,
-  NotebookEdit and Bash are simply not in the allowed-tool set, so nothing
-  the model does can write to the workspace regardless of permission mode --
-  "the feature must not silently launch a writable process" is met by the
-  tool never being offered, not by trusting a permission prompt to refuse it.
-- ``--permission-mode dontAsk`` plus ``--permission-prompts none`` is
-  defence in depth for "automatic tool approval inside read-only mode":
-  since only read tools are offered, nothing should ever prompt, but if
-  something unexpected tried to, this denies it automatically rather than
-  hanging a non-interactive process waiting for a human.
-- ``--json-schema <schema>`` takes the schema inline as a JSON string
-  (confirmed live: `--json-schema '{"type":"object",...}'` produced a
-  ``structured_output`` field alongside a ``result`` string matching it) --
-  unlike Codex's ``--output-schema``, there is no file-based form.
-- ``--output-format json`` wraps the run in one JSON envelope on stdout --
-  confirmed live shape: ``{"type": "result", "is_error": bool, "result":
-  "<final text>", ...}``. ``result`` is what this adapter treats as the raw
-  provider output; ``is_error`` is checked before trusting it.
-- No ``--add-dir`` is passed: the child's cwd is already ``workspace_root``,
-  which is what a non-interactive `-p` session reads from by default.
-- ADR-0056: explicit preferences use ``--model`` and ``--effort``; omitted
-  preferences leave the account defaults in effect.
-- Claude has no documented direct "attach an image" flag the way Codex's
-  ``-i/--image`` is. The design image's absolute path is named in the prompt
-  text instead, asking the model to open it with the (still available)
-  ``Read`` tool, which supports image files.
-- The prompt is sent over stdin, with no positional ``prompt`` argument on
-  the argv (confirmed live: `echo '<prompt>' | claude -p ...` with no
-  trailing prompt argument returns the same result a positional one would),
-  mirroring `ai/codex.py`'s own reasoning -- so an unusually long prompt
-  (Claude's especially, since `build_prompt` echoes the full response schema
-  a second time on top of the already-inline ``--json-schema`` argument)
-  never risks a platform argv-length limit (Windows' ~32K command-line
-  limit).
-"""
+"""The Claude Code CLI adapter behind ``AiProvider``; docs/architecture.md, *AI
+provider CLI flags*, gives each flag's reason."""
 
 from __future__ import annotations
 
@@ -61,9 +20,8 @@ from etsy_listings.core.ai.models import (
 PROVIDER_NAME = "claude"
 
 _READ_ONLY_TOOLS = "Read,Grep,Glob"
-"""The complete allowed-tool set for a generation call. Write, Edit,
-NotebookEdit and Bash are deliberately absent -- see this module's docstring
-for why that, not a permission mode, is what makes the process read-only."""
+"""The complete allowed-tool set for a generation call: no write tool and no
+Bash, which, not a permission mode, is what makes the process read-only."""
 
 _REQUIRED_HELP_FLAGS: tuple[str, ...] = (
     "--tools",
@@ -73,10 +31,9 @@ _REQUIRED_HELP_FLAGS: tuple[str, ...] = (
     "--json-schema",
     "--output-format",
 )
-"""Confirmed-real `claude -p` flags this adapter depends on, checked against
-the installed CLI's own `--help` text at readiness time -- an older `claude`
-missing any of these cannot honour the read-only/no-session contract, so it
-is reported unready rather than launched anyway."""
+"""The `claude -p` flags this adapter depends on, checked against the
+installed CLI's `--help` at readiness time: an older `claude` missing one is
+reported unready rather than launched."""
 
 
 @dataclass

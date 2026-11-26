@@ -100,10 +100,8 @@ class PublishApplied(BaseModel):
 class PublishDesired:
     sync_flags: dict[str, bool]
     priced_variants: tuple[PricedVariant, ...]
-    """The full resolved matrix, colour and size included -- carried rather
-    than collapsed straight to ``{id: price}`` because the below-cost
-    snapshot needs to *name* a variant, not just its id, and this is
-    the one place that resolution exists."""
+    """Not collapsed to ``{id: price}``: the below-cost snapshot names each
+    variant."""
     missing: tuple[tuple[str, str], ...] = ()
     currency: str = ""
 
@@ -123,20 +121,17 @@ class PublishDesired:
 
 class BelowCostRow(BaseModel):
     """One variant priced under what Printify charges to make it -- the
-    row `plan()` already refuses over ( :func:`_below_cost`), named for the
-    before/after review rather than left as a bare variant id."""
+    row `plan()` already refuses over, named for the before/after review
+    rather than left as a bare variant id."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     size: str
     colour: str
     price: Money
     cost: Money
-    """USD, as Printify reports it -- not necessarily the listing's own
-    currency (see :attr:`ProductVariant.cost`'s docstring). Shown as its own
-    ``Money`` rather than coerced into ``price``'s currency, since the two
-    can genuinely differ and a snapshot states facts, it does not convert
-    them."""
+    """USD, as Printify reports it: not necessarily ``price``'s currency, and
+    never converted."""
 
 
 class PublishSnapshot(BaseModel):
@@ -184,9 +179,7 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
             return NO_SHOP_BLOCKED
 
         config = ctx.workspace.load_listing(listing)
-        # Before `resolve_variant_pricing` below, which loads the garment
-        # profile this names -- the same gate the product stage runs, for the
-        # same reason, since both reach that function.
+        # Before `resolve_variant_pricing`, which loads the profile this names.
         blocked = check_garment_profile_chosen(config.garment_profile)
         if blocked is not None:
             return blocked
@@ -346,8 +339,7 @@ def _below_cost(desired_prices: dict[int, int], costs: dict[int, int]) -> tuple[
 
 
 def _below_cost_message(variant_ids: tuple[int, ...]) -> str:
-    """The consequence first, the remedy under it -- ``Blocked``'s shape, which
-    ``cli.render`` relies on to indent one under the other."""
+    """The consequence first, the remedy under it: ``Blocked``'s shape."""
     listed = ", ".join(str(v) for v in variant_ids)
     return (
         f"this listing will not be published: the price for variant(s) {listed} is "

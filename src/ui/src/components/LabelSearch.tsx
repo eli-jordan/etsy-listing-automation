@@ -50,7 +50,6 @@ function optionsFor(items: string[][], term: string, on: string[]): Option[] {
 
 const NO_HIGHLIGHT = -1;
 
-/** The highlight after an arrow key: it wraps at both ends. */
 function stepped(active: number, count: number, step: 1 | -1): number {
   if (active === NO_HIGHLIGHT) return step === 1 ? 0 : count - 1;
   return (active + step + count) % count;
@@ -75,7 +74,6 @@ export function LabelSearch({
   query,
   onQuery,
 }: {
-  /** Every searchable item's tags. */
   items: string[][];
   on: string[];
   onOn: (next: string[]) => void;

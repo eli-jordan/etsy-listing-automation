@@ -10,16 +10,16 @@ def ui(
     host: str = typer.Option(
         "0.0.0.0",
         "--host",
-        help="Interface to bind the server to. The default reaches the workspace "
-        "from another machine on the LAN; pass 127.0.0.1 for loopback only.",
+        help="Network interface to listen on. The default lets other machines on your "
+        "network reach it; pass 127.0.0.1 for this machine only.",
     ),
-    port: int = typer.Option(8000, "--port", help="Port to serve on"),
+    port: int = typer.Option(8000, "--port", help="Port to listen on."),
 ) -> None:
-    """Serve the UI over HTTP in the foreground; open the printed URL in a browser.
+    """Serve the web UI in the foreground; open the URL it prints in a browser.
 
-    The UI includes the dashboard, listings and their editor, batches, listing
-    templates, the calibrator, runs and admin settings.
-    Ctrl-C stops the server once any in-flight apply finishes its current stage.
+    It holds the dashboard, listings and their editor, batches, listing
+    templates, the calibrator, runs and settings. Ctrl-C stops it once any
+    running apply finishes its current step.
     """
     from etsy_listings.server.hosting import (  # noqa: PLC0415 -- only `ui` pays the server's import cost (ADR-0052)
         serve,

@@ -1,9 +1,5 @@
-"""The calibrator's test-design library over HTTP.
-
-Three bundled targets plus the user's uploads (docs/architecture.md, *The
-calibrator*). ``core/application/calibration_designs.py`` owns names and
-validation; the app's refusal table answers what it refuses.
-"""
+"""The calibrator's test-design library over HTTP: three bundled targets plus the
+user's uploads."""
 
 from __future__ import annotations
 
@@ -41,7 +37,6 @@ from a menu while looking at a photograph."""
 
 
 def resolve_design(workspace: Workspace, design: str) -> Path:
-    """Turn an id from the library into a file on disk."""
     bundled = BUNDLED_DESIGNS.get(design)
     if bundled is not None:
         return bundled

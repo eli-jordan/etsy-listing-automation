@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
+
+from pydantic import BaseModel
 
 from etsy_listings.core.errors import ConflictError, MissingError, RefusedError, StaleError
 from etsy_listings.core.workspace.workspace import InvalidNameError
@@ -43,3 +46,15 @@ def refusal_status(refusal: Exception) -> int:
         if category in REFUSAL_STATUS:
             return REFUSAL_STATUS[category]
     raise TypeError(f"{type(refusal).__name__} is not a refusal category")
+
+
+class Refusal(BaseModel):
+    """A refusal :data:`REFUSAL_STATUS` answers: ``detail`` is its message."""
+
+    detail: str
+
+
+def refusals(described: Mapping[int, str]) -> dict[int | str, dict[str, Any]]:
+    """A route's ``responses=`` for the refusals it lets through, each status
+    with what it means there."""
+    return {status: {"model": Refusal, "description": text} for status, text in described.items()}

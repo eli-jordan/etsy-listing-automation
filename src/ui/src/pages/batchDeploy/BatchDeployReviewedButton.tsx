@@ -8,7 +8,6 @@ function runUrl(id: string): string {
   return `/listings/deploy/${encodeURIComponent(id)}`;
 }
 
-/** ADR-0059. */
 export function BatchDeployReviewedButton({
   batchId,
   deployable,

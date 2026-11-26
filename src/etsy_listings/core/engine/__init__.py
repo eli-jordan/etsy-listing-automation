@@ -1,9 +1,7 @@
-"""The stage pipeline, the three-way diff and the lockfile (ADR-0007, ADR-0008, ADR-0009).
+"""The stage pipeline, the three-way diff and the lockfile.
 
-Withholds each stage's class and lockfile snapshot (import them from
-``stages.<stage>``), the listing-level lifecycle in ``lifecycle`` and the
-lockfile template-rename helper in ``template_refs``.
-"""
+Withheld: each stage's class and lockfile snapshot, imported from
+``stages.<stage>``, and ``lifecycle`` and ``template_refs``."""
 
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.change import (

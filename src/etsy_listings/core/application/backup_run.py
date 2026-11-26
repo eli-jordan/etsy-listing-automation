@@ -78,26 +78,13 @@ Progress = Callable[[BackupProgress], None]
 EXCLUDES: tuple[str, ...] = (
     # restic patterns: one without a leading "/" matches at any depth.
     # tests/core/behaviour/test_backup_excludes.py pins each to its writer.
-    #
-    # Every temp-then-rename writer that ends its names in .tmp: a dot, the
-    # name and a random part from workspace/atomic.py, engine/stages/render.py
-    # and preparation/scene_cache.py (market/ writes through atomic.py); the
-    # name, pid and thread from ai/viewable.py;
-    # the bare name from clients/etsy/tokens.py and engine/lock.py.
     "*.tmp",
-    # The Marigold worker's predictions, ".{name}.npz.{uuid}" (server.py _publish).
     ".*.npz.*",
-    # preparation/position_fits.py: a fit's ".{key}-{uuid}" staging directory.
     ".cache/position-fits/.*",
-    # application/mockup_templates.py: a photo between its two renames.
     ".*.renaming.png",
-    # batches/staging.py: an upload as it streams in, and a dropped ZIP while
-    # its PNGs are read out.
     ".cache/staging/*/uploads/incoming.png",
     ".cache/staging/*/upload.zip",
-    # preparation/artifacts.py: a map generation before it is published.
     "_renderer/maps/staging",
-    # workspace/calibration.py: a calibration save's payloads and backups.
     "_renderer/calibration-transaction",
 )
 """Temporary names the app's own writers use (spec, *Backup run* step 3)."""
@@ -113,7 +100,6 @@ class BackupRunner:
     binaries: ResticBinaries
     home: Path | None = None
     restic: OpenRepository | None = None
-    """Replaces restic itself; tests pass an in-memory repository."""
     now: Clock = _utc_now
     sample: float = SAMPLE_FRACTION
     """The share of a destination's files its monthly check reads."""
@@ -209,7 +195,7 @@ class BackupRunner:
     def _copy_all(
         self, backup: ConfiguredBackup, run: _Run, cancel: threading.Event | None
     ) -> None:
-        """Copy to every destination, after the jobs resumed."""
+        """Runs after the jobs resumed."""
         for destination in backup.destinations:
             run.enter("copying", destination)
             result = self._copy_one(backup, destination, run, cancel)
@@ -297,8 +283,7 @@ def _needs_check(state: BackupState) -> bool:
 
 
 def _suspects(state: DestinationState) -> frozenset[str]:
-    """Changes that kept the size, which only a check can see, stay known
-    until a repair."""
+    """Same-size changes only a check can see stay known until a repair."""
     return frozenset(file.name for file in state.changed if file.expected_size == file.actual_size)
 
 

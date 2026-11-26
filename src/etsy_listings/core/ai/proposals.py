@@ -205,10 +205,12 @@ class ProposalStore:
 
 
 class ProposalStaleness(BaseModel):
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
     is_stale: bool
     reasons: list[str]
     """One per input that moved, in a fixed order, each finishing the
-    drawer heading's *Out of date: {reason}. Still usable* (UI doc §8)."""
+    drawer heading's *Out of date: {reason}. Still usable*."""
 
 
 class ListingProposal(BaseModel):

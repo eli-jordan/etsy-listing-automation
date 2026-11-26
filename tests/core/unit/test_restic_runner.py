@@ -541,7 +541,7 @@ def test_a_restore_reports_its_figures_and_estimates_the_time_left() -> None:
     last = restic.restore(_snapshot("/workspace"), Path("/restored"), progress=heard.append)
 
     assert heard[0] == RestoreProgress(
-        percent=0.25,
+        fraction=0.25,
         bytes_done=2_000_000,
         bytes_total=8_000_000,
         files_done=100,
@@ -549,7 +549,7 @@ def test_a_restore_reports_its_figures_and_estimates_the_time_left() -> None:
         seconds_left=180,  # a quarter done in a minute leaves three
     )
     assert heard[1:] == [last]
-    assert (last.percent, last.files_done, last.seconds_left) == (1.0, 400, 0)
+    assert (last.fraction, last.files_done, last.seconds_left) == (1.0, 400, 0)
 
 
 def test_a_restore_status_without_files_restored_keeps_none() -> None:
@@ -559,7 +559,7 @@ def test_a_restore_status_without_files_restored_keeps_none() -> None:
 
     restic.restore(_snapshot("/workspace"), Path("/restored"), progress=heard.append)
 
-    assert (heard[0].percent, heard[0].files_done, heard[0].seconds_left) == (0.02, None, None)
+    assert (heard[0].fraction, heard[0].files_done, heard[0].seconds_left) == (0.02, None, None)
 
 
 def test_the_password_is_verified_by_reading_the_config_without_a_lock() -> None:

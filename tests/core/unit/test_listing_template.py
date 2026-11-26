@@ -57,7 +57,6 @@ def test_a_template_holds_the_reusable_production_settings() -> None:
     [
         {"design": "designs/take-a-hike.png"},
         {"brief": "a brief"},
-        {"artwork": {"black": "default"}},
         {"lifecycle": "retired"},
         {"etsy": {"title": "A title"}},
         {"etsy": {"tags": ["hiking"]}},

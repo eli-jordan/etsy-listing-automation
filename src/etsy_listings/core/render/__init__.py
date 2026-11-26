@@ -1,15 +1,8 @@
-"""Turning a design and a blank mockup photo into a composite (ADR-0012).
+"""Turning a design and a blank mockup photo into a composite: arrays and frozen
+config in, an image out, with no I/O outside :mod:`~etsy_listings.core.render.io`
+and :class:`DerivedMapCache`.
 
-Pure: ndarrays and frozen config in, an image out. No I/O outside
-:mod:`~etsy_listings.core.render.io` and :class:`DerivedMapCache`, no globals, no
-clock, which is what makes the lockfile's input hash and the golden suite
-meaningful. Nothing here knows a workspace, a listing or a Printify product.
-
-``template.yaml``'s models live here, since that file is render geometry and
-settings throughout; ``workspace.template_state`` reads it and
-``CalibrationStore`` writes it. ``positions`` (ADR-0058) is not re-exported:
-import it directly.
-"""
+Withheld: ``positions``, imported directly."""
 
 from etsy_listings.core.render.config import (
     AnyRenderer,

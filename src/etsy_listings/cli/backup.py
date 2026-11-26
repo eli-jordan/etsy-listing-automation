@@ -12,6 +12,7 @@ import typer
 from etsy_listings.cli import prompts
 from etsy_listings.cli.options import RootOption, open_workspace
 from etsy_listings.core.application.backup_provisioning import (
+    Created,
     NewRepository,
     PasswordSource,
     Provisioned,
@@ -68,8 +69,9 @@ def _ask_password(source: Source) -> str:
 
 @app.command()
 def init(root: RootOption = None) -> None:
-    """Create the repository backup.repository names in settings.yaml, or,
-    when a destination already holds a backup, copy that one there and use it.
+    """Create the backup repository settings.yaml names, or adopt a destination's.
+
+    When a destination already holds a backup, copies that one there and uses it.
 
     Uses the password in the workspace .env, or asks for one and stores it
     there. Downloads the pinned restic when no other is configured."""
@@ -94,13 +96,13 @@ def init(root: RootOption = None) -> None:
 
 
 def _report_init(workspace: Workspace, storage: Path, done: Provisioned) -> None:
-    if done.connected is None:
-        repository_id = done.repository_id or ""
-        typer.echo(f"Created the backup repository at {storage} (id {repository_id[:8]}).")
+    brought = done.brought
+    if isinstance(brought, Created):
+        typer.echo(f"Created the backup repository at {storage} (id {brought.repository_id[:8]}).")
     else:
         typer.echo(
-            f"Connected to the backup in {done.connected.source}: "
-            f"{len(done.connected.snapshots)} snapshots, copied to {storage}."
+            f"Connected to the backup in {brought.source}: "
+            f"{len(brought.snapshots)} snapshots, copied to {storage}."
         )
     if done.workspace_id.notice is not None:
         typer.echo(done.workspace_id.notice)
@@ -141,9 +143,10 @@ class _ProgressLines:
 
 @app.command()
 def run(root: RootOption = None) -> None:
-    """Back up the workspace now and apply the retention; prune and check the
-    repository once a week. For when the app is stopped: it pauses no jobs
-    in a running server."""
+    """Back up the workspace now and apply the retention.
+
+    Once a week it also prunes and checks the repository. Use it while the app
+    is stopped: it does not pause a running server's jobs."""
     workspace = open_workspace(root)
     with _reported():
         record = BackupRunner(workspace, ResticBinaries()).run(progress=_ProgressLines())
@@ -222,8 +225,10 @@ class _RestoreLines:
 def restore_progress_line(figures: RestoreProgress) -> str:
     """``  25% · 100 of 400 files``; restic's ``--json`` omits a zero ``files_restored``."""
     if not figures.files_total:
-        return f"  {figures.percent:.0%}"
-    return f"  {figures.percent:.0%} · {figures.files_done or 0:,} of {figures.files_total:,} files"
+        return f"  {figures.fraction:.0%}"
+    return (
+        f"  {figures.fraction:.0%} · {figures.files_done or 0:,} of {figures.files_total:,} files"
+    )
 
 
 @app.command(name="restore")

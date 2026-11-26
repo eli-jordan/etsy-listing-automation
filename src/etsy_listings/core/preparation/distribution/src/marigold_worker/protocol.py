@@ -1,15 +1,8 @@
-"""Protocol v1: the JSON-lines contract between the application and this worker.
+"""Protocol v1: the JSON-lines contract between the application and this worker,
+which needs only pydantic.
 
-Every message on stdin and stdout is one of the models below, one JSON object
-per line. The worker validates requests with ``REQUEST`` and the application
-validates replies with ``REPLY``, so both sides share this single definition.
-It depends only on pydantic: the application imports it from its embedded copy
-of this distribution without installing or loading any model package.
-
-The models describe the v1 bytes that 1.0.0 workers already emit. A change that
-an installed worker would not understand needs a new ``PROTOCOL`` and engine
-version, not an edit in place.
-"""
+Installed workers emit these v1 bytes, so a change they would not understand
+needs a new ``PROTOCOL`` and engine version, not an edit in place."""
 
 from __future__ import annotations
 

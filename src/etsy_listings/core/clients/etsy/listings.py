@@ -30,7 +30,7 @@ HTTP_BAD_REQUEST = 400
 HTTP_CONFLICT = 409
 
 MAX_VIDEOS_TEXT = "The listing already has the maximum number of videos allowed."
-"""Etsy's words for **two** different refusals (decision 9, measured): a
+"""Etsy's words for **two** different refusals (measured): a
 `409` when two videos are already active, and a `400` when the listing has
 spent its ten associations for the day -- on a listing holding none."""
 
@@ -80,7 +80,7 @@ and the content type each is sent as."""
 
 MULTI_VIDEO = {"is_multi_video": "true"}
 """On every upload and every attach. Without it Etsy's legacy mode makes
-every other video on the listing `inactive` (decision 9, measured)."""
+every other video on the listing `inactive` (measured)."""
 
 BATCH_LIMIT = 100
 """Etsy's documented ceiling on `getListingsByListingIds`. Chunking is this

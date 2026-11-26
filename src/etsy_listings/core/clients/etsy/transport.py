@@ -1,10 +1,8 @@
 """One authenticated connection to Etsy, and the token endpoint beside it.
 
-:class:`Transport` sends the app key pair and the shop owner's bearer.
-Etsy's token endpoint takes neither (it authenticates by `client_id` in the
-form body), so :class:`OAuthClient` is separate, which also keeps
-:mod:`tokens` free of an import cycle.
-"""
+Etsy's token endpoint authenticates by ``client_id`` in the form body, not by the
+app key pair and bearer :class:`Transport` sends, so :class:`OAuthClient` is
+separate."""
 
 from __future__ import annotations
 
@@ -49,17 +47,11 @@ one."""
 
 
 class EtsyApiError(UserFacingError, RuntimeError):
-    """A request Etsy understood and refused.
+    """A request Etsy understood and refused; user-facing, so one refused listing is reported rather
+    than a batch ended.
 
-    A :class:`~etsy_listings.core.errors.UserFacingError`, so that one listing
-    Etsy refuses is one listing reported rather than a batch ended.
-
-    Etsy's error envelope is a single ``{"error": "..."}`` string -- no code,
-    no field name -- so there is nothing to branch on and the whole value is
-    worth showing. ``message`` replaces that default wording for the few
-    refusals whose own text misdescribes them (the video budget);
-    ``error`` still carries Etsy's words.
-    """
+    Etsy's envelope is one ``{"error": "..."}`` string. ``message`` replaces it for refusals
+    whose own text misdescribes them (the video budget); ``error`` keeps Etsy's words."""
 
     def __init__(self, status_code: int, *, error: str, message: str | None = None) -> None:
         self.status_code = status_code
@@ -68,8 +60,6 @@ class EtsyApiError(UserFacingError, RuntimeError):
 
 
 def _error_detail(response: httpx.Response) -> str:
-    """Pull ``error`` out of the envelope, degrading to the body text for a
-    proxy's HTML error page rather than raising."""
     detail = response.text.strip() or "no response body"
     try:
         body: Any = response.json()
@@ -193,7 +183,6 @@ class Transport:
         return self.request("DELETE", path, **kwargs)
 
     def ping(self) -> int:
-        """Verify the app key pair alone, and return the application id."""
         body: Any = self.get(PING_PATH).json()
         if not isinstance(body, dict) or not isinstance(body.get("application_id"), int):
             raise EtsyApiError(200, error="ping did not return an application_id")

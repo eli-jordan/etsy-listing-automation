@@ -7,7 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { BoundingBox, Point } from "../types";
+import type { CanvasPoint, PhotoPoint, PhotoPx, ScreenPx } from "../pixels";
+import type { BoundingBox, PhotoSpace } from "../types";
 import { useLatest } from "../hooks/useLatest";
 import { useIsPhone } from "../phone/usePhone";
 import {
@@ -24,9 +25,7 @@ interface Props {
   overlay?: ReactNode;
   interactive?: boolean;
   imageUrl: string;
-  /** The template photo's **true** `[width, height]`, from the API, not
-   * `naturalWidth`: the editor shows a downscale (docs/architecture.md). */
-  space: [number, number];
+  space: PhotoSpace;
   boxes: BoundingBox[];
   selectedIndex: number;
   onSelect: (index: number) => void;
@@ -35,11 +34,8 @@ interface Props {
   onDeleteSelected?: () => void;
   onDuplicateSelected?: () => void;
   onBringSelectedToFront?: () => void;
-  /** How much box chrome to draw. Three states rather than a boolean because
-   * 2a's two toggles mean different things: a chart's "Show all design boxes"
-   * hides the *other* boxes while you keep working on one ("selected"), and a
-   * colour set's "Show design box" hides everything so you can judge
-   * the render clean ("none"). */
+  /** `selected` hides the other boxes while one is edited; `none` hides all of
+   * them, to judge the render. */
   outlines?: "all" | "selected" | "none";
   /** Per-box caption drawn under the box and edited by clicking it. */
   labels?: (string | undefined)[];
@@ -48,29 +44,21 @@ interface Props {
   labelSuggestions?: string[];
 }
 
-interface Menu {
-  /** Where the menu opens, in `.quad-editor` px. */
-  x: number;
-  y: number;
-}
+type Menu = CanvasPoint;
 
 type Drag = { pointerId: number } & (
   | { kind: "corner"; pointIndex: number; start: BoundingBox }
-  | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox }
+  | { kind: "box"; boxIndex: number; origin: PhotoPoint; start: BoundingBox }
 );
 
 const DRAG_TARGETS = ".quad-editor__polygon, .quad-editor__handle, .quad-editor__grip";
 
 /** On a phone, a finger that lands on a box or a corner keeps the whole touch.
  *
- * The overlay lets a finger elsewhere on the photo scroll the page
- * (`touch-action: pan-y` in phone/calibrator.css), and Chromium ignores the
- * `touch-action: none` the box and its corners ask for, since they are SVG
- * shapes: the drag followed for a few pixels, then the browser cancelled it
- * and scrolled instead. Cancelling the touchstart is the one signal it
- * honours. Not passive, so React's own touch listeners cannot do this. A
- * second finger landing mid-drag is held too, so it cannot pinch the page
- * under the box being dragged. */
+ * Chromium ignores `touch-action: none` on SVG shapes, so under the overlay's
+ * `pan-y` a drag followed a few pixels and then scrolled. Cancelling the
+ * touchstart is the one signal it honours, and needs a non-passive listener,
+ * which React's are not. A second finger is held too, so it cannot pinch the page. */
 function useTouchClaim(
   svg: SVGSVGElement | null,
   enabled: boolean,
@@ -87,8 +75,12 @@ function useTouchClaim(
   }, [svg, enabled, dragging]);
 }
 
-function useGripRadius(svg: SVGSVGElement | null, imageWidth: number, dotRadius: number): number {
-  const [overlayWidth, setOverlayWidth] = useState(0);
+function useGripRadius(
+  svg: SVGSVGElement | null,
+  imageWidth: PhotoPx,
+  dotRadius: PhotoPx,
+): PhotoPx {
+  const [overlayWidth, setOverlayWidth] = useState<ScreenPx>(0);
   useLayoutEffect(() => {
     if (!svg) return;
     const measure = () => setOverlayWidth(svg.getBoundingClientRect().width);
@@ -105,18 +97,13 @@ function isTypingInField(event: React.KeyboardEvent): boolean {
   return (event.target as Element).closest("input, textarea") !== null;
 }
 
-function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
+function menuAnchor(clientX: ScreenPx, clientY: ScreenPx, svg: SVGSVGElement | null): Menu {
   const host = svg?.getBoundingClientRect();
   return { x: clientX - (host?.left ?? 0), y: clientY - (host?.top ?? 0) };
 }
 
-/** The rectangle the menu has to stay inside: the nearest ancestor that clips
- * its overflow, or the viewport if nothing does.
- *
- * Not the canvas. The canvas is a child of `.app__preview`, which is
- * `overflow: hidden` and is often the *shorter* of the two -- so anything
- * measured against the canvas gets the vertical case wrong, which is exactly
- * the bug the first attempt at this shipped. */
+/** The nearest ancestor that clips its overflow, or the viewport. Not the
+ * canvas: `.app__preview` clips and is often the shorter of the two. */
 function clipRect(from: HTMLElement): DOMRect {
   for (let el = from.parentElement; el && el !== document.body; el = el.parentElement) {
     const style = getComputedStyle(el);
@@ -128,16 +115,8 @@ function clipRect(from: HTMLElement): DOMRect {
 }
 
 /** Place the menu at the click, then pull it back inside the clipping box.
- *
- * Measured rather than guessed from which half was clicked: the menu is
- * ~90px tall and the preview pane can be barely more than that, so "past the
- * midpoint" answers the wrong question. Written to the node in a layout
- * effect, before paint, so there is no state churn and nothing is ever seen
- * in the wrong place.
- *
- * Left unfixed, `.app__preview`'s clipping cut two of the three items off a
- * menu opened on the rightmost box -- "Delete" was simply unreachable for the
- * last garment in a chart. */
+ * Measured, in a layout effect before paint: the menu is ~90px tall and the
+ * preview pane can be barely more. */
 function positionMenu(el: HTMLElement, menu: Menu): void {
   Object.assign(el.style, { left: `${menu.x}px`, top: `${menu.y}px` });
   const rect = el.getBoundingClientRect();
@@ -229,7 +208,7 @@ export function QuadEditor({
     if (menu && menuRef.current) positionMenu(menuRef.current, menu);
   }, [menu]);
 
-  function toImageSpace(clientX: number, clientY: number): Point | null {
+  function toImageSpace(clientX: ScreenPx, clientY: ScreenPx): PhotoPoint | null {
     const svg = svgRef.current;
     if (!svg) return null;
     const ctm = svg.getScreenCTM();
@@ -243,7 +222,7 @@ export function QuadEditor({
 
   const dragging = useLatest(drag !== null);
   useTouchClaim(svgNode, phone && interactive, dragging);
-  const dotRadius = Math.max(space[0], space[1]) * 0.015;
+  const dotRadius: PhotoPx = Math.max(space[0], space[1]) * 0.015;
   const gripR = useGripRadius(phone ? svgNode : null, space[0], dotRadius);
 
   function handleCornerPointerDown(pointIndex: number) {
@@ -275,9 +254,7 @@ export function QuadEditor({
       onChangeBox(drag.boxIndex, moved(drag.start, drag.origin, point));
       return;
     }
-    // The modifier is read per move, not per press, so shift can be taken
-    // and released mid-gesture -- reach for a corner, discover you wanted the
-    // whole box bigger, hold shift.
+    // Shift is read per move, not per press, so it can be pressed mid-gesture.
     onChangeBox(
       selectedIndex,
       cornerDragged(drag.start, drag.pointIndex, point, {

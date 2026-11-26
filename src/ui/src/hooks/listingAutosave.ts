@@ -3,8 +3,6 @@ import { type Clock, type Settled, WRITTEN, WriteLoop } from "./writeLoop";
 
 export type Patch = Record<string, unknown>;
 
-/** A new object each time a save lands, so an observer can tell two saves
- * apart even when `modified_at` does not move. */
 export type SaveState =
   | { kind: "unnamed" }
   | { kind: "saving" }
@@ -13,7 +11,6 @@ export type SaveState =
   | { kind: "name-taken"; name: string }
   | { kind: "save-failed" };
 
-/** `saved: false`: the server wrote nothing, and says why. */
 export type SaveOutcome =
   | { saved: true; detail: ListingDetail }
   | { saved: false; issues: Issue[] | null; field_errors: Record<string, string> };
@@ -62,26 +59,9 @@ function mergePatch(base: Patch, patch: Patch): Patch {
   return merged;
 }
 
-/** `design:` as `core/config/listing.py`'s `_coerce_design` will store it.
- *
- * The editor sends the bare ref a human writes in `listing.yaml`, and the
- * server normalises it to `{default: ref}` -- so between the edit and the
- * response, local state held a *string* where every consumer expects the map,
- * and `Object.keys("designs/x.png")` made the design strip report "45
- * artworks". On a saved listing the response healed it 800ms later, which is
- * why it went unnoticed; on a draft there is no response to heal it.
- *
- * Applied to local state only. The patch itself keeps the bare form, because
- * that is the form the file stores. */
-function coerceDesign(detail: Patch): Patch {
-  if (typeof detail.design !== "string") return detail;
-  return { ...detail, design: { default: detail.design } };
-}
-
 /** The field error no single field owns. */
 export const ROOT_FIELD_ERROR = "__root__";
 
-/** A write that carries nothing but the create itself. */
 const CREATE_ONLY: Patch = {};
 
 function refusalMessage(fieldErrors: Record<string, string>): string {
@@ -136,7 +116,6 @@ export class ListingAutosave {
     this.loop.edit(patch);
   };
 
-  /** Shows a value the server has already written, without saving it again. */
   adopt = (patch: Patch) => {
     this.adoptedSinceLastSend = mergePatch(this.adoptedSinceLastSend ?? {}, patch);
     this.show({ detail: this.merged(patch) });
@@ -227,9 +206,6 @@ export class ListingAutosave {
     adoptedWhenSent: Patch | null,
     unwrittenPatch: Patch = {},
   ): ListingDetail {
-    // A response carrying field errors describes the *empty* draft alongside
-    // them (there is no listing to describe), so only the errors are news --
-    // taking the rest would wipe the document being edited.
     if (Object.keys(fresh.field_errors ?? {}).length > 0) {
       return { ...this.view.detail, field_errors: fresh.field_errors };
     }
@@ -239,12 +215,10 @@ export class ListingAutosave {
       this.loop.held ?? {},
     );
     if (Object.keys(overlay).length === 0) return fresh;
-    return coerceDesign(mergePatch(fresh, overlay)) as ListingDetail;
+    return mergePatch(fresh, overlay) as ListingDetail;
   }
 
   private refused(outcome: SaveOutcome & { saved: false }): Settled {
-    // With no field to highlight, the page head is the only place left to
-    // say what it is.
     const reason = outcome.field_errors[ROOT_FIELD_ERROR];
     this.show({
       detail: {
@@ -266,7 +240,7 @@ export class ListingAutosave {
   }
 
   private merged(patch: Patch): ListingDetail {
-    return coerceDesign(mergePatch(this.view.detail, patch)) as ListingDetail;
+    return mergePatch(this.view.detail, patch) as ListingDetail;
   }
 
   private show(next: Partial<AutosaveView>) {

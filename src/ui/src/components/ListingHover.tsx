@@ -3,10 +3,7 @@ import { listingDesignThumbnailUrl } from "../api/listings";
 import type { ListingSummary } from "../types";
 import { StatusTag } from "./StatusTag";
 
-/** The listing's artwork, or an empty tile when `design` is null -- which is
- * what a listing with no base design chosen reports. The server picks the
- * file (spec: *Representative artwork*). Decorative: the row's name is right beside it and is
- * what a screen reader should read, so `alt` is deliberately empty. */
+/** Decorative: the row's name beside it is what a screen reader reads. */
 export function DesignThumb({ design }: { design: string | null }) {
   if (design === null) return <span className="listing-thumb listing-thumb--empty" />;
   return (
@@ -14,11 +11,7 @@ export function DesignThumb({ design }: { design: string | null }) {
   );
 }
 
-/** The card the row's name reveals on hover. Purely CSS-driven (see
- * `.listing-hover:hover .listing-popup`) rather than JS state: it shows only
- * what the server already sent for this row, so there is nothing to fetch and
- * no state worth re-rendering the table for. It exists because a table row is
- * narrow and the artwork and colour count have nowhere to go. */
+/** Shown by CSS on hover (`.listing-hover:hover .listing-popup`). */
 function ListingCard({ listing }: { listing: ListingSummary }) {
   return (
     <span className="listing-popup">

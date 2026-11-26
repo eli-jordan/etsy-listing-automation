@@ -1,16 +1,9 @@
-"""One authenticated connection to ``api.printify.com``, shared by both halves
-of the client.
+"""One authenticated connection to ``api.printify.com``, shared by both halves of
+the client.
 
-Error decoding leans on a shape this API keeps to without exception -- every
-failure observed against the live API is
-
-    {"status": "error", "code": 8251, "message": "Validation failed.",
-     "errors": {"reason": "...", "code": 8251}}
-
-``errors.reason`` is a human sentence naming the offending field, and is the
-only part of that envelope worth putting in front of a user
-(docs/research/api-findings.md).
-"""
+Every failure the live API returns is ``{"status": "error", "code": ...,
+"message": ..., "errors": {"reason": ..., "code": ...}}``, and only
+``errors.reason``, a sentence naming the field, is worth showing a user."""
 
 from __future__ import annotations
 
@@ -74,17 +67,9 @@ class PrintifyAuthError(UserFacingError, RuntimeError):
 
 
 class PrintifyApiError(UserFacingError, RuntimeError):
-    """A request Printify understood and refused.
-
-    User-facing for the same reason as :class:`PrintifyAuthError`: a refusal
-    the API explained is a refusal the user can read. A 500 is not actionable
-    in the same way, but it is still one listing's failure and not the run's
-    -- ending the batch on it loses the forty-nine that would have succeeded.
-
-    Carries ``code`` because Printify's numeric codes are stable enough to
-    branch on (:data:`WRONG_SHOP_CODE`), and renders ``errors.reason`` because
-    that is the part a human can act on.
-    """
+    """A request Printify understood and refused; user-facing, so one listing's failure, a 500
+    included, does not end the batch. ``code`` is stable enough to branch on
+    (:data:`WRONG_SHOP_CODE`)."""
 
     def __init__(self, status_code: int, *, code: int | None, reason: str) -> None:
         self.status_code = status_code
@@ -95,8 +80,6 @@ class PrintifyApiError(UserFacingError, RuntimeError):
 
 
 def decode_error(response: httpx.Response) -> PrintifyApiError:
-    """Pull ``errors.reason`` out of the envelope, degrading to the body text
-    for a proxy's HTML error page rather than raising."""
     reason = response.text.strip() or "no response body"
     code: int | None = None
     try:

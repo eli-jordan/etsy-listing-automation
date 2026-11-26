@@ -20,7 +20,6 @@ export const toLimits = (draft: LimitDraft): TemplatePositionLimits => ({
   rotation: draft.tiltDegrees,
 });
 
-/** The interactions table, *Settings: Template rendering*. */
 export const ROWS: {
   key: keyof LimitDraft;
   label: string;

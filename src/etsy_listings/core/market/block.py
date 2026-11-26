@@ -1,10 +1,7 @@
 """The market-data block the proposal prompt receives.
 
-Everything in the block but its fixed note is other sellers' text, so it is
-sent as JSON between fixed delimiters -- the same "this is data" boundary
-``ai/prompt.py`` draws around the listing context -- with a note saying so,
-and with anything in that text that could pass for a delimiter defused.
-"""
+Its text is other sellers', so it goes as JSON between fixed delimiters with a
+note saying so, and anything in it that could pass for a delimiter is defused."""
 
 from __future__ import annotations
 
@@ -48,7 +45,6 @@ def lead(description: str) -> str:
 
 
 def market_block(result: MarketResult) -> str:
-    """The delimited block, or ``""`` for an empty result."""
     if result.empty:
         return ""
     payload = {

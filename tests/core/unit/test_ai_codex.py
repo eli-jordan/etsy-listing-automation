@@ -212,19 +212,27 @@ def test_generate_builds_the_expected_argv(tmp_path: Path) -> None:
     assert len(host.managed_calls) == 1
     call = host.last_managed
     argv = call.argv
-    assert argv[0] == "/resolved/codex"  # the which-resolved path, not the bare name
-    assert argv[1] == "exec"
-    assert argv[-1] == "-", "the prompt is piped via stdin, not passed as an argv value"
-    assert "-s" in argv
-    assert argv[argv.index("-s") + 1] == "read-only"
-    assert "--ephemeral" in argv
-    assert "--skip-git-repo-check" in argv
-    assert "-C" in argv
-    assert argv[argv.index("-C") + 1] == str(tmp_path)
-    assert "-i" in argv
-    assert argv[argv.index("-i") + 1] == str(request.design_image)
-    assert "--output-schema" in argv
-    assert "-o" in argv
+    schema_file = argv[argv.index("--output-schema") + 1]
+    last_message_file = argv[argv.index("-o") + 1]
+    assert argv == [
+        "/resolved/codex",
+        "exec",
+        "-s",
+        "read-only",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "-C",
+        str(tmp_path),
+        "-i",
+        str(request.design_image),
+        "--output-schema",
+        schema_file,
+        "-o",
+        last_message_file,
+        "--color",
+        "never",
+        "-",
+    ]
     assert call.cwd == tmp_path
     assert call.deadline is deadline
     assert cli.schemas == [RESPONSE_SCHEMA]

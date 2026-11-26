@@ -6,8 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 
-class SeoGenerationError(RuntimeError):
-    """Base for every error one AI Mode SEO request can end in."""
+class SeoGenerationError(RuntimeError): ...
 
 
 class ProviderUnavailableError(SeoGenerationError):
@@ -153,9 +152,9 @@ width of that one unbreakable string and paints over the brief."""
 def classify_process_failure(
     provider: str, *, returncode: int | None, stdout: str, stderr: str
 ) -> ProviderUnavailableError | ProviderGenerationError:
-    """Sort one failed CLI invocation into a recognised availability failure
-    (the next provider is tried) or anything else ("Try again"), judged on the
-    CLI's own sentence rather than its raw output. Returns, never raises."""
+    """Sort one failed CLI invocation into an availability failure (the next provider is tried)
+    or anything else ("Try again"), judged on the CLI's own sentence rather than its raw
+    output."""
     shown, status, model_missing = _seller_text(stdout, stderr)
     shown = _clip(shown)
     if (

@@ -1,29 +1,9 @@
-"""The ``setup`` wizard: an empty directory in, a workspace ``new`` can run
-in out.
+"""The ``setup`` wizard: an empty directory in, a workspace ``new`` can run in
+out; re-running it fills gaps and never corrects answers.
 
-This module orders the questions and says what happened. What a workspace
-needs and how ``shop.yaml`` is merged and written is
-:mod:`etsy_listings.core.application.workspace_setup`'s; finding the shops is
-:mod:`~etsy_listings.core.application.shop_discovery`'s; proving the token is
-:mod:`~etsy_listings.core.application.credentials`'. Questions go through
-:mod:`etsy_listings.cli.prompts` rather than questionary directly, because
-questionary cannot prompt at all under cygwin (see that module).
-
-The one rule that shapes it: **`setup` fills gaps, it does not correct
-answers.** Re-running it on a configured workspace must be safe, so every
-prompt is seeded from the file. Two orderings matter and are not arbitrary:
-
-- **The token is verified before anything is written.** A wizard that stores
-  a bad credential and fails three steps later has produced a workspace that
-  looks configured and is not, which is worse than failing at the question.
-- **The token and ``shop.yaml`` are written last.** ``shop.yaml`` is the file
-  that makes a directory a workspace, so writing it means "this worked". A
-  run cancelled halfway leaves directories, prompts and a ``.gitignore``,
-  which are harmless, and no token or ``shop.yaml``, so nothing downstream
-  mistakes the attempt for a workspace.
-
-:func:`run_setup` is the interface.
-"""
+The token is verified before anything is written, and the token and
+``shop.yaml`` are written last, so a cancelled run never leaves a directory
+that looks like a workspace."""
 
 from __future__ import annotations
 
@@ -88,15 +68,8 @@ def _sync_prompts(root: Path, *, replace: bool) -> None:
 
 
 def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]]:
-    """A token that has actually answered ``GET /v1/shops.json``, and what it
-    answered.
-
-    The shop list comes back from the same call rather than being fetched
-    again: verifying the token *is* asking which shops it can reach,
-    and a second call would only invite the two answers to disagree. That is
-    also why this one verifies a *reused* token where ``auth`` does not --
-    ``setup`` needs the answer either way, so there is no call to save.
-    """
+    """A token that has answered ``GET /v1/shops.json``, and the shops it answered. Verifying it
+    is that call, so ``setup`` verifies a reused token too and never fetches the shops twice."""
 
     def verify(values: tuple[str, ...]) -> tuple[list[Shop], str]:
         try:
@@ -116,12 +89,12 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
 
 def _pick_shop(shops: list[Shop]) -> Shop:
     selection = shop_discovery.select_shop(shops)
-    if selection.problem is not None:
-        typer.echo(f"{selection.problem}", err=True)
+    if isinstance(selection, shop_discovery.NoShops):
+        typer.echo(selection.problem, err=True)
         raise typer.Exit(code=1)
-    if selection.shop is not None:
-        typer.echo(f"Printify shop: {selection.shop.title} ({selection.shop.id})")
-        return selection.shop
+    if isinstance(selection, Shop):
+        typer.echo(f"Printify shop: {selection.title} ({selection.id})")
+        return selection
 
     return prompts.pick(
         "Which Printify shop?", shops, label=lambda shop: f"{shop.title}  ({shop.id})"

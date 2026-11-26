@@ -1,5 +1,3 @@
-"""ADR-0054."""
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -44,7 +42,7 @@ class Job(Record):
     action: Action
     kind: Literal["prepare", "rebuild", "coverage"]
     """``coverage`` infers evidence for listing positions only and publishes
-    no maps (option B, spec *Evidence coverage*)."""
+    no maps."""
     config_revision: str
     snapshot: PreparationInputs
     engine_version: str | None = None

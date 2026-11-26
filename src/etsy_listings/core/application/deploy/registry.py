@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Literal
 
 from etsy_listings.core.application.deploy.events import (
     TERMINAL_PHASES,
@@ -18,6 +19,8 @@ from etsy_listings.core.application.deploy.events import (
     RunScope,
 )
 
+CancelOutcome = Literal["cancelled", "refused", "missing"]
+
 _WAKE = ""
 """Queued by :meth:`RunRegistry.wake`; never a run id (ids are non-empty),
 so :meth:`RunRegistry.drain_and_cancel` finds no run for it and skips it."""
@@ -26,8 +29,6 @@ so :meth:`RunRegistry.drain_and_cancel` finds no run for it and skips it."""
 @dataclass(frozen=True, kw_only=True)
 class _Publishes:
     publish: bool = False
-    """Publish new and still-draft listings rather than leave drafts
-    (``publishing_pipeline``). Opt-in; a plan and the apply it reviews agree."""
 
 
 @dataclass(frozen=True)
@@ -85,9 +86,8 @@ class ApplyRunState:
 
 @dataclass
 class Run:
-    """One plan or apply run: its scope, identity, listings, and event log.
-    ``condition`` is the lock the worker appends under and the SSE loop
-    (``server/api/runs.py``) waits on."""
+    """``condition`` is the lock the worker appends under and the SSE loop
+    waits on."""
 
     id: str
     command: RunCommand
@@ -100,7 +100,7 @@ class Run:
 
     def __post_init__(self) -> None:
         """The ``queued`` phase is the first event, so a stream read from 0
-        sees the same history however early it connects."""
+        sees one history however early it connects."""
 
         self._state = (
             PlanRunState()
@@ -169,8 +169,8 @@ class Run:
         return self._state.cancel_requested if isinstance(self._state, PlanRunState) else False
 
     def append(self, make_event: Callable[[int], AnyRunEvent]) -> AnyRunEvent:
-        """Append one event, its ``id`` assigned under the lock a waiter reads
-        with: ``make_event`` takes the id, so no caller holds a stale one."""
+        """``make_event`` takes the id assigned under the lock, so no caller
+        holds a stale one."""
         with self.condition:
             event = make_event(self._next_event_id)
             self._next_event_id += 1
@@ -210,10 +210,8 @@ class Run:
             self.seen = True
 
     def wait_for_events(self, after_id: int, *, timeout: float) -> tuple[list[AnyRunEvent], bool]:
-        """Block up to ``timeout`` seconds for events past ``after_id``.
-        ``done`` once the run is terminal and every event has been returned,
-        so a caller looping until ``done`` sees each event exactly once; the
-        bounded wait lets that loop notice shutdown."""
+        """The bounded wait lets a caller looping until ``done`` notice
+        shutdown."""
         with self.condition:
             pending = [e for e in self.events if e.id > after_id]
             if not pending and self.phase not in TERMINAL_PHASES:
@@ -314,8 +312,8 @@ class RunRegistry:
             return [run for run in self._runs.values() if run.scope == scope]
 
     def dequeue(self, *, timeout: float) -> str | None:
-        """The next queued run id; ``None`` on a timeout or a :meth:`wake`, so
-        the worker thread can notice a stop."""
+        """``None`` on a timeout or a :meth:`wake`, so the worker can notice a
+        stop."""
         try:
             run_id = self._queue.get(timeout=timeout)
         except queue.Empty:
@@ -326,9 +324,6 @@ class RunRegistry:
         self._queue.put(_WAKE)
 
     def drain_and_cancel(self) -> None:
-        """End every queued run without running it: plans cancelled, applies
-        failed. ``queue.Queue`` hands each id to one caller, so this never
-        ends a run the worker has taken."""
         while True:
             try:
                 run_id = self._queue.get_nowait()
@@ -338,24 +333,14 @@ class RunRegistry:
             if run is not None:
                 abandon(run)
 
-    def cancel(self, run_id: str) -> bool | None:
-        """Cancel a queued or running **plan**.
-
-        ``None``: no such run. ``False``: it exists but cannot be cancelled --
-        it is an ``apply`` (refused unconditionally: Back leaves,
-        it never cancels one), or it has already reached a terminal phase.
-        ``True``: cancelled outright (it was only ``queued``, so this
-        transitions it immediately) or asked to stop (``planning``/
-        ``previewing``, where only the worker thread actually executing it can
-        observe :attr:`Run.cancel_requested` and act on it at its next
-        boundary -- see ``executor.py``).
-        """
+    def cancel(self, run_id: str) -> CancelOutcome:
+        """A running plan stops at its next boundary, in the worker."""
         run = self.get(run_id)
         if run is None:
-            return None
+            return "missing"
         if run.kind == "apply" or run.phase in TERMINAL_PHASES:
-            return False
+            return "refused"
         run.request_cancel()
         if run.phase == "queued":
             run.transition_plan("cancelled")
-        return True
+        return "cancelled"

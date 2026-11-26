@@ -1,10 +1,6 @@
-"""Two shapes, because there are two kinds of "no". A refusal that ends the
-operation is raised: nothing was written, and the caller has nothing else to
-report. A malformed document is *returned*, because the caller still has a
-listing (or an empty draft) to describe alongside it: invalid input is a 200
-with the listing unchanged. Incompleteness is neither: ADR-0043 writes an
-incomplete listing and leaves its gaps to ``config/listing_validation.py``.
-"""
+"""The typed refusals operations answer with: raised when the operation ends with
+nothing written, returned for a malformed document the caller still describes
+alongside the unchanged listing."""
 
 from __future__ import annotations
 
@@ -31,8 +27,6 @@ from etsy_listings.core.workspace.workspace import InvalidNameError
 
 
 class PublishedListingDeletionError(ConflictError, ValueError):
-    """ADR-0035."""
-
     def __init__(self, name: str) -> None:
         super().__init__(DELETED_ON_PUBLISHED)
         self.name = name
@@ -102,10 +96,6 @@ class CalibrationDesignMissingError(MissingError):
         self.design = design
 
 
-# --------------------------------------------------------- listing templates
-# A taken name is ``listing_templates.ListingTemplateExistsError``.
-
-
 class ListingTemplateMissingError(MissingError):
     def __init__(self, name: str) -> None:
         super().__init__(f"no listing template {name!r}")
@@ -121,13 +111,8 @@ class ReservedListingTemplateNameError(UserFacingError, InvalidNameError):
 class ListingTemplateSourceRefusedError(RefusedError): ...
 
 
-# ------------------------------------------------------- staging and batches
-# ``batches.StagingRefusedError`` and ``ConfirmRefusedError`` stay in ``batches``.
-
-
 class StagingMissingError(MissingError):
-    """No staging session by this id: never staged, cancelled, confirmed and
-    materialised, or swept
+    """Also a session confirmed, or swept
     :data:`~etsy_listings.core.batches.records.STAGING_LIFETIME` after its
     last edit."""
 
@@ -173,8 +158,6 @@ class BatchRowNotReviewableError(ConflictError, ValueError):
 
 
 class NothingToDeployError(ConflictError, ValueError):
-    """ADR-0059."""
-
     def __init__(self, label: str) -> None:
         super().__init__(f"{label} has no reviewed listings with changes to deploy")
         self.label = label
@@ -195,8 +178,6 @@ class AiRunRefusedError(ConflictError, ValueError):
 
 
 class ListingDeployingError(AiRunRefusedError):
-    """ADR-0050."""
-
     def __init__(self, name: str) -> None:
         super().__init__(
             name, "This listing is deploying. AI Mode is back once the deploy finishes."
@@ -204,8 +185,6 @@ class ListingDeployingError(AiRunRefusedError):
 
 
 class ListingDraftingInBatchError(AiRunRefusedError):
-    """ADR-0048."""
-
     def __init__(self, name: str) -> None:
         super().__init__(
             name, "This listing is drafting in a batch. AI Mode is back once that is done."
@@ -219,8 +198,6 @@ class AiNotReadyError(AiRunRefusedError):
 
 
 class ProposalMissingError(MissingError):
-    """ADR-0049."""
-
     def __init__(self, name: str) -> None:
         super().__init__(f"no proposal for {name!r}")
         self.name = name
@@ -233,7 +210,7 @@ class ProposalReplacedError(StaleError, ValueError):
 
 
 class ReviewedPlanRefusedError(ConflictError, ValueError):
-    """ADR-0042."""
+    pass
 
 
 class ShopRevisionConflictError(StaleError, RuntimeError):

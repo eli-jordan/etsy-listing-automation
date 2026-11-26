@@ -1,16 +1,7 @@
 """How an interactive command asks a question, given the terminal it got.
 
-**Only fzf filters.** Without fzf, ``choose`` falls back to questionary's
-arrow-key list, else a numbered list over ``input()``. Filtering was tried in
-both and both were worse than not having it. questionary's autocomplete copies the
-highlighted row into the input buffer as you arrow through the menu, so the
-query silently becomes a row you never typed -- and clearing it back out
-leaves a fragment that matches nothing. A type-to-narrow loop over ``input()``
-avoids that but costs a full redraw per query to save scrolling a list the
-terminal already scrolls for free. A selector that only selects beats a filter
-that surprises you, and ``fzf`` is one package away for anyone who wants the
-fuzzy version.
-"""
+Only fzf filters: questionary's autocomplete copies the highlighted row into the
+query as you arrow through it, so without fzf ``choose`` is a plain list."""
 
 from __future__ import annotations
 
@@ -30,11 +21,8 @@ without scrolling the prompt off the top."""
 
 @cache
 def prompt_toolkit_works() -> bool:
-    """Can prompt_toolkit drive this terminal at all?
-
-    Probed, not inferred: the failure depends on the console handle behind
-    stdout, which ``platform``/``isatty``/``TERM`` do not describe reliably.
-    """
+    """Probed, not inferred: the failure depends on the console handle behind stdout, which
+    ``platform``, ``isatty`` and ``TERM`` do not describe reliably."""
     try:
         from prompt_toolkit.output.defaults import (  # noqa: PLC0415 -- startup cost: loads only to probe a prompt
             create_output,
@@ -176,7 +164,6 @@ def pick[T](
     marker_hint: str = "",
     host: PromptHost | None = None,
 ) -> T:
-    """Choose one of ``options``, offered by the label ``label`` gives it."""
     by_label = {label(option): option for option in options}
     return by_label[ask_choice(message, list(by_label), marker_hint=marker_hint, host=host)]
 

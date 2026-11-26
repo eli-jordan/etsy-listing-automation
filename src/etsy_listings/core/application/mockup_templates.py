@@ -1,7 +1,8 @@
-"""Every path comes from ``Workspace``: template names arrive from URLs, and
-its accessors are where "stays inside the root" is enforced (ADR-0013,
-ADR-0046) -- an unusable name is its ``InvalidNameError``.
-"""
+"""The calibrator's mockup template operations: overviews, kinds, colour
+reports, saved calibration and previews.
+
+Every path comes from ``Workspace``, whose accessors keep a template name that
+arrived in a URL inside the root."""
 
 from __future__ import annotations
 
@@ -72,14 +73,13 @@ class TemplateOverview:
     photos: list[TemplatePhoto]
     has_config: bool
     status_reason: str | None
-    """Why it is not calibrated yet, in the rail's words; ``None`` once it is."""
     width: int | None
     height: int | None
     """The photo's **true** pixel size: the space ``template.yaml``'s boxes
     are in, which the editor's downscaled canvas cannot tell the client."""
     labels: list[str]
     config: AnyTemplate | None = None
-    """What was read to make this row, or ``None`` for one that did not load."""
+    """``None`` for a template that did not load."""
 
     @property
     def calibrated(self) -> bool:
@@ -208,9 +208,8 @@ def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
 
 @dataclass(frozen=True)
 class ColourAssignment:
-    """What one photo of a candidate ``colour-matrix`` set will be taken as.
-    ``clean`` is false when assigning the kind will rename it (ADR-0004: the
-    filename *is* the slugified colour)."""
+    """``clean`` is false when assigning the kind will rename the photo
+    (ADR-0004: the filename *is* the slugified colour)."""
 
     filename: str
     colour: str
@@ -424,16 +423,14 @@ class PreviewScene:
     derived_dir: Path
     layers: tuple[RenderConfig, ...]
     designs: tuple[Path | None, ...]
-    """The design file each layer composites, as the caller resolved it --
-    parallel to ``layers``. ``None`` leaves that layer's garment bare."""
+    """Parallel to ``layers``; ``None`` leaves that layer's garment bare."""
 
 
 LayerDesign = Callable[[str | None], Path | None]
 """``depicted colour -> design file`` for one layer of a saved scene, or
 ``None`` to leave the layer bare. The colour is the one
 :func:`~etsy_listings.core.render.config.scene_layers` says the layer
-depicts, so a ``multiple`` scene can print a different file per placement
-(A35)."""
+depicts, so a ``multiple`` scene can print a different file per placement."""
 
 
 def _drawn_or_saved_renderer(geometry: PreviewGeometry, config: AnyTemplate) -> AnyRenderer:

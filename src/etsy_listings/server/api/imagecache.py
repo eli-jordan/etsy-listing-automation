@@ -1,12 +1,9 @@
 """In-process caches for the calibrator's preview loop, and the downscale the
 editor renders at.
 
-The render stage reads each image once per run and has no cache; the
-calibrator re-renders the same photo and design several times a second while
-a box is dragged, so :class:`PreviewImages` memoises the decoded images and
-derived maps by path and file version, and hands them out read-only.
-:class:`ScaledBase` is the editor's downscale to :data:`EDITOR_MAX_EDGE`.
-"""
+The calibrator re-renders the same photo several times a second, so
+:class:`PreviewImages` memoises decoded images and derived maps by path and file
+version and hands them out read-only."""
 
 from __future__ import annotations
 

@@ -30,7 +30,7 @@ class EtsyActivateApplied(BaseModel):
 @dataclass(frozen=True)
 class EtsyActivateDesired:
     lifecycle: str | None
-    """The listing's ``lifecycle`` verb. Any verb leaves activation alone."""
+    """Any verb leaves activation alone."""
 
 
 class EtsyActivateStage(Stage[EtsyActivateDesired, EtsyActivateApplied, etsy_models.Listing]):

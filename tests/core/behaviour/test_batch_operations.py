@@ -711,6 +711,14 @@ class TestReads:
 
         assert [(entry.kind, entry.id) for entry in recent] == [("batch", session.id)]
 
+    def test_an_unknown_or_unusable_batch_id_is_refused(
+        self, workspace: Workspace, batches: BatchStore
+    ) -> None:
+        with pytest.raises(BatchMissingError, match="no batch '0123abcd'"):
+            read_batch(workspace, batches, "0123abcd")
+        with pytest.raises(InvalidNameError):
+            read_batch(workspace, batches, "a:b")
+
     def test_a_listing_s_batch_is_the_newest_live_row_naming_it(
         self,
         workspace: Workspace,

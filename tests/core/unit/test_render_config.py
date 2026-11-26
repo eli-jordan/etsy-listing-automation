@@ -62,6 +62,14 @@ def test_displace_defaults_off_shade_defaults_on() -> None:
     assert ShadeConfig().enabled is True
 
 
+@pytest.mark.parametrize("value", [-0.01, 1.01, float("nan")])
+def test_strength_and_opacity_are_refused_outside_zero_to_one(value: float) -> None:
+    with pytest.raises(ValidationError):
+        DisplaceConfig(strength=value)
+    with pytest.raises(ValidationError):
+        ShadeConfig(opacity=value)
+
+
 def test_colour_matrix_template_has_no_per_colour_override() -> None:
     template = load_template_config(
         {
@@ -123,39 +131,6 @@ def test_scene_layers_give_each_placement_its_colour_and_a_listing_box_only_its_
         ("black", SQUARE_BOX),
         ("ivory", moved),
     ]
-
-
-@pytest.mark.parametrize(
-    "data",
-    [
-        {
-            "kind": "multiple",
-            "placements": [
-                {"colour": "ivory", "bounding_box": _box_dicts(SQUARE_BOX), "artwork": "on-dark"}
-            ],
-        },
-        {"kind": "single", "artwork": "on-light", "bounding_box": _box_dicts(SQUARE_BOX)},
-    ],
-)
-def test_a_template_artwork_override_is_refused_naming_prd_30(data: dict[str, object]) -> None:
-    """ADR-0053: a colour resolves to the same file in every mockup scene and on
-    Printify, so a template no longer chooses artwork of its own. Refused by
-    name rather than silently ignored -- ignoring it would render a different
-    print from the one the file asked for."""
-    with pytest.raises(ValidationError, match="ADR-0053"):
-        load_template_config(data)
-
-
-def test_a_null_artwork_written_by_the_old_calibrator_still_loads() -> None:
-    template = load_template_config(
-        {
-            "kind": "single",
-            "artwork": None,
-            "bounding_box": _box_dicts(SQUARE_BOX),
-            "renderer": {"type": "photo-warp", "config": {}},
-        }
-    )
-    assert "artwork" not in dump_template_config(template)
 
 
 def test_multiple_template_colour_coverage_accepts_subset() -> None:

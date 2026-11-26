@@ -1,9 +1,4 @@
-"""The provider boundary `ai/orchestrator.py` drives, and `FakeAiProvider`.
-
-An adapter owns its own CLI invocation, structured-output parsing down to raw
-text, and provider-specific error classification -- it must not edit a
-listing, assemble a prompt, or implement SEO validation.
-"""
+"""The provider boundary ``ai/orchestrator.py`` drives, and ``FakeAiProvider``."""
 
 from __future__ import annotations
 

@@ -1,14 +1,8 @@
 """Terminal decorations that need an ASCII fallback.
 
-A redirected stdout on Windows is cp1252, and a cygwin console can report an
-encoding that represents neither a block nor an emoji; printing one anyway
-raises ``UnicodeEncodeError`` mid-run. Anything that prints a non-ASCII
-decoration asks :func:`choose` first.
-
-A CLI leaf: the ``apply`` swatches and the ``new`` picker's marker are
-both terminal output, which only the CLI produces (ADR-0052). It depends on
-nothing but the standard library, so any CLI module may depend on it.
-"""
+A redirected stdout on Windows is cp1252 and a cygwin console can report an
+encoding with no block or emoji, so printing one raises ``UnicodeEncodeError``
+unless :func:`choose` is asked first."""
 
 from __future__ import annotations
 
@@ -37,13 +31,12 @@ def declared_utf8(environ: Mapping[str, str] | None = None) -> bool:
 
 
 def adopt_declared_encoding(environ: Mapping[str, str] | None = None) -> None:
-    """Re-encode stdout and stderr as UTF-8 when the shell declared UTF-8 and
-    Python decided otherwise.
+    """Re-encode stdout and stderr as UTF-8 when the shell declared UTF-8 and Python chose
+    otherwise.
 
-    Native-Windows Python takes the console codepage (cp1252), but a cygwin
-    pty is a named pipe with no console behind it; mintty is UTF-8 and says
-    so in ``LANG``. An explicit ``PYTHONIOENCODING`` wins.
-    """
+    Native-Windows Python takes the console codepage (cp1252), but a cygwin pty is a named
+    pipe with no console, and mintty declares UTF-8 in ``LANG``. An explicit
+    ``PYTHONIOENCODING`` wins."""
     env = os.environ if environ is None else environ
     if env.get("PYTHONIOENCODING") or not declared_utf8(env):
         return
@@ -58,12 +51,8 @@ def adopt_declared_encoding(environ: Mapping[str, str] | None = None) -> None:
 
 
 def stdout_reader_gone(exc: OSError) -> bool:
-    """Did ``exc`` come from writing to a stdout pipe nobody reads any more?
-
-    POSIX reports it as ``BrokenPipeError``; native-Windows Python as
-    ``EINVAL``, which Click's broken-pipe handling misses, so ``EINVAL``
-    counts only when stdout really is a pipe.
-    """
+    """POSIX reports a write to a stdout pipe nobody reads as ``BrokenPipeError``; native-Windows
+    Python as ``EINVAL``, which Click misses, so ``EINVAL`` counts only when stdout is a pipe."""
     if isinstance(exc, BrokenPipeError):
         return True
     return exc.errno == errno.EINVAL and sys.platform == "win32" and _stdout_is_pipe()

@@ -1,10 +1,8 @@
-"""What a `media:` entry is: a rendered ``{template, colour}`` or a file ref,
-and whether it is an image or a video.
+"""What a ``media:`` entry is: a rendered ``{template, colour}`` or a file ref, and
+whether it is an image or a video.
 
-A file ref's kind is read from its extension alone, so the answer is pure. An
-extension outside the two lists is refused: Etsy accepts exactly these formats,
-and anything else would surface only as a failed upload.
-"""
+A file ref's kind comes from its extension alone, and an extension outside the
+two lists is refused, since Etsy accepts exactly these formats."""
 
 from __future__ import annotations
 
@@ -26,8 +24,8 @@ Etsy counts the two apart -- a listing may hold 20 images *and* 2 videos."""
 MAX_VIDEOS: Final = 2
 """Etsy's video cap per listing, with ``is_multi_video=true``."""
 FEATURED_VIDEO_POSITION: Final = 2
-"""Where Etsy pins the featured video, behind the thumbnail (decision 9).
-1-based, as a buyer counts the gallery."""
+"""Where Etsy pins the featured video, behind the thumbnail; 1-based, as a
+buyer counts the gallery."""
 
 
 class TemplateMediaEntry(BaseModel):

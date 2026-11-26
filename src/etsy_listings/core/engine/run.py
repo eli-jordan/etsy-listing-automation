@@ -33,20 +33,9 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ListingOutcome:
-    """What happened to one listing: its plan, or the reason it was abandoned.
-
-    Exactly one of ``planned`` and ``error`` is set. A failure carries no plan
-    even when it failed *after* planning -- an ``apply`` that got partway is
-    not described by the plan it started from, and reporting one as though it
-    had been carried out is worse than reporting none.
-
-    ``error`` is a :class:`~etsy_listings.core.errors.UserFacingError` and nothing
-    else. That is the whole point of the type: a config mistake, a design too
-    small, a colour that does not exist are all things the *user* can act on,
-    and a run must survive them to reach the next listing. A defect still
-    propagates and still prints a traceback, because that is what a traceback
-    is for.
-    """
+    """Exactly one of ``planned`` and ``error`` is set. A failure carries no
+    plan even after planning: an apply that got partway is not described by
+    the plan it started from. A defect is not an ``error``: it propagates."""
 
     listing: str
     planned: PlannedRun | None = None
@@ -154,9 +143,8 @@ def preview_listing(
 
 
 class _StopLatch:
-    """``should_stop`` for one listing's ``execute``, remembering whether it
-    ever answered True. `execute` breaks out of its loop the first time it
-    does, so remembering that answer is knowing it stopped."""
+    """`execute` breaks out the first time ``should_stop`` answers True, so
+    remembering that answer is knowing it stopped."""
 
     def __init__(self, stop: Callable[[], bool]) -> None:
         self._stop = stop
@@ -239,12 +227,8 @@ def _over(
 
 
 def _read_lock(ctx: RunContext, listing: str) -> Lockfile:
-    """This listing's lockfile, or an empty one if it has never been applied.
-
-    The empty one is stamped with the current version and time so that the
-    document is well-formed from the moment it exists; ``execute`` re-stamps
-    it with the version and time that actually applied it.
-    """
+    """An empty one is stamped now so it is well-formed; ``execute`` re-stamps
+    it with the version and time that applied it."""
     existing = Lockfile.read(ctx.workspace.lock_file(listing))
     if existing is not None:
         return existing

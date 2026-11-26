@@ -1,11 +1,8 @@
-"""Provisioning the backup storage folder: bringing a restic repository into
-it, new or copied from a Destination, and saving the ``backup:`` block that
-names it (workspace-backup spec, *Set-up* and *Missing repository*;
-ADR-0060, ADR-0061).
+"""Provisioning the backup storage folder: bringing a restic repository into it,
+new or copied from a destination, and saving the ``backup:`` block that names it.
 
-Every entry point goes through :func:`provision`, which refuses first and
-undoes on failure (architecture, *restic for workspace backup*).
-"""
+Every entry point goes through :func:`provision`, which refuses first and undoes
+on failure."""
 
 from __future__ import annotations
 
@@ -94,9 +91,6 @@ class NewRepository: ...
 
 @dataclass(frozen=True)
 class DestinationCopy:
-    """Copy in the first of ``copies`` the password opens and that passes a
-    check."""
-
     copies: tuple[Path, ...]
 
 
@@ -105,14 +99,10 @@ Source = NewRepository | DestinationCopy
 
 @dataclass(frozen=True)
 class PasswordSource:
-    """How an entry point gets the password; ``ask`` is told where the
-    repository comes from."""
-
     ask: Callable[[Source], str | None]
     replaces_stored: bool = False
-    """True for a password the seller has just typed for this set-up: used
-    and stored even over one in ``.env``, and refused while the environment
-    overrides it. False uses the stored password and asks only without one."""
+    """A password just typed for this set-up: stored even over one in
+    ``.env``, and refused while the environment overrides it."""
 
     @classmethod
     def typed(cls, password: str) -> PasswordSource:
@@ -125,9 +115,6 @@ class PasswordSource:
 
 @dataclass(frozen=True)
 class NewBlock:
-    """Set-up's ``backup:`` block, less the storage folder and workspace ID
-    :func:`provision` adds."""
-
     destinations: tuple[Path, ...]
     interval_hours: int
     retention: RetentionSettings
@@ -136,19 +123,19 @@ class NewBlock:
 @dataclass(frozen=True)
 class Connected:
     source: Path
-    """The copy it was copied from."""
     snapshots: tuple[Snapshot, ...]
-    """The copy's snapshots, read without the lock."""
+    """Read without restic's lock."""
     notice: str | None = None
-    """What to say beside it, such as a new workspace ID among several."""
+
+
+@dataclass(frozen=True)
+class Created:
+    repository_id: str
 
 
 @dataclass(frozen=True)
 class Provisioned:
-    connected: Connected | None
-    """None for a new repository."""
-    repository_id: str | None
-    """A new repository's restic id; None for a copy."""
+    brought: Connected | Created
     workspace_id: WorkspaceId
     stored_password: bool
     """Whether this attempt wrote the password into ``.env``."""
@@ -162,16 +149,15 @@ def source_for(destinations: Sequence[Path]) -> Source:
 @dataclass(frozen=True)
 class Provisioning:
     storage: Path
-    """The backup storage folder: new, or an empty folder."""
     source: Source
     password: PasswordSource
     expected_revision: str | None = None
-    """The ``settings.yaml`` revision the seller saw; None takes it as it
-    reads now, for a caller no page read it for."""
+    """None, for a caller no page read ``settings.yaml`` for, takes the
+    revision as it reads now."""
     new_block: NewBlock | None = None
-    """Set-up's whole block, refused while one is saved. Without it the
-    saved block is kept, its ``repository`` set to :attr:`storage` when that
-    differs, and its workspace ID added when it has none."""
+    """Refused while a block is saved. Without it the saved block is kept,
+    its ``repository`` set to :attr:`storage` and a missing workspace ID
+    added."""
 
 
 def provision(
@@ -182,8 +168,6 @@ def provision(
     restic: OpenRepository | None = None,
     trying: Callable[[Path | None], None] | None = None,
 ) -> Provisioned:
-    """Provision ``asked.storage`` from ``asked.source``. ``trying`` is told
-    each copy before it is copied, or None before a new repository is made."""
     plan = _plan(workspace, asked, binaries, restic)
     password = _password(workspace, asked.source, asked.password)
     storage = asked.storage
@@ -204,10 +188,9 @@ def provision(
         plan.save(workspace_id.value)
         undo.pop_all()
     stored_password = not password.already_stored
-    if isinstance(brought, _Created):
-        return Provisioned(None, brought.repository_id, workspace_id, stored_password)
-    connected = replace(brought, notice=workspace_id.notice)
-    return Provisioned(connected, None, workspace_id, stored_password)
+    if isinstance(brought, Connected):
+        brought = replace(brought, notice=workspace_id.notice)
+    return Provisioned(brought, workspace_id, stored_password)
 
 
 @dataclass(frozen=True)
@@ -363,8 +346,7 @@ def _put_back(env: Path, before: bytes | None) -> None:
 
 
 def _take_back(storage: Path, *, existed: bool) -> None:
-    """Remove a repository this attempt put in ``storage``: safe, because
-    the folder was new or empty."""
+    """Removing the whole tree is safe: ``storage`` was new or empty."""
     if has_repository(storage):
         remove_tree(storage)
     if existed and not storage.exists():
@@ -372,16 +354,10 @@ def _take_back(storage: Path, *, existed: bool) -> None:
 
 
 def _quietly(undo: Callable[..., None], *args: object, **kwargs: object) -> None:
-    """Run one undo, logging rather than raising over the failure it undoes."""
     try:
         undo(*args, **kwargs)
     except Exception:
         logger.exception("undoing part of a failed backup provisioning failed")
-
-
-@dataclass(frozen=True)
-class _Created:
-    repository_id: str
 
 
 def _bring(
@@ -391,11 +367,11 @@ def _bring(
     *,
     stored: bool,
     trying: Callable[[Path | None], None] | None,
-) -> Connected | _Created:
+) -> Connected | Created:
     told = trying or (lambda _source: None)
     if isinstance(source, NewRepository):
         told(None)
-        return _Created(_into_place(backup.storage, _initialised(backup, password)))
+        return Created(_into_place(backup.storage, _initialised(backup, password)))
     env_file = backup.env_file if stored else None
 
     def connect(copy: Path) -> Connected:
@@ -452,8 +428,6 @@ def _copied(
 
 
 def _open(repository: Repository, source: Path, *, env_file: Path | None) -> None:
-    """Refuse a password that does not open ``repository``, or a copy that
-    does not pass a check."""
     try:
         repository.verify_password()
     except WrongPasswordError:
@@ -475,8 +449,6 @@ def _open(repository: Repository, source: Path, *, env_file: Path | None) -> Non
 
 
 def existing_copies(destinations: Sequence[Path]) -> tuple[Path, ...]:
-    """The destinations set-up should connect from, in their order; empty
-    when none holds a repository."""
     listings: dict[Path, Mapping[str, int]] = {}
     configs: dict[bytes, Path] = {}
     for path in destinations:

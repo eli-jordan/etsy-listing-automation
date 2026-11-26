@@ -1,8 +1,4 @@
-"""Typed reads of what ``create_app`` keeps on ``app.state``.
-
-``app.state`` is untyped, so each read names the type it expects. The routers
-share these instead of each declaring its own copy.
-"""
+"""Typed reads of what ``create_app`` keeps on the untyped ``app.state``."""
 
 from __future__ import annotations
 

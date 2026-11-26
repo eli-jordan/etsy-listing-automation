@@ -24,9 +24,7 @@ class BlueprintRef(BaseModel):
     brand: str
     model: str
     title: str = ""
-    """Optional, and refreshed by ``new``. A garment profile identifying a
-    garment only by part number is hard to read; a drifted one is stale
-    prose, not a broken profile."""
+    """Refreshed by ``new``; a drifted title is stale prose, not a broken profile."""
 
     def __str__(self) -> str:
         return f"{self.brand} {self.model}".strip()
@@ -45,26 +43,14 @@ class GarmentProfile(BaseModel):
     print_area: PrintArea
     sizes: list[str]
     materials: list[str] = []
-    """The fibre materials Etsy displays for this garment.
-
-    A listing chooses a garment rather than independently describing its
-    composition, so every listing using this profile sends the same materials
-    to Etsy.
-    """
+    """The fibre materials Etsy displays, the same for every listing on this garment."""
     colors: dict[str, Literal["light", "dark"]] = {}
-    """Human-classified once via ``new``, not auto-seeded -- Printify's
-    catalog carries no hex colour value in this codebase. Drives artwork
-    (light/dark ink) resolution for listings with more than one design file."""
+    """Classified by hand in ``new``: Printify's catalog gives no hex colour. Picks the light or
+    dark ink design for a listing with more than one design file."""
 
     preview_template: str | None = None
-    """A ``colour-matrix`` template the editor uses to judge colours.
-
-    Not a ``media:`` default -- listing mockups still live in
-    ``listing.media``, and a listing that never names this template still
-    renders whatever ``media:`` does. Optional so garment
-    profiles written before the field existed still load. ``new`` does not
-    prompt; it is hand-edited the same way ``colors:`` is classified.
-    """
+    """A ``colour-matrix`` template the editor uses to judge colours; not a ``media:`` default.
+    Hand-edited, like ``colors:``."""
 
     @field_validator("preview_template", mode="before")
     @classmethod

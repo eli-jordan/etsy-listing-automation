@@ -20,7 +20,6 @@ from etsy_listings.core.application import credentials
 from etsy_listings.core.workspace import scaffold
 
 __all__ = [
-    "ANTHROPIC",
     "ETSY_APP_KEY",
     "PRINTIFY",
     "Capture",
@@ -29,7 +28,6 @@ __all__ = [
     "announce_gitignore",
     "capture",
     "capture_verified",
-    "nothing_to_prove",
     "refuse",
     "store",
 ]
@@ -37,8 +35,6 @@ __all__ = [
 
 @dataclass(frozen=True)
 class CredentialPrompt:
-    """How a wizard asks for one core credential: one prompt per variable."""
-
     credential: credentials.Credential
     asks: tuple[str, ...]
     blurb: tuple[str, ...]
@@ -76,15 +72,6 @@ ETSY_APP_KEY = CredentialPrompt(
 say which was wrong, and asking for them separately with a verification
 between would promise a precision Etsy does not offer."""
 
-ANTHROPIC = CredentialPrompt(
-    credential=credentials.ANTHROPIC,
-    asks=("Anthropic API key (blank to skip):",),
-    blurb=(
-        "An Anthropic API key is optional; no command uses it.",
-        "  https://console.anthropic.com/settings/keys",
-    ),
-)
-
 
 @dataclass(frozen=True)
 class Capture:
@@ -92,10 +79,6 @@ class Capture:
     reused: bool
     """True when every value was already on this machine, so nothing was asked
     and nothing needs writing back."""
-
-    @property
-    def skipped(self) -> bool:
-        return not any(value.strip() for value in self.values)
 
 
 @dataclass(frozen=True)
@@ -123,11 +106,7 @@ def capture(
         typer.echo(reuse_message or _default_reuse_message(prompt))
         return Capture(values=_present(existing), reused=True)
 
-    values = _ask(prompt, existing, allow_blank=prompt.credential.optional)
-    if prompt.credential.optional and not any(values):
-        typer.echo("  skipped.")
-        return Capture(values=values, reused=False)
-
+    values = _ask(prompt, existing)
     _proof, detail = verify(values)
     typer.echo(f"  {detail}")
     return Capture(values=values, reused=False)
@@ -148,7 +127,7 @@ def capture_verified[T](
         values = _present(existing)
         return VerifiedCapture(values=values, reused=True, proof=verify(values)[0])
 
-    values = _ask(prompt, existing, allow_blank=False)
+    values = _ask(prompt, existing)
     proof, detail = verify(values)
     typer.echo(f"  {detail}")
     return VerifiedCapture(values=values, reused=False, proof=proof)
@@ -158,21 +137,19 @@ def _present(existing: Sequence[str | None]) -> tuple[str, ...]:
     return tuple(value for value in existing if value is not None)
 
 
-def _ask(
-    prompt: CredentialPrompt, existing: Sequence[str | None], *, allow_blank: bool
-) -> tuple[str, ...]:
+def _ask(prompt: CredentialPrompt, existing: Sequence[str | None]) -> tuple[str, ...]:
     typer.echo("")
     for line in prompt.blurb:
         typer.echo(line)
 
     answers: list[str] = []
     for ask, already in zip(prompt.asks, existing, strict=True):
-        answers.append(already or prompts.ask_text(ask, allow_blank=allow_blank))
+        answers.append(already or prompts.ask_text(ask))
     return tuple(answer.strip() for answer in answers)
 
 
 def store(root: Path, prompt: CredentialPrompt, capture: Capture) -> None:
-    if capture.reused or capture.skipped:
+    if capture.reused:
         return
     credentials.store(root, prompt.credential, capture.values)
 
@@ -193,9 +170,3 @@ def announce_gitignore(root: Path) -> None:
 def _default_reuse_message(prompt: CredentialPrompt) -> str:
     named = " and ".join(prompt.variables)
     return f"{named} already set -- leaving it alone."
-
-
-def nothing_to_prove(values: Sequence[str]) -> tuple[None, str]:
-    """Store unverified: Anthropic has no free call that proves a key."""
-    del values
-    return None, "stored unverified."

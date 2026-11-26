@@ -19,8 +19,6 @@ def edit_listing(
     *,
     batches: BatchStore,
 ) -> InvalidListing | None:
-    """Returns ``None`` once written, or :class:`InvalidListing`, writing
-    nothing."""
     before: Document = {}
 
     def merge(raw: Document) -> Document:
@@ -41,8 +39,8 @@ def edit_listing(
 def _restore_rows_if_undeleted(
     batches: BatchStore, name: str, before: Document, merged: Document
 ) -> None:
-    """Cancelling a pending delete means the listing never went, so the batch
-    rows the delete marked come back (ADR-0036)."""
+    """A cancelled pending delete brings back the batch rows it marked
+    (ADR-0036)."""
     if before.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
         design = merged.get("design")
         default = design.get("default") if isinstance(design, dict) else None

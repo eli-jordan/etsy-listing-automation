@@ -28,7 +28,6 @@ from etsy_listings.core.config.media import (
 from etsy_listings.core.config.money import Money, require_currency
 from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
     Secrets,
@@ -36,7 +35,6 @@ from etsy_listings.core.config.secrets import (
 from etsy_listings.core.config.slug import ColourExceptions, SlugCollisionError, slug_map, slugify
 
 __all__ = [
-    "ANTHROPIC_KEY_VAR",
     "MAX_IMAGES",
     "MAX_VIDEOS",
     "PRINTIFY_TOKEN_VAR",

@@ -17,10 +17,8 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 @dataclass(frozen=True)
 class Deletion:
-    """What a delete did. ``wiped`` means the listing had no remotes and is
-    gone. Otherwise it is marked ``lifecycle: deleted`` and stays, pending the
-    apply that retracts its remotes. ``etsy_state`` is what Etsy said when
-    the delete was allowed."""
+    """Not ``wiped``: the listing had remotes, so it stays marked
+    ``lifecycle: deleted`` until an apply retracts them."""
 
     wiped: bool
     etsy_state: str | None
@@ -54,7 +52,6 @@ def delete_listing(
     ai_runs: AiRunRegistry,
     etsy_states: EtsyStates,
 ) -> Deletion:
-    """ADR-0035."""
     documents = ListingDocuments(workspace)
     if not documents.exists(name):
         raise ListingMissingError(name)

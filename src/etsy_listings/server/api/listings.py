@@ -72,6 +72,7 @@ from etsy_listings.server.api import app_state
 from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
 from etsy_listings.server.api.etsystate import etsy_states
 from etsy_listings.server.api.imagecache import LIVE_ARTWORK_EDGE, PREVIEW_IMAGES
+from etsy_listings.server.api.refusal_status import refusals
 from etsy_listings.server.api.scene_responses import ScenePreviewQuery, scene_response
 from etsy_listings.server.api.schemas import (
     CommonCopySummary,
@@ -254,17 +255,22 @@ def patch_listing(
     return _detail(request, name, field_errors=refused.field_errors if refused else None)
 
 
-@router.delete("/{name}", response_model=None)
+@router.delete(
+    "/{name}",
+    response_model=None,
+    responses={
+        200: {
+            "model": ListingSummary,
+            "description": "Remote copies: marked `lifecycle: deleted`, the row left pending",
+        },
+        204: {"description": "No remote copies: wiped"},
+        **refusals({409: "Published: retire it instead"}),
+    },
+)
 def delete_listing(
     target: Annotated[Target, Depends(target)], request: Request
 ) -> ListingSummary | Response:
-    """Delete from the listings table.
-
-    No remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering
-    with the row left pending. Published: 409 -- retire it instead. Confirm
-    is the UI's. What goes with the listing either way is
-    :func:`~etsy_listings.core.application.listing_identity.delete_listing`'s.
-    """
+    """Delete from the listings table."""
     workspace, name = target.workspace, target.name
     deletion = delete(
         workspace,
@@ -278,16 +284,16 @@ def delete_listing(
     return _summary(listing_row(workspace, name, etsy_state=deletion.etsy_state))
 
 
-@router.post("", response_model=ListingDetail)
+@router.post(
+    "",
+    response_model=ListingDetail,
+    responses=refusals(
+        {400: "Not a single path segment", 409: "A listing directory of that name exists"}
+    ),
+)
 def create_listing(request: Request, body: CreateListingRequest) -> ListingDetail:
-    """Naming a listing is what creates it.
-
-    Mirrors PATCH exactly, one level up: a document that fails
-    ``Listing.model_validate`` is a **200** carrying ``field_errors`` with
-    nothing written. The two things a *name* can be wrong about keep their
-    status codes instead -- not a single path segment is the 400, and
-    already taken (the directory, not just ``listing.yaml``) is a 409.
-    """
+    """Naming a listing is what creates it. As with PATCH, a document that
+    will not validate writes nothing and answers 200 with ``field_errors``."""
     workspace = app_state.workspace(request)
     refused = create(workspace, body.name, body.document)
     if refused is not None:
@@ -418,7 +424,7 @@ def check_scene_preview(
 
 
 def _scene_layers(target: Target, template: str, colour: str | None) -> SceneLayers:
-    """What ``template``'s scene paints for the *saved* listing (A35)."""
+    """What ``template``'s scene paints for the *saved* listing."""
     try:
         listing = listing_scenes(target.workspace, target.name)
     except ConfigLoadError as exc:
@@ -428,7 +434,10 @@ def _scene_layers(target: Target, template: str, colour: str | None) -> SceneLay
     return SceneLayers(colour, listing.artwork, listing.boxes(template))
 
 
-@router.get("/{name}/scene-artwork")
+@router.get(
+    "/{name}/scene-artwork",
+    responses=refusals({404: "No such listing, or a layer that prints nothing"}),
+)
 def scene_artwork_picture(
     target: Annotated[Target, Depends(target)],
     template: str,
@@ -438,8 +447,7 @@ def scene_artwork_picture(
     """The file one layer of this listing's scene prints, as the editor's live
     Position mode draws it: downscaled and with its transparency, unlike a list
     thumbnail. Resolved here for the reason :func:`scene_preview` is, so the
-    picture under a drag and the render that replaces it print the same file.
-    ``404`` for a layer left bare."""
+    picture under a drag and the render that replaces it print the same file."""
     workspace = target.workspace
     try:
         listing = listing_scenes(workspace, target.name)

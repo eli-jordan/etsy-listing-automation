@@ -65,11 +65,8 @@ def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> Prin
 
 
 def _report_print_area_choice(variant_set: VariantSet) -> None:
-    """Say so when the garment profile's print area is one of several on offer.
-
-    Printify's print areas differ by garment size and the profile records
-    only the largest, which decides how big the design file has to be.
-    """
+    """Say so when the profile's print area is one of several: Printify's differ by garment size,
+    and the profile records only the largest, which sets the design file's size."""
     sizes = variant_set.placeholder_sizes(DEFAULT_PLACEHOLDER)
     if len(sizes) < MIN_SIZES_TO_COMPARE:
         return
@@ -82,11 +79,8 @@ def _report_print_area_choice(variant_set: VariantSet) -> None:
 
 
 def _pick_design(workspace: Workspace) -> str:
-    """Pick the design from what is in ``designs/``, newest first.
-
-    The ``new`` argument still works, for scripting and for naming artwork
-    that does not exist yet.
-    """
+    """Pick the design from ``designs/``, newest first; the ``new`` argument still names one
+    directly, for scripting and for artwork not yet made."""
     choices = build_design_choices(workspace.design_files(), set(workspace.listing_names()))
     if not choices:
         typer.echo(
@@ -116,7 +110,6 @@ def _pick_template(workspace: Workspace) -> str:
 def _report_media_choice(
     template: str, kind: str, colours: list[str], media: list[dict[str, str]]
 ) -> None:
-    """Say what got a photo and what did not."""
     if kind != "colour-matrix":
         typer.echo(
             f"{template} is a {kind}-kind template: one image for the listing, "

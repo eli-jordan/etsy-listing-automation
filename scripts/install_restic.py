@@ -1,9 +1,9 @@
 """Install the pinned restic under a given home and print the binary's path.
 
-CI runs this before the tests marked ``restic`` (workspace-backup plan, P3)
-and exports the path as ``ETSY_LISTINGS_RESTIC_BINARY``. It goes through the
-app's own installer, so the release and its SHA-256 digests are pinned in one
-place, ``core/backup/binary.py``, and a mismatched download fails here.
+CI runs this before the tests marked ``restic`` and exports the path as
+``ETSY_LISTINGS_RESTIC_BINARY``. It goes through the app's own installer, so
+the release and its SHA-256 digests are pinned in one place,
+``core/backup/binary.py``, and a mismatched download fails here.
 
     uv run python scripts/install_restic.py <home>
 """

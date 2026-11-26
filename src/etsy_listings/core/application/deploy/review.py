@@ -21,8 +21,6 @@ def check_reviewed_apply(reviewed: Run | None, command: ReviewedApply) -> None:
 
 
 def _check_same_listings(reviewed: Run, command: ReviewedApply, scope: str) -> None:
-    """The listings and fingerprints the review showed, each listing at its
-    latest plan, in first-planned order."""
     fingerprints: dict[str, str] = {}
     for event in reviewed.events:
         if isinstance(event, ListingPlannedEvent):

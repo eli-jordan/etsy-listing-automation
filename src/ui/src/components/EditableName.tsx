@@ -2,22 +2,18 @@ import { useRef, useState } from "react";
 import { useIsPhone } from "../phone/usePhone";
 
 export interface NameRefusal {
-  /** The name that was refused. Carried so the message can disappear on its
-   * own once the text has moved on -- a refusal is about a particular name, and
-   * one left standing over different text is claiming something untrue. */
   name: string;
   message: string;
 }
 
 export interface EditableNameProps {
-  /** The committed name. `""` for a listing that has never been named. */
+  /** `""` for a listing that has never been named. */
   value: string;
   onCommit: (next: string) => void;
   error?: NameRefusal | null;
   busy?: boolean;
   placeholder?: string;
   label?: string;
-  /** Each keystroke, so a design-derived name can leave a part-typed one alone. */
   onDraftChange?: (text: string) => void;
   as?: "h1" | "span";
   titleClassName?: string;
@@ -39,9 +35,8 @@ export function EditableName({
   const [opened, setOpened] = useState(false);
   const [text, setText] = useState(value);
   const [committed, setCommitted] = useState(value);
-  // A blur *caused by* Escape must not commit, and the browser fires blur after
-  // the keydown either way -- so the key handler records what it decided and
-  // the blur handler obeys it.
+  // The browser fires blur after an Escape keydown, so the key handler records
+  // what it decided and the blur handler obeys it.
   const reverting = useRef(false);
   const isPhone = useIsPhone();
 

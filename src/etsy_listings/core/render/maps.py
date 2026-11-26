@@ -13,7 +13,6 @@ _FLAT_RANGE = 1e-6
 
 
 def luminance_map(base_rgb: RGB) -> FloatMap:
-    """Desaturate, then normalise levels."""
     gray = np.asarray(cv2.cvtColor(base_rgb, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
     normalized = gray.astype(np.float32) / 255.0
     lo, hi = float(normalized.min()), float(normalized.max())

@@ -27,7 +27,7 @@ RestoreOutcome = Literal["running", "succeeded", "failed", "stopped"]
 class RestoreStatus(BaseModel):
     """A restore, for the dialog and the status panel's strip."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     snapshot_id: str
     snapshot_time: datetime
@@ -35,21 +35,19 @@ class RestoreStatus(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     outcome: RestoreOutcome = "running"
-    percent: float = 0.0
-    """0 to 1."""
+    fraction: float = 0.0
     bytes_done: int | None = None
     bytes_total: int | None = None
     files_done: int | None = None
     files_total: int | None = None
     seconds_left: int | None = None
-    """Estimated from the rate so far; None until there is one."""
+    """Estimated from the rate so far; ``None`` until there is one."""
     message: str | None = None
     """Why it failed or stopped."""
 
 
 def default_target(workspace: Path, snapshot: Snapshot) -> Path:
-    """The restore dialog's suggestion: a new sibling of the workspace,
-    outside every folder a restore refuses."""
+    """A new sibling, outside every folder a restore refuses."""
     return workspace.with_name(f"{workspace.name}-restore-{snapshot.short_id}")
 
 

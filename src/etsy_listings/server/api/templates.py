@@ -34,7 +34,7 @@ from etsy_listings.core.application.template_rename import RenameHosts
 from etsy_listings.core.application.template_rename import rename_template as rename
 from etsy_listings.core.batches.records import BatchRecords
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.preparation.readiness import catalog_readiness
+from etsy_listings.core.preparation.readiness import NOT_REQUIRED, maps_required
 from etsy_listings.core.render.config import AnyTemplate, TemplateConfig
 from etsy_listings.core.workspace.template_state import (
     TemplateConfigMissingError,
@@ -44,6 +44,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.designs import resolve_design
 from etsy_listings.server.api.imagecache import PREVIEW_IMAGES
+from etsy_listings.server.api.refusal_status import refusals
 from etsy_listings.server.api.scene_responses import (
     PreviewQuery,
     PreviewScale,
@@ -112,21 +113,28 @@ def list_templates(request: Request) -> list[TemplateSummary]:
         if overview.config is not None:
             summary.renderer = overview.config.renderer.type
             # Metadata only: the per-template status endpoint validates the maps.
-            known = catalog_readiness(overview.config)
-            if known is not None:
-                summary.maps = MapReadinessResponse(**asdict(known), can_render=known.can_render)
+            if not maps_required(overview.config):
+                summary.maps = MapReadinessResponse(
+                    **asdict(NOT_REQUIRED), can_render=NOT_REQUIRED.can_render
+                )
         summaries.append(summary)
     return summaries
 
 
-@router.post("/{name}/rename", response_model=TemplateRenameResponse)
+@router.post(
+    "/{name}/rename",
+    response_model=TemplateRenameResponse,
+    responses=refusals(
+        {
+            400: "An unusable name",
+            409: "A taken name, a running deploy, or a template still preparing",
+        }
+    ),
+)
 def rename_template(
     template: Annotated[Target, Depends(target)], body: RenameListingRequest, request: Request
 ) -> TemplateRenameResponse:
-    """Move a template, and everything naming it, to a new name
-    (:mod:`~etsy_listings.core.application.template_rename`). A taken name, a
-    running deploy or a preparing template is a ``409``; an unusable name is a
-    ``400``."""
+    """Move a template, and everything naming it, to a new name."""
     deployments: Deployments = request.app.state.deployments
     done = rename(
         template.workspace,
@@ -152,13 +160,21 @@ def colour_report(template: Annotated[Target, Depends(target)]) -> list[ColourRe
     return [ColourReportRow(filename=r.filename, colour=r.colour, clean=r.clean) for r in rows]
 
 
-@router.post("/{name}/kind", response_model=TemplateConfig)
+@router.post(
+    "/{name}/kind",
+    response_model=TemplateConfig,
+    responses=refusals(
+        {
+            409: "The template already has a kind; changing it would discard its calibration",
+            422: "No photos, or a photo count the kind does not take",
+        }
+    ),
+)
 def assign_kind(
     template: Annotated[Target, Depends(target)], body: AssignKindRequest
 ) -> AnyTemplate:
     """The first calibration step: say what this template is, and get the
-    starting ``template.yaml`` for that shape. Refused for a template that
-    already has one -- changing kind would discard its calibration."""
+    starting ``template.yaml`` for that shape."""
     return calibration.assign_kind(template.workspace, template.name, body.kind)
 
 

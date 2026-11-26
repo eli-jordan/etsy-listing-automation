@@ -73,9 +73,6 @@ export function buyerFacingImpacts(plan: PlanDTO): ImpactTag[] {
   return buildComparison(plan).impacts;
 }
 
-/** Returned pipeline order is authoritative for the first occurrence of each
- * stage. Retraction is a disjoint lifecycle operation, so it is always shown
- * after the normal pipeline even if a future backend emits it earlier. */
 export function aggregateStageOrder(plans: readonly PlanDTO[]): string[] {
   const normal: string[] = [];
   let hasRetract = false;

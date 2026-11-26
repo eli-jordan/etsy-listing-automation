@@ -653,6 +653,34 @@ run is registered. Listing readiness and run start report the same file/key
 detail; batch readiness carries that detail and a correction remedy while
 keeping staging. Only configuration-loading failures are adapted this way.
 
+### AI provider CLI flags
+
+Each adapter checks the flags it depends on against the installed CLI's
+`--help` at readiness time and reports an older CLI unready rather than
+launching it. The adapters' unit tests pin the full command line. The flags
+were checked against Claude Code 2.1.273, codex-cli 0.155.0 and Grok 1.0.41.
+
+| Provider | Flag | Why |
+|---|---|---|
+| Claude | `-p`, prompt on stdin, no positional prompt | The prompt also echoes the response schema, and an argv element would risk Windows' ~32K command-line limit |
+| Claude | `--output-format json` | One envelope on stdout, `{"type": "result", "is_error": …, "result": "<final text>"}`; `is_error` is checked before `result` is trusted |
+| Claude | `--no-session-persistence` | No durable provider session |
+| Claude | `--tools Read,Grep,Glob` | The read-only guarantee: Write, Edit, NotebookEdit and Bash are never offered, whatever the permission mode |
+| Claude | `--permission-mode dontAsk`, `--permission-prompts none` | Anything that would still prompt is denied instead of hanging a non-interactive process |
+| Claude | `--json-schema <json>` | Inline only; Claude has no file form |
+| Claude | no `--add-dir`, no image flag | The child's cwd is the workspace, which `-p` reads by default; the prompt names the design's absolute path for `Read`, which opens images |
+| Codex | `exec -s read-only` | The documented read-only sandbox |
+| Codex | `--ephemeral` | No session files persisted |
+| Codex | no `-a/--ask-for-approval` | `exec` rejects the option and never asks for approval |
+| Codex | `--output-schema <file>`, `-o <file>` | The schema is a file only; the final message goes to a file rather than being scraped from stdout's transcript |
+| Codex | `-` as the prompt | The prompt goes on stdin, clear of argv-length limits |
+| Codex | `-i <image>` | The design image |
+| Grok | `--prompt-file <file>` | The prompt is too long for Windows' command line |
+| Grok | `--json-schema <json>` | Implies JSON output; the schema-valid object is `structuredOutput`, and `text` is only a rendering of it |
+| Grok | `--tools read_file,grep,list_dir` | The read-only guarantee: `--sandbox read-only` is documented for Linux and macOS only |
+| Grok | no session or image flag | Grok has neither: it writes a session under its home directory although nothing resumes one, and the prompt names the design's path for `read_file` |
+| All | `--model`, and `--effort`, `-c model_reasoning_effort=…` or `--reasoning-effort` | Passed only when set; omitted preferences keep the account defaults (ADR-0056) |
+
 `ProposalStore` retains one latest proposal with its input snapshot,
 generation time, origin and per-section resolutions. Staleness is judged on
 every read (`core/application/ai/listing_proposals.py`), never stored; stale
@@ -1086,8 +1114,7 @@ later. Each traces to a decision.
   Templates choose no artwork. An artwork group — a render layer's design
   identity, a Printify print area — is the resolved file's **content hash**,
   so renaming a file or reshaping `design:` without changing what any garment
-  prints plans nothing. `design:` is always written as a map
-  (`ListingDocuments` normalises a bare string or `null`).
+  prints plans nothing. `design:` is always a map.
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
   variants sell, not which photos get rendered.
@@ -1310,7 +1337,8 @@ configuration. `npm run build` writes `src/ui/dist/`, which is gitignored. The
 Vite dev server proxies `/api` to a running `etsy-listings ui`. The typed
 client is generated: `scripts/export_openapi.py` writes `docs/openapi.json`
 from the FastAPI app and `npm run gen:api` turns it into
-`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011). Only the modules
+`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011), and `poe check`
+and CI fail when either differs from a fresh export. Only the modules
 under `src/ui/src/api/` call the server: everything above them works in domain
 types and never touches `fetch`, URLs or the generated schema.
 
@@ -1425,9 +1453,9 @@ dependency instead of giving everything jsdom. Prototype tests stay required
 prototype frame exercising production components is not production coverage.
 Real-API E2E stays in its separate main/manual workflow.
 
-The CLI currently exposes `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and
-`ui`. Dedicated `render`, `generate`, `catalog refresh`, `status`, a persisted
-run-history recorder and a general persisted rate-budget module are absent.
+The CLI exposes `auth`, `setup`, `new`, `plan`, `apply`, `unlock`, `ui`, `backup`
+and `marigold`. A persisted run-history recorder and a general persisted
+rate-budget module are absent.
 Current transports already share retries, and Etsy has a per-transport,
 header-driven `RateGate`; their existence does not imply those future modules.
 

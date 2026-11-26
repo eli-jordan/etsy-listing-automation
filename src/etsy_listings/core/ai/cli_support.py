@@ -45,7 +45,6 @@ class LocalCliProvider(ABC):
     model: str | None = None
     effort: str | None = None
     host: CliHost = field(default=LOCAL_CLI_HOST, repr=False, compare=False)
-    """Where the CLI is looked up and run; tests pass a scripted machine."""
     provider_name: ClassVar[str]
     image_tool: ClassVar[str | None] = None
 

@@ -105,6 +105,10 @@ describe("isInMedia", () => {
     expect(isInMedia(media, "rack-shot", null)).toBe(true);
   });
 
+  it("matches a fixed scene whose entry leaves the colour out", () => {
+    expect(isInMedia([{ template: "rack-shot" }], "rack-shot", null)).toBe(true);
+  });
+
   it("never matches a shared asset", () => {
     expect(isInMedia(media, "common-media/sizing.png", null)).toBe(false);
   });

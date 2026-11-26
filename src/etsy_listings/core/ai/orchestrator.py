@@ -1,6 +1,5 @@
-"""The captured provider chain (ADR-0056), one same-provider output repair, and the
-run's step and run budgets (ADR-0057).
-"""
+"""The captured provider chain, one same-provider output repair, and the run's
+step and run budgets."""
 
 from __future__ import annotations
 
@@ -76,8 +75,6 @@ def _out_of_time(provider_name: str, budget: RunBudget, what: str) -> SeoDeadlin
 
 @dataclass(frozen=True)
 class _Run[Result]:
-    """One task's inputs, shared by every provider that :func:`run_task` tries."""
-
     task: ProviderTask
     decode: Callable[[str], Result]
     budget: RunBudget

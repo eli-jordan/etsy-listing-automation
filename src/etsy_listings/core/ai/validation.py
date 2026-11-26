@@ -1,11 +1,5 @@
-"""Normalize a provider's raw JSON, then hard-validate it against the proposal contract.
-
-Trademark findings never raise: they become ``kind="trademark"`` warnings on
-the built proposal. The watchlist deliberately excludes ordinary garment/print
-brands (Comfort Colors, Gildan, Bella+Canvas, ...): those are legitimate
-listing facts, and warning on every listing that correctly names its own
-garment would train sellers to ignore the warning.
-"""
+"""Normalize a provider's raw JSON, then hard-validate it against the proposal
+contract; trademark findings become warnings on the proposal, never errors."""
 
 from __future__ import annotations
 
@@ -115,8 +109,8 @@ def _normalize_rationale_item(item: Any) -> Any:
 
 
 def normalize_raw_proposal(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """A new dict with harmless formatting fixed; ``raw`` itself is untouched.
-    Never raises, and leaves list lengths and enum-like values to validation."""
+    """A new dict with harmless formatting fixed; list lengths and enum-like values are left to
+    validation."""
     normalized: dict[str, Any] = dict(raw)
     for field_name in ("titles", "tags", "description_leads", "warnings"):
         normalized[field_name] = _normalize_string_list(normalized.get(field_name))

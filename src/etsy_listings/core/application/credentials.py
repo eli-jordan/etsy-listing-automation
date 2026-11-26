@@ -1,7 +1,6 @@
 """Credential operations: where one is, proving it, storing it, and what a
 workspace's credentials add up to; the terminal-free half of ``auth`` and
-``setup``. Proving and storing stay separate operations (architecture,
-*Workspace, credentials and prompts*).
+``setup``.
 """
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ from etsy_listings.core.clients.etsy.transport import Transport
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.clients.printify.protocol import PrintifyClient
 from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     BACKUP_PASSWORD_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
@@ -36,31 +34,20 @@ from etsy_listings.core.workspace import layout, scaffold
 
 @dataclass(frozen=True)
 class Credential:
-    """One credential, as the environment variables that hold it. Etsy's key
-    pair is one: both halves ride on one header, so a failed verification
-    cannot say which half was wrong.
-    """
+    """Etsy's key pair is one credential: both halves ride on one header, so
+    a failed verification cannot say which half was wrong."""
 
     variables: tuple[str, ...]
-    optional: bool = False
-    """Whether a blank answer is a complete step rather than a missing value.
-    True only for a credential nothing needs yet."""
 
 
 PRINTIFY = Credential((PRINTIFY_TOKEN_VAR,))
 ETSY_APP_KEY = Credential((ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR))
-ANTHROPIC = Credential((ANTHROPIC_KEY_VAR,), optional=True)
 BACKUP_PASSWORD = Credential((BACKUP_PASSWORD_VAR,))
 
 
 def stored(root: Path, variable: str) -> str | None:
-    """A credential this machine already has, environment first.
-
-    :class:`~etsy_listings.core.config.secrets.Secrets`' own precedence, so a
-    wizard cannot disagree with the rest of the tool about which credential
-    is in play: one that stores a token the next command then ignores is
-    worse than one that never ran.
-    """
+    """Environment first, as :class:`Secrets` resolves it, so a wizard never
+    stores a token the next command ignores."""
     from_env = os.environ.get(variable)
     if from_env:
         return from_env
@@ -69,26 +56,21 @@ def stored(root: Path, variable: str) -> str | None:
         PRINTIFY_TOKEN_VAR: secrets.printify_api_token,
         ETSY_KEYSTRING_VAR: secrets.etsy_keystring,
         ETSY_SHARED_SECRET_VAR: secrets.etsy_shared_secret,
-        ANTHROPIC_KEY_VAR: secrets.anthropic_api_key,
         BACKUP_PASSWORD_VAR: secrets.backup_password,
     }[variable]
 
 
 def stored_values(root: Path, credential: Credential) -> tuple[str | None, ...]:
-    """Each of ``credential``'s variables as :func:`stored` finds it."""
     return tuple(stored(root, variable) for variable in credential.variables)
 
 
 def store(root: Path, credential: Credential, values: tuple[str, ...]) -> None:
-    """Write ``values`` -- parallel to ``credential.variables`` -- into the
-    workspace's ``.env``, leaving every other line alone."""
+    """Leaves every other ``.env`` line alone."""
     if len(values) != len(credential.variables):
         raise ValueError(
             f"{len(values)} value(s) for {len(credential.variables)} variable(s): "
             f"{', '.join(credential.variables)}"
         )
-    if credential.optional and not any(value.strip() for value in values):
-        return
     blank = [v for v, value in zip(credential.variables, values, strict=True) if not value.strip()]
     if blank:
         raise ValueError(f"refusing to store a blank {', '.join(blank)}")
@@ -109,7 +91,6 @@ def verify_printify_token(
     *,
     client_for: Callable[[str], PrintifyClient] = connections.printify_client_for,
 ) -> list[Shop]:
-    """The shops ``token`` reaches; raises ``PrintifyAuthError`` if it reaches none."""
     return client_for(token).shops()
 
 
@@ -130,16 +111,12 @@ REQUIRED_VARS: tuple[str, ...] = (
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
 )
-"""The credentials without which some command fails. The Anthropic key is not
-among them: only AI work asks for one, and treating it as required would make
-every `auth --check` report a workspace without AI as incomplete."""
 
 
 @dataclass(frozen=True)
 class TokenSummary:
-    """The stored Etsy consent: whether the access token is fresh (an expired
-    one refreshes unseen) and the whole days left on the refresh token (an
-    expired one needs a browser sign-in)."""
+    """An expired access token refreshes unseen; an expired refresh token
+    needs a browser sign-in."""
 
     present: bool
     user_id: int | None = None
@@ -149,7 +126,7 @@ class TokenSummary:
 
     @property
     def renewal_due(self) -> bool:
-        """Whether the 90-day consent is close enough to its end to warn."""
+        """Etsy's consent lasts 90 days."""
         return (
             self.present
             and self.refresh_days is not None
@@ -179,26 +156,20 @@ def missing_credentials(secrets: Secrets) -> tuple[str, ...]:
     return tuple(name for name in REQUIRED_VARS if not have[name])
 
 
-def optional_credentials(secrets: Secrets) -> tuple[str, ...]:
-    return () if secrets.anthropic_api_key else (ANTHROPIC_KEY_VAR,)
-
-
 @dataclass(frozen=True)
 class CredentialStatus:
     sign_in: TokenSummary
     missing: tuple[str, ...]
-    optional_missing: tuple[str, ...]
     env_file: Path
 
 
 def credential_status(root: Path, *, tokens: TokenStore, now: datetime) -> CredentialStatus:
-    """What this workspace holds, even one with no ``shop.yaml``. Reads the
-    token file without refreshing it: a refresh rotates the token (ADR-0027)."""
+    """Reads the token file without refreshing it: a refresh rotates the
+    token (ADR-0027)."""
     secrets = Secrets.load(root / layout.ENV_FILE)
     return CredentialStatus(
         sign_in=summarise(tokens.load(), now=now),
         missing=missing_credentials(secrets),
-        optional_missing=optional_credentials(secrets),
         env_file=secrets.env_file,
     )
 
@@ -225,9 +196,8 @@ class _CodeExchange(Protocol):
 class SignedIn:
     tokens: StoredTokens
     granted_every_scope: bool
-    """False when Etsy silently granted a subset -- an app registration that
-    allows less than was asked. The shortfall only shows up later as a 403 on
-    one endpoint, so it is cheaper to report now."""
+    """Etsy silently grants a subset when the app registration allows less;
+    unreported, it shows up later as a 403 on one endpoint."""
 
 
 def complete_etsy_sign_in(

@@ -1,20 +1,7 @@
 /**
- * A typed `text/event-stream` reader over `fetch`. The server writes
- * `id: <n>\nevent: <type>\ndata: <json>\n\n` frames and ends the stream after
- * the run's last event.
- *
- * **Why a hand-rolled `fetch` reader and not the browser's `EventSource`.**
- * `EventSource`'s constructor takes a URL and nothing else -- there is no way
- * to set a request header on its first connection, only on the *automatic*
- * reconnect after a drop, which the UA does on its own using whatever `id` it
- * last saw. Reattaching needs the header on the *first* request this page
- * ever makes to a run it did not start (a reload, or *View progress*), and
- * the servers read exactly that header (`Last-Event-ID`). `EventSource`
- * cannot ask for it; a plain `fetch` with a header can.
- *
- * No reconnect-on-drop logic is implemented here -- a run belongs to the
- * server regardless of who is watching, so a dropped connection loses
- * nothing a page reload (which reattaches) does not already recover.
+ * A typed `text/event-stream` reader over `fetch`. Not `EventSource`: it cannot
+ * send `Last-Event-ID` on its first request, which reattaching to a run this
+ * page did not start needs. A dropped stream is not reopened; a reload reattaches.
  */
 
 export interface EventStreamOptions<Event> {

@@ -53,15 +53,8 @@ class Drift:
     live: Any
     last_applied_label: str | None = None
     live_label: str | None = None
-    """ADR-0038: a human name in place of ``last_applied``/``live``'s raw id, when
-    the stage that found the drift can name one. ``None`` by default -- most
-    drift is already scalar text (a title, a boolean) with nothing to name,
-    and a stage with no catalog to ask (``product_diff``, ``publish``) simply
-    never sets these. Filled by `etsy_listing._drift` from the
-    :class:`~etsy_listings.core.clients.etsy.shopcatalog.EtsyShopCatalog` ADR-0033
-    already resolved this run, so naming an id costs no request `plan()`'s own
-    comparison was not already going to make -- `plan()` stays pure (no
-    client) by never asking one itself."""
+    """ADR-0038: a human name for ``last_applied``/``live``'s raw id, from the
+    shop catalog already resolved this run, so ``plan()`` stays pure."""
 
 
 Change = FieldChange | ListChange | PriceChange | MediaChange
@@ -132,14 +125,11 @@ class StageBlocked:
 
 
 StageOutcome = StageIdle | StageWork | StageBlocked
-"""The only three answers a stage can give. The union is the stored truth;
-compatibility properties on :class:`Verdict` and :class:`StagePlan` are derived
-views for renderers."""
+"""The only three answers a stage can give. The union is the stored truth; the
+properties on :class:`Verdict` and :class:`StagePlan` are views of it."""
 
 
 class _OutcomeView:
-    """Compatibility views derived from the same closed stage outcome (S05)."""
-
     outcome: StageOutcome
 
     @property
@@ -205,17 +195,14 @@ class StagePlan(_OutcomeView):
     drift: tuple[Drift, ...] = field(default_factory=tuple)
     snapshot: BaseModel | None = field(default=None, metadata=UNHASHED)
     group: str | None = None
-    """The stage this one is shown under (``Stage.group``), stamped by the
-    engine like ``stage`` itself."""
+    """``Stage.group``, stamped by the engine like ``stage``."""
 
     review_hash: str | None = None
     """Stable execution inputs not expressed by changes/actions (ADR-0039).
     Separate from display snapshots, so preview availability cannot stale a review."""
 
     chosen_at_apply: bool = field(default=False, metadata=UNHASHED)
-    """The stage is one the apply adds by the seller's choice
-    (``Stage.chosen_at_apply``), stamped by the engine like ``group``. Left
-    out of the ADR-0039 fingerprint, plan and all."""
+    """``Stage.chosen_at_apply``, stamped by the engine like ``group``."""
 
     @classmethod
     def no_work(
@@ -266,10 +253,8 @@ class Plan:
     etsy_listing_id: int | None
     stage_plans: tuple[StagePlan, ...]
     publishable: bool = False
-    """An apply that opts in to publishing would make this listing live on
-    Etsy: it is new or still a draft, has no ``lifecycle`` verb, and no stage
-    before ``etsy_activate`` is blocked. What a review shows for the publish
-    choice, which the apply makes without planning again."""
+    """An opt-in apply would make this listing live on Etsy: the review shows
+    the publish choice, which the apply makes without planning again."""
 
     @property
     def has_changes(self) -> bool:

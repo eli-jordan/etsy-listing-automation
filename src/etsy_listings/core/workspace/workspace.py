@@ -1,8 +1,7 @@
-"""Workspace root discovery and path resolution (ADR-0013).
+"""Workspace root discovery and path resolution.
 
-``Workspace.resolve()`` refuses to resolve outside the workspace root. That is
-a security boundary: the media and preview endpoints resolve through it.
-"""
+``Workspace.resolve()`` refuses to resolve outside the workspace root, a security
+boundary the media and preview endpoints resolve through."""
 
 from __future__ import annotations
 
@@ -235,12 +234,8 @@ class Workspace:
         return candidate
 
     def resolve_ref(self, ref: str, *, listing_dir: Path) -> Path:
-        """The one interpreter of a path written in ``listing.yaml``.
-
-        ``listing_dir`` rather than a name, because the editor's unnamed draft
-        has no directory of its own and resolves against a stand-in at the
-        same depth.
-        """
+        """``listing_dir``, not a name: the editor's unnamed draft resolves against a stand-in
+        directory at the same depth."""
         return self._resolve_owned_ref(ref, listing_dir, layout.LISTING_FILE)
 
     def resolve_template_ref(self, ref: str, *, template: str) -> Path:
@@ -256,11 +251,6 @@ class Workspace:
             raise refused("an absolute path is not a ref")
         if "\\" in ref:
             raise refused("use '/' between directories, not a backslash")
-        if ref.startswith("../"):
-            raise refused(
-                "'..' refs are the old listing-relative form; write it from the workspace "
-                "root instead"
-            )
         if ".." in ref.split("/"):
             raise refused("'..' is not allowed in a ref")
         base, rest = (owner_dir, ref[2:]) if ref.startswith("./") else (self.root, ref)
@@ -817,12 +807,9 @@ class Workspace:
     def preview_file(
         self, listing: str, template: str, colour: str | None, scene_hash: str
     ) -> Path:
-        """One scene's full-size preview, content-addressed by its own
-        ``scene_hash``: a plan that changes nothing finds the file already
-        there, and a stale one stops matching rather than needing to be found
-        and deleted by name. ``scene_hash`` goes through :func:`_segment`
-        because the preview endpoint resolves through this accessor, never a
-        path from the URL; the caller strips the hash's ``sha256:`` prefix."""
+        """Content-addressed by ``scene_hash`` (without its ``sha256:`` prefix), so an unchanged
+        plan finds the file and a stale one stops matching. The hash goes through
+        :func:`_segment` because the preview endpoint resolves through this accessor."""
         stem = _segment(colour) if colour is not None else "scene"
         filename = f"{stem}-{_segment(scene_hash)}.png"
         return self.preview_dir(listing) / _segment(template) / filename

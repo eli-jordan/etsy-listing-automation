@@ -106,25 +106,20 @@ def _npm_scripts(command: str) -> list[str]:
     ]
 
 
-def test_frontend_gate_runs_production_and_prototype_tests_in_ci_and_poe_check() -> None:
-    # The frontend CI job runs npm directly (it has no Python), so the test
-    # scripts it runs are compared with those `poe check` runs: dropping the
-    # required prototype command from either side, or folding it into
-    # coverage, fails.
+def test_frontend_gate_runs_the_same_npm_scripts_in_ci_and_poe_check() -> None:
+    # The frontend CI job runs npm directly (it has no Python), so its scripts
+    # are compared with those `poe check` runs, where `format` writes and CI's
+    # `format:check` only reports.
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     ci = [
         script
         for step in workflow["jobs"]["frontend"]["steps"]
         for script in _npm_scripts(step.get("run", ""))
-        if script.startswith("test")
     ]
     gate = shlex.split(_poe_command("frontend"))
-    check = [
-        script
-        for script in gate[gate.index("scripts/frontend_gate.py") + 1 :]
-        if script.startswith("test")
-    ]
-    assert ci == check == ["test:coverage", "test:design"]
+    check = gate[gate.index("scripts/frontend_gate.py") + 1 :]
+    assert ci == ["format:check" if script == "format" else script for script in check]
+    assert {"check:api", "test:coverage", "test:design"} <= set(ci)
 
 
 # The six screenshot scenes are review artifacts, not regression tests (T11):

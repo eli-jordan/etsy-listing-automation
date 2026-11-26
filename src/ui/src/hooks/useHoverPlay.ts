@@ -10,8 +10,6 @@ export interface HoverPlay {
   rest: () => void;
 }
 
-/** The holder of a muted clip owns the hover, so the actions come out here
- * and the element goes to `MutedClip` through `ref`. */
 export function useHoverPlay(): HoverPlay {
   const ref = useRef<HTMLVideoElement>(null);
   return {

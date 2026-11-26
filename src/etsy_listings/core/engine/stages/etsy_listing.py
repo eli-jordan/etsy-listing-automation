@@ -45,11 +45,8 @@ class ReturnPolicyApplied(BaseModel):
     within_days: int | None = None
 
     def describe(self) -> str:
-        """Mirrors :meth:`~etsy_listings.core.clients.etsy.models.ReturnPolicy.describe`
-        -- a return policy has no title of its own, so this is the
-        same human sentence, built from the same three fields this stage
-        already carries, used as a drift label where the live side has
-        only an id to compare with."""
+        """Mirrors :meth:`~etsy_listings.core.clients.etsy.models.ReturnPolicy.describe`:
+        Etsy gives a return policy no title, so drift is labelled with this."""
         accepted = [
             name
             for name, allowed in (
@@ -84,9 +81,8 @@ class AppliedEtsyListing(BaseModel):
     production_partner_ids: tuple[int, ...] = ()
     should_auto_renew: bool
     state: Literal["active", "inactive"] | None = None
-    """What this stage last sent, when it sent ``state`` at all. ``None``
-    means it has never paused or resumed this listing -- first publish does
-    not, and a remote pause is not adopted into the applied document."""
+    """``None`` until this stage pauses or resumes the listing: first publish
+    does not, and a remote pause is not adopted."""
 
 
 @dataclass(frozen=True)
@@ -109,13 +105,8 @@ class EtsyListingDesired:
     should_auto_renew: bool
     state: Literal["active", "inactive"] | None = None
     catalog: EtsyShopCatalog | None = None
-    """This run's already-built :class:`EtsyShopCatalog`, carried
-    only so :func:`_drift` can label a *live* id it did not itself resolve a
-    name for -- through lookups (``shop_section_title`` and its siblings)
-    that read whatever ``desired()`` already fetched and issue no request of
-    their own. ``plan()`` stays pure in effect: nothing here can reach the
-    network. ``None`` only for a dataclass built by hand outside ``desired()``
-    (as every current test does), where there is no drift to label."""
+    """Lets :func:`_drift` label a live id from what ``desired()`` already
+    fetched; its lookups issue no request, so ``plan()`` stays pure."""
 
     def applied(self) -> AppliedEtsyListing:
         return AppliedEtsyListing(**{k: v for k, v in self.__dict__.items() if k != "catalog"})
@@ -156,14 +147,11 @@ class EtsyListingFacts(BaseModel):
 
 
 class EtsyListingSnapshot(BaseModel):
-    """Both sides of the review, in full."""
-
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     desired: EtsyListingFacts
     live: EtsyListingFacts | None
-    """``None`` for a listing with no Etsy id at all -- the mock's single
-    "Not on Etsy yet" column (decision 3), not an empty one."""
+    """``None`` for a listing with no Etsy id at all, not an empty one."""
 
 
 class EtsyListingStage(Stage[EtsyListingDesired, AppliedEtsyListing, EtsyListing]):
@@ -255,10 +243,8 @@ class EtsyListingStage(Stage[EtsyListingDesired, AppliedEtsyListing, EtsyListing
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedEtsyListing | None
     ) -> EtsyListing | None:
-        """``None`` without a request when there is no listing id yet -- read
-        with `GET /v3/application/listings/{id}`, the *unscoped* path: the
-        shop-scoped one exists for `PATCH`/`DELETE` and 404s on `GET`
-        (measured)."""
+        """Reads the *unscoped* `GET /v3/application/listings/{id}`: the
+        shop-scoped path 404s on `GET` (measured)."""
         del applied
         listing_id = etsy_listing_id(lock)
         if listing_id is None:
@@ -403,18 +389,9 @@ def _changes(wanted: AppliedEtsyListing, was: AppliedEtsyListing) -> tuple[Chang
 def _drift(
     was: AppliedEtsyListing | None, live: EtsyListing | None, catalog: EtsyShopCatalog | None
 ) -> tuple[Drift, ...]:
-    """What changed on Etsy since the last apply -- includes Printify
-    re-attaching its own shipping profile after a republish (risk 13,
-    decision 7).
-
-    ``catalog`` names a drifted id's *live* side: the *last-applied*
-    side already has a name on ``was`` (``shop_section``, ``shipping_profile``,
-    or ``return_policy``'s own fields), since this stage stores the name
-    beside the id it resolved from. Only the id a fresh ``GET`` returned has
-    none, and naming it costs the lookup nothing the catalog had not already
-    fetched resolving ``desired()`` (see the three ``EtsyShopCatalog`` methods
-    this calls).
-    """
+    """Includes Printify re-attaching its own shipping profile after a
+    republish. ``catalog`` names only the live side's ids: ``was`` stores a
+    name beside each id it resolved."""
     if was is None or live is None:
         return ()
 

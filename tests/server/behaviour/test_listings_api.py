@@ -725,7 +725,7 @@ class TestCreateListing:
     def _document(self, **over: object) -> dict[str, object]:
         document: dict[str, object] = {
             "garment_profile": "comfort-colors-1717",
-            "design": "designs/take-a-hike.png",
+            "design": {"default": "designs/take-a-hike.png"},
             "colors": ["black"],
             "brief": "",
             "prices": {"S": "349 NOK"},
@@ -865,7 +865,7 @@ class TestListingDraft:
         an unsaved listing has for being told what it needs is lying to it."""
         document = {
             "garment_profile": "comfort-colors-1717",
-            "design": "designs/take-a-hike.png",
+            "design": {"default": "designs/take-a-hike.png"},
             "colors": ["black"],
             "brief": "",
             "media": [],
@@ -888,7 +888,7 @@ class TestListingDraft:
             json={
                 "document": {
                     "garment_profile": "comfort-colors-1717",
-                    "design": "designs/take-a-hike.png",
+                    "design": {"default": "designs/take-a-hike.png"},
                     "colors": ["black"],
                     "brief": "",
                     "media": [],

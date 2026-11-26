@@ -1,15 +1,8 @@
-"""Retract a never-live listing: Printify DELETE, confirm the Etsy draft
-went with it, then the run wipes local files.
+"""Retract a never-live listing: Printify DELETE, confirm the Etsy draft went with
+it, then the run wipes local files.
 
-Not in :data:`STAGES`. :func:`~etsy_listings.core.engine.lifecycle.walk` hands
-this stage to ``build_plan`` *instead* of the pipeline when
-``lifecycle: deleted`` is the right verb, so a listing we are about to
-destroy is never rendered, PUT, or PATCHed -- updating it first is wasted
-writes and a way to recreate a product ``read_live`` just said was missing.
-
-The Etsy 404 is polled, not one GET: Etsy's read-after-write lags the cascade
-(docs/features/listing-lifecycle-20260916/spec.md, *The cascade*).
-"""
+The Etsy 404 is polled, not read once, because Etsy's read-after-write lags the
+cascade."""
 
 from __future__ import annotations
 
@@ -66,11 +59,8 @@ class RetractStage(Stage[RetractDesired, AppliedRetract, RetractLive]):
         now: Callable[[], float] | None = None,
         poll_ceiling: float = POLL_CEILING_SECONDS,
     ) -> None:
-        # Resolved here, not as a default-parameter value: `walk()` builds a
-        # fresh instance on every call rather than holding a module-level
-        # singleton, so a test that monkeypatches `time.sleep` before that
-        # call needs this to be a live lookup, not a reference to whatever
-        # `time.sleep` was when this module was first imported.
+        # Looked up per instance, not as a default, so a test's monkeypatched
+        # `time.sleep` is the one used.
         self._sleep = sleep or time.sleep
         self._now = now or time.monotonic
         self._poll_ceiling = poll_ceiling

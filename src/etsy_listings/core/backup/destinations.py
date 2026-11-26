@@ -533,7 +533,6 @@ def holds_repository(folder: Path) -> bool:
 @dataclass(frozen=True)
 class RepairResult:
     set_aside: Path | None
-    """``<destination>-set-aside-<date>``; None when nothing was moved."""
     moved: tuple[str, ...]
     copy: CopyResult
 

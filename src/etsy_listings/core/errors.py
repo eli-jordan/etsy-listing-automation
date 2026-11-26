@@ -7,7 +7,7 @@ class UserFacingError(Exception): ...
 
 
 INTERNAL_ERROR_MESSAGE = "Internal error, see the server log"
-"""What reaches a client in place of a defect's own message (ADR-0041, decision 7).
+"""What reaches a client in place of a defect's own message.
 
 A :class:`UserFacingError`'s message is the whole of what should reach a
 reader; anything else is a defect, and a defect's own text can carry

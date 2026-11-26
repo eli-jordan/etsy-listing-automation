@@ -12,7 +12,6 @@ import type {
 import type { BackupsOn } from "../../../shell/backupAttention";
 import { timeAgo } from "../../editor/timeAgo";
 
-/** The message a refused submit shows; null when it went through. */
 export type SubmitFailure = string | null;
 
 export const INTERVALS = [4, 6, 12, 24, 48] as const;
@@ -228,7 +227,7 @@ export function restoreFigures(restore: RestoreStatus) {
   const { bytes_total: total, files_total: files, seconds_left: left } = restore;
   const count = (n: number) => n.toLocaleString("en-GB");
   return {
-    pctText: `${Math.round(restore.percent * 100)}%`,
+    pctText: `${Math.round(restore.fraction * 100)}%`,
     bytes: total == null ? "" : bytesProgress(restore.bytes_done ?? 0, total),
     files: files == null ? "" : `${count(restore.files_done ?? 0)} of ${count(files)} files`,
     left:
@@ -261,7 +260,7 @@ export function samePath(a: string, b: string): boolean {
 export function restoreNote(restore: RestoreStatus): string {
   const left =
     "The folder holds the files restored so far; delete it before restoring there again.";
-  const at = `${Math.round(restore.percent * 100)}%`;
+  const at = `${Math.round(restore.fraction * 100)}%`;
   if (restore.outcome === "succeeded")
     return `Restored the backup from ${when(restore.snapshot_time)}.`;
   if (restore.outcome === "stopped") return `Restore stopped at ${at}. ${left}`;

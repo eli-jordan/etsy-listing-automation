@@ -1,12 +1,8 @@
 """A finished scene as an HTTP response, shared by the calibrator's and the
 listing editors' preview routes.
 
-Core answers with the picture (:mod:`etsy_listings.core.application.scene_previews`);
-this is what only serving a browser needs. A rendered scene's ETag is its
-identity, so a browser holding that picture is answered ``304`` without the
-body, and a prepared one also carries the identities that let the editor promote
-it. A frame is encoded here as WebP.
-"""
+A rendered scene's ETag is its identity, so a browser holding that picture is
+answered ``304`` without the body."""
 
 from __future__ import annotations
 

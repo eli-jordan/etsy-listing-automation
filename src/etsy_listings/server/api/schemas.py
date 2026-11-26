@@ -45,12 +45,19 @@ from etsy_listings.core.engine.status import ListingGesture, ListingStatus
 from etsy_listings.core.render.config import BoundingBox, Placement, Renderer, TemplateConfig
 from etsy_listings.core.workspace.calibration import MaskEdit, Stroke
 
+
+class ApiModel(BaseModel):
+    """A wire model whose field docstrings are its OpenAPI field descriptions."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
+
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
 DesignSource = Literal["bundled", "upload"]
 
 
-class DesignSummary(BaseModel):
+class DesignSummary(ApiModel):
     """One entry in the calibrator's test-design library.
 
     ``bundled-grid``: the grid/ruler target, for spotting warp/displacement
@@ -67,14 +74,10 @@ class DesignSummary(BaseModel):
 
 
 TemplateStatus = Literal["needs-calibration", "calibrated"]
-"""Whether a template is ready to render from. Derived on every read, never
-stored: the calibrator's rail sorts unfinished templates to the top, and a
-persisted ``calibrated:`` flag in ``template.yaml`` would be new product state
-the configuration does not need -- as well as something that could disagree with the
-config sitting next to it."""
+"""Derived from the config on every read, never stored in ``template.yaml``."""
 
 
-class TemplatePhoto(BaseModel):
+class TemplatePhoto(ApiModel):
     """One scene photo in a template's directory: which colour it is, and where
     it actually is.
 
@@ -92,7 +95,7 @@ class TemplatePhoto(BaseModel):
     file: str
 
 
-class TemplateSummary(BaseModel):
+class TemplateSummary(ApiModel):
     renderer: Literal["photo-warp", "marigold"] | None = None
     maps: MapReadinessResponse | None = None
     name: str
@@ -102,38 +105,29 @@ class TemplateSummary(BaseModel):
     has_config: bool
     status: TemplateStatus
     status_reason: str | None = None
-    """Why it is not calibrated yet, in the words the rail shows the user
-    ("no kind set", "no boxes", "1 box has no colour"). ``None`` when
-    ``status`` is ``calibrated`` -- there is nothing to explain."""
+    """Why it is not calibrated yet, in the words the rail shows ("no kind
+    set", "1 box has no colour"); ``None`` when ``status`` is ``calibrated``."""
     width: int | None = None
+    """The template photo's true pixel width, the space ``template.yaml``'s
+    boxes are in, not the downscaled preview's; ``None`` with no photo yet."""
     height: int | None = None
-    """The template photo's **true** pixel size, or ``None`` for a directory
-    with no photo in it yet.
-
-    The editor renders its canvas downscaled (``?scale=editor``), so the
-    preview image it draws is no longer the answer to "what coordinate space
-    are these boxes in?" -- ``template.yaml`` stores them at the photo's true
-    size, and this is where the client learns what that is. Measuring the
-    displayed image instead is the bug this field exists to make impossible:
-    it would silently write every box a few times too small."""
+    """The template photo's true pixel height, as ``width``."""
     labels: list[str] = []
-    """The seller's words for finding this template, as ``template.yaml`` holds
-    them; empty for a directory with no config yet."""
+    """The seller's words for finding this template; empty with no config yet."""
 
 
-class AssignKindRequest(BaseModel):
+class AssignKindRequest(ApiModel):
     kind: TemplateKind
 
 
-class SwatchResponse(BaseModel):
+class SwatchResponse(ApiModel):
     """A colour-matrix colour's real garment shade, sampled off its own scene
-    photo (`render/swatch.py`'s `sample_swatch`) rather than an invented or
-    hand-typed hex value -- nothing in the domain model stores one."""
+    photo; nothing in the domain model stores one."""
 
     hex: str
 
 
-class SceneCheckResponse(BaseModel):
+class SceneCheckResponse(ApiModel):
     """Whether the Listing Images preview showed the wrong scene: one found
     under a pixel digest remembered from before a restart that no longer
     names the file's pixels. The digest is corrected either way."""
@@ -141,8 +135,8 @@ class SceneCheckResponse(BaseModel):
     changed: bool
 
 
-class PositionedListingResponse(BaseModel):
-    """A listing holding its own position for a template (ADR-0058), which a
+class PositionedListingResponse(ApiModel):
+    """A listing holding its own position for a template, which a
     recalibration may put outside the limits. ``placements`` lists the
     ``multiple`` placement IDs it positions; empty for one box."""
 
@@ -150,22 +144,21 @@ class PositionedListingResponse(BaseModel):
     placements: list[str]
 
 
-class ColourReportRow(BaseModel):
+class ColourReportRow(ApiModel):
     """What one photo in a candidate ``colour-matrix`` set will be taken as.
 
-    Reporting only: ADR-0004 makes the filename the source of truth, so there is
-    no manual mapping to offer and nothing here changes a name.
+    Reporting only: the filename is the source of truth, so nothing here
+    changes a name.
     """
 
     filename: str
     colour: str
     clean: bool
-    """False when the filename is not already the slug -- ``Heather Grey.png``
-    still yields ``heather-grey``, but not the name sitting on disk, and the
-    user should hear that from the calibrator rather than discover it later."""
+    """False when the filename is not already the slug: ``Heather Grey.png``
+    yields ``heather-grey``."""
 
 
-class ColourMatrixPreviewRequest(BaseModel):
+class ColourMatrixPreviewRequest(ApiModel):
     """A colour-matrix template's preview body. All three preview shapes take
     ``labels``: an editor preview names the labels of its
     ``calibration_revision`` with them. None draws them."""
@@ -181,7 +174,7 @@ class ColourMatrixPreviewRequest(BaseModel):
     mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=32)
 
 
-class MultiplePreviewRequest(BaseModel):
+class MultiplePreviewRequest(ApiModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["multiple"] = "multiple"
     colour_coverage: Literal["exact", "subset"] = "exact"
@@ -193,11 +186,10 @@ class MultiplePreviewRequest(BaseModel):
     mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=32)
 
 
-class SinglePreviewRequest(BaseModel):
+class SinglePreviewRequest(ApiModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["single"] = "single"
     colour: str | None = None
-    artwork: str | None = None
     bounding_box: BoundingBox
     renderer: Renderer
     labels: list[str] = []
@@ -207,67 +199,56 @@ class SinglePreviewRequest(BaseModel):
 
 
 PreviewRequest = ColourMatrixPreviewRequest | MultiplePreviewRequest | SinglePreviewRequest
-"""Which shape applies is decided by which kind the target template already
-is -- the endpoint validates the body against that one kind's model, rather
-than relying on shape-sniffing across all three."""
+"""The endpoint validates the body against the target template's kind, not by
+its shape."""
 
 
 IssueSeverity = Literal["block", "warn", "info"]
-"""`listing_validation.Severity` on the wire. ``info`` (ADR-0045's stripped
-audio) is shown quietly and counted nowhere: `IssueCounts` stays blocks and
-warnings, the two a seller has to act on."""
+"""`listing_validation.Severity` on the wire. ``info`` is shown quietly and
+counted nowhere: `IssueCounts` counts the two a seller has to act on."""
 IssueTab = Literal["variants", "pricing", "images", "details"]
 
 
-class Issue(BaseModel):
+class Issue(ApiModel):
     severity: IssueSeverity
     tab: IssueTab
     where: str
     message: str
 
 
-class IssueCounts(BaseModel):
+class IssueCounts(ApiModel):
     block: int
     warn: int
 
 
-class ListingSummary(BaseModel):
+class ListingSummary(ApiModel):
     name: str
     garment_profile: str
     design: str | None
     """The representative artwork's name, as
-    `GET /api/listing-designs/{name}/thumbnail` takes it -- so the table can
-    show the artwork without a second round trip per row. The first non-null
-    of ``default``, ``on-light``, ``on-dark`` (spec: *Representative
-    artwork*); a colour's own design is never promoted. ``None`` with no
-    base file chosen."""
+    `GET /api/listing-designs/{name}/thumbnail` takes it: the first non-null
+    of ``default``, ``on-light``, ``on-dark``, never a colour's own design.
+    ``None`` with no base file chosen."""
     colour_count: int
     status: ListingStatus
     issue_counts: IssueCounts
     etsy_listing_id: int | None = None
     printify_product_id: str | None = None
-    """Carried on the summary, not just on `ListingDetail`, because the table
-    offers the same "Open in Etsy / Printify" menu the editor's page head
-    does -- and a menu per row that each had to fetch its own ids would be one
-    request per listing to render a list."""
     gestures: list[ListingGesture] = []
-    """Which buttons the listings table offers for this row. Computed
-    server-side from the same facts as ``status``, so the CLI's future
-    `status` and the table cannot disagree about the row. The editor's
-    `ListingDetail` carries the same list for its action row."""
+    """Which buttons the listings table offers for this row, from the same
+    facts as ``status``."""
 
 
-class ResolvedPrice(BaseModel):
+class ResolvedPrice(ApiModel):
     size: str
     amount: str
     """Formatted as `Money` prints itself, e.g. ``"249 NOK"``."""
 
 
 def always_sent_list() -> Any:
-    """An empty-list default the server always sends. ``default_factory``
-    keeps the mutable default off the class (S01), and the explicit schema
-    default keeps OpenAPI, and so the generated client, from marking the field
-    optional."""
+    """An empty-list default the server always sends: ``default_factory`` keeps the mutable
+    default off the class, and the explicit schema default stops OpenAPI, and so the generated
+    client, marking the field optional."""
     return Field(default_factory=list, json_schema_extra={"default": []})
 
 
@@ -276,14 +257,14 @@ def always_sent_dict() -> Any:
     return Field(default_factory=dict, json_schema_extra={"default": {}})
 
 
-class EditorTabFields(BaseModel):
+class EditorTabFields(ApiModel):
     """What the listing editor's tabs read, computed the same way for a
     listing and a listing template, whose editor mounts those tabs unchanged."""
 
     resolved_prices: list[ResolvedPrice] = always_sent_list()
     garment_materials: list[str] | None = None
-    """Read-only fibre materials from the selected garment profile. A listing
-    never writes or owns them; the editor shows what Etsy will use."""
+    """Fibre materials from the selected garment profile, read-only: a
+    listing never stores them."""
     garment_product_type: str | None = None
     garment_brand: str | None = None
     garment_model: str | None = None
@@ -298,106 +279,87 @@ class ListingDetail(EditorTabFields, Listing):
 
     name: str
     modified_at: datetime | None
-    """UTC modification time of ``listing.yaml``. ``None`` for an unsaved
-    draft, which has no file yet."""
+    """UTC modification time of ``listing.yaml``; ``None`` for an unsaved
+    draft."""
     status: ListingStatus
     issues: list[Issue]
     field_errors: dict[str, str] = always_sent_dict()
-    """Populated only when a PATCH's candidate failed `Listing.model_validate`
-    -- the write was skipped and every other field here still describes the
-    listing as it was before the PATCH. Empty on every GET and every
-    successful PATCH; the frontend never re-implements this validation; it
-    only renders what the server returns."""
+    """Set only when a PATCH's candidate failed validation: nothing was
+    written, and every other field describes the listing as it was. Empty on
+    every GET and every successful PATCH."""
     gestures: list[ListingGesture] = always_sent_list()
-    """The lifecycle actions the editor's action row offers: the listings
-    table's row gestures, from the same rule. Empty for the unsaved
-    draft, which has no lifecycle yet."""
+    """The lifecycle actions the editor's action row offers, by the listings
+    table's rule; empty for the unsaved draft."""
     etsy_listing_id: int | None = None
     printify_product_id: str | None = None
     pricing_plan_name: str | None = None
-    """The resolved plan's filename stem, for display -- selecting a
-    different plan from the UI is deferred (features/listings-ui-20260915/spec.md)."""
+    """The resolved plan's filename stem, for display."""
     description_composed: str = ""
-    """The final `etsy.description` text, exactly as
-    `Workspace.compose_description` joins it -- the one value the Details
-    tab's preview may render, so it never re-implements the lead/body join
-    itself (AI SEO implementation plan, PR6). Falls back to the lead alone
-    when `ref` fails to resolve; `description_ref_error`-derived issues
-    already say why, so this field only avoids also raising."""
+    """The final `etsy.description` text, as `Workspace.compose_description`
+    joins it: what the Details tab's preview renders. The lead alone when
+    ``ref`` does not resolve; an issue says why."""
     design_content_hash: str | None = None
-    """Hash of selected design refs and bytes, for AI proposal staleness.
-    Unreadable files contribute a stable marker; absent only with no design."""
+    """Hash of the selected design refs and bytes, for AI proposal
+    staleness; an unreadable file hashes as a stable marker. ``None`` only with
+    no design."""
 
 
-class GarmentProfileSummary(BaseModel):
+class GarmentProfileSummary(ApiModel):
     name: str
     sizes: list[str]
     materials: list[str] | None = None
     colors: dict[str, Literal["light", "dark"]]
     preview_template: str | None = None
-    """A ``colour-matrix`` template the Variants tab uses to judge colours
-    . Null when the garment profile does not name one -- the editor
-    does not fall back to ``media:``."""
+    """The ``colour-matrix`` template the Variants tab judges colours on;
+    ``None`` when the garment profile names none."""
 
 
-class PricingPlanSummary(BaseModel):
+class PricingPlanSummary(ApiModel):
     name: str
     garment_profile: str
     compatible: bool
-    """Whether this plan declares the exact garment profile asked for --
-    `core/application/pricing_plans.pricing_plan_options`' rule, which the `new`
-    wizard's picker marks too."""
+    """Whether this plan declares the exact garment profile asked for."""
     ref: str
-    """Workspace-rooted, ready to PATCH straight into `pricing_plan:`
-    unchanged -- `core/application/pricing_plans.pricing_plan_ref`'s write-side form, the same
-    rule `MediaFileSummary.ref` follows for a shared image."""
+    """Workspace-rooted, ready to PATCH into ``pricing_plan:`` unchanged."""
 
 
-class ListingDesignSummary(BaseModel):
+class ListingDesignSummary(ApiModel):
     name: str
     file: str
     """Workspace-relative path under ``designs/``, e.g.
     ``designs/take-a-hike.png``."""
 
 
-class MediaFileSummary(BaseModel):
+class MediaFileSummary(ApiModel):
     """One file a listing can put in `media:` as a file ref: a
     shared one under ``common-media/``, or one of the listing's own. A bare
     file uploaded as-is, rather than a rendered mockup."""
 
     name: str
-    """Its path under the directory it was listed from -- ``common-media/``
-    or the listing's own -- which is what the picture endpoints take."""
+    """Its path under ``common-media/`` or the listing's own directory: what
+    the picture endpoints take."""
     file: str
-    """Workspace-relative, for display: ``common-media/size-guide.png``,
+    """Workspace-relative, for display, e.g.
     ``listings/take-a-hike/close-up.mp4``."""
     ref: str
-    """The ref to write into `media:` unchanged. A shared file's ref is its
-    workspace-relative path, so it equals ``file``; a listing's own file is
-    spelled ``./close-up.mp4``, which is why this is a field of its
-    own rather than something callers build."""
+    """The ref to write into ``media:`` unchanged: a shared file's
+    workspace-relative path, or ``./close-up.mp4`` for a listing's own."""
     kind: MediaKind
-    """``image`` or ``video``, as `config.media.media_kind` classifies it --
-    served rather than re-derived in the browser, so the locator and the
-    gallery rules cannot disagree about a ``.MOV``."""
 
 
-class CommonCopySummary(BaseModel):
+class CommonCopySummary(ApiModel):
     """One `common-copy/*.md` file, for the Description tab's body-source
     selector. ``ref`` is workspace-relative, exactly what `description.ref`
     stores."""
 
     ref: str
-    """Workspace-relative, e.g. ``common-copy/comfort-colors.md`` -- what
-    `description.ref` stores unchanged."""
     title: str
-    """The file's front-matter title, for the picker's option label."""
+    """The file's front-matter title."""
     summary: str | None = None
-    """The file's optional front-matter summary, for the metadata display
-    once one is selected."""
+    """The file's front-matter summary, if it has one."""
 
 
-class EtsySectionSummary(BaseModel):
+class EtsySectionSummary(ApiModel):
     """One row for the Details tab's Section dropdown.
 
     Existing rows come from the unscoped `EtsyShopClient.shop_sections`;
@@ -408,7 +370,7 @@ class EtsySectionSummary(BaseModel):
     title: str
 
 
-class EtsySectionsResponse(BaseModel):
+class EtsySectionsResponse(ApiModel):
     """The section picker's rows and whether Etsy could supply them.
 
     ``available`` distinguishes a configured shop with no sections -- where
@@ -420,7 +382,7 @@ class EtsySectionsResponse(BaseModel):
     sections: list[EtsySectionSummary]
 
 
-class CreateEtsySectionRequest(BaseModel):
+class CreateEtsySectionRequest(ApiModel):
     """The title Etsy should give a newly created shop section."""
 
     title: str = Field(min_length=1)
@@ -431,22 +393,20 @@ class CreateEtsySectionRequest(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
-class WorkspaceSummary(BaseModel):
+class WorkspaceSummary(ApiModel):
     """Which workspace the UI is pointed at. One workspace is one shop, so the
     sidebar names it -- the difference between a test shop and the real one is
     worth seeing before an edit, not after an apply."""
 
     shop_name: str | None
-    """`etsy.shop_name` from `shop.yaml`. ``None`` until `setup` reads it back
-    from Etsy, which a workspace that has only ever rendered mockups
-    never has."""
+    """``etsy.shop_name`` from ``shop.yaml``; ``None`` until ``setup`` reads
+    it back from Etsy."""
     storage_id: str
-    """Opaque identity of the workspace root for browser-only pending proposals
-    . Distinct roots must not share a local-storage key merely because
-    they use the same Etsy shop name."""
+    """Opaque identity of the workspace root, for browser storage keys: two
+    roots never share one, even with the same shop name."""
 
 
-class DraftListingRequest(BaseModel):
+class DraftListingRequest(ApiModel):
     """A candidate ``listing.yaml``, as the editor holds it before the listing
     exists.
 
@@ -458,7 +418,7 @@ class DraftListingRequest(BaseModel):
     document: dict[str, Any] = Field(default_factory=dict)
 
 
-class CreateListingRequest(BaseModel):
+class CreateListingRequest(ApiModel):
     """The whole document the editor built, written as edited -- not a
     handful of fields to build one from."""
 
@@ -466,11 +426,11 @@ class CreateListingRequest(BaseModel):
     document: dict[str, Any]
 
 
-class RenameListingRequest(BaseModel):
+class RenameListingRequest(ApiModel):
     new_name: str
 
 
-class TemplateRenameResponse(BaseModel):
+class TemplateRenameResponse(ApiModel):
     """A mockup template's rename. ``updated`` and ``unresolved`` are
     workspace-relative files: those now naming it, and those that could not be
     read or written and may still name the old one."""
@@ -480,18 +440,18 @@ class TemplateRenameResponse(BaseModel):
     unresolved: list[str]
 
 
-class PixelSize(BaseModel):
+class PixelSize(ApiModel):
     width: int
     height: int
 
 
-class ListingTemplateSummary(BaseModel):
-    """One card on the Listing templates page (UI doc §2)."""
+class ListingTemplateSummary(ApiModel):
+    """One card on the Listing templates page."""
 
     name: str
     garment: str
-    """The garment profile's blueprint as a seller names it --
-    ``Comfort Colors 1717`` -- or the profile's own name when it will not
+    """The garment profile's blueprint as a seller names it
+    (``Comfort Colors 1717``), or the profile's own name when it will not
     load."""
     colour_count: int
     pricing_plan_name: str | None
@@ -501,16 +461,16 @@ class ListingTemplateSummary(BaseModel):
     batch_count: int = 0
     """Batches made from this template, while their records last."""
     design_minimum: PixelSize | None = None
-    """The smallest design the garment's print area takes -- New batch's size
-    hint (UI doc §4). ``None`` when the garment profile will not load."""
+    """The smallest design the garment's print area takes; ``None`` when the
+    garment profile will not load."""
 
 
-class ListingTemplateSource(BaseModel):
+class ListingTemplateSource(ApiModel):
     kind: Literal["listing", "listing-template"]
     name: str
 
 
-class ListingTemplateAsset(BaseModel):
+class ListingTemplateAsset(ApiModel):
     """A file the draft will copy: the ``./`` ref the template will name it
     by, and the ref it has in its source -- which is where the *name it*
     page's thumbnail has to come from, since the copy does not exist yet."""
@@ -524,7 +484,7 @@ class ListingTemplateDetail(EditorTabFields, ListingTemplate):
     both, as `ListingDetail` is one shape for a listing and the unnamed draft.
 
     A draft (``GET /draft``: Save as listing template or Clone, written
-    nowhere, UI doc §1) has ``name`` ``""``, no ``modified_at``, and says
+    nowhere) has ``name`` ``""``, no ``modified_at``, and says
     where it came from in ``source`` and ``assets``."""
 
     name: str
@@ -539,7 +499,7 @@ class ListingTemplateDetail(EditorTabFields, ListingTemplate):
     placed above it."""
 
 
-class ListingTemplateSaveResult(BaseModel):
+class ListingTemplateSaveResult(ApiModel):
     """What a create or ``PUT`` did. Refusing an incomplete document is
     a 200 with ``saved: false``, as a listing's malformed PATCH is, because the
     editor shows the issues and keeps going; nothing was written."""
@@ -550,17 +510,16 @@ class ListingTemplateSaveResult(BaseModel):
     template: ListingTemplateDetail | None = None
 
 
-class CreateListingTemplateRequest(BaseModel):
+class CreateListingTemplateRequest(ApiModel):
     """Save as listing template (``from_listing``) or Clone
-    (``from_template``) -- exactly one. There is no blank creation (spec)."""
+    (``from_template``) -- exactly one. There is no blank creation."""
 
     name: str
     from_listing: str | None = None
     from_template: str | None = None
     document: dict[str, Any] | None = None
     """The seller's edits made before naming it, as ``template.yaml`` would
-    hold them: the *name it* state is the editor (UI doc §1, §3). Absent
-    means the draft as the source gives it. Checked as a ``PUT`` is,
+    hold them; absent means the draft as the source gives it. Checked as a ``PUT`` is,
     and its ``./`` refs must be files the draft copies."""
 
     @model_validator(mode="after")
@@ -570,8 +529,8 @@ class CreateListingTemplateRequest(BaseModel):
         return self
 
 
-class StagingRowDetail(BaseModel):
-    """One unique design on the staging page (UI doc §5)."""
+class StagingRowDetail(ApiModel):
+    """One unique design on the staging page."""
 
     id: str
     sources: list[str]
@@ -586,34 +545,32 @@ class StagingRowDetail(BaseModel):
     suggestion: str | None
     reuse: str | None
     """The ``designs/`` stem with this row's exact bytes, which its listing
-    will name instead of writing its own (spec, *Content deduplication*)."""
+    will name instead of writing its own."""
 
 
-class StagingDetail(BaseModel):
+class StagingDetail(ApiModel):
     id: str
     listing_template: str
     label: str
     template_saved_at: datetime
-    """When the frozen listing template was last saved: *Using X as saved at
-    HH:MM*."""
+    """When the frozen listing template was last saved."""
     expires_at: datetime
     rows: list[StagingRowDetail]
     ignored: list[str]
-    """A ZIP's files that are not PNGs, by their path in it: the count
-    strip's *N other files ignored* and its list (UI doc §5)."""
+    """A ZIP's files that are not PNGs, by their path in it."""
     ai_blocked: AiReadinessBlock | None = None
     """Set only while a prompt, a ready provider or Etsy market access is
     missing, which refuses Create; nothing is said when AI can run."""
 
 
-class StagingRefusal(BaseModel):
+class StagingRefusal(ApiModel):
     """A ``422``'s ``detail`` for an upload refused before staging."""
 
     message: str
     remedy: str
 
 
-class StagingPatch(BaseModel):
+class StagingPatch(ApiModel):
     """Every staging edit, applied in order: label, names, removals."""
 
     label: str | None = None
@@ -621,7 +578,7 @@ class StagingPatch(BaseModel):
     remove: list[str] = []
 
 
-class BatchRowDetail(BaseModel):
+class BatchRowDetail(ApiModel):
     id: str
     sources: list[str]
     name: str
@@ -630,8 +587,7 @@ class BatchRowDetail(BaseModel):
     creation: Literal["pending", "created", "failed"]
     error: str | None
     ai: AiState | None = None
-    """The row's AI work (ADR-0048, and ADR-0050's ``cancelled_by_deploy``); ``None``
-    until its listing exists."""
+    """The row's AI work; ``None`` until its listing exists."""
     ai_steps: list[WorkflowStep] = []
     """The live run's nodes while running, else the last run's as it ended."""
     ai_error: str | None = None
@@ -639,30 +595,30 @@ class BatchRowDetail(BaseModel):
     """1 for the next row to start, across every batch; ``None`` unless
     queued."""
     waiting_for_backup: bool = False
-    """Held by a backup's pause (workspace-backup plan, decision P4): accepted
-    and queued, starting once the backup step ends. Never stored."""
+    """Held by a backup's pause: accepted and queued, starting once the backup
+    step ends. Never stored."""
     proposal: Literal["ready", "stale", "resolved"] | None = None
     """The listing's cached proposal: sections waiting and current,
     waiting but out of date, or every section dealt with."""
     stale_reasons: list[str] = []
     reviewed: bool = False
-    """The seller's own judgement (spec, *Review workflow*)."""
+    """The seller's own judgement."""
     reviewable: bool = False
     """Whether Mark reviewed is offered: not on a queued, drafting, deleted
-    or never-created row (UI doc §7)."""
+    or never-created row."""
     deleted: bool = False
     """The listing was deleted; the row stays, struck through."""
     deployable: bool = False
     """Whether Deploy reviewed takes this row: reviewed, with changes its
-    last apply did not deploy (ADR-0059)."""
+    last apply did not deploy."""
 
 
 BatchStatus = Literal["staging", "drafting", "in_review", "complete", "stopped"]
-"""Recent batches' derived status (UI doc §2): ``staging`` for a session not
+"""Recent batches' derived status: ``staging`` for a session not
 confirmed yet, the rest `batches.standing`'s."""
 
 
-class BatchDetail(BaseModel):
+class BatchDetail(ApiModel):
     id: str
     label: str
     listing_template: str
@@ -673,18 +629,18 @@ class BatchDetail(BaseModel):
     status: BatchStatus = "drafting"
 
 
-class BatchPatch(BaseModel):
-    """Rename the batch (UI doc §7): its label only, never its identity."""
+class BatchPatch(ApiModel):
+    """Rename the batch: its label only, never its identity."""
 
     label: str
 
 
-class ReviewedRequest(BaseModel):
+class ReviewedRequest(ApiModel):
     reviewed: bool
 
 
-class BatchIndexEntry(BaseModel):
-    """One row of Recent batches (UI doc §2): a confirmed batch, or a staging
+class BatchIndexEntry(ApiModel):
+    """One row of Recent batches: a confirmed batch, or a staging
     session not confirmed yet, which reopens staging instead."""
 
     kind: Literal["staging", "batch"]
@@ -707,9 +663,9 @@ class BatchIndexEntry(BaseModel):
     """A staging session's: seven days after its last edit."""
 
 
-class ListingBatch(BaseModel):
-    """The batch a listing was made by, for the editor's row above the head
-    (UI doc §8): Back to batch and Mark reviewed."""
+class ListingBatch(ApiModel):
+    """The batch a listing was made by, for the editor's row above the head:
+    Back to batch and Mark reviewed."""
 
     batch_id: str
     label: str
@@ -718,7 +674,7 @@ class ListingBatch(BaseModel):
     reviewable: bool
 
 
-class _CreateRunRequest(BaseModel):
+class _CreateRunRequest(ApiModel):
     model_config = ConfigDict(extra="forbid")
 
     publish: bool = False
@@ -739,7 +695,7 @@ class WorkspacePlanRequest(_CreateRunRequest):
 
 class BatchPlanRequest(_CreateRunRequest):
     """Plan the reviewed rows of one listing batch that have changes to
-    deploy (ADR-0059); the server resolves which."""
+    deploy; the server resolves which."""
 
     kind: Literal["plan"]
     scope: Literal["batch"]
@@ -780,11 +736,11 @@ CreateRunRequest = (
 )
 
 
-class _RunSummary(BaseModel):
+class _RunSummary(ApiModel):
     id: str
     scope: RunScope
     batch_id: str | None = None
-    """The listing batch a ``batch``-scoped run deploys (ADR-0059)."""
+    """The listing batch a ``batch``-scoped run deploys."""
     listings: list[str]
     seen: bool
     reviewed_run_id: str | None
@@ -792,8 +748,8 @@ class _RunSummary(BaseModel):
     publish: bool = False
     """Whether this run publishes new and still-draft listings."""
     waiting_for_backup: bool = False
-    """Held by a backup's pause (workspace-backup plan, decision P4): accepted
-    and queued, starting once the backup step ends. Never stored."""
+    """Held by a backup's pause: accepted and queued, starting once the backup
+    step ends. Never stored."""
 
 
 class PlanRunSummary(_RunSummary):
@@ -812,9 +768,8 @@ RunSummary = Annotated[PlanRunSummary | ApplyRunSummary, Field(discriminator="ki
 
 class PlanRunDetail(PlanRunSummary):
     events: list[RunEvent]
-    """Every event this run has produced so far, in order -- what a client
-    reattaching to an in-progress or just-finished run replays instead of
-    opening the SSE stream from nothing (decision 9)."""
+    """Every event this run has produced so far, in order: what a client
+    reattaching to the run replays."""
 
 
 class ApplyRunDetail(ApplyRunSummary):
@@ -824,11 +779,17 @@ class ApplyRunDetail(ApplyRunSummary):
 RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind")]
 
 
-class SeoReadinessResponse(BaseModel):
-    """Whether AI Mode can be enabled for one saved listing right now
-    (implementation plan, "Entry point"). The frontend leaves the control
-    visible and disabled when ``ready`` is false; ``reason`` explains why
-    to a developer or support reader."""
+class RunConflict(ApiModel):
+    """The run already holding one of the listings: reattach to it with
+    ``GET /api/runs/{active_run}`` rather than retrying."""
+
+    active_run: str
+
+
+class SeoReadinessResponse(ApiModel):
+    """Whether AI Mode can be enabled for one saved listing right now. The
+    frontend leaves the control visible and disabled when ``ready`` is false;
+    ``reason`` explains why to a developer or support reader."""
 
     ready: bool
     reason: str | None = None
@@ -840,7 +801,7 @@ class SeoReadinessResponse(BaseModel):
     until the deploy lets it go."""
 
 
-class ProposalResolutionPatch(BaseModel):
+class ProposalResolutionPatch(ApiModel):
     """``PATCH /api/listings/{name}/proposal/resolution``: the sections to
     record, on the proposal generated at ``generated_at`` -- a regeneration
     that landed meanwhile is a different proposal, and is a 412. ``pending``
@@ -852,14 +813,14 @@ class ProposalResolutionPatch(BaseModel):
     lead: Resolution | None = None
 
 
-class CreateAiRunRequest(BaseModel):
+class CreateAiRunRequest(ApiModel):
     listing: str
     draft_brief: bool = False
     """Draft the brief first. Only honoured while the saved brief is empty;
     a run whose listing already has one skips the Brief node."""
 
 
-class AiRunRefusal(BaseModel):
+class AiRunRefusal(ApiModel):
     """A ``409`` from ``POST /api/ai/runs``: exactly one of the two is set.
     ``active_run`` names the run to reattach to; ``reason`` says which
     readiness rule failed."""
@@ -868,7 +829,7 @@ class AiRunRefusal(BaseModel):
     reason: str | None = None
 
 
-class AiRunSummary(BaseModel):
+class AiRunSummary(ApiModel):
     id: str
     listing: str
     draft_brief: bool
@@ -881,16 +842,16 @@ class AiRunSummary(BaseModel):
     pause held it; ``None`` while it is held."""
     finished_at: datetime | None
     waiting_for_backup: bool = False
-    """Held by a backup's pause (workspace-backup plan, decision P4): accepted
-    and queued, starting once the backup step ends. Never stored."""
+    """Held by a backup's pause: accepted and queued, starting once the backup
+    step ends. Never stored."""
 
 
 class AiRunDetail(AiRunSummary):
     events: list[AiRunEvent]
 
 
-class CalibrationSaveRequest(BaseModel):
-    """A single recoverable calibration transaction under ADR-0054."""
+class CalibrationSaveRequest(ApiModel):
+    """A single recoverable calibration transaction."""
 
     model_config = ConfigDict(extra="forbid")
     request_id: str = Field(min_length=1, max_length=256)
@@ -898,7 +859,7 @@ class CalibrationSaveRequest(BaseModel):
     mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=256)
 
 
-class MapReadinessResponse(BaseModel):
+class MapReadinessResponse(ApiModel):
     state: Literal["needs_preparation", "out_of_date", "ready", "not_required"]
     reason: str | None = None
     message: str | None = None
@@ -906,14 +867,14 @@ class MapReadinessResponse(BaseModel):
     can_render: bool
 
 
-class PreparationPlacementResponse(BaseModel):
+class PreparationPlacementResponse(ApiModel):
     placement_id: str | None
     mask_available: bool
     mask_reason: str | None
     undo_count: int
 
 
-class PreparationJobResponse(BaseModel):
+class PreparationJobResponse(ApiModel):
     config_revision: str
     id: str
     template: str
@@ -928,11 +889,11 @@ class PreparationJobResponse(BaseModel):
     queue_position: int | None
     engine_version: str | None
     waiting_for_backup: bool = False
-    """Held by a backup's pause (workspace-backup plan, decision P4): accepted
-    and queued, starting once the backup step ends. Never stored."""
+    """Held by a backup's pause: accepted and queued, starting once the backup
+    step ends. Never stored."""
 
 
-class PreparationResponse(BaseModel):
+class PreparationResponse(ApiModel):
     template: str
     config_revision: str
     main_photo: str
@@ -944,12 +905,12 @@ class PreparationResponse(BaseModel):
     prepared_engine: str | None
 
 
-class PositionReadinessResponse(BaseModel):
+class PositionReadinessResponse(ApiModel):
     ready: bool
     preparing: bool
 
 
-class CreatePreparationRequest(BaseModel):
+class CreatePreparationRequest(ApiModel):
     model_config = ConfigDict(extra="forbid")
     template: str
     config_revision: str
@@ -959,18 +920,18 @@ class CreatePreparationRequest(BaseModel):
     reset_masks_for_photo: bool = False
 
 
-class MaskHistoryStroke(BaseModel):
+class MaskHistoryStroke(ApiModel):
     before: str
     operation: Stroke
 
 
-class MaskHistoryResponse(BaseModel):
+class MaskHistoryResponse(ApiModel):
     checksum: str
     undo_count: int
     strokes: list[MaskHistoryStroke]
 
 
-class MarigoldRuntimeResponse(BaseModel):
+class MarigoldRuntimeResponse(ApiModel):
     available: bool
     problem: str | None
     engine_version: str | None
@@ -982,11 +943,11 @@ class MarigoldRuntimeResponse(BaseModel):
     max_image_dimension: int
 
 
-class PreparationResyncResponse(BaseModel):
+class PreparationResyncResponse(ApiModel):
     resync: Literal[True] = True
 
 
-class ReturnPolicyTermsBody(BaseModel):
+class ReturnPolicyTermsBody(ApiModel):
     """``etsy.listing_defaults.return_policy``: a policy by its terms."""
 
     accepts_returns: bool
@@ -994,12 +955,12 @@ class ReturnPolicyTermsBody(BaseModel):
     within_days: int | None = None
 
 
-class CurrencyOption(BaseModel):
+class CurrencyOption(ApiModel):
     code: str
     name: str
 
 
-class ShopListingDefaults(BaseModel):
+class ShopListingDefaults(ApiModel):
     who_made: str
     when_made: str
     is_supply: bool
@@ -1009,7 +970,7 @@ class ShopListingDefaults(BaseModel):
     renewal: str
 
 
-class ShopSettingsResponse(BaseModel):
+class ShopSettingsResponse(ApiModel):
     revision: str
     """sha256 of the file's exact bytes; the next PATCH must send it."""
     currency: str
@@ -1019,7 +980,7 @@ class ShopSettingsResponse(BaseModel):
     preferred_print_provider: str | None
 
 
-class ShopChanges(BaseModel):
+class ShopChanges(ApiModel):
     """Only the keys sent are changed; ``null`` removes an optional one.
     Values are loosely typed on purpose: the whole candidate document is
     validated by ``Defaults``, which names each refused field."""
@@ -1037,12 +998,12 @@ class ShopChanges(BaseModel):
     preferred_print_provider: str | None = None
 
 
-class ShopPatchRequest(BaseModel):
+class ShopPatchRequest(ApiModel):
     revision: str
     changes: ShopChanges
 
 
-class ShopSaveRefusal(BaseModel):
+class ShopSaveRefusal(ApiModel):
     """A 412 (``stale``: reload, then edit again) or a 422 (``invalid``:
     each refused dotted shop.yaml key to its reason). Nothing was written."""
 
@@ -1051,10 +1012,10 @@ class ShopSaveRefusal(BaseModel):
     field_errors: dict[str, str] = Field(default_factory=dict)
 
 
-class WorkspaceSettingsResponse(BaseModel):
+class WorkspaceSettingsResponse(ApiModel):
     revision: str
     template_positions: TemplatePositionLimits
-    """Current limits, including defaults (ADR-0058)."""
+    """Current limits, including defaults."""
     concurrency: int
     weights: dict[str, float]
     """Relative weights, normalized only for display by the page."""
@@ -1062,13 +1023,13 @@ class WorkspaceSettingsResponse(BaseModel):
     providers: list[AiProviderSettings]
     step_limit_minutes: int
     run_limit_minutes: int
-    """At least ``max(5, enabled providers x step_limit_minutes)`` (ADR-0057);
-    the page computes that floor from ``providers`` as the seller edits."""
+    """At least ``max(5, enabled providers x step_limit_minutes)``; the page
+    computes that floor from ``providers`` as the seller edits."""
     backup: BackupSettings | None = None
-    """The ``backup:`` block, for the Setup page; None while backups are off."""
+    """The ``backup:`` block; ``None`` while backups are off."""
 
 
-class WorkspaceSettingsChanges(BaseModel):
+class WorkspaceSettingsChanges(ApiModel):
     model_config = ConfigDict(extra="forbid")
 
     concurrency: int | float | None = None
@@ -1085,12 +1046,12 @@ class WorkspaceSettingsChanges(BaseModel):
     backup_retention: dict[str, Any] | None = None
 
 
-class WorkspaceSettingsPatch(BaseModel):
+class WorkspaceSettingsPatch(ApiModel):
     revision: str
     changes: WorkspaceSettingsChanges
 
 
-class SettingsSaveRefusal(BaseModel):
+class SettingsSaveRefusal(ApiModel):
     kind: Literal["stale", "invalid"]
     """``stale`` (412): settings.yaml changed since the page read it, so
     reload; ``invalid`` (422): ``field_errors`` say what to change."""
@@ -1098,7 +1059,7 @@ class SettingsSaveRefusal(BaseModel):
     field_errors: dict[str, str] = Field(default_factory=dict)
 
 
-class BackupRefusal(BaseModel):
+class BackupRefusal(ApiModel):
     """Set-up's, create's and connect's refusals."""
 
     kind: Literal["stale", "conflict", "invalid"]
@@ -1109,30 +1070,30 @@ class BackupRefusal(BaseModel):
 
     connect_from: str | None = None
     """Create refused because this destination holds a repository's copy:
-    connect it instead (workspace-backup plan, PR 8)."""
+    connect it instead."""
 
 
-class TemplatePositionImpactRequest(BaseModel):
+class TemplatePositionImpactRequest(ApiModel):
     limits: dict[str, Any]
     """Candidate limits, shaped as ``template_positions`` in settings.yaml."""
 
 
-class ListingOutsideBody(BaseModel):
+class ListingOutsideBody(ApiModel):
     listing: str
     positions: list[str]
     """Dotted ``template_positions`` keys the candidate limits would refuse."""
 
 
-class TemplatePositionImpactResponse(BaseModel):
+class TemplatePositionImpactResponse(ApiModel):
     """What saving the candidate limits would change; nothing is written."""
 
     outside: list[ListingOutsideBody]
     templates_needing_inference: list[str]
     """Marigold templates whose preparation evidence would need model inference
-    to cover the wider limits; empty until Marigold positions ship (PR 7)."""
+    to cover the wider limits."""
 
 
-class ConnectionRowBody(BaseModel):
+class ConnectionRowBody(ApiModel):
     state: Literal["connected", "not_connected", "lookup_failed"]
     shop_name: str | None
     shop_id: int | None
@@ -1145,17 +1106,17 @@ class ConnectionRowBody(BaseModel):
     """The live Etsy shop's own currency, when a lookup read it."""
 
 
-class ShopConnectionsResponse(BaseModel):
+class ShopConnectionsResponse(ApiModel):
     etsy: ConnectionRowBody
     printify: ConnectionRowBody
 
 
-class ReturnPolicyChoiceBody(BaseModel):
+class ReturnPolicyChoiceBody(ApiModel):
     terms: ReturnPolicyTermsBody
     label: str
 
 
-class EtsyLookupsBody(BaseModel):
+class EtsyLookupsBody(ApiModel):
     available: bool
     problem: str | None
     production_partners: list[str]
@@ -1163,19 +1124,19 @@ class EtsyLookupsBody(BaseModel):
     return_policies: list[ReturnPolicyChoiceBody]
 
 
-class PrintifyLookupsBody(BaseModel):
+class PrintifyLookupsBody(ApiModel):
     available: bool
     problem: str | None
     print_providers: list[str]
 
 
-class ShopLookupsResponse(BaseModel):
+class ShopLookupsResponse(ApiModel):
     etsy: EtsyLookupsBody
     printify: PrintifyLookupsBody
 
 
-class BackupSetUpRequest(BaseModel):
-    """The set-up form (workspace-backup interactions, *Set up and Setup*)."""
+class BackupSetUpRequest(ApiModel):
+    """The backup set-up form."""
 
     revision: str
     """``settings.yaml``'s revision from ``GET /api/admin/settings``."""
@@ -1186,7 +1147,7 @@ class BackupSetUpRequest(BaseModel):
     password: str
 
 
-class BackupConnected(BaseModel):
+class BackupConnected(ApiModel):
     """The backup set-up connected instead of creating one."""
 
     destination: str
@@ -1194,7 +1155,7 @@ class BackupConnected(BaseModel):
     snapshots: int
     notice: str | None = None
     """Set when its snapshots name several workspaces, so this workspace
-    got a new workspace ID and starts its own retention (ADR-0061)."""
+    got a new workspace ID and starts its own retention."""
 
 
 class BackupSetUpResponse(BackupOverview):
@@ -1205,9 +1166,8 @@ class BackupSetUpResponse(BackupOverview):
     the backup storage folder and uses it, instead of creating one."""
 
 
-class BackupNewRepositoryRequest(BaseModel):
-    """Create a new repository while the configured one is missing
-    (workspace-backup spec, *Missing repository*)."""
+class BackupNewRepositoryRequest(ApiModel):
+    """Create a new repository while the configured one is missing."""
 
     revision: str
     """``settings.yaml``'s revision from ``GET /api/admin/settings``."""
@@ -1217,7 +1177,7 @@ class BackupNewRepositoryRequest(BaseModel):
     """Only read when no password is stored."""
 
 
-class BackupConnectRequest(BaseModel):
+class BackupConnectRequest(ApiModel):
     """Connect an existing repository, such as a destination copy restored
     onto a new machine, by copying it to local disk first."""
 
@@ -1230,12 +1190,12 @@ class BackupConnectRequest(BaseModel):
     """Only read when no password is stored."""
 
 
-class BackupHistoryResponse(BaseModel):
+class BackupHistoryResponse(ApiModel):
     runs: list[HistoryEntry]
     """Newest first, failed runs included."""
 
 
-class BackupSnapshot(BaseModel):
+class BackupSnapshot(ApiModel):
     id: str
     short_id: str
     time: datetime
@@ -1246,28 +1206,28 @@ class BackupSnapshot(BaseModel):
     """The restore dialog's suggested folder for it."""
 
 
-class BackupSnapshotsResponse(BaseModel):
+class BackupSnapshotsResponse(ApiModel):
     workspace: str
     """The live workspace, which a restore refuses."""
     snapshots: list[BackupSnapshot]
     """Every snapshot restic lists, made by the app or by hand, newest first."""
 
 
-class BackupRestoreRequest(BaseModel):
+class BackupRestoreRequest(ApiModel):
     snapshot: str
     """An id, its start, or ``latest``."""
     target: str
     """A new or empty folder, as a full path."""
 
 
-class BackupRepairRequest(BaseModel):
+class BackupRepairRequest(ApiModel):
     destination: str
     """As ``settings.yaml`` names it."""
 
 
-class BackupRepairResponse(BaseModel):
+class BackupRepairResponse(ApiModel):
     set_aside: str | None
-    """``<destination>-set-aside-<date>``; None when nothing was moved."""
+    """``<destination>-set-aside-<date>``; ``None`` when nothing was moved."""
     moved: list[str]
     outcome: CopyOutcome
     """How the copy after it went."""

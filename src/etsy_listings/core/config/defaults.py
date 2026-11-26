@@ -17,27 +17,17 @@ class MissingDefaultError(ValueError):
 
 
 class PrintifyDefaults(BaseModel):
-    """Which Printify shop this workspace creates products in.
-
-    Optional at load, like the Etsy ids: a workspace that only renders mockups
-    has no use for it, and a product call that needs it raises
-    :class:`MissingDefaultError` then.
-    """
+    """Which Printify shop this workspace creates products in: optional, as a workspace that only
+    renders mockups needs none."""
 
     model_config = ConfigDict(extra="forbid")
 
     shop_name: str | None = None
-    """What the shop is called in Printify, stored beside the id.
-
-    Not a resolution key -- `setup` selects the shop and stores its id, and
-    Printify's titles are whatever the owner typed. It is here so that the
-    stored id is *checkable*: "28819281" tells a reader nothing about whether
-    this workspace points at the right place."""
+    """Stored beside the id so a reader can check it; never a resolution key."""
 
     shop_id: int | None = None
     preferred_print_provider: str | None = None
-    """By name, not id. Preselected in `new` when it offers the chosen
-    garment. Under `printify:` because it names a Printify entity."""
+    """By name, not id; preselected in `new` when it offers the chosen garment."""
 
     def require_shop_id(self) -> int:
         if self.shop_id is None:
@@ -75,21 +65,15 @@ class EtsyListingDefaults(BaseModel):
     the whole `updateListing` PATCH."""
     return_policy: EtsyReturnPolicyDefaults | None = None
     production_partner: str | None = None
-    """By name; omit when the shop has exactly one (decision 3's resolution
-    ladder) -- most shops never need to set this."""
+    """By name; omit when the shop has exactly one, as most shops can."""
 
 
 class EtsyDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     currency: str
-    """The shop's own currency, read from Etsy by `setup`.
-
-    Under `etsy:` because it describes the Etsy shop, and read rather than
-    typed because a workspace configured in one currency while the shop sells
-    in another is a disagreement nothing surfaces until a price lands wrong.
-    ADR-0006 is unchanged: it remains the only currency a price may be written
-    in."""
+    """The shop's own currency, read from Etsy by `setup` so the workspace cannot disagree with the
+    shop; the only currency a price may be written in (ADR-0006)."""
 
     shop_name: str | None = None
     """The shop's name on Etsy -- the human-readable half of its identity, and
@@ -98,16 +82,8 @@ class EtsyDefaults(BaseModel):
     shop_id: int | None = None
 
     listing_defaults: EtsyListingDefaults = EtsyListingDefaults()
-    """What a listing inherits. Everything outside this block identifies or
-    configures the shop -- a distinction worth drawing because the two have
-    different failure modes: a wrong `shop_id` means nothing works, while a
-    wrong default means every listing is quietly slightly wrong.
-
-    No shop-wide section, unlike Phase 2's `shop_section_id`: which part of
-    the shop a listing belongs in is a fact about that listing, not the shop
-    (`listing.yaml`'s `etsy.section`), and a shop-wide default would be right
-    for the first listing and wrong from the second onwards.
-    """
+    """What a listing inherits; the rest of this block identifies the shop. The section is per
+    listing (``listing.yaml``'s ``etsy.section``)."""
 
     def require_shop_id(self) -> int:
         if self.shop_id is None:
@@ -118,18 +94,6 @@ class EtsyDefaults(BaseModel):
                 "`auth` flow can also read it back from the Etsy API.",
             )
         return self.shop_id
-
-
-MOVED_KEYS = {
-    "currency": "etsy.currency",
-    "preferred_print_provider": "printify.preferred_print_provider",
-}
-"""Where two top-level keys went.
-
-`extra="forbid"` would report them as "extra inputs are not permitted", which
-is true and useless: the value is not extra, it is one line further down the
-file. A workspace written before the move is exactly the one whose owner needs
-to be told where to put it."""
 
 
 class Defaults(BaseModel):
@@ -150,20 +114,5 @@ class Defaults(BaseModel):
 
     @classmethod
     def from_document(cls, path: Path, raw: object) -> Defaults:
-        if isinstance(raw, dict):
-            _refuse_moved_keys(path, raw)
+        del path
         return cls.model_validate(raw)
-
-
-def _refuse_moved_keys(path: Path, raw: dict[str, object]) -> None:
-    found = [(key, moved_to) for key, moved_to in MOVED_KEYS.items() if key in raw]
-    if not found:
-        return
-    moves = "\n".join(f"  {key}: -> {moved_to}:" for key, moved_to in found)
-    raise ConfigLoadError(
-        path,
-        "these keys moved under the service that owns them:\n"
-        f"{moves}\n"
-        "  Move them by hand, or re-run `etsy-listings setup`, which rewrites "
-        "the file in the current shape.",
-    )

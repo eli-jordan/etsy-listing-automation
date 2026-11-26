@@ -61,7 +61,6 @@ export class WriteLoop<Edit> {
     });
   }
 
-  /** Starts synchronously when nothing is out: a page being left may get no further turn. */
   flush(): Promise<Settled> {
     this.disarm();
     this.flushedSinceWriteBegan = true;

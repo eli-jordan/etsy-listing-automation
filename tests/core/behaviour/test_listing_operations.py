@@ -170,7 +170,7 @@ class TestDescribeDraft:
             workspace,
             {
                 "garment_profile": "comfort-colors-1717",
-                "design": "designs/take-a-hike.png",
+                "design": {"default": "designs/take-a-hike.png"},
                 "colors": ["black"],
                 "brief": "",
                 "media": [],

@@ -22,15 +22,16 @@ from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 __all__ = [
+    "NOT_REQUIRED",
     "Readiness",
     "ReadinessReason",
     "SavedPreparationFacts",
-    "catalog_readiness",
+    "maps_required",
     "saved_preparation_facts",
     "template_readiness",
 ]
 
-_NOT_REQUIRED = Readiness("not_required")
+NOT_REQUIRED = Readiness("not_required")
 
 
 @dataclass(frozen=True)
@@ -39,15 +40,12 @@ class SavedPreparationFacts:
     prepared_engine: str | None = None
 
 
-def catalog_readiness(config: AnyTemplate) -> Readiness | None:
-    """What is known from the configuration alone, for a catalogue that reads
-    metadata only: ``None`` means the maps must be validated to answer."""
-    return _NOT_REQUIRED if isinstance(config.renderer, PhotoWarpRenderer) else None
+def maps_required(config: AnyTemplate) -> bool:
+    return not isinstance(config.renderer, PhotoWarpRenderer)
 
 
 def template_readiness(workspace: Workspace, name: str, config: AnyTemplate) -> Readiness:
-    known = catalog_readiness(config)
-    return known if known is not None else saved_preparation_facts(workspace, name).maps
+    return saved_preparation_facts(workspace, name).maps if maps_required(config) else NOT_REQUIRED
 
 
 def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparationFacts:
@@ -60,9 +58,8 @@ def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparation
 
 def _saved_facts(workspace: Workspace, name: str) -> SavedPreparationFacts:
     config = template_state(workspace, name).require()
-    known = catalog_readiness(config)
-    if known is not None:
-        return SavedPreparationFacts(known)
+    if not maps_required(config):
+        return SavedPreparationFacts(NOT_REQUIRED)
     if isinstance(config, MultipleTemplate) and not config.placements:
         return SavedPreparationFacts(
             Readiness(

@@ -1,10 +1,4 @@
-"""The Admin page's Shop tab over HTTP: ``/api/admin/shop``.
-
-``core/application/shop_settings.py`` owns the revision check, validation and
-lookups; this module builds the clients through ``app_state.clients``. A refused
-save is a :class:`ShopSaveRefusal` body at ``REFUSAL_STATUS``'s status
-(docs/architecture.md, *Shop administration*).
-"""
+"""The Admin page's Shop tab over HTTP: ``/api/admin/shop``."""
 
 from __future__ import annotations
 

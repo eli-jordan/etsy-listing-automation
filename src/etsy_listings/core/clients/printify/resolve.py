@@ -1,5 +1,5 @@
-"""Name -> id resolution: the only place a config name for a blueprint or
-print provider becomes a Printify integer id (ADR-0005)."""
+"""Name -> id resolution: the only place a config name for a blueprint or print
+provider becomes a Printify integer id."""
 
 from __future__ import annotations
 
@@ -104,11 +104,9 @@ class ResolvedVariant:
 class VariantResolution:
     variants: tuple[ResolvedVariant, ...]
     missing: tuple[tuple[str, str], ...]
-    """``(colour_slug, size)`` cells the catalog does not offer. Reported, not
-    fatal -- missing variant cells."""
+    """``(colour_slug, size)`` cells the catalog does not offer; reported, not fatal."""
 
     def ids(self, *, colours: Collection[str] | None = None) -> tuple[int, ...]:
-        """Variant ids, optionally narrowed to some colour slugs."""
         return tuple(v.id for v in self.variants if colours is None or v.colour_slug in colours)
 
 

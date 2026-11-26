@@ -390,8 +390,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         self._variation_images[listing_id] = list(links)
 
 
-# ------------------------------------------------------------------ market
-
 MarketMethod = Literal["search_active", "listings_by_ids", "review_count"]
 
 

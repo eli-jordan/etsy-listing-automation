@@ -101,13 +101,9 @@ export function describeTerms(terms: ReturnPolicyTerms): string {
 export type Creatable =
   "production_partner" | "preferred_print_provider" | "shipping_profile" | "return_policy";
 
-/** Each Etsy URL is the one Etsy's own help article links to, checked
- * 2026-10-30: shipping profiles in "How to Set Up Shipping Information"
- * (help.etsy.com/hc/articles/115014115187), return policies under Policy
- * settings in "How do I Set Return Policies on My Listings"
- * (help.etsy.com/hc/articles/7869401615255), and "Partners you work with"
- * in "Working with Production Partners on Etsy"
- * (help.etsy.com/hc/articles/360000336547). */
+/** Each Etsy URL is the one Etsy's help links to (checked 2026-10-30): shipping
+ * profiles (help.etsy.com/hc/articles/115014115187), return policies
+ * (.../7869401615255) and production partners (.../360000336547). */
 export const CREATE_LINKS: Record<Creatable, { label: string; href: string; where: string }> = {
   shipping_profile: {
     label: "Create on Etsy",

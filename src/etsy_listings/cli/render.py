@@ -72,7 +72,7 @@ def format_blocked(stage_plan: StagePlan) -> list[str]:
 
 
 def _name(stage_plan: StagePlan) -> str:
-    """``etsy_media/etsy_videos``: a stage under its group (ADR-0045)."""
+    """``etsy_media/etsy_videos``: a stage under its group."""
     if stage_plan.group is None:
         return stage_plan.stage
     return f"{stage_plan.group}/{stage_plan.stage}"
