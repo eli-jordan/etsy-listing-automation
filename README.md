@@ -142,10 +142,11 @@ npm run test          # vitest, every project (node, dom, design)
 npm run test:coverage # node + dom projects with the coverage gate
 npm run test:design   # design prototype tests (required, not coverage)
 npm run gen:api       # regenerate src/api/schema.ts from docs/openapi.json
+npm run check:api     # fail if src/api/schema.ts is stale (poe check and CI run this)
 ```
 
 After changing a FastAPI endpoint's shape, regenerate the typed client — it is
-generated, never hand-written:
+generated, never hand-written. `poe check` and CI fail when either file is stale:
 
 ```bash
 uv run python scripts/export_openapi.py   # writes docs/openapi.json

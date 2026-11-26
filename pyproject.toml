@@ -125,7 +125,7 @@ test-browser = "pytest -m browser -n auto --dist worksteal"
 # `format:check`. `test:design` runs the marver prototype frames' tests:
 # required, but a separate Vitest project outside production coverage.
 # Skipped, not failed, when npm is not on PATH.
-frontend = "python scripts/frontend_gate.py format lint typecheck test:coverage test:design"
+frontend = "python scripts/frontend_gate.py format lint check:api typecheck test:coverage test:design"
 # Fix, then format (so a fix's output is formatted and E501 is judged on
 # formatted lines), then report what is left. The gates run one after another
 # on purpose: `test` already keeps every core busy, so running lint and the

@@ -72,7 +72,7 @@ uv run lint-imports # Import Linter contracts in pyproject.toml (ADR-0052)
 uv run ruff check . / ruff format . # lint / format
 ```
 
-Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|test:design|gen:api`. Vitest has three projects (`vitest.config.ts`): `node` for pure subjects, `dom` (jsdom + setup) for everything else under `src/`, `design` for prototype frames; `test:coverage` measures only node + dom, `test:design` is required separately. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
+Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|test:design|gen:api|check:api`. Vitest has three projects (`vitest.config.ts`): `node` for pure subjects, `dom` (jsdom + setup) for everything else under `src/`, `design` for prototype frames; `test:coverage` measures only node + dom, `test:design` is required separately. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`. `tests/test_export_openapi.py` and `npm run check:api` fail when either generated file is stale.
 
 A new T3 worktree runs `scripts/setup_worktree.py` (`uv sync`, `npm install` in `src/ui`, then `git config core.hooksPath .githooks`) from [t3.json](t3.json). T3 reads `t3.json` from the project root's checkout, not the new worktree, so a change to it takes effect only after it merges to `main`.
 

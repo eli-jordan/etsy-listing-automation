@@ -1310,7 +1310,8 @@ configuration. `npm run build` writes `src/ui/dist/`, which is gitignored. The
 Vite dev server proxies `/api` to a running `etsy-listings ui`. The typed
 client is generated: `scripts/export_openapi.py` writes `docs/openapi.json`
 from the FastAPI app and `npm run gen:api` turns it into
-`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011). Only the modules
+`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011), and `poe check`
+and CI fail when either differs from a fresh export. Only the modules
 under `src/ui/src/api/` call the server: everything above them works in domain
 types and never touches `fetch`, URLs or the generated schema.
 

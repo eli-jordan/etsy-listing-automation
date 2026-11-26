@@ -1,10 +1,10 @@
 """Exports the FastAPI app's OpenAPI schema to docs/openapi.json, which
-openapi-typescript then turns into the frontend's typed client (ADR-0011: "TS
+``npm run gen:api`` then turns into the frontend's typed client (ADR-0011: "TS
 client generated from the OpenAPI schema -- never hand-written").
 
 Run with ``uv run python scripts/export_openapi.py`` whenever an endpoint's
-shape changes, then ``npm run gen:api`` in src/ui/. CI checks frontend
-types but does not currently regenerate this contract to detect a stale export.
+shape changes, then ``npm run gen:api`` in src/ui/. ``tests/test_export_openapi.py``
+fails when the committed file is stale, and ``npm run check:api`` when schema.ts is.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 REPO_ROOT = Path(__file__).parent.parent
+CONTRACT = REPO_ROOT / "docs" / "openapi.json"
 
 
 def build_schema() -> dict[str, Any]:
@@ -29,11 +30,16 @@ def build_schema() -> dict[str, Any]:
     return create_app(workspace).openapi()
 
 
+def render_schema() -> bytes:
+    """docs/openapi.json's bytes, with CRLF endings on every OS so an export
+    from Linux matches the committed file."""
+    text = json.dumps(build_schema(), indent=2, sort_keys=True) + "\n"
+    return text.replace("\n", "\r\n").encode("utf-8")
+
+
 def main() -> None:
-    schema = build_schema()
-    out_path = REPO_ROOT / "docs" / "openapi.json"
-    out_path.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"wrote {out_path}")
+    CONTRACT.write_bytes(render_schema())
+    print(f"wrote {CONTRACT}")
 
 
 if __name__ == "__main__":
