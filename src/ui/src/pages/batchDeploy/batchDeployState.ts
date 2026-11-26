@@ -83,7 +83,7 @@ function project(
 ): BatchListingState {
   return {
     ...value,
-    ...applyListingRunEvent(value, event, source === "review" ? "review" : "runtime-only"),
+    ...applyListingRunEvent(value, event, source === "review" ? "review" : "keep-reviewed"),
   };
 }
 

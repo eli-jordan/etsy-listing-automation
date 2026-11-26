@@ -22,13 +22,14 @@ import { PublishDraftsToggle } from "./deploy/PublishDraftsToggle";
 import { DeployHead } from "./deploy/DeployHead";
 import {
   applyRunEvent,
+  applyStarted,
   controlPhase,
   deployState,
   initialDeployState,
   type DeployState,
 } from "./deploy/deployState";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
-import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
+import { isPlanInProgress, MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
 
 function stepStripHeading(phase: ReturnType<typeof controlPhase>): string {
   if (phase === "queued" || phase === "planning" || phase === "previewing")
@@ -196,11 +197,6 @@ export function DeployPage() {
       void markRunSeen(runId);
     };
 
-    // A very small apply can finish between the user's Apply and immediate
-    // Back clicks. Give that exit intent a short window to land so the
-    // editor can still offer View result; a result the user stays on is
-    // marked seen normally. Plan reviews and other terminal outcomes keep
-    // their existing immediate behaviour.
     if (state.phase !== "applied") {
       markSeen();
       return;
@@ -231,17 +227,7 @@ export function DeployPage() {
     await applyStartRef.current;
     activeRunRef.current = null;
     streamRef.current?.close();
-    // Only a plan run still under review (queued/planning/planned/previewing)
-    // is worth asking the registry to cancel. An `apply` in progress is
-    // never asked at all (decision 8: Back leaves, it never cancels one),
-    // and a run already at a terminal phase -- "ready" included, a plan
-    // run's own natural rest state, per `TERMINAL_PHASES` -- always answers
-    // 409 from `registry.cancel`, since it refuses anything already
-    // terminal. That case needs no cancel call at all: the "mark a terminal
-    // run seen" effect above already marked it the moment its result
-    // rendered, which is what keeps the editor's page head from dangling on
-    // a stale *View progress* link.
-    if (runId !== null && state.phase !== "applying" && !TERMINAL_PHASES.has(state.phase)) {
+    if (runId !== null && isPlanInProgress(state.phase)) {
       await cancelRun(runId).catch(() => false);
     }
     navigate(deletedAfterApply ? "/listings" : `/listings/${encodeURIComponent(name)}`);
@@ -261,13 +247,7 @@ export function DeployPage() {
         await reattachRun(result.activeRun);
         return;
       }
-      // Keep the reviewed plan on screen while the apply run performs its
-      // required re-plan. The fresh listing_planned event will replace it.
-      setState((current) => ({
-        ...initialDeployState,
-        plan: current.plan,
-        fingerprint: current.fingerprint,
-      }));
+      setState(applyStarted);
       setRunId(result.run.id);
       openStream(result.run.id);
     } catch {
@@ -311,7 +291,7 @@ export function DeployPage() {
         status={detail?.status ?? null}
         phase={phase}
         waitingForBackup={heldForBackup}
-        backToListings={deletedAfterApply}
+        listingDeleted={deletedAfterApply}
         showPlanAgain={showPlanAgain}
         onBack={() => void handleBack()}
         onPlanAgain={() => void startFreshPlan()}

@@ -16,7 +16,13 @@ export interface ListingRunState {
   stageRuntime: Record<string, StageRuntimeStatus>;
 }
 
-export type ListingPlanMode = "review" | "replace" | "runtime-only";
+export type ListingPlanMode =
+  /** A single listing's deploy: each fresh plan replaces the one shown. */
+  | "replace"
+  /** A batch review: each fresh plan is also the reviewed plan. */
+  | "review"
+  /** A batch apply: re-planning cannot overwrite what was reviewed. */
+  | "keep-reviewed";
 
 /** Stages an apply adds by the seller's choice, which its review was planned
  * without: `etsy_activate` (`Stage.chosen_at_apply` on the server). */
@@ -70,7 +76,7 @@ function withListingPlanned(
   event: Extract<RunEvent, { type: "listing_planned" }>,
   planMode: ListingPlanMode,
 ): ListingRunState {
-  if (planMode === "runtime-only") {
+  if (planMode === "keep-reviewed") {
     return {
       ...state,
       plan: withStagesChosenAtApply(state.plan, event.plan),
@@ -103,9 +109,6 @@ function withListingFailed(
   };
 }
 
-/** One authoritative projection for a listing's plan and stage-runtime events.
- * Individual deploy uses `replace`; batch review uses `review`; batch apply
- * uses `runtime-only` so re-planning cannot overwrite what was reviewed. */
 export function applyListingRunEvent(
   state: ListingRunState,
   event: RunEvent,

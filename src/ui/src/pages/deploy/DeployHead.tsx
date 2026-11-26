@@ -74,7 +74,7 @@ export function DeployHead({
   status,
   phase,
   waitingForBackup,
-  backToListings,
+  listingDeleted,
   showPlanAgain,
   onBack,
   onPlanAgain,
@@ -83,15 +83,14 @@ export function DeployHead({
   status: ListingStatus | null;
   phase: ControlPhase;
   waitingForBackup: boolean;
-  /** The apply deleted the listing, so Back goes to the listings list. */
-  backToListings: boolean;
+  listingDeleted: boolean;
   showPlanAgain: boolean;
   onBack: () => void;
   onPlanAgain: () => void;
 }) {
   return (
     <div className="page-head">
-      <BackLinks name={name} backToListings={backToListings} onBack={onBack} />
+      <BackLinks name={name} backToListings={listingDeleted} onBack={onBack} />
       <h1 className="page-head__title">Deploy</h1>
       {status !== null && <StatusTag status={status} />}
       <span className="page-head__meta">{metaText(phase, waitingForBackup)}</span>

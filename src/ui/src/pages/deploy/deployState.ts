@@ -9,8 +9,7 @@ export type { StageRuntimeStatus } from "./listingRunState";
 
 export interface DeployState extends ListingRunState {
   phase: RunPhase;
-  /** Keys `${template}|${colour ?? ""}` for every scene a `preview_rendered`
-   * event has named so far this run. */
+  /** `previewKey`s of the scenes this run's `preview_rendered` events named. */
   previewsRendered: Set<string>;
 }
 
@@ -20,8 +19,14 @@ export const initialDeployState: DeployState = {
   previewsRendered: new Set(),
 };
 
-function previewKey(template: string, colour: string | null): string {
+export function previewKey(template: string, colour: string | null): string {
   return `${template}|${colour ?? ""}`;
+}
+
+/** The state an apply starts from: the reviewed plan stays on screen until
+ * the apply's own re-plan sends a fresh `listing_planned`. */
+export function applyStarted(state: DeployState): DeployState {
+  return { ...initialDeployState, plan: state.plan, fingerprint: state.fingerprint };
 }
 
 export function applyRunEvent(state: DeployState, event: RunEvent): DeployState {

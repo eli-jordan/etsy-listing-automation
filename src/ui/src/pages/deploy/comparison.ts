@@ -11,31 +11,15 @@ import {
 export type ImpactTag =
   "Images" | "Videos" | "Title" | "Description" | "Prices" | "Colours" | "Tags" | "Materials";
 
-export interface TitleBlock {
+/** The title or the description. */
+export interface TextBlock {
   before: string | null;
   after: string;
   changed: boolean;
 }
 
-/** Same shape as `TitleBlock` -- kept as its own type because "description"
- * reading as a `TitleBlock` at a call site would be confusing, not because
- * the two ever need to diverge. */
-export interface DescriptionBlock {
-  before: string | null;
-  after: string;
-  changed: boolean;
-}
-
-export interface TagsBlock {
-  before: string[];
-  after: string[];
-  added: string[];
-  removed: string[];
-  changed: boolean;
-}
-
-/** Same shape as `TagsBlock`, same reasoning. */
-export interface MaterialsBlock {
+/** The tags or the materials. */
+export interface StringListBlock {
   before: string[];
   after: string[];
   added: string[];
@@ -68,10 +52,9 @@ export interface AfterImageTile {
   ref: string;
   badge: ImageBadge;
   movedFrom?: number;
-  /** New bytes for an image already on Etsy -- a re-rendered mockup, which
-   * the stage reports as a media change whose ref is the same before and
-   * after. Independent of `badge`: a re-rendered image can also move. */
-  replaced: boolean;
+  /** The stage reports a re-render as a media change whose ref is the same
+   * before and after. Independent of `badge`: a re-rendered image can also move. */
+  reRendered: boolean;
 }
 
 export interface BeforeImageTile {
@@ -79,8 +62,7 @@ export interface BeforeImageTile {
   ref: string | null;
   url: string | null;
   badge: ImageBadge;
-  /** This image is on Etsy and about to be swapped for its re-render. */
-  replaced: boolean;
+  reRendered: boolean;
 }
 
 export interface ImagesBlock {
@@ -120,12 +102,13 @@ export interface PriceRow {
   belowCost: boolean;
 }
 
+type DriftSource = "etsy" | "printify";
+
 export interface DriftedField {
-  /** `etsy:title`: stable across renders, and names the page anchor. */
-  key: string;
+  key: `${DriftSource}:${string}`;
   path: string;
   label: string;
-  source: "etsy" | "printify";
+  source: DriftSource;
   live: string;
   after: string;
   expandable: boolean;
@@ -135,10 +118,10 @@ export interface Comparison {
   impacts: ImpactTag[];
   drifted: DriftedField[];
   hasEtsyListing: boolean;
-  title: TitleBlock | null;
-  description: DescriptionBlock | null;
-  tags: TagsBlock | null;
-  materials: MaterialsBlock | null;
+  title: TextBlock | null;
+  description: TextBlock | null;
+  tags: StringListBlock | null;
+  materials: StringListBlock | null;
   colours: ColoursBlock | null;
   price: PriceBlock | null;
   images: ImagesBlock | null;
@@ -167,11 +150,15 @@ function asStrings(values: unknown[]): string[] {
   return values.filter((v): v is string => typeof v === "string");
 }
 
-/** `"349 NOK"` -> `349`. Parses only the leading amount -- callers already
- * know the currency is the listing's own from context, and this exists
- * purely to compare two `Money` strings' magnitudes for a min/max range. */
-function moneyAmount(rendered: string): number {
+function leadingAmount(rendered: string): number {
   return Number.parseFloat(rendered);
+}
+
+export function formatPriceRange(range: PriceRange | null): string {
+  if (range === null) return "—";
+  if (range.min === range.max) return range.min;
+  const minAmount = range.min.split(" ")[0] ?? range.min;
+  return `${minAmount}–${range.max}`;
 }
 
 function priceRange(rows: readonly { price: string }[]): PriceRange | null {
@@ -180,13 +167,13 @@ function priceRange(rows: readonly { price: string }[]): PriceRange | null {
   let min = first;
   let max = first;
   for (const row of rest) {
-    if (moneyAmount(row.price) < moneyAmount(min.price)) min = row;
-    if (moneyAmount(row.price) > moneyAmount(max.price)) max = row;
+    if (leadingAmount(row.price) < leadingAmount(min.price)) min = row;
+    if (leadingAmount(row.price) > leadingAmount(max.price)) max = row;
   }
   return { min: min.price, max: max.price };
 }
 
-function buildTitle(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TitleBlock | null {
+function buildTitle(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TextBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   return {
@@ -196,9 +183,7 @@ function buildTitle(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TitleB
   };
 }
 
-function buildDescription(
-  stagePlan: StagePlanFor<"etsy_listing"> | undefined,
-): DescriptionBlock | null {
+function buildDescription(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TextBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   return {
@@ -212,7 +197,7 @@ function buildDescription(
 function buildStringList(
   stagePlan: StagePlanFor<"etsy_listing"> | undefined,
   field: "tags" | "materials",
-): TagsBlock | null {
+): StringListBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === field);
@@ -287,9 +272,9 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
 
   const after: AfterImageTile[] = snapshot.desired.map((entry) => {
     const previousRank = wasRankByRef.get(entry.ref);
-    const tile = { rank: entry.rank, ref: entry.ref, replaced: replaced.has(entry.ref) };
+    const tile = { rank: entry.rank, ref: entry.ref, reRendered: replaced.has(entry.ref) };
     if (previousRank === undefined) {
-      return { ...tile, badge: "new", replaced: false };
+      return { ...tile, badge: "new", reRendered: false };
     }
     if (previousRank !== entry.rank) {
       return { ...tile, badge: "moved", movedFrom: previousRank };
@@ -305,7 +290,7 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
       ref,
       url: image.url ?? null,
       badge: ref !== null && !used ? "removed" : null,
-      replaced: used && replaced.has(ref),
+      reRendered: used && replaced.has(ref),
     };
   });
 
@@ -447,11 +432,11 @@ function buildDrifted(plan: PlanDTO): DriftedField[] {
 
 function impactsFor(
   colours: ColoursBlock | null,
-  title: TitleBlock | null,
-  description: DescriptionBlock | null,
+  title: TextBlock | null,
+  description: TextBlock | null,
   price: PriceBlock | null,
-  tags: TagsBlock | null,
-  materials: MaterialsBlock | null,
+  tags: StringListBlock | null,
+  materials: StringListBlock | null,
   images: ImagesBlock | null,
   videos: VideosBlock | null,
 ): ImpactTag[] {

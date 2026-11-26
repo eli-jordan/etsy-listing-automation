@@ -2,20 +2,21 @@ import { useState } from "react";
 import { MutedClip } from "../../components/MutedClip";
 import { pictureFor, type SceneSource } from "../../media";
 import type { RenderSnapshot } from "../../types";
-import type {
-  AfterImageTile,
-  AfterVideoTile,
-  BeforeImageTile,
-  BeforeVideoTile,
-  ColoursBlock,
-  Comparison as ComparisonData,
-  DescriptionBlock,
-  DriftedField,
-  PriceBlock,
-  TagsBlock,
-  TitleBlock,
+import {
+  formatPriceRange,
+  type AfterImageTile,
+  type AfterVideoTile,
+  type BeforeImageTile,
+  type BeforeVideoTile,
+  type ColoursBlock,
+  type Comparison as ComparisonData,
+  type DriftedField,
+  type PriceBlock,
+  type StringListBlock,
+  type TextBlock,
 } from "./comparison";
 import { DriftTextRow, DriftValueRow } from "./DriftRows";
+import { previewKey } from "./deployState";
 import { wordDiff } from "./wordDiff";
 
 export interface ListingMediaContext {
@@ -64,7 +65,7 @@ function afterTileImage(
     return { src: pictureFor(ref, listing.scene, "full", listing.name || null), pending: false };
   }
   const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
-  const key = `${parsed.template}|${parsed.colour ?? ""}`;
+  const key = previewKey(parsed.template, parsed.colour);
   const ready =
     scene === null || scene.state === "cached" || scene.preview || previewsRendered.has(key);
   if (!ready) return { src: null, pending: true };
@@ -102,8 +103,8 @@ function AfterTile({
   return (
     <figure className="dv-thumb-wrap">
       <div
-        className={`dv-thumb${tile.badge === "new" ? " dv-thumb--new" : ""}${tile.replaced ? " dv-thumb--replaced" : ""}`}
-        title={tile.replaced ? "Changed" : undefined}
+        className={`dv-thumb${tile.badge === "new" ? " dv-thumb--new" : ""}${tile.reRendered ? " dv-thumb--replaced" : ""}`}
+        title={tile.reRendered ? "Changed" : undefined}
       >
         {pending ? (
           <span className="dv-spinner" aria-hidden="true" />
@@ -136,8 +137,8 @@ function BeforeTile({ tile }: { tile: BeforeImageTile }) {
   return (
     <figure className="dv-thumb-wrap">
       <div
-        className={`dv-thumb${tile.badge === "removed" ? " dv-thumb--gone" : ""}${tile.replaced ? " dv-thumb--replaced" : ""}`}
-        title={tile.replaced ? "Changed" : undefined}
+        className={`dv-thumb${tile.badge === "removed" ? " dv-thumb--gone" : ""}${tile.reRendered ? " dv-thumb--replaced" : ""}`}
+        title={tile.reRendered ? "Changed" : undefined}
       >
         {tile.url !== null ? (
           <img alt={tile.ref ?? "listing image"} src={tile.url} />
@@ -220,7 +221,7 @@ function StringList({
   side,
 }: {
   label: string;
-  block: TagsBlock;
+  block: StringListBlock;
   side: "before" | "after";
 }) {
   const isAfter = side === "after";
@@ -315,7 +316,7 @@ function mediaRows({ images, videos }: ComparisonData, media: MediaContext): Fie
 function copyRow(
   key: "title" | "description",
   label: string,
-  block: TitleBlock | DescriptionBlock,
+  block: TextBlock,
   drifted: DriftedField[],
 ): FieldRow {
   return {
@@ -358,14 +359,14 @@ function priceRow(price: PriceBlock): FieldRow {
     cell: (side) => (
       <Block label="Price" changed={price.changed} side={side}>
         <div className="dv-price dv-tnum">
-          {formatRange(side === "after" ? price.after : price.before)}
+          {formatPriceRange(side === "after" ? price.after : price.before)}
         </div>
       </Block>
     ),
   };
 }
 
-function listRow(label: string, block: TagsBlock): FieldRow {
+function listRow(label: string, block: StringListBlock): FieldRow {
   return {
     key: label,
     cell: (side) => <StringList label={label} block={block} side={side} />,
@@ -416,16 +417,6 @@ function ColumnHeads({ sides, idLabel }: { sides: Side[]; idLabel: string }) {
       ))}
     </div>
   );
-}
-
-/** `"349 NOK"` alone, or `"349–399 NOK"` -- the bare low amount, an
- * en-dash, then the high amount with its unit, matching how the design mock
- * reads a price range. */
-function formatRange(range: { min: string; max: string } | null): string {
-  if (range === null) return "—";
-  if (range.min === range.max) return range.min;
-  const minAmount = range.min.split(" ")[0] ?? range.min;
-  return `${minAmount}–${range.max}`;
 }
 
 export function ComparisonView({

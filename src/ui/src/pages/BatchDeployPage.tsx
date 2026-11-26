@@ -34,7 +34,7 @@ import {
 import { useIsPhone } from "../phone/usePhone";
 import { PublishDraftsToggle } from "./deploy/PublishDraftsToggle";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
-import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
+import { isPlanInProgress, MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
 
 function formatGeneratedAt(value: string | null): string {
   if (value === null) return "";
@@ -77,12 +77,6 @@ function planCounts(listings: readonly BatchListingState[]) {
     if (group === "remove") counts.remove += 1;
   }
   return counts;
-}
-
-function isPlanning(phase: BatchDeployState["phase"]): boolean {
-  return (
-    phase === "queued" || phase === "planning" || phase === "planned" || phase === "previewing"
-  );
 }
 
 function isTerminalApply(state: BatchDeployState): boolean {
@@ -303,11 +297,6 @@ export function BatchDeployPage() {
       void markRunSeen(id);
     };
 
-    // A very small workspace apply can finish before the user's immediate
-    // Back click is honoured -- Apply's own re-navigate to this apply run's
-    // URL (handleApply) lands first and attaches here already terminal.
-    // Give that exit intent a short window so Listings can still offer View
-    // batch result; a result the user stays on is marked seen normally.
     if (!isTerminalApply(state)) {
       markSeen();
       return;
@@ -445,7 +434,7 @@ export function BatchDeployPage() {
   async function handleBack() {
     leavingRef.current = true;
     await applyStartRef.current;
-    if (run?.id === runId && run.kind === "plan" && isPlanning(visibleState.phase)) {
+    if (run?.id === runId && run.kind === "plan" && isPlanInProgress(visibleState.phase)) {
       await cancelRun(run.id).catch(() => false);
     }
     streamRef.current?.close();
@@ -453,7 +442,7 @@ export function BatchDeployPage() {
   }
 
   const phase = visibleState.phase;
-  const planning = !visibleState.applyStarted && isPlanning(phase);
+  const planning = !visibleState.applyStarted && isPlanInProgress(phase);
   const stage = batchStage({ planning, applying, terminalApply });
   const planTimestamp = formatGeneratedAt(visibleState.generatedAt);
   const showReview =
