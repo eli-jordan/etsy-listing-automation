@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class Ticket:
     """One admitted unit of work, counted by :meth:`JobGate.wait_idle` until
-    released. Releasing twice is harmless; a ``with`` block releases it."""
+    released."""
 
     def __init__(self, job: str, release: Callable[[], None]) -> None:
         self._release = release
@@ -67,27 +67,21 @@ class JobGate:
         return queued and self.paused
 
     def on_resume(self, listener: Callable[[], None]) -> None:
-        """Call ``listener`` after each :meth:`resume`, so a coordinator
-        looks again at the queue it keeps. Called outside the gate's lock,
-        after the line has started; one that raises is logged and the rest
-        still hear."""
+        """Call ``listener`` after each :meth:`resume`, outside the gate's lock."""
         with self._condition:
             self._listeners.append(listener)
 
     def admit(self, job: str) -> Ticket | None:
-        """A ticket for work named ``job`` starting now, or ``None`` while
-        paused: the caller leaves the work queued and looks again on
-        resume."""
+        """A ticket for ``job`` starting now, or ``None`` while paused or
+        while held work is still in line."""
         with self._condition:
             if self._paused or self._line:
                 return None
             return self._ticket_locked(job)
 
     def hold(self, job: str, start: Callable[[Ticket], object]) -> None:
-        """Call ``start`` with a ticket for ``job`` now, or -- while paused
-        -- once the pause ends, after the work that joined the line before
-        it. ``start`` owns the ticket; if it raises, the ticket is released
-        and the error logged. Never called after :meth:`stop`."""
+        """Call ``start`` with a ticket for ``job`` once the gate is open and
+        the line ahead has started. ``start`` owns the ticket."""
         with self._condition:
             if self._stopped:
                 return
@@ -115,9 +109,6 @@ class JobGate:
             self._condition.notify_all()
 
     def resume(self) -> None:
-        """Admit again: start the line in order, then tell every
-        coordinator in the order they asked. Does nothing after
-        :meth:`stop`."""
         with self._condition:
             if self._stopped:
                 return
@@ -138,10 +129,8 @@ class JobGate:
             self._condition.notify_all()
 
     def wait_idle(self, *, waiting: Callable[[str], None] | None = None) -> bool:
-        """Block until no admitted work is in flight, with no timeout (spec,
-        *Pausing jobs*). ``waiting`` hears the job waited for each time it
-        changes, so status can name it. ``False`` when :meth:`stop` ended
-        the wait."""
+        """Block until no admitted work is in flight, telling ``waiting`` each
+        job it waits on. ``False`` when :meth:`stop` ended the wait."""
         named: str | None = None
         with self._condition:
             while self._in_flight and not self._stopped:
@@ -153,8 +142,6 @@ class JobGate:
             return not self._stopped
 
     def _start_line(self) -> None:
-        """Admit the line in order while the gate is open. A pause landing
-        part way holds the rest; one ``start`` failing starts the next."""
         with self._admitting:
             while True:
                 with self._condition:
