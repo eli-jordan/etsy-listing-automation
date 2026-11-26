@@ -71,15 +71,7 @@ class RunReport:
 
 
 def fully_applied(outcome: ListingOutcome, lock: Lockfile) -> bool:
-    """Whether ``outcome``'s apply was a *full success* (ADR-0050; spec,
-    *Deployment interaction*): the listing is ``ok``, no stage of its plan
-    was blocked, and ``lock`` -- the lockfile the apply left -- carries no
-    ``incomplete`` marker.
-
-    ``ok`` alone is not enough: a blocked stage is not a failure (the CLI
-    says so out loud rather than failing the run), so a listing whose Etsy
-    stages were all blocked reads ``ok`` having deployed nothing there.
-    """
+    """ADR-0050's *full success*; ``lock`` is the lockfile the apply left."""
     if not outcome.ok or outcome.planned is None:
         return False
     if any(stage_plan.blocked for stage_plan in outcome.planned.plan.stage_plans):
@@ -198,11 +190,6 @@ class _ApplyListing:
             record=lambda updated: updated.write(lock_file),
         )
         if stop_here.halted:
-            # ADR-0041's graceful stop skipped stages the plan meant to run, so
-            # the listing-level half of the apply did not happen either: a
-            # retract that never ran must not wipe the listing, and a renew
-            # never sent must stay marked. Nor is it a full
-            # success, so the proposal stays too.
             return planned
         after_apply(ctx, listing, planned)
         if fully_applied(ListingOutcome(listing=listing, planned=planned), applied):

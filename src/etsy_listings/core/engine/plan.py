@@ -95,10 +95,6 @@ def _blocked(states: list[StageState]) -> bool:
 
 
 def _held_by_earlier_block(stage: AnyStage, earlier: list[StageState]) -> StageState | None:
-    """A stage that declares ``needs_every_earlier_stage`` is blocked, without
-    being asked, while any stage before it is. ``etsy_activate`` is the one:
-    publishing a listing whose images could not be uploaded would show buyers
-    Printify's mockups."""
     if not stage.needs_every_earlier_stage:
         return None
     blocker = next((state for state in earlier if state.stage_plan.blocked is not None), None)

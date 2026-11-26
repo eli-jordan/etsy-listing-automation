@@ -44,14 +44,8 @@ UNREADABLE_ETSY = (
 
 @dataclass(frozen=True)
 class LifecycleWalk:
-    """What this listing's lifecycle does to a plan.
-
-    ``blocked`` wraps the walk rather than living in any one stage: missing
-    yaml, the wrong verb, or a delete/retire we cannot prove safe. ``stages``
-    in that case is the pipeline the caller passed, so every stage shows the
-    same refusal. Otherwise it is either that pipeline or ``RetractStage``
-    alone.
-    """
+    """What this listing's lifecycle does to a plan: the caller's pipeline,
+    ``RetractStage`` alone, or a ``blocked`` refusal every stage carries."""
 
     stages: list[AnyStage]
     published: bool
@@ -128,8 +122,6 @@ def _retract_succeeded(planned: PlannedRun) -> bool:
 
 
 def _omit_consumed_renew(ctx: RunContext, listing: str, planned: PlannedRun) -> None:
-    """``lifecycle: renew`` is a one-shot mark. Apply sends
-    ``state=active``, then deletes the key."""
     etsy_plan = next(
         (sp for sp in planned.plan.stage_plans if sp.stage == "etsy_listing"),
         None,
