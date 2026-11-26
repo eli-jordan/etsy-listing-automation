@@ -943,7 +943,7 @@ export interface paths {
     get: operations["get_listing_template_api_listing_templates__name__get"];
     /**
      * Put Listing Template
-     * @description template completeness: write the whole document only if it is complete. A malformed or
+     * @description Write the whole document only if it is complete. A malformed or
      *     incomplete one leaves ``template.yaml`` byte-for-byte as it was, so the
      *     server always holds the last complete version; the listing-template editor
      *     keeps the unsaved values on its side.
@@ -3018,13 +3018,9 @@ export interface components {
     };
     /**
      * ColourMatrixPreviewRequest
-     * @description Disambiguated from the other two preview shapes by required fields
-     *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
-     *     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
-     *     than forbidden, since a natural client pattern is spreading a whole
-     *     ``GET.../config`` response (which includes ``kind``) into the body. All
-     *     three take ``labels`` because an editor preview names with them the labels
-     *     of its ``calibration_revision``. None draws them.
+     * @description A colour-matrix template's preview body. All three preview shapes take
+     *     ``labels``: an editor preview names the labels of its
+     *     ``calibration_revision`` with them. None draws them.
      */
     ColourMatrixPreviewRequest: {
       /** Bounding Box */
@@ -3352,8 +3348,8 @@ export interface components {
      *
      *     ``dict`` rather than ``Listing``, deliberately: an incomplete candidate is
      *     the *normal* case on this endpoint, and rejecting it at the FastAPI boundary
-     *     would answer with a 422 the editor cannot render. The point is to get it as
-     *     far as ``Listing.draft`` and report what is missing.
+     *     would answer with a 422 the editor cannot render. The point is to describe
+     *     it as it stands and report what is missing.
      */
     DraftListingRequest: {
       /** Document */

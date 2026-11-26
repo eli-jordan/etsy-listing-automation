@@ -1,7 +1,8 @@
 """How an interactive command asks a question, given the terminal it got.
 
-**Only fzf filters.** Filtering was tried in the other two backends and both
-were worse than not having it. questionary's autocomplete copies the
+**Only fzf filters.** Without fzf, ``choose`` falls back to questionary's
+arrow-key list, else a numbered list over ``input()``. Filtering was tried in
+both and both were worse than not having it. questionary's autocomplete copies the
 highlighted row into the input buffer as you arrow through the menu, so the
 query silently becomes a row you never typed -- and clearing it back out
 leaves a fragment that matches nothing. A type-to-narrow loop over ``input()``

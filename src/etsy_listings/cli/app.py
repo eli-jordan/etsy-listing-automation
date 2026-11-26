@@ -224,7 +224,8 @@ def setup(
     Verifies the token against Printify before storing it, and reads the shop
     id back from the same call rather than asking you to find one.
 
-    Stops before Etsy sign-in, which arrives with `auth` in Phase 3.
+    With Etsy credentials stored (`auth etsy`), it also looks up the Etsy shop
+    and its return policy.
     """
 
     target = to_native_path(root) if root else Path.cwd()
@@ -325,7 +326,7 @@ def auth_anthropic(
     *,
     check: CheckOption = False,
 ) -> None:
-    """Capture just the Anthropic API key (used by `generate`, from Phase 4)."""
+    """Capture just the optional Anthropic API key, which no command reads."""
     _run_auth(root, ["anthropic"], check=check)
 
 

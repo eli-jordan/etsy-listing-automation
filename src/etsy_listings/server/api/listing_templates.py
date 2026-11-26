@@ -145,7 +145,7 @@ def get_listing_template(request: Request, name: str) -> ListingTemplateDetail:
 def put_listing_template(
     request: Request, name: str, body: dict[str, Any]
 ) -> ListingTemplateSaveResult:
-    """template completeness: write the whole document only if it is complete. A malformed or
+    """Write the whole document only if it is complete. A malformed or
     incomplete one leaves ``template.yaml`` byte-for-byte as it was, so the
     server always holds the last complete version; the listing-template editor
     keeps the unsaved values on its side."""

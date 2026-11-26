@@ -17,7 +17,8 @@ def ui(
 ) -> None:
     """Serve the UI over HTTP in the foreground; open the printed URL in a browser.
 
-    The UI includes the dashboard, calibrator, listing editor and run runner.
+    The UI includes the dashboard, listings and their editor, batches, listing
+    templates, the calibrator, runs and admin settings.
     Ctrl-C stops the server once any in-flight apply finishes its current stage.
     """
     from etsy_listings.server.hosting import (  # noqa: PLC0415 -- only `ui` pays the server's import cost (ADR-0052)

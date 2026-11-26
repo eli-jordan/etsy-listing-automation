@@ -2149,7 +2149,7 @@
       },
       "ColourMatrixPreviewRequest": {
         "additionalProperties": false,
-        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body. All\nthree take ``labels`` because an editor preview names with them the labels\nof its ``calibration_revision``. None draws them.",
+        "description": "A colour-matrix template's preview body. All three preview shapes take\n``labels``: an editor preview names the labels of its\n``calibration_revision`` with them. None draws them.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -2898,7 +2898,7 @@
         "type": "object"
       },
       "DraftListingRequest": {
-        "description": "A candidate ``listing.yaml``, as the editor holds it before the listing\nexists.\n\n``dict`` rather than ``Listing``, deliberately: an incomplete candidate is\nthe *normal* case on this endpoint, and rejecting it at the FastAPI boundary\nwould answer with a 422 the editor cannot render. The point is to get it as\nfar as ``Listing.draft`` and report what is missing.",
+        "description": "A candidate ``listing.yaml``, as the editor holds it before the listing\nexists.\n\n``dict`` rather than ``Listing``, deliberately: an incomplete candidate is\nthe *normal* case on this endpoint, and rejecting it at the FastAPI boundary\nwould answer with a 422 the editor cannot render. The point is to describe\nit as it stands and report what is missing.",
         "properties": {
           "document": {
             "additionalProperties": true,
@@ -12012,7 +12012,7 @@
         ]
       },
       "put": {
-        "description": "template completeness: write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\nkeeps the unsaved values on its side.",
+        "description": "Write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\nkeeps the unsaved values on its side.",
         "operationId": "put_listing_template_api_listing_templates__name__put",
         "parameters": [
           {
