@@ -29,42 +29,17 @@ import {
 import { ChooseBaseDialog } from "./ChooseBaseDialog";
 import { ShirtThumb } from "./ShirtThumb";
 
-/**
- * The design strip above the tabs: which artwork each shirt prints.
- *
- * One design (`design.default`) is the default and shows as one selector
- * beside a light and a dark shirt wearing it. **Use different designs on
- * light & dark shirts** splits it into two selectors, `on-light` and
- * `on-dark`, each beside the one shirt it prints on; going back to one design
- * asks which file to keep when there are two. Every change is one `onChange`
- * with the whole new map, built by `artwork.ts`'s transitions.
- *
- * A PNG dropped on a selector is uploaded into `designs/` and picked for that
- * selector. The drop targets are the selectors on show: dropping never
- * changes the mode, so a listing on one design is only ever given another
- * one design.
- *
- * Which Recent designs panel is open is the shell's state, not the strip's,
- * so the card under the Variants stage can open a slot's panel too.
- */
-
 interface Props {
   design: DesignMap;
-  /** The colours the listing sells -- which ones each slot prints on. */
   colours: readonly string[];
   garmentProfile: string;
   open: SlotTarget | null;
   onOpen: (target: SlotTarget | null) => void;
-  /** The new `design:` map. What it sets off beyond the edit -- naming a
-   * draft, arming AI -- is decided from the map, not from which control made
-   * it (spec: *Representative artwork*). */
   onChange: (next: DesignMap) => void;
-  /** Previews a colour on the Variants stage: the own-design line's names. */
   onPreview: (colour: string) => void;
 }
 
-/** How many the strip offers before the full list is needed. Four fills one
- * row of the picker grid; the rest are a search away. */
+/** One row of the picker grid. */
 const RECENT = 4;
 
 const ONE: SlotTarget = { kind: "one" };
@@ -78,7 +53,7 @@ function targetLabel(target: SlotTarget): string {
 
 const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer.types).includes("Files");
 
-/** Enter/leave counted, so passing over a child doesn't drop the state. */
+/** Counted: `dragenter`/`dragleave` also fire for every child the pointer crosses. */
 function useDragDepth(onChange: (holding: boolean) => void) {
   const depth = useRef(0);
   return {
@@ -100,7 +75,6 @@ function useDragDepth(onChange: (holding: boolean) => void) {
   };
 }
 
-/** A tone slot's "Prints on …" line, or `null` when no colour uses it. */
 function tonePrintsOn(users: string[]): string | null {
   return users.length === 0 ? null : `Prints on ${listNames(users)}`;
 }
@@ -130,8 +104,6 @@ export function ArtworkStrip({
   const [uploading, setUploading] = useState<{ target: SlotTarget; name: string } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const hold = useDragDepth(setHolding);
-  // An upload outlives the render that started it; it picks into the map as
-  // it is when the file lands, not as it was when the file was dropped.
   const latest = useRef(design);
   useEffect(() => {
     latest.current = design;
@@ -191,7 +163,6 @@ export function ArtworkStrip({
       ? "Prints on every colour without its own design"
       : "Prints on every colour you sell";
 
-  /** What a slot shows; its handlers are written where it is rendered. */
   const view = (target: SlotTarget) => {
     const file = slotFile(design, target);
     const tone = target.kind === "slot" ? target.tone : null;
@@ -203,7 +174,7 @@ export function ArtworkStrip({
       tones: tone === null ? (["light", "dark"] as const) : [tone],
       usedBy: used,
       open: sameTarget(open, target),
-      missing: tone !== null && file === null && users[tone].length > 0,
+      neededButEmpty: tone !== null && file === null && users[tone].length > 0,
       emptyText: tone === null ? "No design selected" : `Choose the design for ${toneLabel(tone)}`,
       holding,
       uploading: uploading !== null && sameTarget(uploading.target, target) ? uploading.name : null,
@@ -244,8 +215,7 @@ export function ArtworkStrip({
         }
         onDragEnter={(e) => hold.enter(e)}
         onDragLeave={() => hold.leave()}
-        // Over the card but between targets: take the drop so the browser
-        // doesn't navigate to the file, and do nothing with it.
+        // A drop nobody takes, the browser opens as a page.
         onDragOver={(e) => {
           if (hasFiles(e)) e.preventDefault();
         }}
@@ -308,8 +278,6 @@ export function ArtworkStrip({
                     ? "template-card template-card--active"
                     : "template-card"
                 }
-                // PRD 73: a ref with no prefix is the workspace root, so the
-                // design's workspace-relative path is already the ref.
                 onClick={() => pick(open, d.file)}
               >
                 <span className="template-card__name">{d.name}</span>
@@ -351,7 +319,7 @@ export function ArtworkStrip({
         <ArtworkPicker
           title={`Design for ${targetLabel(finding)}`}
           hint={finderHint(finding, users)}
-          tile={finding.kind === "one" ? TILE.neutral : TILE[finding.tone]}
+          cloth={finding.kind === "one" ? TILE.neutral : TILE[finding.tone]}
           current={slotFile(design, finding)}
           library={library}
           onPick={(ref) => pick(finding, ref)}
@@ -375,7 +343,6 @@ export function ArtworkStrip({
   );
 }
 
-/** The file a slot holds, the one uploading into it, or what it is for. */
 function SlotName({
   uploading,
   file,
@@ -403,7 +370,7 @@ function Slot({
   tones,
   usedBy,
   open,
-  missing,
+  neededButEmpty,
   emptyText,
   holding,
   uploading,
@@ -413,17 +380,12 @@ function Slot({
   title: string;
   target: SlotTarget;
   file: string | null;
-  /** The shirts drawn beside it: both for one design, else its own. */
   tones: readonly Tone[];
-  /** The "Prints on …" line; `null` when the slot is unused. */
   usedBy: string | null;
   open: boolean;
-  /** Empty, and a colour the listing sells needs it. */
-  missing: boolean;
+  neededButEmpty: boolean;
   emptyText: string;
-  /** A file is being held over the strip: every slot shows it is a target. */
   holding: boolean;
-  /** The name of the file uploading into this slot. */
   uploading: string | null;
   onChange: () => void;
   onFile: (file: File) => void;
@@ -435,7 +397,7 @@ function Slot({
   const cls = [
     "design-row",
     "design-row--slot",
-    missing ? "design-row--missing" : "",
+    neededButEmpty ? "design-row--missing" : "",
     open ? "design-row--open" : "",
     holding ? "design-row--target" : "",
     over ? "design-row--over" : "",
@@ -452,7 +414,6 @@ function Slot({
         if (hasFiles(e)) e.preventDefault();
       }}
       onDrop={(e) => {
-        // Bubbles on to the card, which clears its own holding state.
         e.preventDefault();
         drag.reset();
         const dropped = e.dataTransfer.files[0];

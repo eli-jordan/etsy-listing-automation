@@ -3,14 +3,6 @@ import { listPricingPlans } from "../../api/listings";
 import { useIsPhone } from "../../phone/usePhone";
 import type { ListingDetail, PricingPlanSummary } from "../../types";
 
-/** Plan picker and per-size prices (phase 5).
- *
- * The same controls Listing Details used to hold. A plan is selectable
- * (`GET /api/pricing-plans`, already built for the "+ New listing" flow) and
- * each resolved size carries an editable price, written as a per-size
- * override into `Listing.prices` -- `resolved_price()` already prefers that
- * over the plan, so no new resolution rule is needed. */
-
 /** A `"<amount> <CURRENCY>"` string (a `PriceField`'s wire form), split for
  * an editable amount plus a fixed currency suffix -- the currency itself is
  * the workspace's, not something this field lets you change per size. */
@@ -60,8 +52,6 @@ export function PricingTab({ detail, onUpdate, onFlush }: Props) {
             {plans.map((plan) => (
               <option key={plan.ref} value={plan.ref}>
                 {plan.name}
-                {/* Only worth saying against a garment that was actually
-                    chosen: with none, nothing *is* different. */}
                 {plan.compatible || detail.garment_profile === "" ? "" : " (different garment)"}
               </option>
             ))}
@@ -79,8 +69,7 @@ export function PricingTab({ detail, onUpdate, onFlush }: Props) {
                   <input
                     className="input price-table__input"
                     type="number"
-                    // A phone's keyboard with the decimal point, not the
-                    // full one a number field gets on iOS.
+                    // iOS gives a number field its full keyboard.
                     {...(phone ? { inputMode: "decimal" as const } : {})}
                     step="0.01"
                     aria-label={`Price for size ${price.size}`}

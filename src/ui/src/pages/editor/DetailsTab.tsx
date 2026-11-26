@@ -10,20 +10,6 @@ import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
 import { useDrawerMotion } from "./useDrawerMotion";
 import { useIsPhone } from "../../phone/usePhone";
 
-/** Title/tags/description/section (phase 5).
- *
- * Section is a dropdown of the live shop's sections (`GET /api/etsy/sections`,
- * `EtsyShopClient.shop_sections` -- unscoped, needs only the workspace's app
- * key pair) when that list is available. Its inline create action uses the
- * signed-in client because Etsy requires `shops_w`. The field falls back to
- * free text for a workspace that hasn't configured a shop id or Etsy
- * credentials yet -- an ordinary state short of `setup`/`auth etsy`, not an
- * error. Pricing lives on its own tab. */
-
-/** Etsy's own ceilings, mirrored from `config/listing.py`'s MAX_* constants.
- * Shown as counters rather than enforced here: the server is what refuses a
- * candidate (and says so through `field_errors`), and a field that silently
- * truncates what you paste is worse than one that tells you it is over. */
 const MAX_TITLE_LENGTH = 140;
 const MAX_TAGS = 13;
 const CREATE_SECTION_VALUE = "create";
@@ -43,15 +29,9 @@ type Props = {
 } & (
   | {
       kind?: "listing";
-      /** AI Mode, owned by `ListingEditorShell` rather than by this tab : a request has to survive a tab switch, and the chain that starts
-       * one begins at the design strip above the tabs. */
       aiSeo: AiSeoMode;
     }
   | {
-      /** A listing template's Details (UI doc §3): no Brief, Title, Tags,
-       * Description lead, AI Mode or market panel -- each listing in a batch
-       * writes those for itself -- and a hint that its lead goes above this
-       * body. */
       kind: "listing-template";
       aiSeo?: undefined;
     }
@@ -115,15 +95,6 @@ export function DetailsTab(props: Props) {
     };
   }, [previewOpen]);
 
-  // Accessibility (`docs/features/ai-seo-20260922/interactions.md` section 10):
-  // "Keyboard focus moves to the first useful control in the first opened
-  // drawer after generation, and returns to a sensible field or AI Mode
-  // control when the last drawer closes." Every drawer opens together right
-  // after a successful `generate()` (a fresh proposal starts every field
-  // unresolved), so the title drawer -- first in the field order -- is
-  // always "the first opened drawer" at that moment; closing every drawer
-  // (rejecting, choosing, or resolving each one) is exactly when `proposal`
-  // goes back to `null`.
   useEffect(() => {
     const hasProposal = proposal !== null;
     if (hasProposal && !hadAiSeoProposal.current) {
@@ -305,7 +276,7 @@ export function DetailsTab(props: Props) {
               {aiSeo.proposal?.resolution.lead === "pending" && (
                 <AiChoiceDrawer
                   enter={drawerMotion}
-                  field="description lead"
+                  field="description_lead"
                   options={aiSeo.proposal.proposal.description_leads}
                   staleReason={aiSeo.staleReason}
                   rationale={aiSeo.proposal.proposal.rationale}
@@ -367,12 +338,6 @@ export function DetailsTab(props: Props) {
           >
             Description preview
           </button>
-          {/* The server's own join of lead + resolved body
-              (`Workspace.compose_description`) -- rendered as-is, never
-              rejoined here, so this can never disagree with what Printify,
-              Etsy, and the deploy comparison view will actually send
-              (AI SEO implementation plan, "Description and common-copy
-              boundaries"). */}
           {previewOpen && (
             <div
               id="details-description-preview"
@@ -476,20 +441,10 @@ export function DetailsTab(props: Props) {
           )}
           {sectionError && <span className="field__error">{sectionError}</span>}
         </div>
-
-        {/* No Materials field: they belong to the garment profile, which
-            every listing on it deploys (docs/features/listings-ui-20260915/spec.md), so a
-            read-only copy here only looked editable. */}
       </fieldset>
     </div>
   );
 
-  // The top listings panel sits beside the fields once there is a search to
-  // show (docs/features/market-seo-20260924/interactions.md, section 3). Without one the
-  // fields keep their own width: an empty "run AI Mode" card would be noise
-  // on every new listing. The wrapper is there either way, so the fields are
-  // never remounted -- losing the seller's focus and caret -- when research
-  // starts mid-edit and the panel appears.
   return (
     <div className={aiSeo === null || aiSeo.market === null ? undefined : "mkt-layout"}>
       {fields}

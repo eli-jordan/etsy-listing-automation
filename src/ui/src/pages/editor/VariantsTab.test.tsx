@@ -5,6 +5,7 @@ import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
 import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { listingDetail } from "../../test/listings";
+import { deferred } from "../../test/helpers";
 import { VariantsTab as VariantsTabView } from "./VariantsTab";
 
 /** The previewed colour is the shell's state, so the strip's own-design line
@@ -495,6 +496,27 @@ describe("VariantsTab's tone tags and the card under the stage", () => {
     renderTab({ colors: ["black", "heather"] });
     const row = (await screen.findByText("heather")).closest(".color-row");
     expect(row?.querySelector(".tag.tag-dirty")).toHaveTextContent("no tone");
+  });
+
+  it("holds the card back until the garment profile loads, lest every colour read as no tone", async () => {
+    const profiles = deferred<GarmentProfileSummary[]>();
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockReturnValue(profiles.promise);
+    const { container } = render(
+      <VariantsTab
+        detail={detail({
+          garment_profile: "bella-canvas-3001",
+          colors: ["black"],
+          design: { default: "designs/x.png" },
+        })}
+        onUpdate={vi.fn()}
+      />,
+    );
+    await screen.findByText("black");
+    expect(container.querySelector(".color-prints")).toBeNull();
+
+    profiles.resolve([PROFILE]);
+
+    await waitFor(() => expect(card(container)).not.toHaveTextContent(/no tone/i));
   });
 
   it("explains the one design for all shirts", async () => {

@@ -4,25 +4,9 @@ import { listingDesignThumbnailUrl } from "../../api/listings";
 import { refName } from "../../media";
 import { listNames, TILE, toneLabel, type Tone } from "./artwork";
 
-/**
- * Linking a light/dark pair that holds two different files: which one every
- * shirt prints (interactions Part 1 §5, spec *Base artwork mode*). Leaving
- * light/dark mode must end in exactly one chosen base file, so nothing is
- * written until one is picked -- **Use one design** stays disabled, and
- * Cancel changes nothing.
- *
- * Each file sits on its slot's tile, captioned by the slot it fills now, so
- * the choice is about the ink as it looks on the shirt it was made for.
- *
- * Colours with their own design keep it through the change, and the dialog
- * says so -- "Moss keeps its own design." -- because losing them is the
- * obvious worry (interactions Part 1 §5).
- */
-
 interface Props {
   light: string;
   dark: string;
-  /** The enabled colours printing their own design. */
   own: readonly string[];
   onKeep: (ref: string) => void;
   onCancel: () => void;

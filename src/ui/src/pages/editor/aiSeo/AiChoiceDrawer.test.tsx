@@ -43,7 +43,7 @@ describe("AiChoiceDrawer", () => {
     const onChoose = vi.fn();
     render(
       <AiChoiceDrawer
-        field="description lead"
+        field="description_lead"
         options={["Lead A", "Lead B"]}
         staleReason={null}
         rationale={[]}

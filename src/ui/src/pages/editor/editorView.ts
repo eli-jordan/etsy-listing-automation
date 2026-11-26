@@ -1,18 +1,5 @@
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 
-/**
- * What the seller was looking at in an editor -- the tab, the colour on the
- * stage, the picture in the preview -- kept so a page refresh comes back to it.
- *
- * In `sessionStorage` rather than the URL: the preview follows the pointer
- * across the locator, and a router navigation per hover would re-render the
- * page and run past the template editor's unsaved-edits blocker. It is per
- * browser tab, so two listings side by side keep their own views, and it is
- * never part of the document, so nothing here reaches a save.
- */
-
-/** Which editor's view this is, or `null` for one with nothing to come back
- * to: a refresh of an unnamed draft starts a new draft. */
 export type ViewScope = string | null;
 
 export function viewScope(kind: "listing" | "listing-template", name: string): ViewScope {
@@ -61,13 +48,6 @@ function remembered<T>(
   }
 }
 
-/**
- * `useState`, remembered under `scope` for the life of the browser tab.
- *
- * Written whenever the value *or the scope* changes, so a draft that gets its
- * name keeps the view it already has. `accept` checks what comes back, because
- * what was stored may be from an older build.
- */
 export function useViewState<T>(
   scope: ViewScope,
   slot: string,
@@ -87,7 +67,7 @@ function remember(scope: string, slot: string, value: unknown) {
   try {
     sessionStorage.setItem(storageKey(scope, slot), JSON.stringify(value));
   } catch {
-    // Remembering is a convenience: the editor works the same without it.
+    // Storage may refuse the write (blocked, or full).
   }
 }
 
@@ -95,21 +75,12 @@ function isNumber(value: unknown): value is number {
   return typeof value === "number";
 }
 
-/** How long a refreshed page may take to grow back to where it was. */
 export const SCROLL_RESTORE_MS = 5000;
 
-/** What says the seller has taken over the scrolling themselves. */
-const SCROLL_INPUTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+const USER_SCROLL_INPUTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
 
-/**
- * The page's scroll position, remembered under `scope` and returned to on mount.
- *
- * The browser's own restoration cannot do this: it runs when the document has
- * loaded, and at that point the listing is still being fetched, so the page is
- * too short to scroll anywhere. So this waits, a frame at a time, for the page
- * to be tall enough. Any input from the seller ends the wait, because a jump
- * under someone already scrolling is worse than not coming back at all.
- */
+/** The browser restores scroll at load, while the listing is still being fetched and the page
+ * is too short, so this waits a frame at a time for the page to grow. */
 export function useViewScroll(scope: ViewScope) {
   useEffect(() => {
     if (scope === null) return;
@@ -120,7 +91,7 @@ export function useViewScroll(scope: ViewScope) {
     function stopWaiting() {
       if (frame !== null) cancelAnimationFrame(frame);
       frame = null;
-      SCROLL_INPUTS.forEach((input) => window.removeEventListener(input, stopWaiting));
+      USER_SCROLL_INPUTS.forEach((input) => window.removeEventListener(input, stopWaiting));
     }
 
     function returnWhenTallEnough() {
@@ -136,12 +107,11 @@ export function useViewScroll(scope: ViewScope) {
     }
 
     function rememberScroll() {
-      // Not while waiting: the page is at the top only because it is short.
       if (frame === null && scope !== null) remember(scope, "scroll", window.scrollY);
     }
 
     if (target > 0) {
-      SCROLL_INPUTS.forEach((input) =>
+      USER_SCROLL_INPUTS.forEach((input) =>
         window.addEventListener(input, stopWaiting, { passive: true }),
       );
       frame = requestAnimationFrame(returnWhenTallEnough);

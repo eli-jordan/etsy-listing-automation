@@ -22,13 +22,6 @@ import { PositionGlyph } from "./positions/PositionControls";
  * rules allow is `mediaEdits`' answer, asked while a tile is carried so a
  * refused target looks refused; a drop there changes nothing and the tile
  * snaps back.
- *
- * The order is a product decision, not a display detail -- the first tile is
- * the Etsy thumbnail -- so the drag is what this module is *for*, and the
- * drag's own state (which tile is being carried, which one it is over) lives
- * here and nowhere else. It used to sit in the tab alongside eleven other
- * pieces of state, which is how "remove a tile" and "open the carousel" came
- * to share one click handler.
  */
 
 interface Props {
@@ -36,27 +29,15 @@ interface Props {
   scene: Artwork | null;
   swatchTemplate: string | null;
   selectedIndex: number | null;
-  /** Whose `./` refs these are -- a listing (by name) or a listing
-   * template -- or `null` for a draft. */
   listing: MediaOwner | string | null;
-  /** Every file the locator lists, both groups -- what a file ref's tile
-   * points the preview at. */
   files: readonly MediaFileSummary[];
   onRemove: (index: number) => void;
   onReorder: (from: number, to: number) => void;
   onFocus: (focus: Focus) => void;
-  /** Templates this listing positions (`template_positions:`): their tiles
-   * wear the badge, every colour of a colour-matrix one included. */
   positioned?: ReadonlySet<string>;
-  /** Opens Add media, when the reel carries the button for it: on a phone,
-   * where the locator is a sheet rather than a column beside the reel. */
   onAdd?: () => void;
-  /** On a phone: the selected tile's bar opens it full size, and a second
-   * tap on the tile, the bar's ×, or Escape lets go of it. */
   onView?: (index: number) => void;
   onDeselect?: () => void;
-  /** On a phone, when the selected tile is a template whose design this
-   * listing can position: the bar's Adjust opens the preview to do it in. */
   onAdjust?: () => void;
 }
 
@@ -79,7 +60,6 @@ export function MediaReel({
   const phone = useIsPhone();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  // Images are what Etsy caps at twenty; videos are counted apart.
   const images = media.filter((entry) => mediaKind(entry) === "image").length;
   const videos = media.length - images;
 
@@ -88,9 +68,6 @@ export function MediaReel({
       onFocus({ kind: "template", template: entry.template, colour: entry.colour ?? null });
       return;
     }
-    // Only a file still on disk can be previewed; a ref whose file has gone
-    // keeps its tile and its label, which is how the user finds out it is
-    // missing.
     const asset = files.find((a) => a.ref === entry);
     if (asset !== undefined) onFocus({ kind: "file", asset });
   }
@@ -185,18 +162,8 @@ function reelHint(images: number, phone: boolean): string {
     : "Drag a tile to change the order Etsy shows them in";
 }
 
-/**
- * The phone's way to reorder: only some phone browsers let a finger carry a
- * tile, after a long press, so the selected tile gets a bar under the reel
- * that moves it one place at a time, or straight to the front, under the
- * same gallery rules a drop obeys. The selection follows the tile, so
- * repeated taps keep moving the same one.
- *
- * The bar is also the tile's way to the larger views: View opens it full
- * size, and Adjust -- for a template this listing positions its design on --
- * opens the preview with Position mode. It lets go of the tile on ×, or
- * Escape.
- */
+/** Phone browsers carry a dragged tile only sometimes, after a long press, so a
+ * selected tile gets a bar that moves it under the same rules a drop obeys. */
 function ReelMoves({
   media,
   index,
@@ -330,8 +297,6 @@ interface TileProps {
   onRemove: () => void;
 }
 
-/** One tile. Its own component so a video's clip has somewhere to keep the
- * element its hover plays. */
 function ReelTile({
   entry,
   index,
@@ -354,9 +319,7 @@ function ReelTile({
       className={["rtile", ...state].filter(Boolean).join(" ")}
       draggable
       onDragStart={(event) => {
-        // A plain-text payload (Firefox starts no drag without one) and a
-        // move, so nothing reads the tile as a picture or a link to open. A
-        // synthetic drag has no `dataTransfer`.
+        // Firefox starts no drag without a payload. A synthetic drag has no `dataTransfer`.
         const carried = event.dataTransfer as DataTransfer | null | undefined;
         if (carried) {
           carried.effectAllowed = "move";
@@ -369,9 +332,7 @@ function ReelTile({
         onDragOver();
       }}
       onDrop={(event) => {
-        // The drop is the reorder's, not the browser's: left to it, the
-        // browser opens what was dropped -- on a phone, the tile's small
-        // picture, alone on the page in place of the editor.
+        // Left to the browser, a drop opens the dropped picture as the page.
         event.preventDefault();
         onDrop();
       }}
@@ -379,9 +340,8 @@ function ReelTile({
     >
       <div
         className="rtile__face"
-        // A click, not a hover, points the preview here: the pointer crosses
-        // the reel on its way to anything below it, and every tile it passed
-        // used to swap the stage's picture and start another full render.
+        // A click, not a hover: the pointer crosses the reel on its way below,
+        // and each tile it passed would start another full render.
         onClick={onFocus}
         onMouseEnter={isVideo ? play : undefined}
         onMouseLeave={isVideo ? rest : undefined}
@@ -394,7 +354,6 @@ function ReelTile({
             </span>
           </>
         ) : (
-          // Not draggable itself, so a drag carries the tile, not the picture.
           <img src={picture} alt={label} loading="lazy" draggable={false} />
         )}
         <span className="rtile__pos">{index + 1}</span>

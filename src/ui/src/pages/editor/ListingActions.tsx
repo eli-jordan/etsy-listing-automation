@@ -28,14 +28,6 @@ import {
   LIFECYCLE_OF,
 } from "../listingLifecycle";
 
-/**
- * The listing editor's side of its head (UI doc, *The editor head* and §8):
- * Back to batch in the breadcrumb's place, and the action row's contents.
- */
-
-/** Back to batch, in the breadcrumb's place, only when the editor was opened
- * from the batch summary (`?batch=`). It names its batch in its tooltip, so
- * the identity row keeps its room for the name and Deploy. */
 export function BackToBatch({
   batch,
   member,
@@ -59,8 +51,6 @@ export function BackToBatch({
   );
 }
 
-/** The lifecycle gestures other than delete, as the action row words them.
- * `cancel` is the table's Undo on a pending delete. */
 const GESTURES: Record<Exclude<Gesture, "delete">, { label: string; icon: ReactNode }> = {
   cancel: {
     label: "Undo mark for deletion",
@@ -71,18 +61,6 @@ const GESTURES: Record<Exclude<Gesture, "delete">, { label: string; icon: ReactN
   renew: { label: "Renew", icon: <ArrowsClockwiseIcon aria-hidden="true" /> },
 };
 
-/**
- * The listing's action row: Open in, Create listing template, then Mark
- * reviewed for a batch's listing and the listing's lifecycle gestures --
- * exactly the Listings table's, as the server serves them on the detail
- *, with the table's confirmation for deleting.
- *
- * Delete goes through `DELETE`, like the table, after flushing: a wipe
- * leaves the editor for Listings; a mark adopts what the server answered.
- * The other gestures are ordinary edits to `lifecycle`, sent at once through
- * the editor's own autosave, whose response carries the new status.
- */
-/** Mark reviewed's tooltip: how to undo it, or why it is not available yet. */
 function reviewTitle(member: ListingBatch): string | undefined {
   if (member.reviewed) return "Mark needs review";
   return member.reviewable ? undefined : "Available once the batch has drafted this listing";
@@ -124,15 +102,13 @@ export function ListingActions({
     setConfirming(false);
     setError("");
     try {
-      // Waited for, so no write crosses the delete. Whether it landed does not
-      // matter: an edit that would not save goes with the listing.
+      // Awaited so no write crosses the delete; its outcome is moot.
       await flush();
       const row = await deleteListing(name);
       if (row === null) {
         onDeleted();
         return;
       }
-      // Already written: shown, not saved again.
       adopt({ lifecycle: "deleted", status: row.status, gestures: row.gestures });
     } catch {
       setError(`Could not ${deleteLabel(detail).toLowerCase()} ${name}`);
@@ -158,7 +134,6 @@ export function ListingActions({
         Create listing template
       </ActionLink>
       {((member !== null && !phone) || detail.gestures.length > 0) && <ActionDivider />}
-      {/* On a phone it sits beside Deploy instead (ReviewButton). */}
       {member !== null && !phone && (
         <ActionLink
           icon={
@@ -209,8 +184,6 @@ export function ListingActions({
   );
 }
 
-/** Sends Mark reviewed / Mark needs review, and keeps `member` in step with
- * what the batch answered. */
 function useReview(
   member: ListingBatch | null,
   setMember: (member: ListingBatch) => void,
@@ -228,12 +201,6 @@ function useReview(
   };
 }
 
-/**
- * Mark reviewed on a phone: a button beside Deploy rather than a row of the
- * "⋯" sheet, because reviewing is what a batch's listing is opened for, and
- * the two are the head's next steps. Pressed, it reads Reviewed, and a
- * second press marks it as needing review again.
- */
 export function ReviewButton({
   member,
   setMember,
@@ -267,15 +234,10 @@ export function ReviewButton({
   );
 }
 
-/** On a phone the actions live in the head's "⋯" sheet, which closes as
- * soon as one is picked; the delete confirmation goes on the page body so it
- * stays on screen after the sheet holding its trigger is hidden. */
 function OnBodyOnPhone({ phone, children }: { phone: boolean; children: ReactNode }) {
   return phone ? createPortal(children, document.body) : children;
 }
 
-/** Open in, on a phone: the two destinations as rows of the "⋯" sheet
- * rather than a dropdown inside it. */
 function OpenInLinks({
   etsyListingId,
   printifyProductId,

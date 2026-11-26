@@ -12,8 +12,9 @@ export function DescriptionSourcePicker({
   onSelect: (value: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  // A phone's keyboard would cover the options it is there to narrow.
   const phone = useIsPhone();
+  // A phone's keyboard would cover the options it is there to narrow.
+  const autoFocusSearch = !phone;
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -34,9 +35,7 @@ export function DescriptionSourcePicker({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  // On a phone the menu opens below a field that may sit low on the screen:
-  // scrolled up clear of the tab bar (its scroll margin), so no option is
-  // under it.
+  // The menu's scroll-margin keeps this clear of the phone's tab bar.
   useEffect(() => {
     if (open && phone) menu.current?.scrollIntoView({ block: "nearest" });
   }, [open, phone]);
@@ -70,7 +69,7 @@ export function DescriptionSourcePicker({
           <input
             className="input"
             type="search"
-            autoFocus={!phone}
+            autoFocus={autoFocusSearch}
             aria-label="Search description body sources"
             placeholder="Search common copy..."
             value={query}

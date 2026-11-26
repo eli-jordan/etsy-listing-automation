@@ -8,7 +8,7 @@ import {
   IDENTITY,
   nearestAllowedPose,
   toPhoto,
-  unitFrame,
+  quadToUnit,
 } from "./pose";
 
 /** The cases of `tests/core/unit/test_positions.py`, case for case, so this
@@ -29,9 +29,9 @@ function expectCorners(actual: Quad, expected: Quad, digits = 7) {
   });
 }
 
-describe("unitFrame", () => {
+describe("quadToUnit", () => {
   it("takes a quad's corners back onto the unit square", () => {
-    const [a, b, c, d, e, f, g, h, i] = unitFrame(BOX);
+    const [a, b, c, d, e, f, g, h, i] = quadToUnit(BOX);
     const point = toPhoto(BOX, { x: 0.25, y: 0.75 });
     const w = g * point.x + h * point.y + i;
     expect((a * point.x + b * point.y + c) / w).toBeCloseTo(0.25, 9);
@@ -58,7 +58,7 @@ describe("pose maths in the template homography's frame", () => {
     expectCorners(compose(box, IDENTITY), box, 8);
     const fit = decompose(box, box);
     expect(fit.pose.scale).toBeCloseTo(1, 10);
-    expect(fit.residual).toBeLessThan(1e-8);
+    expect(fit.residualPixels).toBeLessThan(1e-8);
   });
 
   it("moves and scales in unit-frame fractions", () => {
@@ -86,13 +86,13 @@ describe("pose maths in the template homography's frame", () => {
       expect(fitted.pose.offsetX).toBeCloseTo(pose.offsetX, 9);
       expect(fitted.pose.offsetY).toBeCloseTo(pose.offsetY, 9);
       expect(fitted.pose.rotation).toBeCloseTo(pose.rotation, 7);
-      expect(fitted.residual).toBeLessThan(1e-7);
+      expect(fitted.residualPixels).toBeLessThan(1e-7);
       expectCorners(compose(box, fitted.pose), posed);
     },
   );
 
   it("measures the residual in photo pixels", () => {
-    expect(decompose(FLAT, STRETCHED).residual).toBeGreaterThan(1);
+    expect(decompose(FLAT, STRETCHED).residualPixels).toBeGreaterThan(1);
   });
 
   it("repairs a non-uniform stretch by fitting first", () => {
@@ -117,7 +117,7 @@ describe("pose maths in the template homography's frame", () => {
     expect(nearest.offsetX).toBeCloseTo(0.1, 12);
     expect(nearest.offsetY).toBeCloseTo(-0.1, 12);
     expect(nearest.rotation).toBeCloseTo(15, 12);
-    expect(decompose(box, compose(box, nearest)).residual).toBeLessThan(1e-7);
+    expect(decompose(box, compose(box, nearest)).residualPixels).toBeLessThan(1e-7);
   });
 
   it.each([

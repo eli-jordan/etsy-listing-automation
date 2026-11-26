@@ -1,17 +1,11 @@
 import type { SeoRationaleEntry, SeoWarningEntry } from "../../../types";
 
-/** The shared shape of the title and description-lead drawers
- * (`docs/features/ai-seo-20260922/interactions.md` sections 3 and 5): exactly three
- * options, one click both decides and applies, **Reject all** closes it
- * unchanged, and there is no default selection or separate Accept step. */
+type Field = "title" | "description_lead";
 
-type Field = "title" | "description lead";
-
-/** `SeoRationaleEntry.used_in` uses the wire's field keys; this drawer is
- * labelled with the prose field name a seller reads. */
-function usedInKey(field: Field): "title" | "description_lead" {
-  return field === "title" ? "title" : "description_lead";
-}
+const FIELD_LABEL: Record<Field, string> = {
+  title: "title",
+  description_lead: "description lead",
+};
 
 export function AiChoiceDrawer({
   field,
@@ -26,18 +20,15 @@ export function AiChoiceDrawer({
 }: {
   field: Field;
   options: string[];
-  /** Why the proposal no longer describes the saved listing, from the
-   * server, or `null` while it still does. */
   staleReason: string | null;
   rationale: SeoRationaleEntry[];
   warnings: SeoWarningEntry[];
   observedText: string;
   onChoose: (value: string) => void;
   onReject: () => void;
-  /** Play the draw-out only when generation finishes while this page is open. */
   enter?: boolean;
 }) {
-  const relevantRationale = rationale.filter((entry) => entry.used_in.includes(usedInKey(field)));
+  const relevantRationale = rationale.filter((entry) => entry.used_in.includes(field));
 
   return (
     <div
@@ -46,7 +37,7 @@ export function AiChoiceDrawer({
       <aside
         className={staleReason ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
         role="region"
-        aria-label={`${field} AI suggestions`}
+        aria-label={`${FIELD_LABEL[field]} AI suggestions`}
       >
         <div className="seo-suggestion__topline">
           <div className="seo-suggestion__identity">
@@ -77,10 +68,6 @@ export function AiChoiceDrawer({
   );
 }
 
-/** A drawer's heading: its own, or -- for an out-of-date proposal -- what
- * changed (UI doc §8; `features/ai-seo-20260922/interactions.md` §7). The choices
- * below stay clickable with no confirmation: the heading is the warning
- * (ADR-0047). */
 export function SuggestionHeading({
   staleReason,
   children,
@@ -109,11 +96,8 @@ export function AiModeMark() {
   );
 }
 
-/** Warnings, rationale, and observed OCR text as one collapsed disclosure
- * per drawer (implementation plan, PR7 item 2; the settled "Validation"
- * decision that trademark findings are warnings, never a hard refusal).
- * Rendered by every AI Mode drawer, so it lives here rather than being
- * duplicated in `AiTagsDrawer`. */
+/** Warnings, rationale, and observed OCR text as one collapsed disclosure per
+ * drawer. Trademark findings are warnings, never a hard refusal. */
 export function AiSeoDisclosure({
   rationale,
   warnings,
