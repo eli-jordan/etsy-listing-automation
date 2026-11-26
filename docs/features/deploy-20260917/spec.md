@@ -411,10 +411,19 @@ run or still an Etsy `draft`. An `active`, `inactive` (paused or retired),
 is blocked: a listing goes live only with its own copy, images and videos on
 it, never Printify's mockups. Etsy charges its listing fee on activation.
 
-The choice is part of the plan, so the review shows the extra step and the
-fingerprint covers it (ADR-0039). Changing the toggle plans again. A
-workspace or batch apply must repeat its reviewed plan's choice or is refused
-before it is queued (ADR-0042). Run requests and summaries carry `publish`.
+The seller makes the choice when applying, not when planning (amended
+2026-11-26). The review is planned without `etsy_activate`, and the ADR-0039
+fingerprint leaves a stage chosen at apply out, so the apply that opts in
+still matches the review and changing the toggle plans nothing. The plan
+says instead which listings an opt-in would make live (`publishable`: new or
+still a draft, no `lifecycle` verb, nothing blocked), and the toggle names
+them, so an older draft held back on purpose is never published unseen. It
+is offered only when at least one listing is publishable. With the opt-in, a
+draft with nothing else to change still has work, so Apply stays available
+to publish it. A batch apply's progress view adopts `etsy_activate` from the
+apply's own plan, the one way it can differ from the review. Run requests
+and summaries carry `publish`; `plan --publish` on the CLI still plans the
+stage for reading.
 
 ---
 
