@@ -8,10 +8,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
 from tests.support.marigold import PreparationRuntime, marigold_template
 from tests.support.mobile import assert_mobile_page_fits, pinch, swipe
+from tests.support.workspace_files import read_workspace_yaml
 
 pytestmark = pytest.mark.browser
 
@@ -31,7 +31,8 @@ def app_options(workspace_root: Path, preparation_runtime: PreparationRuntime) -
 
 def _template_config(workspace_root: Path, template: str) -> dict:
     path = workspace_root / "mockup-templates" / template / "template.yaml"
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    config: dict = read_workspace_yaml(path)
+    return config
 
 
 def _open_calibrator(page):

@@ -16,13 +16,13 @@ import time
 from pathlib import Path
 
 import pytest
-import yaml
 from playwright.sync_api import expect
 
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import GARMENT_PROFILE, LISTING_TEMPLATE, a_listing_template
 from tests.support.builders import edit_garment_profile
+from tests.support.workspace_files import read_workspace_yaml
 
 pytestmark = pytest.mark.browser
 
@@ -34,7 +34,7 @@ def _template_file(root: Path, name: str = LISTING_TEMPLATE) -> Path:
 
 
 def _colours(root: Path, name: str = LISTING_TEMPLATE) -> list[str]:
-    colours: list[str] = yaml.safe_load(_template_file(root, name).read_text("utf-8"))["colors"]
+    colours: list[str] = read_workspace_yaml(_template_file(root, name))["colors"]
     return colours
 
 

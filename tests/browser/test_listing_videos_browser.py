@@ -15,7 +15,8 @@ import shutil
 from pathlib import Path
 
 import pytest
-import yaml
+
+from tests.support.workspace_files import read_workspace_yaml
 
 pytestmark = pytest.mark.browser
 
@@ -33,7 +34,7 @@ def _image(colour: str) -> dict[str, str]:
 
 def _listing_on_disk(workspace_root: Path) -> dict[str, object]:
     path = workspace_root / "listings" / "take-a-hike" / "listing.yaml"
-    document: dict[str, object] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    document: dict[str, object] = read_workspace_yaml(path)
     return document
 
 

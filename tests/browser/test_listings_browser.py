@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.workspace_files import read_workspace_yaml
+
 pytestmark = pytest.mark.browser
 
 
@@ -33,9 +35,8 @@ def _write_pricing_plan(workspace_root: Path) -> None:
 
 
 def _listing_yaml(workspace_root: Path, name: str) -> dict:
-    return yaml.safe_load(
-        (workspace_root / "listings" / name / "listing.yaml").read_text(encoding="utf-8")
-    )
+    document: dict = read_workspace_yaml(workspace_root / "listings" / name / "listing.yaml")
+    return document
 
 
 def _wait_for_listing(page, workspace_root: Path, name: str, **fields: object) -> dict:

@@ -18,11 +18,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 from PIL import Image
 
 from tests.support.builders import edit_listing
 from tests.support.scenes import expected_scene
+from tests.support.workspace_files import read_workspace_yaml
 
 pytestmark = pytest.mark.browser
 
@@ -37,15 +37,9 @@ def _designs(workspace_root: Path) -> None:
 
 
 def _design(workspace_root: Path) -> Any:
-    """The saved design, or None while the server renames a new copy into
-    place: Windows refuses to open a file mid-replace."""
-    try:
-        text = (workspace_root / "listings" / "take-a-hike" / "listing.yaml").read_text(
-            encoding="utf-8"
-        )
-    except PermissionError:
-        return None
-    return yaml.safe_load(text).get("design")
+    return read_workspace_yaml(workspace_root / "listings" / "take-a-hike" / "listing.yaml").get(
+        "design"
+    )
 
 
 def _wait_for_design(page: Any, workspace_root: Path, expected: object) -> None:
