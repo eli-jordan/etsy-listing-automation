@@ -5,9 +5,7 @@ import type { BoundingBox } from "../types";
 import { artworkTransform } from "./artworkTransform";
 
 export type Stroke = Extract<MaskOperation, { type: "stroke" }>;
-/** Mask pixels and strokes use original photo coordinates. The separate SVG
- * input layer captures a complete gesture so moving a placement cannot move
- * a saved exclusion and Undo never removes only part of a stroke. */
+/** Mask pixels and strokes are in original photo coordinates. */
 export function PlacementOverlay({
   box,
   designUrl,
@@ -77,16 +75,10 @@ export function PlacementOverlay({
     if (strokePointerId.current !== null && event.pointerId !== strokePointerId.current) return;
     finish();
   }
-  /** A second finger landing means a pinch, not paint: the stroke so far is
-   * dropped, not committed, and nothing paints until every finger lifts and
-   * a new one lands. Painting both fingers' moves into one stroke drew a
-   * line between them. */
   function drop() {
     current.current = null;
     setStroke(null);
   }
-  // Leaving mask mode commits an active gesture once, including Escape while
-  // the pointer is still held. The effect event uses the latest draft callback.
   const finishGesture = useEffectEvent(finish);
   useEffect(() => {
     if (editing) return () => finishGesture();
@@ -225,8 +217,7 @@ export function PlacementOverlay({
             pointerEvents="none"
             fill="none"
           >
-            {/* SVG photo units match the stroke, including resize and DPR.
-                  Non-scaling outlines stay legible on light and dark photos. */}
+            {/* Photo units, so the cursor matches the stroke at any size and DPR. */}
             <circle
               cx={0}
               cy={0}
