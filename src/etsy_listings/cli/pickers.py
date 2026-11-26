@@ -48,10 +48,14 @@ def marked_choices[T](
         Choice(
             value=item,
             marked=is_marked,
-            label=f"{marker if is_marked else ' ' * MARKER_WIDTH}  {label(item)}",
+            label=_marked_label(marker, label(item), is_marked=is_marked),
         )
         for item, is_marked in entries
     ]
+
+
+def _marked_label(marker: str, text: str, *, is_marked: bool) -> str:
+    return f"{marker if is_marked else ' ' * MARKER_WIDTH}  {text}"
 
 
 def build_blueprint_choices(
@@ -125,15 +129,13 @@ def build_pricing_plan_choices(
     *,
     marker: str = LOCAL_MARKER,
 ) -> list[Choice[Path]]:
-    """Rows for the picker, in :func:`pricing_plan_options`' order -- plans
-    declaring this exact garment profile first -- with those carrying the
-    marker. Which plans suit a garment is core's answer, shared with the
-    listings editor's picker; only the rendering is the wizard's."""
+    """Rows in :func:`pricing_plan_options`' order, the plans for this exact
+    garment profile first and marked."""
     return [
         Choice(
             value=option.path,
             marked=option.compatible,
-            label=f"{marker if option.compatible else ' ' * MARKER_WIDTH}  {option.path.stem}",
+            label=_marked_label(marker, option.path.stem, is_marked=option.compatible),
         )
         for option in pricing_plan_options(plans, garment_profile_slug)
     ]

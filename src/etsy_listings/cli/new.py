@@ -9,6 +9,7 @@ from etsy_listings.cli.pickers import (
     CREATE_NEW_PLAN_LABEL,
     LOCAL_MARKER,
     LOCAL_MARKER_FALLBACK,
+    Choice,
     build_blueprint_choices,
     build_design_choices,
     build_pricing_plan_choices,
@@ -159,18 +160,20 @@ def _pick_or_create_pricing_plan(
     workspace: Workspace, catalog: CatalogClient, offer: GarmentOffer
 ) -> Path:
     candidates = load_candidate_pricing_plans(workspace)
-    choices = build_pricing_plan_choices(candidates, offer.garment_profile_slug)
-    rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]
-    by_label = {c.label: c for c in choices}
+    rows: list[Choice[Path | None]] = [
+        *build_pricing_plan_choices(candidates, offer.garment_profile_slug),
+        Choice(value=None, label=CREATE_NEW_PLAN_LABEL),
+    ]
 
     marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
-    # `ask_choice` rather than `pick`: one of the rows is a sentinel that is
-    # not a plan at all, so there is no option to map it back to.
-    answer = prompts.ask_choice(
-        "Pricing plan", rows, marker_hint=f"{marker.strip()} = sizes match this garment exactly"
-    )
+    answer = prompts.pick(
+        "Pricing plan",
+        rows,
+        label=lambda row: row.label,
+        marker_hint=f"{marker.strip()} = sizes match this garment exactly",
+    ).value
 
-    if answer == CREATE_NEW_PLAN_LABEL:
+    if answer is None:
         name = prompts.ask_text("Pricing plan name:")
         created = create_starting_pricing_plan(
             workspace, PriceSources(catalog), name=name, offer=offer
@@ -183,7 +186,7 @@ def _pick_or_create_pricing_plan(
             )
         return created.path
 
-    return by_label[answer].value
+    return answer
 
 
 def _reject_existing_listing(workspace: Workspace, design_name: str) -> None:
