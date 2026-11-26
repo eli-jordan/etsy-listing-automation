@@ -30,7 +30,7 @@ from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import IncompleteApply, Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, StageState
 from etsy_listings.core.engine.run import apply_listings
-from etsy_listings.core.engine.stage import StageApplyResult
+from etsy_listings.core.engine.stage import Stage, StageApplyResult
 from etsy_listings.core.errors import UserFacingError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -47,7 +47,7 @@ class _AppliedDoc(BaseModel):
 
 
 @dataclass
-class _Stage:
+class _Stage(Stage[Any, _AppliedDoc, Any]):
     """A stage that reports whatever it is told to, and raises on request.
 
     Implements the full `Stage` protocol (not just `apply`) so it can be
@@ -96,7 +96,7 @@ def _planned(*stages: _Stage) -> PlannedRun:
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(
             StageState(
-                stage=s,  # type: ignore[arg-type]
+                stage=s,
                 desired={"stage": s.name},
                 applied=None,
                 live=None,
@@ -192,7 +192,7 @@ def test_a_run_with_nothing_left_to_do_still_clears_a_stale_marker(workspace_roo
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=(stage_plan,)),
         states=(
             StageState(
-                stage=_Stage("etsy_listing"),  # type: ignore[arg-type]
+                stage=_Stage("etsy_listing"),
                 desired={"stage": "etsy_listing"},
                 applied=None,
                 live=None,

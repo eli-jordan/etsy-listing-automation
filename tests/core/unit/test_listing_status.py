@@ -49,6 +49,13 @@ class TestTheTransitionTable:
         assert listing_status(StatusInputs(applied=False, edited=False, live=True)) == "live"
 
 
+@pytest.mark.parametrize("state", [None, "draft"])
+def test_an_unreadable_or_draft_etsy_state_is_never_reported_as_published(
+    state: str | None,
+) -> None:
+    assert not is_live_etsy_state(state)
+
+
 class TestTheIncompleteMarker:
     """ADR-0037. A per-stage lockfile write makes `state.lock.json` newer than
     `listing.yaml` partway through a deploy that then fails, so

@@ -3089,7 +3089,7 @@
         "type": "object"
       },
       "EtsyListingFacts": {
-        "description": "One side of the review: the fields the mock shows unchanged\ncontext for, named rather than left as an id.",
+        "description": "One side of the review, its section and shipping profile named rather than left as ids.",
         "properties": {
           "description": {
             "anyOf": [
@@ -3156,7 +3156,7 @@
         "type": "object"
       },
       "EtsyListingSnapshot": {
-        "description": "Both sides, in full -- the ``Plan`` this stage also returns carries\nonly what changed.",
+        "description": "Both sides of the review, in full.",
         "properties": {
           "desired": {
             "$ref": "#/components/schemas/EtsyListingFacts"

@@ -1,13 +1,6 @@
 """Listing-level lifecycle orchestration.
 
-Delete, retire and renew are one product concept, and they used to be a
-scavenger hunt: ``plan`` chose the pipeline, ``run`` wiped files and edited
-``lifecycle: renew`` out of the yaml, ``Plan.is_live`` read a lockfile key no
-stage writes, and the listings DELETE reconstructed "published?" from a
-different predicate. The copies could not even be compared in production,
-because one never saw a value.
-
-This module owns the questions those call sites were each answering:
+Delete, retire and renew are one product concept. This module owns its questions:
 
 * which stages to walk (retract-only, the normal pipeline, or all blocked)
 * whether the listing has left Etsy ``draft`` -- one GET, one fact
@@ -15,8 +8,7 @@ This module owns the questions those call sites were each answering:
 
 It does **not** own the retract stage's HTTP, ``listing_validation``'s
 sentences, or the pure badge table in ``status.py``. ``Plan.is_live`` is this
-module's published fact, threaded through ``build_plan``; a key that does not
-exist is not a fact.
+module's published fact, threaded through ``build_plan``.
 """
 
 from __future__ import annotations
@@ -24,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
@@ -52,14 +44,8 @@ UNREADABLE_ETSY = (
 
 @dataclass(frozen=True)
 class LifecycleWalk:
-    """What this listing's lifecycle does to a plan.
-
-    ``blocked`` wraps the walk rather than living in any one stage: missing
-    yaml, the wrong verb, or a delete/retire we cannot prove safe. ``stages``
-    in that case is the pipeline the caller passed, so every stage shows the
-    same refusal. Otherwise it is either that pipeline or ``RetractStage``
-    alone.
-    """
+    """What this listing's lifecycle does to a plan: the caller's pipeline,
+    ``RetractStage`` alone, or a ``blocked`` refusal every stage carries."""
 
     stages: list[AnyStage]
     published: bool
@@ -70,22 +56,21 @@ class LifecycleWalk:
     that no stage is blocked."""
 
 
-def published_on_etsy(ctx: RunContext, lock: Lockfile) -> bool | None:
-    """Whether the listing has left Etsy ``draft``.
+EtsyPublication = Literal["live", "never_live", "unknown"]
+"""``unknown``: an Etsy id but no client to ask, so delete/retire fails closed.
+No id is ``never_live``, including a Printify-only product."""
 
-    ``None`` means we have an id but no client to ask -- delete/retire must
-    not guess; the caller fails closed. No id is never-live (``False``),
-    including a Printify-only product.
-    """
+
+def published_on_etsy(ctx: RunContext, lock: Lockfile) -> EtsyPublication:
     listing_id = etsy_listing_id(lock)
     if listing_id is None:
-        return False
+        return "never_live"
     if ctx.etsy is None:
-        return None
+        return "unknown"
     live = ctx.etsy.get_listing(listing_id)
-    if live is None or live.state is None:
-        return False
-    return is_live_etsy_state(live.state)
+    if live is None or live.state is None or not is_live_etsy_state(live.state):
+        return "never_live"
+    return "live"
 
 
 def walk(
@@ -94,8 +79,6 @@ def walk(
     lock: Lockfile,
     stages: Sequence[AnyStage],
 ) -> LifecycleWalk:
-    """Missing yaml, wrong verb, or retract-only -- listing-level, so they
-    wrap the walk rather than living in any one stage."""
     pipeline = list(stages)
     present = ListingDocuments(ctx.workspace).exists(listing)
     if not present:
@@ -109,10 +92,10 @@ def walk(
             return LifecycleWalk(stages=pipeline, published=False, blocked=yaml_block.message)
 
     config = ctx.workspace.load_listing(listing)
-    published = published_on_etsy(ctx, lock)
-    if published is None and config.lifecycle in {"deleted", "retired"}:
+    publication = published_on_etsy(ctx, lock)
+    if publication == "unknown" and config.lifecycle in {"deleted", "retired"}:
         return LifecycleWalk(stages=pipeline, published=False, blocked=UNREADABLE_ETSY)
-    proven = False if published is None else published
+    proven = publication == "live"
     verb_block = check_lifecycle_verb(config.lifecycle, published=proven)
     if verb_block is not None:
         return LifecycleWalk(stages=pipeline, published=proven, blocked=verb_block.message)
@@ -126,8 +109,6 @@ def walk(
 
 
 def after_apply(ctx: RunContext, listing: str, planned: PlannedRun) -> None:
-    """The listing-level half of a successful apply: wipe after retract, or
-    consume ``lifecycle: renew``. ``plan`` never writes the yaml."""
     if _retract_succeeded(planned):
         remove_listing(ctx.workspace, listing)
         return
@@ -141,8 +122,6 @@ def _retract_succeeded(planned: PlannedRun) -> bool:
 
 
 def _omit_consumed_renew(ctx: RunContext, listing: str, planned: PlannedRun) -> None:
-    """``lifecycle: renew`` is a one-shot mark. Apply sends
-    ``state=active``, then deletes the key."""
     etsy_plan = next(
         (sp for sp in planned.plan.stage_plans if sp.stage == "etsy_listing"),
         None,

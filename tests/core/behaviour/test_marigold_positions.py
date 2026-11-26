@@ -128,3 +128,12 @@ def test_evidence_that_misses_the_position_blocks_the_plan(workspace_root):
     assert refusal is not None
     assert "cover listing positions" in refusal
     assert workspace.position_fits() == []
+
+
+def test_a_refused_position_is_named_before_maps_that_are_not_ready(workspace_root):
+    workspace, _ = listing_with_marigold(workspace_root)
+    edit_listing(workspace_root, template_positions=position(workspace, Pose(scale=1.5)))
+    planned = build_plan(a_context(workspace_root), FIXTURE_LISTING, a_lock(), (RenderStage(),))
+    refusal = planned.plan.stage_plans[0].blocked
+    assert refusal is not None
+    assert "scales the design to 1.50" in refusal

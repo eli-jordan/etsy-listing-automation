@@ -1,8 +1,7 @@
 """The closed event vocabulary emitted while the engine runs.
 
-These are domain values, not the UI server's wire models. A caller learns one
-interface and receives one ordered stream; adapters decide which events to
-render or serialise.
+Domain values, not the server's wire models: adapters decide which to render
+or serialise.
 """
 
 from __future__ import annotations
@@ -88,19 +87,17 @@ EngineEventSink = Callable[[EngineRunEvent], None]
 
 
 def ignore_engine_event(event: EngineRunEvent) -> None:
-    """The default sink for callers interested only in the final report."""
+    del event
 
 
 def never_stop() -> bool:
-    """The default stop signal: a run nobody can pause."""
     return False
 
 
 @dataclass(frozen=True)
 class RunHooks:
-    """How a caller watches and stops an engine run. ``on_event`` hears every
-    event the run emits; ``should_stop`` is asked at each boundary the run
-    may stop at -- between listings, and between stages while applying."""
+    """``should_stop`` is asked between listings, and between stages while
+    applying."""
 
     on_event: EngineEventSink = ignore_engine_event
     should_stop: Callable[[], bool] = never_stop

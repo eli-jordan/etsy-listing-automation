@@ -1,37 +1,3 @@
-"""Where a listing has got to: the states the UI badges it with.
-
-Two independent facts decide the original four, and neither is a state in
-its own right:
-
-* **has it been applied, and has it been edited since?** -- local, and the
-  lockfile's question, since the lockfile *is* the record of the last apply.
-* **is it live on Etsy?** -- remote, and nothing this tool ever does: the pipeline never activates a
-listing it creates, so
-  "live" only ever arrives because a human pressed publish in Shop Manager.
-
-Crossing them gives the transitions the product asks for::
-
-    draft --(apply)--> deployed --(publish on Etsy)--> live
-    draft --(apply)--> deployed --(edit)--> draft --(apply)--> deployed
-    live --(edit)--> dirty --(apply)--> live
-
-The asymmetry between ``draft`` and ``dirty`` is the point worth stating: an
-edit to something that was never live takes it back to ``draft``, because
-nobody is looking at the stale version -- whereas an edit to a live listing is
-``dirty``, because a buyer *is*, and the gap between what Etsy shows and what
-the workspace says is the thing worth a different colour.
-
-ADR-0035, ADR-0036 add delete/retire on top of those four, from two more facts:
-``listing.yaml``'s optional ``lifecycle:`` key, and Etsy's actual ``state``
-(not the collapsed live-or-not). Those win when both could apply: a retired
-listing is ``inactive``, not ``dirty``, even if the yaml was edited.
-
-This module lives in ``engine`` for the reason the "only ``engine`` computes a
-diff" invariant gives: it is the shop-side lifecycle rule, and the CLI's
-`status` command (Phase 6) has to answer it the same way the UI's badge does.
-The table's buttons are the same facts, as :func:`listing_gestures`.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -59,7 +25,6 @@ ListingGesture = Literal["delete", "retire", "un-retire", "cancel", "renew"]
 
 
 def remote_ids(workspace: Workspace, name: str) -> tuple[int | None, str | None]:
-    """Public remote identity, decoded from the engine's persistence format."""
     lock = Lockfile.read(workspace.lock_file(name))
     if lock is None:
         return None, None
@@ -76,7 +41,6 @@ def workspace_listing_status(
     lifecycle: ListingLifecycle | None = None,
     etsy_state: str | None = None,
 ) -> ListingStatus:
-    """Combine the last apply record with current local and remote facts."""
     lock = Lockfile.read(workspace.lock_file(name))
     applied = lock.parse_applied_for("etsy_listing", AppliedEtsyListing) if lock else None
     return listing_status(
@@ -93,9 +57,6 @@ def workspace_listing_status(
 
 
 def has_undeployed_changes(workspace: Workspace, name: str) -> bool:
-    """Whether the workspace holds changes to ``name`` its last apply did not
-    deploy: never applied, edited since, or an apply left incomplete. The
-    local half of ``draft`` and ``dirty``, answered without asking Etsy."""
     lock = Lockfile.read(workspace.lock_file(name))
     if lock is None or not lock.stages_completed or lock.incomplete is not None:
         return True
@@ -114,30 +75,10 @@ what `dirty` is for.
 
 
 def is_live_etsy_state(state: str | None) -> bool:
-    """Whether Etsy's ``state`` means this listing has been published.
-
-    ``None`` -- no id on record, or a state we could not read -- is **not**
-    live. A listing this tool cannot prove is published is reported as though
-    it were not, which is the reading that never overstates what has happened
-    to a shop.
-    """
     return state is not None and state in LIVE_ETSY_STATES
 
 
 def edited_since_apply(listing_file: Path, lock_file: Path) -> bool:
-    """Whether the listing document was written after the last apply.
-
-    Modification times, not a diff, and deliberately: the question the product
-    asks is "has it been *edited* since the last apply", and a write is what
-    an edit is. The cost is that an edit reverted before the next apply still
-    reads as an edit until one runs; the alternative is re-deriving every
-    stage's desired document -- half of which (`etsy_media`'s image ids) is
-    not knowable without the network -- to paint a badge.
-
-    A missing lockfile answers ``False`` rather than ``True``: it means the
-    listing has never been applied, which :func:`listing_status` reads on its
-    own and would otherwise be told twice.
-    """
     if not lock_file.is_file() or not listing_file.is_file():
         return False
     return listing_file.stat().st_mtime > lock_file.stat().st_mtime
@@ -147,17 +88,10 @@ def edited_since_apply(listing_file: Path, lock_file: Path) -> bool:
 class StatusInputs:
     """The facts a listing's badge is decided from (:func:`listing_status`).
 
-    ``lifecycle`` / ``etsy_state`` / ``last_applied_lifecycle`` are optional
-    so the original four-state table still answers from the two facts it
-    always had. When they *are* passed, delete/retire win over
-    ``live``/``dirty``: calling a paused listing ``live`` would lie.
-
-    ``incomplete`` is ADR-0037's marker -- a stage raised mid-``apply`` and left
-    the lockfile recording only what ran before it. A per-stage write makes
-    ``state.lock.json`` newer than ``listing.yaml`` partway through that
-    failed run, so ``edited`` alone would read the listing as clean. The
-    marker is folded into the same branch ``edited`` already decides: it
-    invents no status of its own, and delete/retire still win over both.
+    A ``lifecycle`` verb or a paused ``etsy_state`` wins over ``live``/``dirty``:
+    calling a paused listing ``live`` would lie. ``incomplete`` (ADR-0037) reads
+    like ``edited``, because a per-stage lockfile write leaves the lockfile
+    newer than ``listing.yaml`` partway through a failed apply.
     """
 
     applied: bool
@@ -170,22 +104,17 @@ class StatusInputs:
 
 
 def listing_status(inputs: StatusInputs) -> ListingStatus:
-    """The badge. Pure -- see the module docstring for what each combination
-    means and why, and :class:`StatusInputs` for the facts."""
     return (
         _lifecycle_status(inputs) or _etsy_state_status(inputs.etsy_state) or _deploy_status(inputs)
     )
 
 
 def _lifecycle_status(inputs: StatusInputs) -> ListingStatus | None:
-    """What the workspace's lifecycle intent decides, whatever Etsy says."""
     lifecycle = inputs.lifecycle
     if lifecycle == "deleted":
         return "pending-delete"
     if lifecycle == "renew" or (lifecycle is None and inputs.last_applied_lifecycle == "retired"):
-        # Un-retire and pending renew: the workspace wants it on sale, Etsy
-        # does not. Etsy cannot go back to `draft` (birth-only), so the
-        # badge is ours.
+        # Etsy has no way back to `draft`, so this badge is ours, not Etsy's.
         return "draft"
     if lifecycle == "retired":
         return "pending-retire" if inputs.etsy_state == "active" else "inactive"
@@ -215,13 +144,6 @@ def listing_gestures(
     etsy_state: str | None = None,
     published: bool = False,
 ) -> tuple[ListingGesture, ...]:
-    """Which buttons the listings table offers for this row.
-
-    ``published`` is :func:`is_live_etsy_state`: the listing has left
-    ``draft``. The original four badges do not decide the buttons -- a
-    ``dirty`` live listing still retires; a never-live ``draft`` still
-    deletes.
-    """
     if lifecycle == "deleted":
         return ("cancel",)
     if lifecycle == "retired":
