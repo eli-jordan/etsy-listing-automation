@@ -1,24 +1,3 @@
-"""The request, task, proposal, rationale, warning, and readiness shapes one
-AI Mode request passes between its layers (AI SEO implementation plan, PR3,
-item 1; `docs/features/ai-seo-20260922/interactions.md`).
-
-Plain frozen dataclasses, not pydantic models. A `SeoProposal` is never
-loaded from a config file -- it is built by `ai/validation.py` from a
-provider's already-JSON-decoded output, field by field, collecting every
-reason it is unusable rather than raising on the first (see that module's
-own docstring). Pydantic's validate-on-construct is the wrong shape for that:
-these types are the *destination* `validate_proposal` builds once normalizing
-and hard-validating a raw mapping has already succeeded, not a schema it
-validates against directly.
-
-`Deadline` is the one shared clock this feature uses. The settled plan gives
-the whole request -- provider call, one same-provider repair, and the
-permitted Codex-to-Claude fallback -- a single request budget; a `Deadline`
-is what lets that budget be threaded through the orchestration service and
-both provider adapters (PR4) as one value instead of each layer computing its
-own remaining time from a start timestamp it has to be separately handed.
-"""
-
 from __future__ import annotations
 
 import time
@@ -67,34 +46,12 @@ class ProviderTask:
 
 @dataclass(frozen=True)
 class GarmentContext:
-    """The garment facts the prompt's `listing.garment` object needs --
-    brand and model only, mirroring `seo_prompt.md`'s drafted context shape
-    exactly (see `ai/prompt.py`'s context payload). Nothing else about the
-    garment profile is in scope for SEO copy."""
-
     brand: str
     model: str
 
 
 @dataclass(frozen=True)
 class SeoRequest:
-    """The submitted generation inputs for one proposal request.
-
-    These are the inputs described in the AI and market feature specifications:
-    listing brief, garment
-    context, and the other editable listing values relevant to SEO copy.
-    `design_image` is a workspace-resolved path, handed to a provider adapter
-    to read directly -- this type carries no
-    image bytes, and no design *identity/content hash*: the request endpoint
-    captures that alongside this provider-facing request before generation,
-    so the server can compare pending choices with the same saved inputs.
-
-    Deliberately excludes an explicit "exact design text" field: the brief carries any
-    design wording that stylised lettering might obscure from OCR ("the
-    brief carries exact design text"), so `brief` alone covers input
-    authority #2 in `seo_prompt.md`'s ranked list.
-    """
-
     brief: str
     product_type: str
     etsy_category: str
@@ -111,10 +68,6 @@ class SeoRequest:
 
 @dataclass(frozen=True)
 class PhraseRationale:
-    """One of the proposal's exactly seven priority-phrase rationales
-    (`seo_prompt.md`'s "Priority search phrases" section, `used_in` renamed
-    from that draft's fixed enum values to match `RationaleField`)."""
-
     phrase: str
     intent: RationaleIntent
     reason: str
@@ -123,35 +76,14 @@ class PhraseRationale:
 
 @dataclass(frozen=True)
 class ProposalWarning:
-    """One disclosure attached to a proposal.
-
-    `kind="trademark"` is `ai/validation.py`'s own addition -- a soft,
-    non-blocking finding the hard-validation pass appends when copy mentions
-    a name on its curated watch list (settled decision: "Trademark findings
-    are warnings, not a hard refusal"). `kind="general"` (the default) covers
-    everything else, including every warning the provider itself returned in
-    its `warnings` array -- the model's own "missing information" disclosures
-    (`seo_prompt.md`'s "Missing information" section) arrive with no kind of
-    their own, and are not trademark findings.
-    """
-
     message: str
     kind: WarningKind = "general"
 
 
 @dataclass(frozen=True)
 class SeoProposal:
-    """A complete, hard-validated SEO proposal -- the only shape
-    `ai/validation.py.validate_proposal` ever hands back, and the only shape
-    later PRs' browser drawers (PR7) are built against.
-
-    Exactly three titles, twenty unique ranked tags (the first thirteen are
-    Best 13), three description leads, seven phrase rationales, warnings, and
-    observed OCR text -- the settled "Proposal" row in the implementation
-    plan's decision table. `tags` keeps its ranked order: index position *is*
-    the rank, so "first thirteen" is simply `tags[:13]`, with no separate
-    rank field to keep in sync.
-    """
+    """`tags` keeps its ranked order: index position *is* the rank, so Best 13
+    is simply `tags[:13]`, with no separate rank field to keep in sync."""
 
     titles: tuple[str, str, str]
     tags: tuple[str, ...]
@@ -163,53 +95,20 @@ class SeoProposal:
 
 @dataclass(frozen=True)
 class ProviderReadiness:
-    """Whether one provider can be asked to generate a proposal right now.
-
-    `reason` is set only when `ready` is `False` -- the sentence a caller
-    surfaces (or, at the readiness-endpoint layer PR5 builds, folds into
-    "AI Mode is hidden because..."). A provider that cannot guarantee the
-    agreed read-only execution boundary answers `ready=False` here rather
-    than being launched writable (implementation plan, "Provider adapters").
-    """
-
     ready: bool
     reason: str | None = None
 
 
 @dataclass(frozen=True)
 class RawProviderResult:
-    """A provider's unparsed response, still just text.
-
-    Decoding it as JSON, and everything downstream of that, is
-    `ai/validation.py.validate_proposal`'s job -- an adapter's own concern
-    stops at "the CLI ran and printed this" (implementation plan, "Provider
-    adapters": an adapter owns CLI invocation and structured-output parsing
-    down to text, never SEO validation itself).
-    """
-
     provider: str
     raw_output: str
 
 
 @dataclass(frozen=True)
 class RepairContext:
-    """What the orchestration service hands a provider for its one allowed
-    same-provider repair call (AI SEO implementation plan, PR4, item 3: "one
-    same-provider output repair").
-
-    This is the genuine gap PR3's `SeoProvider.generate(request, deadline)`
-    left open: a real Codex/Claude adapter runs one CLI invocation per call
-    with no durable session (implementation plan: "no durable provider
-    session"), so the repair turn has to carry everything the first call did
-    *plus* what went wrong -- there is no prior turn for the CLI to remember.
-    ``reasons`` is `ai/validation.py.ProposalValidationError.reasons` (or the
-    orchestrator's own "not valid JSON"/"not a JSON object" reason when the
-    first response could not even be decoded -- every malformed-response case
-    is repaired identically, per the settled decision that any validation
-    failure counts as malformed). ``prior_raw_output`` is the first call's
-    unparsed text, so a repair prompt can show the model exactly what it
-    produced rather than only describing the problem in the abstract.
-    """
+    """A provider CLI keeps no session, so the one repair call carries the
+    first call's unparsed output and every reason it failed validation."""
 
     prior_raw_output: str
     reasons: tuple[str, ...]
@@ -217,15 +116,8 @@ class RepairContext:
 
 @dataclass(frozen=True)
 class Deadline:
-    """A fixed point in time, expressed as a remaining budget.
-
-    Wraps a monotonic clock rather than `time.time()` -- a wall-clock
-    adjustment mid-request must never shorten or extend the request budget
-    the settled plan promises. Construct with :meth:`starting_now`; the bare
-    constructor exists for tests that want to pin `deadline_at` directly.
-    ``clock`` is `time.monotonic` unless a run injects its own, as the AI
-    runner does so its watchdog and every provider call read one clock.
-    """
+    """A monotonic point in time; the bare constructor is for tests that pin
+    ``deadline_at``, and a run may inject one ``clock`` for every reader."""
 
     deadline_at: float = field(default=0.0)
     clock: Callable[[], float] | None = field(default=None, compare=False, repr=False)
@@ -255,12 +147,6 @@ class Deadline:
 
 @dataclass(frozen=True)
 class AiLimits:
-    """One run's captured time limits, in whole minutes (ADR-0057).
-
-    ``settings.yaml``'s ``ai.step_limit_minutes`` and ``ai.run_limit_minutes``,
-    read once when the run starts. A settings edit affects the next run only.
-    """
-
     step_minutes: int = DEFAULT_STEP_LIMIT_MINUTES
     run_minutes: int = DEFAULT_RUN_LIMIT_MINUTES
 
@@ -279,14 +165,6 @@ class AiLimits:
 
 @dataclass(frozen=True)
 class RunBudget:
-    """ADR-0057's two budgets for one AI run.
-
-    ``deadline`` is the whole run's: every task, every fallback and market
-    research between them. :meth:`step` starts one provider's allowance,
-    shared by its attempt and its one repair; the next fallback provider
-    calls it again for a fresh one. A step never outlasts the run.
-    """
-
     limits: AiLimits
     deadline: Deadline
 

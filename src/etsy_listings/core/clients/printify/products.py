@@ -1,28 +1,5 @@
 """Printify's shop-scoped half over HTTP: the calls that write, and the ones
-that read state a shop owns rather than reference data everyone shares.
-
-Built against [docs/research/api-findings.md](../../../../docs/research/api-findings.md) rather
-than the API reference, because several of the answers are not the obvious
-ones and each has produced a plausible-looking wrong implementation:
-
-- The product comes back carrying the **whole blueprint matrix** -- 238
-  variants for a product created with 6 -- so every comparison goes through
-  the enabled subset.
-- ``variants`` on an update **merges by id**. Omitting one does not disable
-  it, so a dropped colour has to be retired explicitly, with a price, because
-  a variant entry is never partial.
-- ``print_areas.variant_ids`` must cover **every** variant on an update and
-  only the created ones on create, which is why ``apply`` branches and why an
-  update reads the product first.
-- ``POST products.json`` has no idempotency key and no conflict, so nothing on
-  the server stops a re-run making a second product.
-
-The token, the retries and the error shapes are
-:mod:`~etsy_listings.core.clients.printify.transport`, shared with the catalog
-reader. What is *not* shared is the surface: reaching these calls means
-holding a :class:`PrintifyClient`, which a caller that only reads the catalog
-never does.
-"""
+that read state a shop owns rather than reference data everyone shares."""
 
 from __future__ import annotations
 
@@ -55,8 +32,6 @@ class HttpPrintifyClient(PrintifyClient):
         response = self._transport.request("GET", "/v1/shops.json")
         return [Shop.model_validate(item) for item in response.json()]
 
-    # ------------------------------------------------------------- uploads
-
     def upload_image(self, file_name: str, contents: bytes) -> Upload:
         response = self._transport.request(
             "POST",
@@ -67,8 +42,6 @@ class HttpPrintifyClient(PrintifyClient):
             },
         )
         return Upload.model_validate(response.json())
-
-    # ------------------------------------------------------------ products
 
     def get_product(self, shop_id: int, product_id: str) -> Product | None:
         """The product, or ``None`` if this shop does not have it.
@@ -94,20 +67,11 @@ class HttpPrintifyClient(PrintifyClient):
         return Product.model_validate(response.json())
 
     def create_product(self, shop_id: int, spec: ProductSpec) -> Product:
-        """Create, hidden.
-
-        ``visible: false`` because a product nobody has reviewed has no
-        business being visible, and the field *is* writable despite the API
-        reference marking it read-only (docs/research/api-findings.md).
-        """
         body = {
             "title": spec.title,
             "description": spec.description,
             "blueprint_id": spec.blueprint_id,
             "print_provider_id": spec.print_provider_id,
-            # On create the print areas cover only the variants being created.
-            # On update they must cover every variant the product has -- see
-            # `update_product`.
             "variants": _variant_bodies(spec.variants, retiring={}),
             "print_areas": _print_area_bodies(spec.print_areas),
             "visible": False,
@@ -118,18 +82,6 @@ class HttpPrintifyClient(PrintifyClient):
     def update_product(
         self, shop_id: int, product_id: str, spec: ProductSpec, *, live: Product
     ) -> Product:
-        """Update, taking ``live`` because an update cannot be built without it.
-
-        Two measured rules make this differ from create rather than share it:
-
-        - **``variants`` merges by id.** Omitting one does not disable it, so a
-          colour the listing dropped has to be named with an explicit
-          ``is_enabled: false`` -- and carry a price, because a variant entry
-          is never partial.
-        - **``print_areas.variant_ids`` must cover every variant the product
-          has**, not the ones being changed. The payload that created the
-          product is rejected as an update of it (400 code 8251).
-        """
         retiring = {
             variant.id: variant.price
             for variant in live.variants
@@ -164,7 +116,6 @@ class HttpPrintifyClient(PrintifyClient):
             raise
 
     def set_visible(self, shop_id: int, product_id: str, *, visible: bool) -> None:
-        # A PUT carrying only `visible` leaves everything else alone (measured).
         self._transport.request(
             "PUT", f"/v1/shops/{shop_id}/products/{product_id}.json", json={"visible": visible}
         )
@@ -182,16 +133,6 @@ class HttpPrintifyClient(PrintifyClient):
         )
 
     def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
-        """The id of a product already carrying this copy, or ``None``. ADR-0023.
-
-        A walk, not a query: ``GET products.json`` accepts ``title``,
-        ``search`` and ``sku`` and ignores all three, so the match is
-        client-side over every page. Affordable because it runs only where a
-        create is already pending -- never on a no-op ``plan``.
-
-        Deleted products stay in the listing, and adopting one would bind the
-        lockfile to a product that can no longer be updated.
-        """
         page = 1
         while True:
             response = self._transport.request(
@@ -211,8 +152,6 @@ class HttpPrintifyClient(PrintifyClient):
 def _product_with_copy(
     products: list[dict[str, Any]], *, title: str, description: str
 ) -> str | None:
-    """The id of the first product on a page carrying this copy, skipping
-    deleted ones."""
     for raw in products:
         if raw.get("is_deleted"):
             continue
@@ -222,15 +161,6 @@ def _product_with_copy(
 
 
 def _variant_bodies(variants: dict[int, int], *, retiring: dict[int, int]) -> list[dict[str, Any]]:
-    """Enabled variants, plus explicit disables for the ones being retired.
-
-    **Every entry carries a price, including a disabled one.** Measured:
-    ``{"id":..., "is_enabled": false}`` alone is
-    ``400 8150 "variants.0.price: The variants.0.price field is required."``
-    A variant entry is never partial, which is also why the lockfile has to
-    remember what each enabled variant cost -- the desired document cannot
-    supply a price for a colour it no longer offers.
-    """
     bodies = [
         {"id": variant_id, "price": price, "is_enabled": True}
         for variant_id, price in variants.items()

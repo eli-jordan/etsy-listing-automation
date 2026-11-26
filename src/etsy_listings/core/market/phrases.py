@@ -1,11 +1,3 @@
-"""The ranked phrase list (features/market-seo-20260924/spec.md, *What the proposal sees*, part 1).
-
-For each tag the scored listings use: how many use it, and the sum of their
-scores normalised so the best phrase is 1. Code does the counting and
-weighting because a model is unreliable at counting across twenty blocks of
-text.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -17,8 +9,6 @@ PHRASE_LIMIT = 40
 
 
 def normalise(tag: str) -> str:
-    """A tag as one phrase: lower-cased, whitespace collapsed. ``Hiking
-    Shirt`` and ``hiking  shirt`` are what a buyer types the same way."""
     return " ".join(tag.casefold().split())
 
 

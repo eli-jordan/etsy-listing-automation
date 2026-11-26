@@ -1,11 +1,9 @@
-"""The Codex CLI adapter behind `SeoProvider` (AI SEO implementation plan,
-PR4, items 1-4): a non-interactive `codex exec` invocation with its
-read-only sandbox, ephemeral/no-session mode, structured output schema, and
-the design image.
+"""The Codex CLI adapter behind `AiProvider`: a non-interactive `codex exec`
+invocation with its read-only sandbox, ephemeral/no-session mode, structured
+output schema, and the design image.
 
 Every flag below was confirmed against the installed `codex exec --help`
-(codex-cli 0.155.0) rather than guessed -- see this PR's own report for the
-transcript. In particular:
+(codex-cli 0.155.0) rather than guessed. In particular:
 
 - ``-s, --sandbox read-only`` is the documented read-only sandbox policy.
 - ``--ephemeral`` is the documented "run without persisting session files"
@@ -60,21 +58,9 @@ writable (implementation plan, "Provider adapters")."""
 
 @dataclass
 class CodexProvider(cli_support.LocalCliProvider):
-    """The `SeoProvider` adapter for the local Codex CLI.
-
-    ``workspace_root`` is the real workspace directory `codex exec` is
-    launched in (`-C`, and the child process's cwd) -- the plan's "agreed
-    readable scope": full read access to the workspace tree, deliberately
-    including readable secrets and caches (implementation plan, "Provider
-    process"). A plain `Path` rather than a `Workspace`, mirroring
-    `ai/prompt.py.seed_default_prompt`'s own rule: the caller already knows
-    how to reach `Workspace.root`.
-
-    No prompt file: which prose a request is built from, and whether that
-    file exists at all, is the *request's* business (`ai/models.py.ProviderTask`,
-    ADR-0003). This adapter is only ever told "run the CLI on this text", so a
-    missing `prompts/seo.md` is reported by the endpoint that needed it
-    rather than as this CLI being unready.
+    """``workspace_root`` is the real workspace directory `codex exec` is
+    launched in (`-C`, and the child process's cwd): full read access to the
+    workspace tree, deliberately including readable secrets and caches.
     """
 
     binary: str = "codex"

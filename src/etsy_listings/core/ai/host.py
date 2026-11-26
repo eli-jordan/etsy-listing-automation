@@ -1,17 +1,3 @@
-"""What a local CLI caller asks of the machine: find a command, run it.
-
-Three questions cover every caller: the provider adapters' readiness probes
-and generation calls, model discovery, and the CLI's prompt backends. Asking
-them through one injected object rather than ``shutil``/``subprocess``
-directly is what lets a test describe a machine (this CLI is installed, its
-``--help`` says this) instead of patching module globals.
-
-``LOCAL_CLI_HOST`` is the real machine. It adds no policy: a lookup is
-``shutil.which``, so a cygwin-only binary stays invisible to it exactly as
-before, and callers that need cygwin's own shell (``cli/prompts.py``) still
-do that second step themselves.
-"""
-
 from __future__ import annotations
 
 import shutil
@@ -28,9 +14,7 @@ from etsy_listings.core.ai.process import ProcessResult, run_managed
 class CommandHost(Protocol):
     """Find and briefly run a command: probes and the CLI's fzf picker."""
 
-    def which(self, name: str) -> str | None:
-        """``name``'s executable path, or ``None`` when it is not on PATH."""
-        ...
+    def which(self, name: str) -> str | None: ...
 
     def run(
         self,
@@ -49,8 +33,6 @@ class CommandHost(Protocol):
 
 
 class CliHost(CommandHost, Protocol):
-    """A `CommandHost` that can also own a long-running provider process."""
-
     def run_managed(
         self,
         argv: Sequence[str],
@@ -59,14 +41,10 @@ class CliHost(CommandHost, Protocol):
         input_text: str,
         deadline: Deadline,
         cancel_event: threading.Event | None = None,
-    ) -> ProcessResult:
-        """`ai/process.py.run_managed`: deadline, cancellation, tree cleanup."""
-        ...
+    ) -> ProcessResult: ...
 
 
 class LocalCliHost:
-    """This machine, through ``shutil``, ``subprocess`` and `run_managed`."""
-
     def which(self, name: str) -> str | None:
         return shutil.which(name)
 

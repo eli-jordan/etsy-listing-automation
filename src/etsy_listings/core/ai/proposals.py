@@ -1,22 +1,3 @@
-"""The latest AI SEO proposal per listing, kept in server cache (ADR-0049; spec,
-*Durable AI proposals*; ADR-0003, ADR-0044 as amended by ADR-0047).
-
-``.cache/proposals/<listing>.json`` holds one record per listing:
-the ranked choices, the inputs frozen when they were generated, when, which
-run origin wrote it, and which of its three sections the seller has accepted
-or dismissed. Regeneration replaces it; there is no history and no expiry.
-It goes when the listing is deleted or fully applied, or ``.cache`` is
-cleared, and moves when the listing is renamed.
-
-It lives here rather than beside the UI so the engine can reach it (ADR-0050's
-cleanup after a full apply) without importing ``ui``.
-
-:func:`proposal_staleness` is the one answer to "does this proposal still
-describe its listing?". It was the browser's (``aiSeoStorage.isStale``),
-which meant the batch summary could not ask it; on the server the editor and
-the summary read the same reasons.
-"""
-
 from __future__ import annotations
 
 import json
@@ -50,7 +31,7 @@ class SeoRationaleEntry(BaseModel):
 
 
 class SeoWarningEntry(BaseModel):
-    """The wire shape of `ai/models.py.ProposalWarning`."""
+    """One disclosure attached to a proposal: a general note or a trademark warning."""
 
     message: str
     kind: SeoWarningKind = "general"
@@ -75,8 +56,7 @@ class SeoProposalSnapshot(BaseModel):
 
 
 class ProposalChoices(BaseModel):
-    """What the seller chooses from: the validated `ai/models.py.SeoProposal`,
-    field for field, as JSON can carry it."""
+    """The validated proposal the seller chooses from."""
 
     titles: list[str]
     tags: list[str]
@@ -113,9 +93,7 @@ ProposalOrigin = Literal["manual", "batch"]
 
 
 class ProposalResolution(BaseModel):
-    """Each section's state (spec, *Durable AI proposals*): a section the
-    seller accepted or dismissed stays resolved after a reload, so its drawer
-    does not present itself as new again. ``pending`` is still open."""
+    """Each section's state: an accepted or dismissed section stays resolved after a reload."""
 
     title: Resolution = "pending"
     tags: Resolution = "pending"
@@ -138,8 +116,7 @@ class ProposalRecord(BaseModel):
     resolution: ProposalResolution = Field(default_factory=ProposalResolution)
 
 
-class ProposalReplacedError(Exception):
-    """A resolution named a proposal that has since been regenerated."""
+class ProposalReplacedError(Exception): ...
 
 
 class ProposalStore:
@@ -186,7 +163,6 @@ class ProposalStore:
         generated_at: datetime,
         origin: ProposalOrigin,
     ) -> ProposalRecord:
-        """Replace ``listing``'s proposal with a new one, every section open."""
         record = ProposalRecord(
             listing=listing,
             proposal=choices,
@@ -227,7 +203,6 @@ class ProposalStore:
             return record
 
     def move(self, old: str, new: str) -> None:
-        """Rename's half of rename and delete hooks: the record follows the listing."""
         with self._lock(old, new):
             record = self.load(old)
             if record is None:
@@ -301,7 +276,6 @@ def proposal_staleness(frozen: SeoProposalSnapshot, now: SeoProposalSnapshot) ->
 
 
 def _profile_edits(frozen: SeoProposalSnapshot, now: SeoProposalSnapshot) -> list[str]:
-    """The profile's own facts that moved under an unchanged profile name."""
     reasons: list[str] = []
     if not _same_set(frozen.materials, now.materials):
         reasons.append("materials changed since")

@@ -41,36 +41,11 @@ detailed brief about a busy design is never refused for being thorough."""
 
 @dataclass(frozen=True)
 class BriefRequest:
-    """The inputs one brief draft is built from: the design, and nothing else.
-
-    A brief describes the *artwork*. It used to carry the garment as well --
-    brand, model, product type -- on the theory that the model should know it
-    was looking at something destined for a shirt. That context bought
-    nothing: `resources/brief.md` already tells the model the artwork will be
-    printed on a garment, and in the same breath tells it not to write about
-    the garment. What it did cost was a hard dependency on a garment profile,
-    so attaching a design before choosing one -- the ordinary order while
-    creating a listing -- failed the draft for a fact the draft was forbidden
-    to use.
-
-    No colours or category either, for the reason the garment went: they are
-    facts about the listing, not the design, and including them is how a
-    brief ends up asserting an audience the artwork never showed.
-    """
-
     design_image: Path
 
 
 @dataclass(frozen=True)
 class DesignBrief:
-    """A validated draft, ready to become the listing's ordinary `brief`.
-
-    One field, because that is genuinely all a brief is. It is not wrapped in
-    warnings or rationale the way a `SeoProposal` is: there is nothing here
-    for a seller to choose between, and the text lands in an editable field
-    they can simply rewrite.
-    """
-
     brief: str
 
 
@@ -88,24 +63,12 @@ unchecked."""
 
 
 class BriefValidationError(Exception):
-    """A provider's response could not become a `DesignBrief`.
-
-    Carries `reasons` rather than one message, matching
-    `ai/validation.py.ProposalValidationError`, because
-    `ai/orchestrator.py`'s one same-provider repair attempt sends every
-    reason at once -- a model told only "that was invalid" has no better
-    information on its second try than on its first.
-    """
-
     def __init__(self, *reasons: str) -> None:
         self.reasons: tuple[str, ...] = reasons
         super().__init__("; ".join(reasons))
 
 
 def default_brief_prompt_text() -> str:
-    """The packaged default ``prompts/brief.md`` -- read fresh from package
-    data each call, for the same reason
-    `ai/prompt.py.default_seo_prompt_text` is."""
     return (
         resources.files("etsy_listings.core.ai.resources")
         .joinpath("brief.md")
@@ -114,9 +77,6 @@ def default_brief_prompt_text() -> str:
 
 
 def build_brief_task(seller_prompt: str, request: BriefRequest) -> ProviderTask:
-    """One brief draft, as the thing a provider adapter actually runs --
-    `ai/prompt.py.build_seo_task`'s counterpart, and the only structural
-    difference between the two AI features at the provider boundary."""
     return ProviderTask(
         # No context block: the image is the whole input (see `BriefRequest`).
         prompt_text=build_task_prompt(seller_prompt, None, BRIEF_RESPONSE_SCHEMA),
@@ -126,16 +86,6 @@ def build_brief_task(seller_prompt: str, request: BriefRequest) -> ProviderTask:
 
 
 def validate_brief(parsed: object) -> DesignBrief:
-    """Hard-validate an already-JSON-decoded provider response.
-
-    Collects every reason before raising, the same way
-    `ai/validation.py.validate_proposal` does, so one repair attempt can fix
-    them all. Surrounding whitespace is normalised away first -- a leading
-    newline is a formatting difference, not a defect worth spending the one
-    repair on -- but nothing else about the text is rewritten: a brief that
-    is too long is refused rather than truncated, because a truncated brief
-    reads as a complete one and would be silently wrong about the design.
-    """
     if not isinstance(parsed, dict):
         raise BriefValidationError("response: expected a JSON object")
 

@@ -1,12 +1,4 @@
-"""The loopback server that catches Etsy's redirect.
-
-One request, one result, then gone. It exists for the few seconds between
-opening the browser and the user granting consent, and it takes its address
-from :data:`~etsy_listings.core.clients.etsy.oauth.REDIRECT_URI` rather than a port
-constant of its own -- Etsy matches the redirect against a registered string
-exactly, so that string is the only thing entitled to say which port this
-listens on.
-"""
+"""The loopback server that catches Etsy's redirect."""
 
 from __future__ import annotations
 
@@ -89,9 +81,6 @@ def wait_for_redirect(
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
-    """Answers requests to ``callback_path``, recording what Etsy's redirect
-    carried in ``outcomes["value"]``; every other path is a 404."""
-
     callback_path: ClassVar[str]
     outcomes: ClassVar[dict[str, Callback | OAuthError]]
 

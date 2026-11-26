@@ -1,9 +1,3 @@
-"""Advisory installed-CLI catalogs, cached per host for 30 minutes (ADR-0056).
-
-Only explicit catalog fields are read. Discovery never changes preferences or
-starts generation, and no account configuration or credentials are read here.
-"""
-
 from __future__ import annotations
 
 import json
@@ -72,8 +66,6 @@ class ModelDiscovery:
         self._worker: threading.Thread | None = None
 
     def start(self) -> None:
-        """Attempt discovery off the host's startup path. Construction does
-        no work. Repeated starts share the active attempt."""
         with self._lock:
             if self._worker is not None and self._worker.is_alive():
                 return
@@ -84,8 +76,6 @@ class ModelDiscovery:
             self._worker.start()
 
     def stop(self, *, timeout: float = 6.0) -> None:
-        """Cancel the probe's managed process tree and wait a bounded time.
-        A stopped owner starts no new probes until ``start`` is called."""
         self._cancel.set()
         with self._lock:
             worker = self._worker

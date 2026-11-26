@@ -1,9 +1,4 @@
-"""Backoff policy for the write-side clients. ADR-0009.
-
-Retry arrives in Phase 2 rather than Phase 6 with the rest of the rate-limiting
-work, because it is needed the moment anything writes: a 429 against a client
-that does not retry is a failed ``apply``, and Printify's shop budget is 600
-requests a minute shared with every other call the run makes.
+"""Backoff policy for every Etsy and Printify request. ADR-0009.
 
 **The method matters more than the status.** A 429 is a refusal to process --
 Printify rejected the request before touching it, so resending is free
@@ -12,10 +7,6 @@ may well have landed, and ``POST products.json`` has no idempotency key and no
 conflict, so a retried create is precisely how one design becomes two products
 (ADR-0023, and ``TestNothingStopsUsCreatingTheSameProductTwice`` in the e2e
 layer). So idempotent methods are retried on both; POST only on 429.
-
-Nothing here sleeps on its own clock or reads the global one: ``sleep`` and the
-jitter source are injected, which is what makes the whole module testable
-instantly and deterministically.
 """
 
 from __future__ import annotations
@@ -89,12 +80,7 @@ def wait_for(
     *,
     random: Callable[[], float] = _random.random,
 ) -> float:
-    """Seconds to wait before attempt ``attempt + 1``.
-
-    ``Retry-After`` wins where the server sent one -- it knows when its window
-    reopens and we are guessing -- but is still clamped to ``max_delay``: a
-    server asking for an hour is not a reason to block for an hour.
-    """
+    """Seconds to wait before attempt ``attempt + 1``."""
     asked = _retry_after_seconds(response)
     if asked is not None:
         return min(asked, policy.max_delay)
@@ -112,12 +98,9 @@ def wait_for(
 def _send_once(
     send: Callable[[], httpx.Response], method: str
 ) -> tuple[httpx.Response | None, httpx.TransportError | None]:
-    """One call: its response, or the transport error a retry may answer."""
     try:
         return send(), None
     except httpx.TransportError as exc:
-        # No response at all: the same ambiguity as a 5xx, so the same
-        # rule about which verbs may be sent again.
         if method.upper() not in IDEMPOTENT_METHODS:
             raise
         return None, exc

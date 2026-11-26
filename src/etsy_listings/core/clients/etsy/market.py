@@ -1,28 +1,5 @@
 """Reading the Etsy market: other sellers' active listings, their stats, and
-their review counts (features/market-seo-20260924/spec.md, *Search* and *Stats*).
-
-Three calls, each the one the spec names and nothing more -- the filtering,
-scoring and rationing that decide *which* calls to make live in research, not
-here:
-
-- :meth:`~EtsyMarketClient.search_active`: `findAllListingsActive`, ranked by
-  Etsy's own relevance for a US buyer, with no ``taxonomy_id`` (the item type
-  at the end of each query does that job).
-- :meth:`~EtsyMarketClient.listings_by_ids`: `getListingsByListingIds` with
-  the shop and images attached, a hundred ids a call.
-- :meth:`~EtsyMarketClient.review_count`: `getReviewsByListing`, one review
-  asked for and only its total read.
-
-Read-only by type, like:mod:`shops`: a caller holding an
-:class:`EtsyMarketClient` cannot reach a write however the transport underneath
-is shared. All three calls are unscoped -- the app key pair is enough --
-so the client needs no sign-in (see ``connections.etsy_market_client``).
-
-Pacing and retries are the transport's: header pacing through
-:class:`~etsy_listings.core.clients.etsy.transport.RateGate`, and the shared retry
-policy for 429, 5xx and network errors. What surfaces here after those is a
-failure research reports as *Etsy market search failed*.
-"""
+their review counts."""
 
 from __future__ import annotations
 
@@ -65,10 +42,6 @@ class HttpEtsyMarketClient:
         self._transport = transport
 
     def search_active(self, query: str, *, limit: int = 25) -> list[MarketCandidate]:
-        """Active listings matching ``query``, in the order Etsy ranks them
-        for a buyer (``sort_on=score``) who ships to the US -- the country the
-        seo prompt writes for. Deliberately no ``taxonomy_id``: nothing in a
-        listing or garment profile records one (features/market-seo-20260924/spec.md, *Search*)."""
         response = self._transport.get(SEARCH_PATH, params=search_params(query, limit=limit))
         return [MarketCandidate.model_validate(row) for row in _results(response.json())]
 
@@ -108,14 +81,9 @@ class HttpEtsyMarketClient:
         return [MarketListing.model_validate(row) for row in _results(response.json())]
 
     def review_count(self, listing_id: int) -> int:
-        """How many reviews the listing has: the nearest thing to per-listing
-        sales the API offers, and the one per-listing call, so the one
-        research rations (features/market-seo-20260924/spec.md, *Stats*).
-
-        ``limit=1`` because ``count`` is the total whatever the page size
-        (measured). A listing gone since the batch counts zero rather than
-        failing the run; a body with no ``count`` is refused, since zero
-        there would be a guess scored as evidence.
+        """A listing gone since the batch counts zero rather than failing the
+        run; a body with no ``count`` is refused, since zero there would be a
+        guess scored as evidence.
         """
         try:
             response = self._transport.get(
@@ -135,8 +103,6 @@ class HttpEtsyMarketClient:
 
 
 def search_params(query: str, *, limit: int) -> dict[str, str | int]:
-    """The exact parameters :meth:`HttpEtsyMarketClient.search_active` sends
-    for ``query``."""
     return {"keywords": query, "limit": limit, **SEARCH_DEFAULTS}
 
 

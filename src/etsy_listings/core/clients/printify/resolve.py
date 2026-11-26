@@ -1,11 +1,5 @@
-"""Name -> id resolution. Config refers to blueprints and print providers by
-name; this is the only place that turns one into a Printify integer id.
-
-A print provider is named by its title -- "Monster Digital" identifies one.
-A *blueprint* is not: Printify titles 706 "Unisex Garment-Dyed T-shirt", which
-several brands sell, and retitles it at will. Blueprints are therefore matched
-on brand + model, the pair anyone buying blanks quotes.
-"""
+"""Name -> id resolution: the only place a config name for a blueprint or
+print provider becomes a Printify integer id (ADR-0005)."""
 
 from __future__ import annotations
 
@@ -55,12 +49,6 @@ class CatalogResolutionError(UserFacingError, ValueError):
 
 
 class AmbiguousBlueprintError(UserFacingError, ValueError):
-    """Brand and model matched more than one blueprint.
-
-    Picking one arbitrarily would silently bind a profile to a garment nobody
-    chose, so this names the candidates and stops.
-    """
-
     def __init__(self, brand: str, model: str, candidates: list[Blueprint]) -> None:
         self.candidates = candidates
         listed = ", ".join(f"{b.title!r} (id {b.id})" for b in candidates)
@@ -77,13 +65,6 @@ def _blueprint_brand(brand: str) -> str:
 
 
 def resolve_blueprint(brand: str, model: str, blueprints: list[Blueprint]) -> Blueprint:
-    """The blueprint sold as ``brand`` ``model``.
-
-    Title is deliberately not consulted -- see the module docstring. Both
-    sides go through :func:`normalise`, so neither the catalog's ® nor a
-    stray capital in a hand-written profile decides whether a garment
-    resolves.
-    """
     wanted = (_blueprint_brand(brand), normalise(model))
     matches = [b for b in blueprints if (_blueprint_brand(b.brand), normalise(b.model)) == wanted]
 
@@ -197,8 +178,6 @@ def _check_sizes(variant_set: VariantSet, sizes: Sequence[str]) -> None:
 def _resolve_cells(
     cells: list[tuple[str, str, str]], by_cell: Mapping[tuple[str, str], Variant]
 ) -> VariantResolution:
-    """Each ``(slug, colour, size)`` cell's variant, or the cell as missing
-    when the catalog has dropped it."""
     resolved: list[ResolvedVariant] = []
     missing: list[tuple[str, str]] = []
     for slug, colour, size in cells:

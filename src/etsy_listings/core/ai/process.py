@@ -1,11 +1,3 @@
-"""Own a CLI's processes and pipes until every captured stream is drained.
-
-Windows uses an atomically assigned kill-on-close job. POSIX reserves a new
-session's leader until group termination, observing exit without reaping it.
-Cleanup never depends on finding a live launcher or scanning descendant PIDs.
-Adapters and discovery share this owner and know no platform-specific policy.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -32,8 +24,7 @@ each call rather than bound as a default, so a test can shorten it."""
 _REAP_TIMEOUT = 5.0
 
 
-class CliProcessError(RuntimeError):
-    """A command could not be launched, safely owned, or cleaned up."""
+class CliProcessError(RuntimeError): ...
 
 
 @dataclass(frozen=True)
@@ -130,7 +121,6 @@ def _wait(
     deadline: Deadline,
     cancel_event: threading.Event | None,
 ) -> _Ending:
-    """Poll until the command exits, its deadline passes or it is cancelled."""
     idle = cancel_event or threading.Event()
     while (ending := _ending(scope, deadline, cancel_event)) is None:
         if capture.worker.is_alive():
@@ -152,8 +142,6 @@ def _ending(
 
 
 def _clean_up(scope: _OwnedProcess, capture: _Capture) -> int:
-    """End every owned process and drain the pipes, within the cleanup
-    allowance; the exit code once reaped."""
     reap_at = time.monotonic() + _REAP_TIMEOUT
     try:
         scope.kill()

@@ -66,13 +66,11 @@ class EtsyApiError(UserFacingError, RuntimeError):
 
     A :class:`~etsy_listings.core.errors.UserFacingError`, so that one listing
     Etsy refuses is one listing reported rather than a batch ended.
-    The Phase 3 stages that will raise this inherit the behaviour by being
-    written against this type.
 
     Etsy's error envelope is a single ``{"error": "..."}`` string -- no code,
     no field name -- so there is nothing to branch on and the whole value is
     worth showing. ``message`` replaces that default wording for the few
-    refusals whose own text misdescribes them (the video budget, decision 9);
+    refusals whose own text misdescribes them (the video budget);
     ``error`` still carries Etsy's words.
     """
 
@@ -165,17 +163,12 @@ class RateGate:
 
 @dataclass(frozen=True)
 class Timing:
-    """The transport's sense of time: how it waits, the jitter its retries
-    draw, and the clock its rate gate reads. Tests replace all three."""
-
     sleep: Callable[[float], None] = time.sleep
     random: Callable[[], float] = _random.random
     clock: Callable[[], float] = time.monotonic
 
 
 class Transport:
-    """Send a request to Etsy and hand back a response worth reading."""
-
     def __init__(
         self,
         app_key: EtsyAppKey | AppKeySource,
@@ -206,9 +199,6 @@ class Transport:
             self._gate.observe(response.headers)
             return response
 
-        # Retries first, so a 429 that clears never becomes an exception, and
-        # one that does not surfaces as the real decoded error rather than a
-        # wrapper's summary of it.
         response = with_retries(send, method, self._policy, sleep=self._sleep, random=self._random)
 
         if response.status_code in (401, 403):
@@ -236,7 +226,7 @@ class Transport:
     def ping(self) -> int:
         """Verify the app key pair alone, and return the application id.
 
-        The one Etsy endpoint that needs no bearer, which makes it exactly the
+        It needs no bearer, which makes it exactly the
         check `auth` wants before it opens a browser: a bad keystring or a
         mistyped shared secret is caught at the question that asked for it,
         not three steps later in a redirect nobody can read.
@@ -251,10 +241,7 @@ def _rejected_message(status_code: int, *, bearer: BearerSource | None, detail: 
     """Name the credential that was actually rejected, and say what Etsy said.
 
     Etsy answers 401 for a bad app key pair, a bad bearer, *and* a missing
-    scope alike -- Phase 3 is the first phase where the third is plausible
-    (`shops_r` for shipping profiles) -- and the old message named only the
-    credential, which points a scope error at a keystring that was never the
-    problem. Carrying the server's own text is what tells the two apart.
+    scope alike; carrying the server's own text is what tells them apart.
     """
     if bearer is None:
         return (

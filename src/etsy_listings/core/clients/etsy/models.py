@@ -34,8 +34,6 @@ class Shop(BaseModel):
 
 
 class ShopSection(BaseModel):
-    """A section a listing can be filed under (`etsy.shop_section_id`)."""
-
     model_config = ConfigDict(extra="ignore")
 
     shop_section_id: int
@@ -44,13 +42,6 @@ class ShopSection(BaseModel):
 
 
 class ReturnPolicy(BaseModel):
-    """A listing-level return policy (`etsy.return_policy_id`).
-
-    Etsy gives these no title, so the only way to tell two apart is the terms
-    themselves -- which is why all three fields are carried rather than the id
-    alone: a picker offering "1122334" and "1122335" would be a coin toss.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     return_policy_id: int
@@ -76,9 +67,6 @@ class ReturnPolicy(BaseModel):
 
 
 class ShippingProfile(BaseModel):
-    """A shipping profile (`etsy.shipping_profile_id`), addressed by title
-    -- Etsy gives these a title, unlike a return policy."""
-
     model_config = ConfigDict(extra="ignore")
 
     shipping_profile_id: int
@@ -88,15 +76,6 @@ class ShippingProfile(BaseModel):
 
 
 class ProductionPartner(BaseModel):
-    """A fulfilment relationship the shop has declared.
-
-    Etsy gives it a name and a location but not, notably, a link to
-    `profile.print_provider` -- the two describe different things (decision
-    3's resolution ladder). Read the same way whether it came from
-    `getShopProductionPartners` or nested in a listing's own
-    `production_partners`.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     production_partner_id: int
@@ -105,9 +84,6 @@ class ProductionPartner(BaseModel):
 
 
 class ListingImage(BaseModel):
-    """One image on a listing, as `getListing?includes=Images` and
-    `uploadListingImage` both return it."""
-
     model_config = ConfigDict(extra="ignore")
 
     listing_image_id: int
@@ -122,16 +98,6 @@ class ListingImage(BaseModel):
 
 
 class ListingVideo(BaseModel):
-    """One video on a listing, as `getListing?includes=Videos`,
-    `uploadListingVideo` and a re-attach by id all return it (decision 9).
-
-    `video_state` is carried because an `inactive` video stays in every list
-    Etsy returns -- a caller that took presence for "on the listing" would
-    miss one that no longer shows. The dimensions are Etsy's transcode, not
-    the file's: a 1440 px upload came back 1440, a 540 px one 540, and
-    neither says where in the gallery the video sits; nothing does.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     video_id: int
@@ -143,13 +109,6 @@ class ListingVideo(BaseModel):
 
 
 class VariationImageLink(BaseModel):
-    """One `(property, value) -> image` swatch binding.
-
-    `value` is present on a read (`getListingVariationImages` returns the
-    value string alongside each id, which is what makes the reverse
-    projection free) and absent on a write -- Etsy only wants the ids sent.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     property_id: int
@@ -159,12 +118,6 @@ class VariationImageLink(BaseModel):
 
 
 class InventoryPropertyValue(BaseModel):
-    """One property on one inventory product-combination -- e.g. this
-    combination's colour, or its size. `property_name` is the *blueprint's*
-    option name (ADR-0002, "Comfort Colors® Colors" rather than "Color"), which
-    is why the colour property is identified by matching `values` against the
-    listing's own colours rather than by name or id (decision 6)."""
-
     model_config = ConfigDict(extra="ignore")
 
     property_id: int
@@ -191,17 +144,12 @@ class InventoryProduct(BaseModel):
 
 
 class Inventory(BaseModel):
-    """`getListingInventory`'s response: Printify's variant matrix as Etsy
-    materialised it, including the disabled cross-product cells Etsy adds to
-    keep the grid rectangular (ADR-0029 -- read here, never written)."""
-
     model_config = ConfigDict(extra="ignore")
 
     products: tuple[InventoryProduct, ...] = ()
 
 
 def _unescape_copy(value: dict[str, Any]) -> dict[str, Any]:
-    """A copy with the title, description and tags' HTML entities decoded."""
     value = dict(value)
     for key in ("title", "description"):
         if isinstance(value.get(key), str):
@@ -347,9 +295,6 @@ class ShopStats(BaseModel):
 
 
 class MarketListing(MarketCandidate):
-    """A candidate with the stats `getListingsByListingIds` adds: its shop,
-    and the thumbnail the top listings panel shows."""
-
     shop: ShopStats | None = None
     thumbnail_url: str | None = None
     """``url_170x135`` of the listing's first image by rank -- Etsy's

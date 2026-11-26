@@ -1,9 +1,4 @@
-"""In-memory Etsy, for the behaviour layer.
-
-Behaviour tests drive this; contract tests drive the HTTP client through
-`httpx`'s mock transport against transcripts. Asking either to do the other's
-job is the mistake that split exists to prevent.
-"""
+"""In-memory Etsy, for the behaviour layer."""
 
 from __future__ import annotations
 
@@ -47,18 +42,12 @@ from etsy_listings.core.config.media import MAX_IMAGES
 
 @dataclass(frozen=True)
 class GallerySlot:
-    """One position in a listing's gallery, as Shop Manager shows it."""
-
     kind: Literal["image", "video"]
     id: int
 
 
 @dataclass
 class _Attached:
-    """A video on a listing: when it was attached, and how many images the
-    listing had then -- the two facts decision 9 found its position hangs on.
-    """
-
     video_id: int
     state: str
     attached: int
@@ -69,9 +58,6 @@ class _Attached:
 def _videos_after(
     count: int, featured: list[_Attached], others: list[_Attached], image_count: int
 ) -> list[_Attached]:
-    """The videos Shop Manager shows right after the ``count``-th image: the
-    featured one after the first, each other after the image count it was
-    anchored at, clamped to the gallery."""
     first = featured if count == 1 else []
     return [*first, *(a for a in others if max(1, min(a.anchor, image_count)) == count)]
 
@@ -133,21 +119,7 @@ class FakeEtsyShopClient(_FakeShopMetadata, EtsyShopClient):
 
 
 class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
-    """Models the measured API quirks a tidy fake would hide: `image_ids`
-    as a full-replacement set that detaches whatever it omits, and
-    `overwrite: true` replacing an image in place -- a new id at the same
-    rank, everything else untouched -- rather than colliding with what was
-    there (features/etsy-listing-20260910/spec.md decision 5).
-
-    And the video gallery of decision 9, which behaviour tests can only see
-    through :meth:`gallery`: the video attached longest is featured at
-    position 2, any other is anchored after the number of images the listing
-    had when it was attached, and deleting the featured one promotes the
-    other. The listing's limits are enforced as Etsy enforces them -- two
-    active videos, ten associations per listing per 24 hours on ``clock`` --
-    and detaching an image through `image_ids` deletes its swatch link.
-
-    Where decision 9 measured nothing, the fake refuses with a
+    """Where Etsy's behaviour was never measured, the fake refuses with a
     :class:`ValueError` naming the gap rather than guessing, so a stage that
     comes to depend on unmeasured behaviour finds out in a test.
     """
@@ -211,8 +183,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
     def seed_inventory(self, listing_id: int, inventory: Inventory) -> None:
         self._inventory[listing_id] = inventory
 
-    # -------------------------------------------------------------- reads
-
     @override
     def get_listing(
         self, listing_id: int, *, include_images: bool = False, include_videos: bool = False
@@ -225,8 +195,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         return listing.model_copy(update={"images": images, "videos": videos})
 
     def _listed_videos(self, listing_id: int) -> tuple[ListingVideo, ...]:
-        """Newest *upload* first, inactive ones included -- the response's
-        order, measured, and nothing to do with the gallery's."""
         upload_order = list(self._shop_videos)
         on_listing = sorted(
             self._videos.get(listing_id, []),
@@ -292,8 +260,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         self.production_partner_calls += 1
         return list(self._production_partners)
 
-    # ------------------------------------------------------------- writes
-
     @override
     def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
         next_id = max((section.shop_section_id for section in self._sections), default=0) + 1
@@ -317,10 +283,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         return self._listings[listing_id].model_copy(update={"images": ()})
 
     def _set_image_ids(self, listing_id: int, image_ids: list[int]) -> None:
-        """Etsy keeps a detached image, so a later `image_ids` can bring it
-        back (decision 9's cut-and-restore) -- but not its swatch link, which
-        detaching deletes for good (measured). An id that is no image of this
-        listing, such as a video's, is refused whole (measured)."""
         known = self._known_images.setdefault(listing_id, {})
         if any(image_id not in known for image_id in image_ids):
             raise EtsyApiError(
@@ -393,9 +355,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
 
     @override
     def attach_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> ListingVideo:
-        """Re-attach a video the shop already has. One `inactive` on this
-        listing is reactivated (measured); either way it is anchored afresh
-        and counts against the budget, as a fresh upload does."""
         if video_id not in self._shop_videos:
             raise ValueError(f"unmeasured: attaching video {video_id}, which this shop never had")
         attached = self._videos.get(listing_id, [])
@@ -408,7 +367,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
 
     @override
     def delete_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> None:
-        """Off the listing, `active` or `inactive`; the file stays the shop's."""
         attached = self._videos.get(listing_id, [])
         if not any(a.video_id == video_id for a in attached):
             raise ValueError(f"unmeasured: deleting video {video_id}, which is not on the listing")
@@ -455,16 +413,11 @@ MARKET_BATCH_LIMIT = 100
 
 
 class MarketCall(NamedTuple):
-    """One call the fake answered or refused: the method, and what it asked
-    -- the query, the chunk of ids as a tuple, or the listing id."""
-
     method: MarketMethod
     argument: object
 
 
 def market_listing(listing_id: int, **fields: Any) -> MarketListing:
-    """A listing with plausible defaults, for seeding. ``shop_id`` defaults to
-    one shop per listing; override any field by name."""
     defaults: dict[str, Any] = {
         "shop_id": 1000 + listing_id,
         "title": f"Listing {listing_id}",
@@ -518,8 +471,6 @@ class FakeEtsyMarketClient(EtsyMarketClient):
         self._failures: list[_Failure] = []
         self.calls: list[MarketCall] = []
 
-    # ----------------------------------------------------------- seeding
-
     def seed_listing(self, listing: MarketListing, *, reviews: int = 0) -> None:
         with self._lock:
             self._listings[listing.listing_id] = listing
@@ -547,8 +498,6 @@ class FakeEtsyMarketClient(EtsyMarketClient):
     def count(self, method: MarketMethod) -> int:
         with self._lock:
             return sum(1 for call in self.calls if call.method == method)
-
-    # ----------------------------------------------------------- the calls
 
     @override
     def search_active(self, query: str, *, limit: int = 25) -> list[MarketCandidate]:

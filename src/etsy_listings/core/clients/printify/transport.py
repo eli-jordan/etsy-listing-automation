@@ -1,25 +1,6 @@
 """One authenticated connection to ``api.printify.com``, shared by both halves
 of the client.
 
-The catalog reader and the shop-scoped writer address different path families
-and carry different authority, but they talk to the *same host with the same
-token* -- so everything between "here is a path" and "here is a decoded
-response" is one thing, and used to be two. The duplicated half was: a
-``TokenSource`` alias, a lazy token resolve, a ``401/403`` branch into a
-bespoke auth error, a base URL, a timeout, and an ``httpx.Client`` fallback.
-
-Keeping them apart was not free. The catalog reader called
-``raise_for_status()`` and had **no retries at all**, so a 429 on
-``GET /v1/catalog/blueprints.json`` failed a ``new`` run outright while the
-identical 429 on a product write rode out its backoff window. Nobody
-decided that; it is what two implementations of one concern drift into.
-
-What stays split is the *authority*: :class:`~...protocol.CatalogClient` and
-:class:`~...protocol.PrintifyClient` remain separate protocols over separate
-path families, so nothing holding a catalog client can reach a call that
-creates a product. That was always the real content of the split, and it lives
-in the protocols rather than in a second copy of the plumbing.
-
 Error decoding leans on a shape this API keeps to without exception -- every
 failure observed against the live API is
 
@@ -114,8 +95,7 @@ class PrintifyApiError(UserFacingError, RuntimeError):
     -- ending the batch on it loses the forty-nine that would have succeeded.
 
     Carries ``code`` because Printify's numeric codes are stable enough to
-    branch on (8254 is "shop not connected to a sales channel", which
-    ``publish`` will want to recognise), and renders ``errors.reason`` because
+    branch on (:data:`WRONG_SHOP_CODE`), and renders ``errors.reason`` because
     that is the part a human can act on.
     """
 
@@ -153,13 +133,6 @@ def decode_error(response: httpx.Response) -> PrintifyApiError:
 
 
 class Transport:
-    """Send a request to Printify and hand back a response worth reading.
-
-    Everything a caller would otherwise repeat: resolving the token, attaching
-    it, riding out a retryable failure, and turning a refusal into an error
-    that names what to do about it.
-    """
-
     def __init__(
         self,
         token: TokenSource,
@@ -181,10 +154,6 @@ class Transport:
                 method, path, headers={"Authorization": f"Bearer {token}"}, **kwargs
             )
 
-        # Retries happen *before* the error decoding below, so a 429 that
-        # clears on the second attempt never becomes an exception at all --
-        # and one that does not clear surfaces as the real decoded error
-        # rather than a retry wrapper's summary of it.
         response = with_retries(send, method, self._policy, sleep=self._sleep)
 
         if response.status_code in (401, 403):

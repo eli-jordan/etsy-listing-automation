@@ -1,22 +1,3 @@
-"""Query extraction (features/market-seo-20260924/spec.md, *Query extraction*; ADR-0044): the
-request
-shape, the packaged default `prompts/market-queries.md`, the response schema,
-and the validation three buyer search queries pass before market search
-spends Etsy calls on them.
-
-One module for the same reason `ai/brief.py` is one: a small contract, and
-everything around it -- the delimited-context wrapper, the provider chain,
-the repair and the deadline -- is already owned elsewhere. A query request is
-an ordinary `ai/models.py.ProviderTask`.
-
-Validation checks exactly what the spec says and no more: three unique,
-non-empty queries. The prompt asks for each query to end in the buyer's word
-for the item type (the job a taxonomy filter would otherwise do), but a
-model that writes ``retro sunset hiking tees`` or ``hiking t shirt`` has
-still written a usable search, and refusing it would spend the one repair on
-a matter of wording.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -48,8 +29,6 @@ class MarketQueriesRequest:
 
 @dataclass(frozen=True)
 class MarketQueries:
-    """Three validated buyer search queries, in the model's order."""
-
     queries: tuple[str, str, str]
 
 
@@ -72,17 +51,12 @@ task's schema follows (`ai/prompt.py.RESPONSE_SCHEMA`)."""
 
 
 class MarketQueriesValidationError(Exception):
-    """A response could not become `MarketQueries`. Carries every reason, so
-    the one repair attempt hears them all (`ai/brief.py.BriefValidationError`)."""
-
     def __init__(self, *reasons: str) -> None:
         self.reasons: tuple[str, ...] = reasons
         super().__init__("; ".join(reasons))
 
 
 def default_market_queries_prompt_text() -> str:
-    """The packaged default ``prompts/market-queries.md``, read fresh each
-    call like the other two packaged prompts."""
     return (
         resources.files("etsy_listings.core.ai.resources")
         .joinpath("market-queries.md")
@@ -91,7 +65,6 @@ def default_market_queries_prompt_text() -> str:
 
 
 def build_market_queries_task(seller_prompt: str, request: MarketQueriesRequest) -> ProviderTask:
-    """One extraction, as the thing a provider adapter runs."""
     context = {"listing": {"brief": request.brief, "garment": {"title": request.garment_title}}}
     return ProviderTask(
         prompt_text=build_task_prompt(seller_prompt, context, MARKET_QUERIES_RESPONSE_SCHEMA),

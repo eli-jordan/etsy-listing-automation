@@ -40,8 +40,6 @@ class Invocation:
 
 @dataclass
 class LocalCliProvider(ABC):
-    """One public provider contract; subclasses own their CLI command and response format."""
-
     workspace_root: Path
     binary: str
     model: str | None = None

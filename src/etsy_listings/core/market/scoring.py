@@ -1,11 +1,3 @@
-"""The scoring maths, pure (features/market-seo-20260924/spec.md, *Scoring*).
-
-Each metric becomes a 0-1 **percentile within the set being scored**: a
-single viral listing then cannot swamp the rest, and a favourite count and a
-star rating can be added together. The weighted sum of those percentiles,
-divided by the total weight, is a listing's score.
-"""
-
 from __future__ import annotations
 
 import math
@@ -15,7 +7,6 @@ from etsy_listings.core.config.market_weights import METRICS, MarketWeights, Met
 
 
 def _last_tied(keys: list[float], order: list[int], start: int) -> int:
-    """The last position in ``order`` holding the same key as ``start``."""
     end = start
     while end + 1 < len(order) and keys[order[end + 1]] == keys[order[start]]:
         end += 1
@@ -40,7 +31,6 @@ def percentiles(values: Sequence[float | None]) -> list[float]:
         return []
     if count == 1:
         return [0.5]
-    # None sorts first: -inf is below every real value, including 0.
     keys = [-math.inf if value is None else value for value in values]
     order = sorted(range(count), key=lambda index: keys[index])
     result = [0.0] * count
@@ -72,8 +62,6 @@ def rescaled(weights: MarketWeights, *, exclude: Collection[Metric] = ()) -> dic
 def weighted(
     metrics: dict[Metric, Sequence[float | None]], weights: dict[Metric, float]
 ) -> list[float]:
-    """Each listing's score, 0-1: the sum over ``weights`` of its percentile
-    for that metric times the (already rescaled) weight."""
     count = len(next(iter(metrics.values()), ()))
     scores = [0.0] * count
     for metric, weight in weights.items():

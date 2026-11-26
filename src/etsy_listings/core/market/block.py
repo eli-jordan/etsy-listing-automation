@@ -1,16 +1,4 @@
-"""The market-data block the proposal prompt receives (features/market-seo-20260924/spec.md, *What
-the proposal sees*).
-
-Two parts, in this order:
-
-1. the **ranked phrase list** -- code's counting and weighting, which a model
-   is unreliable at; and
-2. the **top eight listings verbatim** -- title, every tag and the
-   description's lead, in score order -- which show how winning titles and
-   openings are *built*, as a list of phrases cannot.
-
-Full descriptions stay out: they cost the most tokens and carry the most
-copying and prompt-injection risk, and the proposal only writes a lead.
+"""The market-data block the proposal prompt receives.
 
 Everything in the block but its fixed note is other sellers' text, so it is
 sent as JSON between fixed delimiters -- the same "this is data" boundary

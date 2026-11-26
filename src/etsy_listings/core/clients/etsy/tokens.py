@@ -1,29 +1,4 @@
-"""The OAuth tokens on disk, and the only code that rotates them.
-
-Etsy issues a new **refresh** token on every refresh, so the file write is
-part of the protocol rather than a cache of it: lose the write and the next
-run has no way back to a working credential except the browser. Everything
-here follows from that.
-
-- The write is **atomic and lands before the new access token is used**, so a
-  crash mid-rotation leaves either the old pair or the new one, never a
-  half-file and never a rotated-but-unrecorded token.
-- Refresh is **serialised in-process per token file**, because `plan` fans
-  its read-only fetches across a thread pool, and the Admin page's
-  connection and lookup requests each build their own store: two refreshes
-  of the same token would each invalidate the other's. The lock belongs to
-  the resolved file, not to a store, so every store for one file shares it
-  and stores for other workspaces never wait on it.
-- An `invalid_grant` is **re-read before it is believed**: a second process
-  may have rotated the pair a moment ago, and the answer to that is to use
-  what it wrote, not to send the user to a browser. That re-read is the only
-  defence across processes: a process that refreshes between this one's
-  refresh and its save still races it, which no in-process lock can close.
-
-The store never builds a client. It is handed a `refresh` callable, because
-the token endpoint is the one Etsy endpoint that needs no bearer -- which is
-what keeps this module free of a cycle through:mod:`transport`.
-"""
+"""The OAuth tokens on disk, and the only code that rotates them."""
 
 from __future__ import annotations
 
@@ -173,8 +148,6 @@ def _rotation_lock(path: Path) -> threading.Lock:
 
 
 class TokenStore:
-    """Reads, refreshes and writes the token file. The only writer of it."""
-
     def __init__(
         self,
         path: Path,
@@ -191,11 +164,6 @@ class TokenStore:
         return self._path
 
     def load(self) -> StoredTokens | None:
-        """What is on disk, without refreshing anything.
-
-        For `auth --check` and for the wizard's "you are already signed in" --
-        the questions that want the stored state rather than a usable token.
-        """
         try:
             raw = self._path.read_text(encoding="utf-8")
         except OSError:
@@ -224,19 +192,11 @@ class TokenStore:
         temp.replace(self._path)
 
     def record(self, response: TokenResponse) -> StoredTokens:
-        """Store the result of a fresh authorization-code grant."""
         tokens = StoredTokens.from_response(response, now=self._now())
         self.save(tokens)
         return tokens
 
     def access_token(self) -> str:
-        """A token good for the next few minutes, refreshing if needed.
-
-        This is the callable the transport is built with, and it is resolved
-        lazily on every request rather than once at construction -- `plan`
-        builds clients it may never call, and a workspace that has not reached
-        Phase 3 must not be made to sign in to build one.
-        """
         lock = _rotation_lock(self._path)
         if not lock.acquire(timeout=ROTATION_WAIT_SECONDS):
             raise EtsyRefreshBusyError(
@@ -256,14 +216,6 @@ class TokenStore:
             lock.release()
 
     def _rotate(self, stored: StoredTokens) -> StoredTokens:
-        """Exchange the refresh token, tolerating a rotation we did not make.
-
-        The re-read is the whole point: two runs in parallel each hold a pair,
-        the first rotates, and the second's `invalid_grant` means "you are
-        holding yesterday's token", not "the user must sign in". Re-reading
-        answers which of the two it was, and only a genuinely dead grant
-        reaches the user.
-        """
         try:
             response = self._refresh(stored.refresh_token)
         except OAuthError as exc:
@@ -280,8 +232,6 @@ class TokenStore:
             ) from exc
 
         rotated = StoredTokens.from_response(response, now=self._now())
-        # Saved before it is returned, never after: a caller that used a token
-        # this process failed to record would leave the file naming a refresh
-        # token Etsy has already retired.
+        # Saved before it is returned (ADR-0027).
         self.save(rotated)
         return rotated

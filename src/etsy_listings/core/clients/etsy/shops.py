@@ -1,14 +1,4 @@
-"""Reading a shop's identity, sections and return policies.
-
-Everything `setup` needs from Etsy and nothing that writes -- the protocol is
-separate from the listing surface Phase 3's stages use for the reason ADR-0024
-gives: authority is a property of the type, so a caller holding this one
-cannot reach `updateListing` however the transport underneath is shared.
-
-All four calls are **unscoped**. Etsy requires only the app key pair for them,
-which is what lets `setup` resolve every id in `shop.yaml` before, or without,
-a browser sign-in.
-"""
+"""Reading a shop's identity, sections and return policies."""
 
 from __future__ import annotations
 
@@ -25,16 +15,12 @@ class ShopMetadataClient(Protocol):
 
 
 class EtsyShopClient(ShopMetadataClient, Protocol):
-    """What `setup` asks Etsy. Reads only, and shop-level only."""
-
     def find_shops(self, name: str) -> list[Shop]: ...
 
     def shop_by_owner(self, user_id: int) -> Shop | None: ...
 
 
 class ShopMetadataReads:
-    """The unscoped section/policy reads shared by shop and listing clients (ADR-0024)."""
-
     _transport: Transport
 
     def shop_sections(self, shop_id: int) -> list[ShopSection]:

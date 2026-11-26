@@ -77,8 +77,6 @@ def auth_file() -> Path:
 
 @dataclass
 class GrokProvider(cli_support.LocalCliProvider):
-    """The `AiProvider` adapter for the local Grok CLI."""
-
     binary: str = "grok"
     credentials: Path | None = None
     """The session file readiness checks; ``None`` is `auth_file`'s."""
@@ -153,13 +151,6 @@ class GrokProvider(cli_support.LocalCliProvider):
         )
 
     def _extract_result_text(self, stdout: str) -> str:
-        """The proposal JSON from ``--output-format json``.
-
-        ``--json-schema`` puts the schema-valid object in
-        ``structuredOutput``. ``text`` is only the model's own rendering of
-        that answer, and it is often prose or a fenced block rather than
-        JSON. The structured object is what gets validated.
-        """
         envelope = cli_support.json_object(PROVIDER_NAME, stdout)
         if envelope.get("is_error") or envelope.get("error"):
             reported = stdout

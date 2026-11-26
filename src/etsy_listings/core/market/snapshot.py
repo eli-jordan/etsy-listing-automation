@@ -1,17 +1,3 @@
-"""The latest market research per listing, on disk (features/market-seo-20260924/spec.md, *Cache*).
-
-``.cache/market/snapshots/{name}.json`` exists so the top listings panel can
-show a listing's comparables after a reload. It is written only by a run
-whose research **succeeded** -- a failed run leaves the previous one in place,
-while a search that found nothing comparable replaces it, because that *is*
-the latest answer. It moves with the listing on rename and goes when the
-listing is deleted, as ``.cache/renders/{name}/`` does. Both are
-``core/listing_artifacts.py``'s job, not this module's.
-
-Read-only to the seller in this version: nothing edits a snapshot but the
-next research.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -26,10 +12,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 class MarketSnapshot(BaseModel):
-    """One research, as the panel reads it back: the result's fields, when
-    the search ran, and the exact block the proposal was given. Holds each
-    listing's lead, never its full description (features/market-seo-20260924/spec.md, *What the
-    proposal sees*)."""
+    """One listing's latest market research, as the top listings panel reads it back."""
 
     model_config = ConfigDict(frozen=True)
 

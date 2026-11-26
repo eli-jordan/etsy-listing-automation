@@ -1,10 +1,4 @@
-"""One-off, uncached live FX-rate fetch for ``new``'s pricing-plan wizard only.
-
-The wizard uses one current rate while choosing a saved retail price. It does
-not cache rates or calculate a full margin model; deployment uses the saved
-amount without another conversion. The original broader FX design remains
-unbuilt, so it is not a dependency of this helper.
-"""
+"""One-off, uncached live FX-rate fetch for ``new``'s pricing-plan wizard only."""
 
 from __future__ import annotations
 

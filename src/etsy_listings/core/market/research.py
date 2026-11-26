@@ -1,18 +1,3 @@
-"""Three buyer queries in, twenty scored comparable listings out
-(features/market-seo-20260924/spec.md, *Market search* and *Scoring*).
-
-The order of work is the order of cost. Searches and the batch are cheap and
-fixed -- three and one -- so every candidate gets them. The review count is
-the only per-listing call, so it is rationed: the candidates are ranked first
-on the free signals, and only the top twenty are asked. With an empty cache a
-research run therefore makes at most 3 + 1 + 20 calls.
-
-Calls go out at most :data:`MAX_IN_FLIGHT` at a time; pacing and retries are
-the transport's. A call that still fails after those fails the whole run
-( :class:`MarketResearchError`): the market data is the primary driver of the
-proposal's wording, so there is no quietly carrying on without it.
-"""
-
 from __future__ import annotations
 
 import threading
@@ -77,10 +62,6 @@ class _Candidate:
 
 @dataclass(frozen=True)
 class ResearchSettings:
-    """The seller's side of a search: the ranking ``weights`` from settings
-    (the defaults when ``None``), and ``own_shop_id``, ``shop.yaml``'s
-    ``etsy.shop_id`` -- a listing from it is marked, never excluded."""
-
     weights: MarketWeights | None = None
     own_shop_id: int | None = None
 
@@ -93,15 +74,6 @@ def research(
     settings: ResearchSettings = ResearchSettings(),
     cancel_event: threading.Event | None = None,
 ) -> MarketResult:
-    """Search, filter, rank on the free signals, count reviews for the top
-    twenty, score them, and list their phrases.
-
-    ``today`` is the moment listing ages are measured from.
-    ``cancel_event`` is checked before every call.
-
-    Raises :class:`MarketResearchError` when an Etsy call fails, and
-    :class:`ResearchCancelledError` when ``cancel_event`` is set.
-    """
     calls = _Calls(cancel_event or threading.Event())
     weights = settings.weights or MarketWeights()
     queries = tuple(queries)
@@ -111,9 +83,6 @@ def research(
 
     now = today.timestamp()
     old_enough = _old_enough(found, now)
-    # Relaxing (features/market-seo-20260924/spec.md, *Filters*): the age filter is the only one
-    # research applies itself, so dropping it is a second pass over what was
-    # already found -- a new search would return the same listings.
     relaxed = not old_enough
     survivors = old_enough or found
     candidates = _with_stats(calls, client, survivors) if survivors else []
@@ -141,9 +110,6 @@ def research(
         relaxed=relaxed,
         empty=False,
     )
-
-
-# ------------------------------------------------------------------ calls
 
 
 class _Calls:
@@ -192,9 +158,6 @@ class _Calls:
             raise ResearchCancelledError
 
 
-# -------------------------------------------------------------- the pipeline
-
-
 def _merge(searches: Sequence[Sequence[MarketCandidate]]) -> list[tuple[MarketCandidate, int]]:
     """Every candidate once, with its best (lowest) 1-based position across
     the queries, best first -- ties by id, so the order is the same whichever
@@ -235,8 +198,6 @@ def _old_enough(
 def _with_stats(
     calls: _Calls, client: EtsyMarketClient, survivors: Sequence[tuple[MarketCandidate, int]]
 ) -> list[_Candidate]:
-    """Each survivor's batch fields with its search rank, for those Etsy
-    still returns."""
     ranks = {candidate.listing_id: rank for candidate, rank in survivors}
     stats = calls.one(lambda: client.listings_by_ids([c.listing_id for c, _ in survivors]))
     return [
@@ -265,14 +226,12 @@ def _order(
 def _metrics(
     candidates: Sequence[_Candidate], now: float, reviews: Sequence[int] | None
 ) -> dict[Metric, Sequence[float | None]]:
-    """Each signal's raw value per candidate, in candidate order."""
     shops = [candidate.listing.shop for candidate in candidates]
     return {
         "reviews": list(reviews) if reviews is not None else [0.0] * len(candidates),
         "favourites_per_day": [
             _per_day(c.listing.num_favorers, c.listing, now) for c in candidates
         ],
-        # Inverted: 1st is best, and percentiles rank a higher value higher.
         "search_rank": [-c.search_rank for c in candidates],
         "views_per_day": [_per_day(c.listing.views, c.listing, now) for c in candidates],
         "shop_sales": [_shop_sales(shop) for shop in shops],
@@ -286,9 +245,6 @@ def _shop_sales(shop: ShopStats | None) -> int:
 
 @dataclass(frozen=True)
 class _Scoring:
-    """What is the same for every scored row of one run: the moment ages are
-    measured from, and the seller's own shop."""
-
     now: float
     own_shop_id: int | None
 
@@ -321,9 +277,6 @@ class _Scoring:
 
 
 def _empty(queries: tuple[str, ...], found: int, *, relaxed: bool) -> MarketResult:
-    """Nothing comparable: the one outcome that lets the proposal go ahead
-    without market data, since the calls worked and there was simply
-    nothing to learn from (features/market-seo-20260924/spec.md, *Filters*)."""
     return MarketResult(
         queries=queries,
         found=found,

@@ -1,22 +1,4 @@
-"""The two Printify boundaries. One host, one token, two authorities.
-
-**This split is the whole point of having two protocols.** A caller that reads
-reference data holds a :class:`CatalogClient` and cannot reach a call that
-creates, updates or deletes anything -- not by discipline, but because the
-method is not on the type it was handed. The plumbing underneath them is
-shared (:mod:`~etsy_listings.core.clients.printify.transport`); the authority is
-not, and that is the half worth keeping apart.
-
-The two also differ in what may be done *with* a result. A catalog read is
-large, rarely changes, is idempotent and is safe to cache on disk and
-to fan out. A shop's products are the state this tool is converging on,
-so a cached read of one would make ``plan`` diff against a stale world --
-which is why :class:`~...cache.CachedCatalogClient` exists for one and
-deliberately has no counterpart for the other.
-
-Both surfaces are narrow, and grow one method at a time as a stage needs them
-rather than in one speculative batch.
-"""
+"""The two Printify boundaries. One host, one token, two authorities."""
 
 from __future__ import annotations
 
@@ -35,12 +17,6 @@ from etsy_listings.core.clients.printify.models import (
 
 
 class CatalogClient(Protocol):
-    """Printify's reference data: read-only and shop-agnostic.
-
-    Any implementation satisfies this without the rest of the codebase knowing
-    which -- real HTTP, TTL-cached, or a test fake.
-    """
-
     def blueprints(self) -> list[Blueprint]: ...
 
     def print_providers(self, blueprint_id: int) -> list[PrintProvider]: ...
@@ -77,9 +53,7 @@ class PrintifyClient(Protocol):
         return the same id, so this is safe to repeat and merely wasteful."""
         ...
 
-    def get_product(self, shop_id: int, product_id: str) -> Product | None:
-        """The product, or ``None`` if it no longer exists."""
-        ...
+    def get_product(self, shop_id: int, product_id: str) -> Product | None: ...
 
     def create_product(self, shop_id: int, spec: ProductSpec) -> Product: ...
 
@@ -91,21 +65,14 @@ class PrintifyClient(Protocol):
         """Remove the product. Idempotent: already gone is success, not an error."""
         ...
 
-    def set_visible(self, shop_id: int, product_id: str, *, visible: bool) -> None:
-        """Set the product's ``visible`` flag, nothing else.
-
-        Printify's publish copies this onto the Etsy listing: ``false``
-        publishes a new listing as a draft and turns an active one inactive,
-        ``true`` keeps an active one active (measured 2026-11-07, see
-        docs/research/printify-etsy-integration.md)."""
-        ...
+    def set_visible(self, shop_id: int, product_id: str, *, visible: bool) -> None: ...
 
     def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
         """Ask Printify to push this product to its connected sales channel.
 
         Fire-and-forget by design: Printify answers `200 {}` immediately and
         the actual publish happens asynchronously, behind `is_locked` --
-        polling `get_product` is the caller's job (`publish` stage, ADR-0024)."""
+        polling `get_product` is the caller's job (`publish` stage)."""
         ...
 
     def publishing_failed(self, shop_id: int, product_id: str, *, reason: str) -> None:
@@ -114,10 +81,4 @@ class PrintifyClient(Protocol):
         measured; the remedy is not."""
         ...
 
-    def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
-        """The id of a product already carrying this copy, or ``None``.
-
-        The duplicate-create guard. A walk of every product in the
-        shop, matched client-side, because the list endpoint has no filter.
-        """
-        ...
+    def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None: ...

@@ -1,11 +1,7 @@
-"""The Claude Code CLI adapter behind `SeoProvider` (AI SEO implementation
-plan, PR4, items 1-4): the corresponding `claude -p`, JSON schema,
-no-session-persistence, and read-only non-interactive controls supported by
-the installed version.
+"""The Claude Code CLI adapter behind `AiProvider`.
 
 Every flag below was confirmed against the installed `claude -p --help`
-(Claude Code 2.1.273) rather than guessed -- see this PR's own report for the
-transcript. In particular:
+(Claude Code 2.1.273) rather than guessed. In particular:
 
 - ``--no-session-persistence`` is the documented "sessions will not be saved
   to disk and cannot be resumed" flag -- this feature's own words for "no
@@ -85,13 +81,6 @@ is reported unready rather than launched anyway."""
 
 @dataclass
 class ClaudeProvider(cli_support.LocalCliProvider):
-    """The `AiProvider` adapter for the local Claude Code CLI.
-
-    Same shape and reasoning as `ai/codex.py.CodexProvider`: a plain `Path`
-    for the workspace root, not a `Workspace`, and no prompt file -- a task
-    arrives with its prompt already assembled (`ai/models.py.ProviderTask`).
-    """
-
     binary: str = "claude"
     provider_name = PROVIDER_NAME
     image_tool = "Read"

@@ -72,7 +72,6 @@ class CachedEtsyMarketClient:
 
     @classmethod
     def in_workspace(cls, inner: EtsyMarketClient, workspace: Workspace) -> CachedEtsyMarketClient:
-        """``inner`` cached under the workspace's ``.cache/market/``."""
         return cls(
             inner,
             search_dir=workspace.market_search_cache_dir(),
@@ -126,7 +125,6 @@ class CachedEtsyMarketClient:
         return known
 
     def _fetch_listings(self, missing: list[int]) -> dict[int, MarketListing | None]:
-        """Ask Etsy for ``missing`` and remember each answer, gone ones too."""
         fetched = {listing.listing_id: listing for listing in self._inner.listings_by_ids(missing)}
         now = self._clock()
         known: dict[int, MarketListing | None] = {}
@@ -174,7 +172,6 @@ class CachedEtsyMarketClient:
 
 
 def _decoded_listing(data: Any) -> MarketListing | None:  # JSON
-    """A cached listing, or ``None`` when it was recorded as gone."""
     if data is None:
         return None
     return MarketListing.model_validate(data, context=ALREADY_DECODED)

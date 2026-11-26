@@ -72,12 +72,6 @@ class OAuthError(RuntimeError):
 
     @property
     def is_grant_failure(self) -> bool:
-        """True when the *grant* was rejected rather than the request.
-
-        `invalid_grant` is what a used authorization code, an expired refresh
-        token and a revoked consent all come back as, and it is the one error
-        whose answer is "run `auth` again" rather than "look at the code".
-        """
         return self.error == "invalid_grant"
 
 
@@ -101,8 +95,6 @@ class Pkce:
 
 
 def new_state(*, entropy: Callable[[int], bytes] = _secrets.token_bytes) -> str:
-    """A single-use value Etsy echoes back, so the redirect can be tied to the
-    request that started it."""
     return _b64url(entropy(STATE_BYTES))
 
 
@@ -141,12 +133,6 @@ def authorize_url(
 
 
 def check_state(*, sent: str, received: str | None) -> None:
-    """Raise unless the redirect carried back the state we sent.
-
-    A mismatch is not a glitch to log and continue past: it means the redirect
-    being processed belongs to a request this process did not make, which is
-    the CSRF case `state` exists to catch.
-    """
     if received != sent:
         raise OAuthError(
             "state_mismatch",
@@ -184,13 +170,6 @@ def refresh_form(*, keystring: str, refresh_token: str) -> dict[str, str]:
 
 @dataclass(frozen=True)
 class TokenResponse:
-    """A successful answer from the token endpoint, whichever grant asked.
-
-    Both grants return the same shape, including a **new refresh token every
-    time** -- rotation is not an occasional event to handle, it is the normal
-    case.
-    """
-
     access_token: str
     refresh_token: str
     expires_in: int
