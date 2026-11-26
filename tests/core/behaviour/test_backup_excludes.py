@@ -37,14 +37,6 @@ WRITERS: dict[str, tuple[str, str]] = {
         'prefix=f".{path.name}.", suffix=".tmp"',
         ".cache/scenes/.forest.png.x0c1.tmp",
     ),
-    "core/market/cache.py": (
-        'f"{path.name}.{uuid.uuid4().hex}.tmp"',
-        ".cache/market/search/shirts.json.5f2b0c4e9a.tmp",
-    ),
-    "core/market/snapshot.py": (
-        'f"{path.name}.{uuid.uuid4().hex}.tmp"',
-        ".cache/market/snapshots/demo.json.7e1d.tmp",
-    ),
     "core/ai/viewable.py": (
         'f"{target.name}.{os.getpid()}.{threading.get_ident()}.tmp"',
         ".cache/ai-images/ab12/design.png.4120.9876.tmp",

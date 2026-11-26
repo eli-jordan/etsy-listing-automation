@@ -195,3 +195,20 @@ def test_sync_prompt_treats_a_file_that_is_not_utf8_as_different(tmp_path: Path)
 
     assert sync_prompt(target, default_seo_prompt_text(), replace=False) == "differs"
     assert target.read_bytes() == b"caf\xe9 style"
+
+
+def test_sync_prompt_reads_a_crlf_copy_of_the_default_as_current(tmp_path: Path) -> None:
+    target = tmp_path / "seo.md"
+    target.write_bytes(default_seo_prompt_text().replace("\n", "\r\n").encode("utf-8"))
+
+    assert sync_prompt(target, default_seo_prompt_text(), replace=True) == "current"
+
+
+def test_replacing_an_unchanged_prompt_keeps_the_last_real_backup(tmp_path: Path) -> None:
+    target = tmp_path / "seo.md"
+    target.write_text(default_seo_prompt_text(), encoding="utf-8")
+    backup = tmp_path / "seo.md.bak"
+    backup.write_text("the seller's last edit", encoding="utf-8")
+
+    assert sync_prompt(target, default_seo_prompt_text(), replace=True) == "current"
+    assert backup.read_text(encoding="utf-8") == "the seller's last edit"

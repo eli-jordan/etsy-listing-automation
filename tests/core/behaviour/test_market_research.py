@@ -25,9 +25,9 @@ from etsy_listings.core.clients.etsy.fakes import (
     server_error,
 )
 from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing, ShopStats
+from etsy_listings.core.config.market_weights import MarketWeights
 from etsy_listings.core.market import (
     MarketResearchError,
-    MarketWeights,
     ResearchCancelledError,
     ResearchSettings,
     research,
@@ -151,6 +151,26 @@ def test_weights_change_the_order() -> None:
     )
     result = _run(_three_listings(), settings=ResearchSettings(weights=only_reviews))
     assert [(row.listing_id, row.score) for row in result.listings] == [(2, 100), (1, 50), (3, 0)]
+
+
+def test_equal_scores_keep_the_better_search_position_then_the_lower_id() -> None:
+    fake = FakeEtsyMarketClient()
+    for listing_id in (1, 2, 3):
+        _seed(fake, listing_id, reviews=5)
+    fake.seed_search(QUERIES[0], [3, 1])
+    fake.seed_search(QUERIES[1], [2])
+    only_reviews = MarketWeights(
+        reviews=1,
+        favourites_per_day=0,
+        search_rank=0,
+        views_per_day=0,
+        shop_sales=0,
+        shop_rating=0,
+    )
+
+    result = _run(fake, settings=ResearchSettings(weights=only_reviews))
+
+    assert [row.listing_id for row in result.listings] == [2, 3, 1]
 
 
 # ---------------------------------------------------- searching and merging

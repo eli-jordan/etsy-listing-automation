@@ -14,11 +14,9 @@ validate-on-construct getting in the way.
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from etsy_listings.core.ai import models as models_module
 from etsy_listings.core.ai.models import (
     Deadline,
     GarmentContext,
@@ -91,21 +89,19 @@ class _Clock:
 
 
 @pytest.fixture
-def clock(monkeypatch: pytest.MonkeyPatch) -> _Clock:
-    fake = _Clock(1_000.0)
-    monkeypatch.setattr(models_module, "time", SimpleNamespace(monotonic=fake))
-    return fake
+def clock() -> _Clock:
+    return _Clock(1_000.0)
 
 
 def test_deadline_starting_now_has_the_full_budget_remaining(clock: _Clock) -> None:
-    deadline = Deadline.starting_now(seconds=60)
+    deadline = Deadline.starting_now(seconds=60, clock=clock)
 
     assert deadline.remaining_seconds() == 60.0
     assert not deadline.expired
 
 
 def test_deadline_counts_down_on_the_monotonic_clock(clock: _Clock) -> None:
-    deadline = Deadline.starting_now(seconds=60)
+    deadline = Deadline.starting_now(seconds=60, clock=clock)
 
     clock.now = 1_059.5  # just before the cutoff
     assert deadline.remaining_seconds() == 0.5
@@ -113,7 +109,7 @@ def test_deadline_counts_down_on_the_monotonic_clock(clock: _Clock) -> None:
 
 
 def test_deadline_expires_exactly_at_its_cutoff(clock: _Clock) -> None:
-    deadline = Deadline.starting_now(seconds=60)
+    deadline = Deadline.starting_now(seconds=60, clock=clock)
 
     clock.now = 1_060.0
     assert deadline.remaining_seconds() == 0.0
@@ -121,7 +117,7 @@ def test_deadline_expires_exactly_at_its_cutoff(clock: _Clock) -> None:
 
 
 def test_deadline_remaining_seconds_never_goes_negative(clock: _Clock) -> None:
-    deadline = Deadline.starting_now(seconds=60)
+    deadline = Deadline.starting_now(seconds=60, clock=clock)
 
     clock.now = 1_075.0  # well past the cutoff
     assert deadline.remaining_seconds() == 0.0

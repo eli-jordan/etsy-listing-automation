@@ -1,35 +1,17 @@
-"""The latest market research per listing, on disk (features/market-seo-20260924/spec.md, *Cache*).
-
-``.cache/market/snapshots/{name}.json`` exists so the top listings panel can
-show a listing's comparables after a reload. It is written only by a run
-whose research **succeeded** -- a failed run leaves the previous one in place,
-while a search that found nothing comparable replaces it, because that *is*
-the latest answer. It moves with the listing on rename and goes when the
-listing is deleted, as ``.cache/renders/{name}/`` does. Both are
-``core/listing_artifacts.py``'s job, not this module's.
-
-Read-only to the seller in this version: nothing edits a snapshot but the
-next research.
-"""
-
 from __future__ import annotations
 
-import contextlib
-import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from etsy_listings.core.market.block import market_block
 from etsy_listings.core.market.models import MarketResult, PhraseScore, ScoredListing
+from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.workspace import Workspace
 
 
 class MarketSnapshot(BaseModel):
-    """One research, as the panel reads it back: the result's fields, when
-    the search ran, and the exact block the proposal was given. Holds each
-    listing's lead, never its full description (features/market-seo-20260924/spec.md, *What the
-    proposal sees*)."""
+    """One listing's latest market research, as the top listings panel reads it back."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -61,24 +43,14 @@ class MarketSnapshot(BaseModel):
 
 
 def save(workspace: Workspace, name: str, snapshot: MarketSnapshot) -> None:
-    """Replace ``name``'s snapshot atomically: written beside the old file
-    and swapped in, so a reader sees the old snapshot or the new one, never
-    half of either."""
-    path = workspace.market_snapshot_file(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
-        temporary.replace(path)
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            temporary.unlink()
+    write_bytes_atomic(
+        workspace.market_snapshot_file(name),
+        snapshot.model_dump_json(indent=2).encode("utf-8"),
+    )
 
 
 def load(workspace: Workspace, name: str) -> MarketSnapshot | None:
-    """``name``'s snapshot, or ``None`` when it has none -- or only a file
-    that no longer reads as one. The snapshot is derivable (the next run
-    rewrites it), so a damaged one is shown as no snapshot, not an error."""
+    """``name``'s snapshot, or ``None`` when it has none or it is unreadable."""
     path = workspace.market_snapshot_file(name)
     try:
         return MarketSnapshot.model_validate_json(path.read_bytes())

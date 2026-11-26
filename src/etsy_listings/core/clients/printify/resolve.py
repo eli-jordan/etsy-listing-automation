@@ -1,11 +1,5 @@
-"""Name -> id resolution. Config refers to blueprints and print providers by
-name; this is the only place that turns one into a Printify integer id.
-
-A print provider is named by its title -- "Monster Digital" identifies one.
-A *blueprint* is not: Printify titles 706 "Unisex Garment-Dyed T-shirt", which
-several brands sell, and retitles it at will. Blueprints are therefore matched
-on brand + model, the pair anyone buying blanks quotes.
-"""
+"""Name -> id resolution: the only place a config name for a blueprint or
+print provider becomes a Printify integer id (ADR-0005)."""
 
 from __future__ import annotations
 
@@ -20,22 +14,14 @@ from etsy_listings.core.errors import UserFacingError
 
 _TRADEMARK = re.compile(r"[®™©]")
 _WHITESPACE = re.compile(r"\s+")
-# With more valid names than this, a refusal lists only the closest few.
 _LIST_EVERY_NAME_UP_TO = 8
-_CLOSEST_NAMES = 5
+_CLOSEST_NAMES_LISTED_BEYOND_THAT = 5
 _BLUEPRINT_BRAND_ALIASES = {"comfort colors print on demand": "comfort colors"}
 """Known catalog renames only; never match unrelated brands by similarity (ADR-0005)."""
 
 
 def normalise(value: str) -> str:
-    """Fold the differences nobody means: case, spacing, and the trademark
-    signs Printify puts in brand names.
-
-    Without this a hand-written ``brand: Comfort Colors`` never matches the
-    catalog's ``Comfort Colors®`` -- and expecting a human to type ® into a
-    YAML file to make their profile resolve is the kind of papercut that
-    reads as "the tool is broken".
-    """
+    """Fold case, spacing and the trademark signs Printify puts in brand names."""
     return _WHITESPACE.sub(" ", _TRADEMARK.sub("", value)).strip().casefold()
 
 
@@ -45,7 +31,9 @@ class CatalogResolutionError(UserFacingError, ValueError):
         self.name = name
         self.valid_names = valid_names
         if len(valid_names) > _LIST_EVERY_NAME_UP_TO:
-            closest = get_close_matches(name, sorted(valid_names), n=_CLOSEST_NAMES, cutoff=0.0)
+            closest = get_close_matches(
+                name, sorted(valid_names), n=_CLOSEST_NAMES_LISTED_BEYOND_THAT, cutoff=0.0
+            )
             options = ", ".join(closest)
             suggestions = f"Closest names: {options} (and {len(valid_names) - len(closest)} more)"
         else:
@@ -55,12 +43,6 @@ class CatalogResolutionError(UserFacingError, ValueError):
 
 
 class AmbiguousBlueprintError(UserFacingError, ValueError):
-    """Brand and model matched more than one blueprint.
-
-    Picking one arbitrarily would silently bind a profile to a garment nobody
-    chose, so this names the candidates and stops.
-    """
-
     def __init__(self, brand: str, model: str, candidates: list[Blueprint]) -> None:
         self.candidates = candidates
         listed = ", ".join(f"{b.title!r} (id {b.id})" for b in candidates)
@@ -77,13 +59,6 @@ def _blueprint_brand(brand: str) -> str:
 
 
 def resolve_blueprint(brand: str, model: str, blueprints: list[Blueprint]) -> Blueprint:
-    """The blueprint sold as ``brand`` ``model``.
-
-    Title is deliberately not consulted -- see the module docstring. Both
-    sides go through :func:`normalise`, so neither the catalog's ® nor a
-    stray capital in a hand-written profile decides whether a garment
-    resolves.
-    """
     wanted = (_blueprint_brand(brand), normalise(model))
     matches = [b for b in blueprints if (_blueprint_brand(b.brand), normalise(b.model)) == wanted]
 
@@ -94,8 +69,6 @@ def resolve_blueprint(brand: str, model: str, blueprints: list[Blueprint]) -> Bl
     raise CatalogResolutionError(
         "blueprint",
         f"{brand} {model}".strip(),
-        # Offered as the brand/model pairs a profile would have to name, not
-        # as titles: a list of titles cannot be pasted into a `blueprint:`.
         sorted({f"{b.brand} {b.model}".strip() for b in blueprints}),
     )
 
@@ -108,13 +81,7 @@ def resolve_print_provider(name: str, providers: list[PrintProvider]) -> PrintPr
 
 
 class UnknownSizeError(UserFacingError, ValueError):
-    """A size no colour of this garment is made in.
-
-    Distinct from a discontinued *cell*, which is Printify's business
-    and merely reported: a size absent from the entire catalog entry is a
-    profile naming something this blank does not come in, and no amount of
-    skipping produces the product the user asked for.
-    """
+    """A size no colour of this garment is made in (unlike a missing cell, fatal)."""
 
     def __init__(self, size: str, valid_sizes: list[str]) -> None:
         self.size = size
@@ -124,12 +91,8 @@ class UnknownSizeError(UserFacingError, ValueError):
 
 @dataclass(frozen=True)
 class ResolvedVariant:
-    """One colour × size cell, carrying the name each side of the join uses.
-
-    ``colour`` is Printify's own (``"Blue Jean"``), ``colour_slug`` is what the
-    listing and the mockup filenames say (``"blue-jean"``). Both, because
-    re-deriving either at a call site is how the two drift apart.
-    """
+    """One colour × size cell: Printify's ``colour`` (``"Blue Jean"``) and the
+    listing's ``colour_slug`` (``"blue-jean"``)."""
 
     id: int
     colour: str
@@ -145,12 +108,7 @@ class VariantResolution:
     fatal -- missing variant cells."""
 
     def ids(self, *, colours: Collection[str] | None = None) -> tuple[int, ...]:
-        """Variant ids, optionally narrowed to some colour slugs.
-
-        ``print_areas.*.variant_ids`` wants ids and nothing else, and the
-        narrowing is what on-light/on-dark split needs to partition
-        one product's variants across two print areas.
-        """
+        """Variant ids, optionally narrowed to some colour slugs."""
         return tuple(v.id for v in self.variants if colours is None or v.colour_slug in colours)
 
 
@@ -160,20 +118,9 @@ def resolve_variants(
     sizes: Sequence[str],
     exceptions: ColourExceptions,
 ) -> VariantResolution:
-    """The variant ids for ``colour_slugs`` × ``sizes``, in that order.
-
-    Order is the listing's colours outer, the profile's sizes inner, so the
-    payload reads like the config it came from and a diff of it is legible.
-
-    Three failure modes, and they are deliberately not the same shape:
-
-    - a colour slug matching nothing is a typo -- fatal, listing the slugs
-      that do exist;
-    - a size no colour offers is a profile naming a size this blank is not
-      made in -- fatal;
-    - a single colour × size cell the catalog has dropped is Printify's doing
-      -- reported in :attr:`VariantResolution.missing` and skipped.
-    """
+    """The variant ids for ``colour_slugs`` × ``sizes``, colours outer. An
+    unknown colour or size is fatal; a cell the catalog dropped is reported in
+    :attr:`VariantResolution.missing`."""
     by_slug = {slug: name for name, slug in slug_map(variant_set.colors, exceptions).items()}
 
     unknown = [slug for slug in colour_slugs if slug not in by_slug]
@@ -197,8 +144,6 @@ def _check_sizes(variant_set: VariantSet, sizes: Sequence[str]) -> None:
 def _resolve_cells(
     cells: list[tuple[str, str, str]], by_cell: Mapping[tuple[str, str], Variant]
 ) -> VariantResolution:
-    """Each ``(slug, colour, size)`` cell's variant, or the cell as missing
-    when the catalog has dropped it."""
     resolved: list[ResolvedVariant] = []
     missing: list[tuple[str, str]] = []
     for slug, colour, size in cells:

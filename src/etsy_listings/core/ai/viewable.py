@@ -1,19 +1,11 @@
 """The copy of a design an AI provider actually looks at.
 
-A print design is usually a PNG with a transparent background, and the
-provider CLIs flatten transparency onto black before the model sees it. Black
-artwork on a transparent ground then reaches the model as a solid black
-square, and a brief drafted from it says there is nothing there. So before
-any provider is handed a design, its transparent pixels are composited onto a
-background that contrasts with the artwork itself: white behind dark
-artwork, charcoal behind light artwork.
+The provider CLIs flatten transparency onto black, so black artwork on a
+transparent ground reaches the model as a black square. A transparent design
+is therefore composited onto a background that contrasts with its artwork.
 
-The flattened copy is written inside the workspace cache rather than a
-temporary directory, because `claude -p` reads the image with its own Read
-tool and is not given access to anything outside the workspace
-(`ai/claude.py`). It keeps the design's file name, so a run step still says
-which design it is reading, under a directory named by the source's content
-hash, so an edited design is never served a stale copy.
+The copy lives in the workspace cache, not a temporary directory, because
+`claude -p`'s Read tool cannot reach outside the workspace.
 """
 
 from __future__ import annotations
@@ -29,9 +21,9 @@ from PIL import Image, ImageStat
 LIGHT_BACKGROUND: Final = (255, 255, 255)
 DARK_BACKGROUND: Final = (34, 34, 34)
 _DARK_ARTWORK_LUMINANCE: Final = 128
-_OPAQUE: Final = 255  # 8-bit alpha of a fully opaque pixel
 """Below this alpha-weighted mean luminance the artwork reads as dark, and
 gets :data:`LIGHT_BACKGROUND`."""
+_OPAQUE: Final = 255  # 8-bit alpha of a fully opaque pixel
 
 
 def viewable_design(source: Path, cache_dir: Path) -> Path:
@@ -45,18 +37,17 @@ def viewable_design(source: Path, cache_dir: Path) -> Path:
     target = cache_dir / digest / source.name
     if target.is_file():
         return target
-    background = Image.new("RGBA", rgba.size, (*_background_for(rgba), 255))
+    background = Image.new("RGBA", rgba.size, (*_background_for(rgba), _OPAQUE))
     flattened = Image.alpha_composite(background, rgba).convert("RGB")
     target.parent.mkdir(parents=True, exist_ok=True)
-    # Two runs whose listings share a design flatten it on threads of one
-    # process, so the partial name carries the thread as well as the pid.
+    # Runs share a process, so the partial name carries the thread too.
     partial = target.with_name(f"{target.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     flattened.save(partial, format="PNG")
     try:
         partial.replace(target)
     except PermissionError:
-        # Windows refuses to replace a file another run has open. The copy
-        # is named by its content, so the one already there is this one.
+        # Windows refuses to replace a file another run has open; the copy
+        # there has the same content.
         partial.unlink(missing_ok=True)
         if not target.is_file():
             raise
@@ -73,8 +64,7 @@ def _has_transparency(image: Image.Image) -> bool:
 
 
 def _background_for(rgba: Image.Image) -> tuple[int, int, int]:
-    """Weight each pixel's luminance by its opacity, so a mostly transparent
-    canvas is judged by its artwork rather than by its empty pixels' colour."""
+    """Contrast with the artwork's mean luminance, weighted by opacity."""
     alpha = rgba.getchannel("A")
     coverage = ImageStat.Stat(alpha).mean[0]
     if coverage == 0:

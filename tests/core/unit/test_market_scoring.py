@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from etsy_listings.core.market.models import MarketWeights
+from etsy_listings.core.config.market_weights import MarketWeights
 from etsy_listings.core.market.scoring import display_score, percentiles, rescaled
 
 

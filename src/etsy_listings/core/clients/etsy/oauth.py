@@ -1,22 +1,9 @@
-"""Etsy's OAuth 2.0 authorization-code flow, as pure functions.
+"""Etsy's OAuth 2.0 authorization-code flow, as pure functions: no I/O,
+no clock, no globals.
 
-No I/O, no clock, no globals: this module builds strings and parses payloads,
-which is what lets the whole flow be tested without a browser, a socket or a
-recorded response. What talks to the network lives in:mod:`transport`, what
-catches the redirect lives in:mod:`callback`, and what remembers the result
-lives in:mod:`tokens`.
-
-Two facts about Etsy shape everything here:
-
-- **PKCE is mandatory on every flow.** Not an option we chose for hygiene --
-  ``code_challenge`` is a required parameter of the authorize request, so the
-  verifier has to outlive the browser round trip.
-- **The redirect URI must match a pre-registered string exactly**, character
-  for character: scheme, host, port, path, no trailing slash. That is why
-:data:`REDIRECT_URI` is a constant rather than something assembled from a
-  port number at call time -- the registered string is the source of truth,
-  and:mod:`callback` takes its port and path *from* it rather than the other
-  way round.
+Etsy requires PKCE on every flow, and compares the redirect URI against the
+registered string exactly, so :data:`REDIRECT_URI` is a constant that
+:mod:`callback` takes its port and path from.
 """
 
 from __future__ import annotations
@@ -58,12 +45,8 @@ STATE_BYTES = 16
 
 
 class OAuthError(RuntimeError):
-    """Etsy refused, or answered with something this module cannot read.
-
-    One class for both, because the caller's response is the same either way:
-    tell the user what Etsy said and stop. The distinction that *does* matter
-    -- whether re-running `auth` can fix it -- is :attr:`is_grant_failure`.
-    """
+    """Etsy refused, or answered with something this module cannot read;
+    :attr:`is_grant_failure` says whether re-running `auth` can fix it."""
 
     def __init__(self, error: str, description: str | None = None) -> None:
         self.error = error
@@ -72,23 +55,12 @@ class OAuthError(RuntimeError):
 
     @property
     def is_grant_failure(self) -> bool:
-        """True when the *grant* was rejected rather than the request.
-
-        `invalid_grant` is what a used authorization code, an expired refresh
-        token and a revoked consent all come back as, and it is the one error
-        whose answer is "run `auth` again" rather than "look at the code".
-        """
         return self.error == "invalid_grant"
 
 
 @dataclass(frozen=True)
 class Pkce:
-    """A verifier and the challenge derived from it.
-
-    Kept together because they are only ever meaningful as a pair: the
-    challenge goes to the browser, the verifier is held back and proves, at
-    token exchange, that the same client started the flow.
-    """
+    """A verifier and the challenge derived from it."""
 
     verifier: str
     challenge: str
@@ -101,8 +73,6 @@ class Pkce:
 
 
 def new_state(*, entropy: Callable[[int], bytes] = _secrets.token_bytes) -> str:
-    """A single-use value Etsy echoes back, so the redirect can be tied to the
-    request that started it."""
     return _b64url(entropy(STATE_BYTES))
 
 
@@ -114,16 +84,9 @@ def authorize_url(
     redirect_uri: str = REDIRECT_URI,
     scopes: Sequence[str] = SCOPES,
 ) -> str:
-    """The URL to open in the browser.
-
-    Encoded to match Etsy's documented example rather than to `urlencode`'s
-    defaults, which are wrong here in two ways. Spaces between scopes become
-    `+`, and Etsy documents `%20` -- whether its authorize endpoint decodes a
-    `+` as a space is not something to discover on a user's consent screen.
-    And the redirect URI comes out fully escaped, where every Etsy example
-    shows it plain; since the URI is compared against a registered string,
-    the encoding that appears in the documentation is the one worth sending.
-    """
+    """The URL to open in the browser, encoded as Etsy's documented example
+    is (``%20`` between scopes, the redirect URI unescaped), not as
+    ``urlencode``'s defaults would."""
     query = urlencode(
         {
             "response_type": "code",
@@ -141,12 +104,6 @@ def authorize_url(
 
 
 def check_state(*, sent: str, received: str | None) -> None:
-    """Raise unless the redirect carried back the state we sent.
-
-    A mismatch is not a glitch to log and continue past: it means the redirect
-    being processed belongs to a request this process did not make, which is
-    the CSRF case `state` exists to catch.
-    """
     if received != sent:
         raise OAuthError(
             "state_mismatch",
@@ -172,9 +129,7 @@ def authorization_code_form(
 
 
 def refresh_form(*, keystring: str, refresh_token: str) -> dict[str, str]:
-    """No `redirect_uri` and no verifier: a refresh grant carries neither, and
-    sending them is how a working refresh starts failing after a callback
-    change."""
+    """A refresh grant carries no `redirect_uri` and no verifier."""
     return {
         "grant_type": "refresh_token",
         "client_id": keystring,
@@ -184,13 +139,6 @@ def refresh_form(*, keystring: str, refresh_token: str) -> dict[str, str]:
 
 @dataclass(frozen=True)
 class TokenResponse:
-    """A successful answer from the token endpoint, whichever grant asked.
-
-    Both grants return the same shape, including a **new refresh token every
-    time** -- rotation is not an occasional event to handle, it is the normal
-    case.
-    """
-
     access_token: str
     refresh_token: str
     expires_in: int
@@ -198,13 +146,7 @@ class TokenResponse:
 
     @property
     def user_id(self) -> int:
-        """The numeric prefix Etsy puts on its tokens.
-
-        It is the shop owner's user id, and the only place the flow yields one
-        without a further request. `int()` on a token that has drifted from
-        that format raises rather than guessing -- the alternative is a
-        plausible-looking id in a URL path.
-        """
+        """The shop owner's user id: Etsy's numeric prefix on its tokens."""
         prefix, _, _ = self.access_token.partition(".")
         try:
             return int(prefix)
@@ -241,8 +183,7 @@ class TokenResponse:
 
 
 def _b64url(raw: bytes) -> str:
-    """Unpadded base64url -- the only alphabet RFC 7636 permits for a verifier,
-    and the one Etsy's `code_challenge` is compared in."""
+    """Unpadded base64url, the alphabet RFC 7636 permits for a verifier."""
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 

@@ -72,6 +72,12 @@ def test_scopes_are_space_separated_and_percent_encoded() -> None:
     assert parse_qs(urlsplit(url).query)["scope"] == [" ".join(oauth.SCOPES)]
 
 
+def test_the_redirect_uri_is_sent_unescaped_as_etsys_examples_show_it() -> None:
+    url = oauth.authorize_url(keystring="k", pkce=oauth.Pkce.generate(), state="s")
+
+    assert f"redirect_uri={oauth.REDIRECT_URI}&" in url
+
+
 def test_the_registered_scopes_cover_listing_and_shop_section_writes() -> None:
     """ADR-0026. `listings_d` is deliberately absent: it deletes listings, and
     image delete is covered by `listings_w`."""

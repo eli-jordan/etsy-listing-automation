@@ -4358,7 +4358,7 @@
         "type": "object"
       },
       "ListingProposal": {
-        "description": "A listing's cached proposal as the editor and the batch summary read\nit: the record, and whether it still describes the saved listing.\n``stale`` is computed from the saved listing on every read, never\nstored.",
+        "description": "A listing's cached proposal, with ``stale`` computed on every read.",
         "properties": {
           "generated_at": {
             "format": "date-time",
@@ -5177,7 +5177,7 @@
         "type": "object"
       },
       "MarketSnapshot": {
-        "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (features/market-seo-20260924/spec.md, *What the\nproposal sees*).",
+        "description": "One listing's latest market research, as the top listings panel reads it back.",
         "properties": {
           "block": {
             "title": "Block",
@@ -5706,7 +5706,7 @@
         "type": "object"
       },
       "PhraseScore": {
-        "description": "One tag used by the scored listings: how many use it, and the sum of\ntheir scores normalised so the best phrase is 1.",
+        "description": "One tag the scored listings use, with its normalised score.",
         "properties": {
           "listings": {
             "title": "Listings",
@@ -6755,7 +6755,7 @@
         "type": "object"
       },
       "ProposalChoices": {
-        "description": "What the seller chooses from: the validated `ai/models.py.SeoProposal`,\nfield for field, as JSON can carry it.",
+        "description": "The validated proposal the seller chooses from.",
         "properties": {
           "description_leads": {
             "items": {
@@ -6809,7 +6809,7 @@
         "type": "object"
       },
       "ProposalResolution": {
-        "description": "Each section's state (spec, *Durable AI proposals*): a section the\nseller accepted or dismissed stays resolved after a reload, so its drawer\ndoes not present itself as new again. ``pending`` is still open.",
+        "description": "Each section's state: an accepted or dismissed section stays resolved after a reload.",
         "properties": {
           "lead": {
             "default": "pending",
@@ -7766,7 +7766,7 @@
         "type": "object"
       },
       "ScoredListing": {
-        "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (features/market-seo-20260924/interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal\nsees*).",
+        "description": "One scored comparable listing, as the top listings panel shows it.",
         "properties": {
           "favourites_per_day": {
             "anyOf": [
@@ -7903,7 +7903,7 @@
         "type": "object"
       },
       "SeoProposalSnapshot": {
-        "description": "The generation inputs, frozen before the provider starts: everything\n`ai/models.py.SeoRequest` sent except the design image itself, plus the\ndesign's identity and content hash. :func:`proposal_staleness` compares\none of these against the same inputs read from the listing now.",
+        "description": "The generation inputs, frozen before the provider starts: the\nrequest's fields but the image, plus the design's name and content hash.",
         "properties": {
           "brief": {
             "title": "Brief",
@@ -7985,7 +7985,7 @@
         "type": "object"
       },
       "SeoRationaleEntry": {
-        "description": "One of the proposal's seven priority-phrase rationales -- the wire\nshape of `ai/models.py.PhraseRationale`.",
+        "description": "One of the proposal's seven priority-phrase rationales.",
         "properties": {
           "intent": {
             "enum": [
@@ -8062,7 +8062,7 @@
         "type": "object"
       },
       "SeoWarningEntry": {
-        "description": "The wire shape of `ai/models.py.ProposalWarning`.",
+        "description": "One disclosure attached to a proposal: a general note or a trademark warning.",
         "properties": {
           "kind": {
             "default": "general",

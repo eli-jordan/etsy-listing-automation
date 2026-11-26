@@ -3953,10 +3953,7 @@ export interface components {
     };
     /**
      * ListingProposal
-     * @description A listing's cached proposal as the editor and the batch summary read
-     *     it: the record, and whether it still describes the saved listing.
-     *     ``stale`` is computed from the saved listing on every read, never
-     *     stored.
+     * @description A listing's cached proposal, with ``stale`` computed on every read.
      */
     ListingProposal: {
       /**
@@ -4295,10 +4292,7 @@ export interface components {
     };
     /**
      * MarketSnapshot
-     * @description One research, as the panel reads it back: the result's fields, when
-     *     the search ran, and the exact block the proposal was given. Holds each
-     *     listing's lead, never its full description (features/market-seo-20260924/spec.md, *What the
-     *     proposal sees*).
+     * @description One listing's latest market research, as the top listings panel reads it back.
      */
     MarketSnapshot: {
       /** Block */
@@ -4535,8 +4529,7 @@ export interface components {
     };
     /**
      * PhraseScore
-     * @description One tag used by the scored listings: how many use it, and the sum of
-     *     their scores normalised so the best phrase is 1.
+     * @description One tag the scored listings use, with its normalised score.
      */
     PhraseScore: {
       /** Listings */
@@ -4950,8 +4943,7 @@ export interface components {
     };
     /**
      * ProposalChoices
-     * @description What the seller chooses from: the validated `ai/models.py.SeoProposal`,
-     *     field for field, as JSON can carry it.
+     * @description The validated proposal the seller chooses from.
      */
     ProposalChoices: {
       /** Description Leads */
@@ -4969,9 +4961,7 @@ export interface components {
     };
     /**
      * ProposalResolution
-     * @description Each section's state (spec, *Durable AI proposals*): a section the
-     *     seller accepted or dismissed stays resolved after a reload, so its drawer
-     *     does not present itself as new again. ``pending`` is still open.
+     * @description Each section's state: an accepted or dismissed section stays resolved after a reload.
      */
     ProposalResolution: {
       /**
@@ -5368,11 +5358,7 @@ export interface components {
     };
     /**
      * ScoredListing
-     * @description One of the (at most) twenty listings scored, with everything the top
-     *     listings panel shows (features/market-seo-20260924/interactions.md, *Where the data
-     *     comes from*) -- and deliberately not the full description, which neither
-     *     the panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal
-     *     sees*).
+     * @description One scored comparable listing, as the top listings panel shows it.
      */
     ScoredListing: {
       /** Favourites Per Day */
@@ -5414,10 +5400,8 @@ export interface components {
     };
     /**
      * SeoProposalSnapshot
-     * @description The generation inputs, frozen before the provider starts: everything
-     *     `ai/models.py.SeoRequest` sent except the design image itself, plus the
-     *     design's identity and content hash. :func:`proposal_staleness` compares
-     *     one of these against the same inputs read from the listing now.
+     * @description The generation inputs, frozen before the provider starts: the
+     *     request's fields but the image, plus the design's name and content hash.
      */
     SeoProposalSnapshot: {
       /** Brief */
@@ -5445,8 +5429,7 @@ export interface components {
     };
     /**
      * SeoRationaleEntry
-     * @description One of the proposal's seven priority-phrase rationales -- the wire
-     *     shape of `ai/models.py.PhraseRationale`.
+     * @description One of the proposal's seven priority-phrase rationales.
      */
     SeoRationaleEntry: {
       /**
@@ -5486,7 +5469,7 @@ export interface components {
     };
     /**
      * SeoWarningEntry
-     * @description The wire shape of `ai/models.py.ProposalWarning`.
+     * @description One disclosure attached to a proposal: a general note or a trademark warning.
      */
     SeoWarningEntry: {
       /**
