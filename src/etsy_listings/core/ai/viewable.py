@@ -29,9 +29,9 @@ from PIL import Image, ImageStat
 LIGHT_BACKGROUND: Final = (255, 255, 255)
 DARK_BACKGROUND: Final = (34, 34, 34)
 _DARK_ARTWORK_LUMINANCE: Final = 128
-_OPAQUE: Final = 255  # 8-bit alpha of a fully opaque pixel
 """Below this alpha-weighted mean luminance the artwork reads as dark, and
 gets :data:`LIGHT_BACKGROUND`."""
+_OPAQUE: Final = 255  # 8-bit alpha of a fully opaque pixel
 
 
 def viewable_design(source: Path, cache_dir: Path) -> Path:
@@ -45,7 +45,7 @@ def viewable_design(source: Path, cache_dir: Path) -> Path:
     target = cache_dir / digest / source.name
     if target.is_file():
         return target
-    background = Image.new("RGBA", rgba.size, (*_background_for(rgba), 255))
+    background = Image.new("RGBA", rgba.size, (*_background_for(rgba), _OPAQUE))
     flattened = Image.alpha_composite(background, rgba).convert("RGB")
     target.parent.mkdir(parents=True, exist_ok=True)
     # Two runs whose listings share a design flatten it on threads of one

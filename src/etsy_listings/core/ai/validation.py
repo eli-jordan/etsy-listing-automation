@@ -11,14 +11,20 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, get_args
 
-from etsy_listings.core.ai.models import PhraseRationale, ProposalWarning, SeoProposal
+from etsy_listings.core.ai.models import (
+    RATIONALE_ENTRIES,
+    PhraseRationale,
+    ProposalWarning,
+    RationaleField,
+    RationaleIntent,
+    SeoProposal,
+)
 from etsy_listings.core.config.listing import MAX_TAG_LENGTH, MAX_TITLE_LENGTH
 
-ALLOWED_INTENTS = frozenset({"core_product", "bottom_of_funnel", "style"})
-ALLOWED_USED_IN = frozenset({"title", "tags", "description_lead"})
-RATIONALE_ENTRIES = 7  # the seven priority phrases the SEO prompt asks for
+ALLOWED_INTENTS = frozenset(get_args(RationaleIntent))
+ALLOWED_USED_IN = frozenset(get_args(RationaleField))
 
 AFFILIATION_TERMS = frozenset(
     {

@@ -1,10 +1,4 @@
-"""Saved-listing facts shared by AI generation and proposal judgment.
-
-A prepared request carries the comparison snapshot derived from exactly
-those same facts. HTTP adapters choose status codes; invalid workspace refs
-remain actionable errors on a background run. Reading again between run
-steps is deliberate, not one frozen snapshot for the whole run.
-"""
+"""Saved-listing facts shared by AI generation and proposal judgment."""
 
 from __future__ import annotations
 

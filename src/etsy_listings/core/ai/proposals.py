@@ -8,33 +8,28 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from etsy_listings.core.ai.models import SeoProposal
+from etsy_listings.core.ai.models import RationaleField, RationaleIntent, SeoProposal, WarningKind
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_json_atomic
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 SCHEMA = 1
 
-SeoRationaleIntent = Literal["core_product", "bottom_of_funnel", "style"]
-SeoRationaleField = Literal["title", "tags", "description_lead"]
-SeoWarningKind = Literal["general", "trademark"]
-
 
 class SeoRationaleEntry(BaseModel):
-    """One of the proposal's seven priority-phrase rationales -- the wire
-    shape of `ai/models.py.PhraseRationale`."""
+    """One of the proposal's seven priority-phrase rationales."""
 
     phrase: str
-    intent: SeoRationaleIntent
+    intent: RationaleIntent
     reason: str
-    used_in: list[SeoRationaleField]
+    used_in: list[RationaleField]
 
 
 class SeoWarningEntry(BaseModel):
     """One disclosure attached to a proposal: a general note or a trademark warning."""
 
     message: str
-    kind: SeoWarningKind = "general"
+    kind: WarningKind = "general"
 
 
 class SeoProposalSnapshot(BaseModel):
@@ -101,8 +96,6 @@ class ProposalResolution(BaseModel):
 
 
 class ProposalRecord(BaseModel):
-    """``.cache/proposals/<listing>.json``."""
-
     model_config = ConfigDict(populate_by_name=True)
 
     schema_version: int = Field(SCHEMA, alias="schema")

@@ -11,9 +11,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, get_args
 
-from etsy_listings.core.ai.models import ProviderTask, SeoRequest
+from etsy_listings.core.ai.models import (
+    RATIONALE_ENTRIES,
+    ProviderTask,
+    RationaleField,
+    RationaleIntent,
+    SeoRequest,
+)
 
 CONTEXT_BEGIN: Final = "<<<LISTING_CONTEXT_JSON>>>"
 CONTEXT_END: Final = "<<<END_LISTING_CONTEXT_JSON>>>"
@@ -31,11 +37,11 @@ _RATIONALE_ITEM_SCHEMA: Final[dict[str, Any]] = {
     "required": ["phrase", "intent", "reason", "used_in"],
     "properties": {
         "phrase": {"type": "string"},
-        "intent": {"enum": ["core_product", "bottom_of_funnel", "style"]},
+        "intent": {"enum": list(get_args(RationaleIntent))},
         "reason": {"type": "string"},
         "used_in": {
             "type": "array",
-            "items": {"enum": ["title", "tags", "description_lead"]},
+            "items": {"enum": list(get_args(RationaleField))},
         },
     },
 }
@@ -63,8 +69,8 @@ RESPONSE_SCHEMA: Final[dict[str, Any]] = {
         "rationale": {
             "type": "array",
             "items": _RATIONALE_ITEM_SCHEMA,
-            "minItems": 7,
-            "maxItems": 7,
+            "minItems": RATIONALE_ENTRIES,
+            "maxItems": RATIONALE_ENTRIES,
         },
         "warnings": {"type": "array", "items": {"type": "string"}},
         "observed_text": {"type": "string"},
@@ -186,12 +192,7 @@ def build_prompt(seller_prompt: str, request: SeoRequest) -> str:
 
 
 def build_seo_task(seller_prompt: str, request: SeoRequest) -> ProviderTask:
-    """One SEO generation, as the thing a provider adapter actually runs.
-
-    The two steps an adapter used to take for itself -- read ``prompts/seo.md``,
-    call :func:`build_prompt` -- happen here instead, which is what lets one
-    adapter serve both AI features (`ai/models.py.ProviderTask`, ADR-0003).
-    """
+    """One SEO generation, as the thing a provider adapter actually runs."""
     return ProviderTask(
         prompt_text=build_prompt(seller_prompt, request),
         response_schema=RESPONSE_SCHEMA,

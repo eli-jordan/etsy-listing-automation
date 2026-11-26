@@ -160,10 +160,10 @@ class ClaudeProvider(cli_support.LocalCliProvider):
         regardless of which of the two shapes carried it."""
         envelope = cli_support.json_object(PROVIDER_NAME, stdout)
         if envelope.get("is_error"):
-            # No sentence and no status: the old fixed line, so a bare
-            # `is_error` doesn't surface the envelope. A status with no
-            # sentence still goes through as the envelope, which is what
-            # makes `api_error_status` 429 readable as "HTTP 429".
+            # An envelope with no sentence, status or error object is reported
+            # as a fixed line rather than as kilobytes of telemetry. A status
+            # with no sentence still goes through, which is what makes
+            # `api_error_status` 429 readable as "HTTP 429".
             has_sentence = any(
                 isinstance(envelope.get(key), str) and envelope[key].strip()
                 for key in ("result", "message")
