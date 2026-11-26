@@ -22,12 +22,12 @@ Float = NDArray[np.float32]
 # Thresholds of the evaluated prototype (ADR-0054). Named, not tuned here.
 _MIN_FACING_Z = 0.22  # a normal's camera-facing component below this is grazing
 _CG_BREAKDOWN = 1e-25  # conjugate-gradient curvature at which the solve stops
-_CONFIDENT = 0.15
+_TRUSTED_CONFIDENCE = 0.15
 _MIN_DEPTH_SAMPLES = 30
 _MIN_DEPTH_SPREAD = 1e-5
 _FOLDED_AREA = 1e-9
 _FLATTEN_CONVERGED = 1e-6
-_CLOTH_COVERAGE = 0.95  # cloth mask value of a pixel inside the garment
+_INSIDE_CLOTH_MASK = 0.95
 _LIGHTING_CONFIDENCE = 0.35
 _CLIPPED_GAIN = 1.7  # shading over exposure above which a gain counts as clipped
 Pixels = NDArray[np.uint8]
@@ -208,7 +208,7 @@ def integrate(
             ((edge_weight < original_weight * 0.95) & (original_weight > 0)).mean()
         ),
         "grazing_fraction": float(1 - usable.mean()),
-        "uncertain_fraction": float((conf < _CONFIDENT).mean()),
+        "uncertain_fraction": float((conf < _TRUSTED_CONFIDENCE).mean()),
         "depth": depth_metrics,
         "camera": "orthographic visible height patches",
         "boundary_height": "free",
@@ -247,7 +247,7 @@ def _fit_depth(
     d = -evidence.depth.ravel().astype(np.float64)
     dc = np.ones_like(d) if evidence.depth_confidence is None else evidence.depth_confidence.ravel()
     dc = dc * conf
-    selected = dc > _CONFIDENT
+    selected = dc > _TRUSTED_CONFIDENCE
     if not (selected.sum() > _MIN_DEPTH_SAMPLES and np.std(d[selected]) > _MIN_DEPTH_SPREAD):
         return z, {"used": False, "fallback": "insufficient confident, varying depth"}
     design = np.stack([d, np.ones_like(d)], axis=-1)
@@ -433,7 +433,7 @@ def lighting_fields(
     minimum_samples: int = 100,
 ) -> tuple[dict[str, Float], dict[str, Any]]:
     shading, albedo, residual = intrinsics.shading, intrinsics.albedo, intrinsics.residual
-    selected = (cloth > _CLOTH_COVERAGE) & (confidence > _LIGHTING_CONFIDENCE)
+    selected = (cloth > _INSIDE_CLOTH_MASK) & (confidence > _LIGHTING_CONFIDENCE)
     if selected.sum() < minimum_samples:
         raise ValueError("Not enough confident visible cloth to normalize lighting")
     luminance = np.sum(shading * np.array([0.2126, 0.7152, 0.0722]), -1)

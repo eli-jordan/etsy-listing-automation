@@ -350,7 +350,7 @@ class BatchStore(_Store[Batch]):
                 held.enter_context(self.lock(batch_id))
             yield
             for batch_id in ids:
-                self._change_rows(
+                self._change_rows_locked(
                     batch_id,
                     lambda row: row.name == old and not row.deleted,
                     lambda _: {"name": new},
@@ -399,15 +399,14 @@ class BatchStore(_Store[Batch]):
     ) -> None:
         for batch_id in self._workspace.batch_ids():
             with self.lock(batch_id):
-                self._change_rows(batch_id, which, change)
+                self._change_rows_locked(batch_id, which, change)
 
-    def _change_rows(
+    def _change_rows_locked(
         self,
         batch_id: str,
         which: Callable[[BatchRow], bool],
         change: Callable[[BatchRow], dict[str, object]],
     ) -> None:
-        """Under ``batch_id``'s lock, which the caller holds."""
         batch = self.load(batch_id)
         if batch is None or not any(which(row) for row in batch.rows):
             return

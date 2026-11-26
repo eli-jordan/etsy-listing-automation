@@ -245,8 +245,7 @@ def _holds(workspace: Workspace, design: str, sha256: str) -> bool:
     return path.is_file() and _sha256(path) == sha256
 
 
-def _is_ours(workspace: Workspace, row: BatchRow) -> bool:
-    """May this row write at its recorded name?"""
+def _may_write_at_name(workspace: Workspace, row: BatchRow) -> bool:
     design = workspace.design_file(row.design)
     if design.is_file() and _sha256(design) != row.sha256:
         return False
@@ -271,7 +270,7 @@ def _create(
     row = batch.rows[index]
     while True:
         with ListingDocuments(workspace).lock(row.name):
-            if _is_ours(workspace, row):
+            if _may_write_at_name(workspace, row):
                 if not row.claimed:
                     row = row.model_copy(update={"claimed": True})
                     batch.rows[index] = row

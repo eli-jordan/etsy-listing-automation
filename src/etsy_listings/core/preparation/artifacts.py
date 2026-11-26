@@ -266,7 +266,7 @@ class Readiness:
         return self.state in ("ready", "not_required")
 
 
-_ZERO_DIGEST = "0" * 64  # the identity of an absent mask or evidence
+_ABSENT_DIGEST = "0" * 64
 
 
 def _bounding_box(config: AnyTemplate, placement_id: str | None) -> BoundingBox:
@@ -785,7 +785,7 @@ class Artifacts:
                     placement_id,
                     _bounding_box(config, placement_id),
                     mask=self._mask_checksum(name, placement_id, reset=reset_masks_for_photo),
-                    evidence=evidence.get(placement_id, _ZERO_DIGEST),
+                    evidence=evidence.get(placement_id, _ABSENT_DIGEST),
                 )
                 for placement_id in ids
             )
@@ -808,13 +808,13 @@ class Artifacts:
         """The saved mask's identity, or zero for none. A photo reset also
         counts a mask belonging to another photo as none."""
         if not self._has_mask(name, placement_id, reset=reset):
-            return _ZERO_DIGEST
+            return _ABSENT_DIGEST
         try:
             return self.calibration.mask(name, placement_id).checksum
         except MaskPhotoMismatchError:
             if not reset:
                 raise
-            return _ZERO_DIGEST
+            return _ABSENT_DIGEST
 
     def _has_mask(self, name: str, placement_id: str | None, *, reset: bool) -> bool:
         if self.workspace.template_mask_file(name, placement_id).exists():

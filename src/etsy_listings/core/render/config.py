@@ -122,9 +122,8 @@ def photo_warp_config(renderer: AnyRenderer, box: BoundingBox) -> RenderConfig:
     return RenderConfig(bounding_box=box, **renderer.config.model_dump())
 
 
-def _safe_id(value: str) -> str:
-    # ADR-0054: an ID owns durable assets and survives reorder/recolour.
-    reserved = {
+_WINDOWS_RESERVED_NAMES = frozenset(
+    {
         "con",
         "prn",
         "aux",
@@ -132,12 +131,19 @@ def _safe_id(value: str) -> str:
         *(f"com{i}" for i in range(1, 10)),
         *(f"lpt{i}" for i in range(1, 10)),
     }
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", value) or value.casefold() in reserved:
+)
+
+
+def _path_segment_id(value: str) -> str:
+    if (
+        not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", value)
+        or value.casefold() in _WINDOWS_RESERVED_NAMES
+    ):
         raise ValueError("placement id must be a non-empty safe path segment")
     return value
 
 
-PlacementId = Annotated[str, AfterValidator(_safe_id)]
+PlacementId = Annotated[str, AfterValidator(_path_segment_id)]
 
 
 class ColourMatrixTemplate(BaseModel):

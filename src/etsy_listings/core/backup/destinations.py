@@ -146,29 +146,37 @@ def _in_order(names: list[str], order: tuple[str, ...]) -> list[str]:
     return sorted(names, key=lambda name: order.index(name.split("/")[0]))
 
 
-@dataclass
-class Sorted:
-    """A destination's files against the local listing (spec step 2)."""
+@dataclass(frozen=True)
+class Expiry:
+    config: os.stat_result
+    files: dict[str, os.stat_result] = field(default_factory=dict)
 
+
+@dataclass
+class DestinationPlan:
     missing: list[str] = field(default_factory=list)
-    expired: dict[str, os.stat_result] = field(default_factory=dict)
     changed: list[ChangedFile] = field(default_factory=list)
     unexpected: list[str] = field(default_factory=list)
     temporaries: dict[str, os.stat_result] = field(default_factory=dict)
-    config: os.stat_result | None = None
+    expiry: Expiry | None = None
+
+    @property
+    def expired(self) -> dict[str, os.stat_result]:
+        return self.expiry.files if self.expiry else {}
 
 
 def sort_destination(
     repository: Path, destination: Path, local: dict[str, int], suspect: frozenset[str]
-) -> Sorted:
+) -> DestinationPlan:
     """Sort ``destination``'s files. ``suspect`` names present files known
     to be changed although their size matches."""
     found = list_destination(destination)
-    result = Sorted(
+    config = found.get(CONFIG)
+    result = DestinationPlan(
         missing=_in_order([name for name in local if name not in found], WRITE_ORDER),
-        config=found.get(CONFIG),
+        expiry=None if config is None else Expiry(config),
     )
-    if result.config is None and any(restic_name(name) for name in found):
+    if config is None and any(restic_name(name) for name in found):
         # A sync client can remove config before the rest of the old copy.
         result.changed.append(ChangedFile(CONFIG, local[CONFIG], 0))
     for name, info in found.items():
@@ -183,11 +191,12 @@ def sort_destination(
     return result
 
 
-def _classify_other(result: Sorted, name: str, info: os.stat_result) -> None:
+def _classify_other(result: DestinationPlan, name: str, info: os.stat_result) -> None:
     regular = stat.S_ISREG(info.st_mode)
     temporary = _TEMP.fullmatch(name)
     if regular and restic_name(name):
-        result.expired[name] = info
+        if result.expiry is not None:
+            result.expiry.files[name] = info
     elif regular and temporary and restic_name(temporary[1]):
         result.temporaries[name] = info
     else:
@@ -272,7 +281,7 @@ def copy_repository(
 class _Copy:
     repository: Path
     destination: Path
-    plan: Sorted
+    plan: DestinationPlan
     observe: Callable[[CopyStep], None]
     cancel: threading.Event
     steps: list[CopyStep] = field(default_factory=list)
@@ -291,9 +300,8 @@ class _Copy:
                 self._continue()
                 _copy_file(self.repository, self.destination, name)
                 self._done("copied", name)
-            for name in _in_order(list(self.plan.expired), DELETE_ORDER):
-                self._continue()
-                self._expire(name)
+            if self.plan.expiry is not None:
+                self._expire_all(self.plan.expiry)
             for name, expected in self.plan.temporaries.items():
                 self._continue()
                 self._remove_temporary(name, expected)
@@ -308,13 +316,17 @@ class _Copy:
             return self.result("failed", _failure(exc, self.repository, self.destination))
         return self.result("copied")
 
-    def _expire(self, name: str) -> None:
-        config = self.plan.config
-        assert config is not None  # Expiry requires a matching config when we list the copy.
+    def _expire_all(self, expiry: Expiry) -> None:
+        for name in _in_order(list(expiry.files), DELETE_ORDER):
+            self._continue()
+            self._expire(expiry, name)
+
+    def _expire(self, expiry: Expiry, name: str) -> None:
+        config = expiry.config
         if not _unchanged(self.destination / CONFIG, config, CONFIG):
             raise _DestinationChangedError(ChangedFile(CONFIG, config.st_size, 0))
         path = _destination_path(self.destination, name)
-        expected = self.plan.expired[name]
+        expected = expiry.files[name]
         if not _unchanged(path, expected, name):
             return
         if _sha256(path) != path.name:
