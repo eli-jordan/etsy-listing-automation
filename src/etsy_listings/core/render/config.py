@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
@@ -152,27 +152,6 @@ class ColourMatrixTemplate(BaseModel):
         return photo_warp_config(self.renderer, self.bounding_box)
 
 
-def _reject_template_artwork(value: Any) -> Any:
-    """A template no longer chooses artwork (ADR-0053): a colour resolves to the
-    same file in every mockup scene and on Printify, and a mockup showing a
-    different print from the delivered shirt is not a useful exception. The
-    field is refused by name rather than dropped, since ignoring it would
-    render something other than what the file asks for.
-
-    ``artwork: null`` is not an override, and is what the calibrator wrote
-    into every ``multiple`` and ``single`` template before ADR-0053 -- so it loads,
-    and the next save drops it."""
-    if isinstance(value, Mapping) and value.get("artwork") is not None:
-        raise ValueError(
-            "artwork: is no longer a template setting (ADR-0053) -- remove it; the "
-            "listing's design: decides which file each colour prints"
-        )
-    if isinstance(value, Mapping) and "artwork" in value:
-        # Dropped here: these models forbid unknown keys (ADR-0054).
-        return {k: v for k, v in value.items() if k != "artwork"}
-    return value
-
-
 class Placement(BaseModel):
     """One garment within a ``multiple``-kind scene."""
 
@@ -181,11 +160,6 @@ class Placement(BaseModel):
     id: PlacementId
     colour: str
     bounding_box: BoundingBox
-
-    @model_validator(mode="before")
-    @classmethod
-    def _no_artwork(cls, value: Any) -> Any:
-        return _reject_template_artwork(value)
 
 
 class MultipleTemplate(BaseModel):
@@ -229,11 +203,6 @@ class SingleTemplate(BaseModel):
     bounding_box: BoundingBox
     renderer: Renderer
     labels: list[str] = []
-
-    @model_validator(mode="before")
-    @classmethod
-    def _no_artwork(cls, value: Any) -> Any:
-        return _reject_template_artwork(value)
 
     def render_config(self) -> RenderConfig:
         return photo_warp_config(self.renderer, self.bounding_box)

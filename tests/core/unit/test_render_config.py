@@ -125,39 +125,6 @@ def test_scene_layers_give_each_placement_its_colour_and_a_listing_box_only_its_
     ]
 
 
-@pytest.mark.parametrize(
-    "data",
-    [
-        {
-            "kind": "multiple",
-            "placements": [
-                {"colour": "ivory", "bounding_box": _box_dicts(SQUARE_BOX), "artwork": "on-dark"}
-            ],
-        },
-        {"kind": "single", "artwork": "on-light", "bounding_box": _box_dicts(SQUARE_BOX)},
-    ],
-)
-def test_a_template_artwork_override_is_refused_naming_prd_30(data: dict[str, object]) -> None:
-    """ADR-0053: a colour resolves to the same file in every mockup scene and on
-    Printify, so a template no longer chooses artwork of its own. Refused by
-    name rather than silently ignored -- ignoring it would render a different
-    print from the one the file asked for."""
-    with pytest.raises(ValidationError, match="ADR-0053"):
-        load_template_config(data)
-
-
-def test_a_null_artwork_written_by_the_old_calibrator_still_loads() -> None:
-    template = load_template_config(
-        {
-            "kind": "single",
-            "artwork": None,
-            "bounding_box": _box_dicts(SQUARE_BOX),
-            "renderer": {"type": "photo-warp", "config": {}},
-        }
-    )
-    assert "artwork" not in dump_template_config(template)
-
-
 def test_multiple_template_colour_coverage_accepts_subset() -> None:
     template = load_template_config(
         {
