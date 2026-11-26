@@ -16,14 +16,8 @@ class PrintArea(BaseModel):
 
 
 class BlueprintRef(BaseModel):
-    """Which blank this garment is, as a human orders one.
-
-    ``brand`` and ``model`` identify it; ``title`` is readable context and
-    takes no part in matching. Printify's titles are generic ("Unisex
-    Garment-Dyed T-shirt" is sold by several brands) and are rewritten over
-    time, so one is not an identifier -- a garment profile naming only a title
-    could never resolve, which is what the e2e layer caught.
-    """
+    """``brand`` and ``model`` identify the blank. Printify's titles are
+    generic and rewritten over time, so ``title`` takes no part in matching."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
