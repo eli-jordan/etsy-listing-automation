@@ -32,8 +32,8 @@ _MISSING_IDS = re.compile(r"Missing listing_ids:\s*([\d,\s]+)")
 
 
 class EtsyMarketClient(Protocol):
-    """What market research asks Etsy. Reads only, and safe to call from
-    several threads at once -- research keeps up to five calls in flight."""
+    """What market research asks Etsy. Reads only; implementations must be
+    thread-safe (research keeps ``MAX_IN_FLIGHT`` calls going)."""
 
     def search_active(self, query: str, *, limit: int = 25) -> list[MarketCandidate]: ...
 
@@ -52,13 +52,8 @@ class HttpEtsyMarketClient:
 
     def listings_by_ids(self, ids: Sequence[int]) -> list[MarketListing]:
         """Each listing's stats, shop and thumbnail, in chunks of
-        :data:`BATCH_LIMIT`.
-
-        An id Etsy no longer has is **absent** from the answer. Etsy refuses
-        the whole chunk with a ``404`` naming the missing ids (measured), and
-        a listing deactivated between the search and this call is ordinary --
-        so the chunk is asked again without them, once.
-        """
+        :data:`BATCH_LIMIT`. Etsy 404s a whole chunk naming any gone ids
+        (measured), so the chunk is asked again once without them."""
         listings: list[MarketListing] = []
         wanted = list(ids)
         for start in range(0, len(wanted), BATCH_LIMIT):
@@ -112,8 +107,7 @@ def search_params(query: str, *, limit: int) -> dict[str, str | int]:
 
 
 def _missing_ids(error: EtsyApiError) -> set[int] | None:
-    """The ids a batch ``404`` names as gone, or ``None`` for any other
-    failure -- only the one measured shape is read as "some ids are gone"."""
+    """The ids a batch ``404`` names as gone, or ``None`` for any other failure."""
     if error.status_code != HTTP_NOT_FOUND:
         return None
     match = _MISSING_IDS.search(error.error)

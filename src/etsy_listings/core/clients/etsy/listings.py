@@ -149,8 +149,6 @@ class HttpEtsyListingClient(ShopMetadataReads):
     def get_listing(
         self, listing_id: int, *, include_images: bool = False, include_videos: bool = False
     ) -> Listing | None:
-        # One comma-joined `includes`, never the key twice: which of two
-        # repeated keys Etsy honours is not something to leave to chance.
         includes = [
             name
             for name, wanted in (("Images", include_images), ("Videos", include_videos))
@@ -166,19 +164,8 @@ class HttpEtsyListingClient(ShopMetadataReads):
         return Listing.model_validate(response.json())
 
     def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
-        """Each of ``listing_ids``' Etsy-side ``state``, keyed by listing id.
-
-        One request per :data:`BATCH_LIMIT` ids rather than one per listing:
-        the caller is the listings UI asking about every listing in the
-        workspace at once, and a `getListing` apiece would make opening the
-        page cost a round trip per row.
-
-        Unscoped, like `getListing` beside it -- `getListingsByListingIds`
-        needs only the app key pair. An id Etsy does not answer for is
-        **absent** from the result rather than present with an invented state:
-        "we could not find out" and "it is still a draft" are different facts,
-        and only the caller knows which way to resolve the difference.
-        """
+        """Each of ``listing_ids``' Etsy-side ``state``, one batch request per
+        :data:`BATCH_LIMIT` ids; an id Etsy does not answer for is absent."""
         states: dict[int, str] = {}
         ids = list(listing_ids)
         for start in range(0, len(ids), BATCH_LIMIT):
@@ -200,17 +187,8 @@ class HttpEtsyListingClient(ShopMetadataReads):
     def get_listing_variation_images(
         self, shop_id: int, listing_id: int
     ) -> list[VariationImageLink]:
-        """Shop-scoped, like the write beside it -- and unlike every other
-        *read* in this client, which is why it was got wrong once and worth
-        stating: `getListingVariationImages` takes `shop_id` in the path.
-
-        The unscoped `/v3/application/listings/{id}/variation-images` 404s for
-        every listing, linked or not, which is indistinguishable from "no
-        links yet" and was once read as exactly that. On the correct path a
-        listing with no links answers `200` with `count: 0` like every other
-        list read here (measured, both shapes), so a `404` means the listing
-        is gone and is raised rather than flattened into an empty list.
-        """
+        """Shop-scoped, unlike every other read here: the unscoped path 404s
+        for every listing (measured), so a 404 here means the listing is gone."""
         response = self._transport.get(
             f"/v3/application/shops/{shop_id}/listings/{listing_id}/variation-images"
         )
@@ -243,8 +221,8 @@ class HttpEtsyListingClient(ShopMetadataReads):
     def upload_listing_image(
         self, shop_id: int, listing_id: int, upload: ImageUpload
     ) -> ListingImage:
-        """Upload at ``upload.rank``, with its alt text -- there is no
-        image-update endpoint, so alt text is only ever set here."""
+        """Upload at ``upload.rank`` with its alt text; Etsy has no
+        image-update endpoint, so alt text is only set here."""
         file_name, contents, rank = upload.file_name, upload.contents, upload.rank
         alt_text, overwrite = upload.alt_text, upload.overwrite
         listing_image_id = upload.listing_image_id
@@ -313,10 +291,7 @@ class HttpEtsyListingClient(ShopMetadataReads):
 
 def video_content_type(file_name: str) -> str:
     """The content type a video upload is sent as, or a :class:`ValueError`
-    for a file ADR-0045 does not allow -- raised before a byte is sent, since
-    anything else reaching the client is a caller's bug that would spend one
-    of the listing's daily associations. The fake shares it, so a stage
-    tested against the fake meets the same refusal."""
+    before a byte is sent (a bad upload spends a daily association)."""
     suffix = PurePosixPath(file_name).suffix.lower()
     content_type = VIDEO_CONTENT_TYPES.get(suffix)
     if content_type is None:

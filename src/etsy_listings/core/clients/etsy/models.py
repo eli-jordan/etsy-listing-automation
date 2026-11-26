@@ -1,11 +1,5 @@
-"""The Etsy responses this tool reads, narrowed to the fields it uses.
-
-Etsy's `Shop` carries forty-seven fields, most of them about a storefront's
-presentation. Modelling all of them would make every one of them look load
-bearing, and would turn a field Etsy renames into a validation error in a
-workspace that never touched it. So: the few we act on, and `extra="ignore"`
-for the rest.
-"""
+"""The Etsy responses this tool reads, narrowed to the fields it uses;
+the rest are ignored so an Etsy rename never fails validation."""
 
 from __future__ import annotations
 
@@ -17,12 +11,7 @@ from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, mod
 
 
 class Shop(BaseModel):
-    """An Etsy shop, as `findShops` and `getShopByOwnerUserId` return it.
-
-    `currency_code` is the reason this model exists beyond the id: it is the
-    shop's own currency, and reading it is what stops a workspace being
-    configured in one currency while the shop sells in another.
-    """
+    """An Etsy shop, as `findShops` and `getShopByOwnerUserId` return it."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -161,15 +150,7 @@ def _unescape_copy(value: dict[str, Any]) -> dict[str, Any]:
 
 class Listing(BaseModel):
     """`getListing`'s response, narrowed to what the stages compare against
-    `applied` (the Etsy write surface table in features/etsy-listing-20260910/spec.md).
-
-    Read only through `GET /v3/application/listings/{id}` -- the *unscoped*
-    path. The shop-scoped one exists for `PATCH`/`DELETE` and 404s on `GET`,
-    which cost the probe a false "our copy was overwritten" verdict.
-
-    Text arrives **HTML-escaped** (measured: ``Don&#39;t``) and is unescaped
-    here, once. `applied` holds the plain text this tool sent, so an escaped
-    read would report every apostrophe as drift.
+    `applied`. Etsy sends text HTML-escaped (measured); it is unescaped here, once.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -205,12 +186,7 @@ class Listing(BaseModel):
     @field_validator("images", "videos", mode="before")
     @classmethod
     def _null_images_is_none_requested(cls, value: object) -> object:
-        """``getListing`` sends ``images: null``, not an omitted key or ``[]``,
-        when called without ``includes=Images`` (measured) -- the default
-        every ``read_live()`` but ``etsy_media``'s asks for. The field default
-        only covers a *missing* key, so without this a plain re-plan of an
-        existing listing fails validation on every run. ``videos`` has the
-        same shape without ``includes=Videos``."""
+        """Etsy sends ``null`` for media not in ``includes`` (measured)."""
         return () if value is None else value
 
 
@@ -218,9 +194,8 @@ class Listing(BaseModel):
 
 
 def _drop_nulls(value: object) -> object:
-    """Etsy sends ``null`` for a field it has no value for as readily as it
-    omits the key (``tags`` is documented as defaulting to null). Dropping
-    the nulls lets one set of field defaults answer both shapes."""
+    """Etsy sends ``null`` and omits a key interchangeably; dropping nulls
+    lets the field defaults answer both."""
     if isinstance(value, dict):
         return {key: item for key, item in value.items() if item is not None}
     return value
@@ -234,15 +209,8 @@ second pass would turn a seller's literal ``&amp;`` into ``&``."""
 
 class MarketCandidate(BaseModel):
     """Another seller's active listing, as `findAllListingsActive` returns
-    it: what market research filters, scores and quotes (features/market-seo-20260924/spec.md).
-
-    Every field but the two ids is optional, because one sparse row must not
-    fail a search of twenty-five. The defaults are the values scoring would
-    give an absent signal anyway: no favourites, no views, no tags.
-
-    Text arrives **HTML-escaped** (measured: ``Father&#39;s Day`` in titles,
-    descriptions and tags alike) and is unescaped here, once, so that no
-    phrase count or prompt ever sees an entity a buyer never typed.
+    it. Every field but the ids is optional, since Etsy rows are sparse, and
+    text arrives HTML-escaped (measured) and is unescaped here, once.
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
@@ -274,12 +242,7 @@ class MarketCandidate(BaseModel):
 
 class ShopStats(BaseModel):
     """The selling shop's signals, from the batch call's ``includes=Shop``.
-
-    `review_average` stays ``None`` when Etsy sends null -- a shop with no
-    reviews in the past year -- because scoring ranks that as the *lowest*
-    rating, which a default of ``0.0`` would merely imitate while claiming a
-    rating that was never given.
-    """
+    ``review_average`` is ``None`` for a shop with no reviews this year."""
 
     model_config = ConfigDict(extra="ignore", frozen=True)
 

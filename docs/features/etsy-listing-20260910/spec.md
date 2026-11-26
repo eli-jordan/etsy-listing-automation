@@ -257,7 +257,11 @@ re-asserted whenever any id changed.
 pair, so Etsy's colour selector shows the shirt in that colour instead of a
 plain swatch. It needs only `listings_w`, and `getListingVariationImages`
 reads the links back with no scope at all — so this is drift-checkable like
-everything else.
+everything else. Unlike every other read, it takes `shop_id` in the path: the
+unscoped `/v3/application/listings/{id}/variation-images` answers `404` for
+every listing, linked or not (measured), which reads exactly like "no links
+yet". On the shop-scoped path a listing with no links answers `200` with
+`count: 0`.
 
 The whole of the feature is one join, and it is worth writing out because none
 of its three links is obvious.
