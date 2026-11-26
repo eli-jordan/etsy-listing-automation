@@ -12,10 +12,6 @@ from cachetools import LRUCache
 
 
 class BoundedCache[K: Hashable, V]:
-    """At most ``budget`` units of ``size(value)`` (bytes, typically), the
-    least recently read or written evicted first. Without ``size`` every entry
-    counts 1, which makes ``budget`` an entry count."""
-
     def __init__(self, budget: int, size: Callable[[V], int] | None = None) -> None:
         self._entries: LRUCache[K, V] = LRUCache(budget, getsizeof=size)
         self._lock = threading.Lock()
@@ -29,11 +25,6 @@ class BoundedCache[K: Hashable, V]:
             self._store(key, value)
 
     def get_or_compute(self, key: K, compute: Callable[[], V]) -> V:
-        """The kept value, or ``compute()``'s, kept before it is returned.
-
-        Two threads missing the same key at once each compute; the first to
-        store wins and both return its value, so every caller holds the same
-        object and the accounting counts it once."""
         cached = self.get(key)
         if cached is not None:
             return cached
@@ -50,8 +41,7 @@ class BoundedCache[K: Hashable, V]:
         try:
             self._entries[key] = value
         except ValueError:
-            # cachetools refuses an item over the whole budget before touching
-            # anything; any other ValueError (a negative size) is a bug.
+            # cachetools raises ValueError, untouched, for an item over the budget.
             if self._entries.getsizeof(value) <= self._entries.maxsize:
                 raise
 
