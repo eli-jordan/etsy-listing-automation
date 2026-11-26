@@ -25,9 +25,9 @@ from etsy_listings.core.clients.etsy.fakes import (
     server_error,
 )
 from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing, ShopStats
+from etsy_listings.core.config.market_weights import MarketWeights
 from etsy_listings.core.market import (
     MarketResearchError,
-    MarketWeights,
     ResearchCancelledError,
     ResearchSettings,
     research,

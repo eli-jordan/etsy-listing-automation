@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.config.market_weights import METRICS as METRICS
-from etsy_listings.core.config.market_weights import MarketWeights as MarketWeights
-from etsy_listings.core.config.market_weights import Metric as Metric
-
 
 class ScoredListing(BaseModel):
     """One scored comparable listing, as the top listings panel shows it."""
