@@ -137,8 +137,6 @@ class AiRun:
         self.emit(lambda seq: AiStepEvent(seq=seq, id=step, state=state, detail=detail))
 
     def finish(self, phase: TerminalPhase, message: str | None = None) -> None:
-        """Emit the terminal ``phase`` event, then tell the listeners. Only
-        the first call counts."""
         with self.condition:
             if self.finished:
                 return
@@ -191,14 +189,11 @@ class AiRun:
 
 @dataclass(frozen=True)
 class Conflict:
-    """``create`` refused: ``active_run`` already holds the listing."""
-
     active_run: str
 
 
 @dataclass(frozen=True)
-class Deploying:
-    """``create`` refused: a UI deploy holds the listing."""
+class Deploying: ...
 
 
 class AiRunRegistry:
@@ -211,8 +206,6 @@ class AiRunRegistry:
         self._deploying: Counter[str] = Counter()
 
     def subscribe(self, listener: FinishListener) -> None:
-        """Hear every run this registry creates from now on finish -- the
-        batch queue's wake-up, and how its rows learn their outcome."""
         with self._lock:
             self._listeners.append(listener)
 
@@ -265,7 +258,6 @@ class AiRunRegistry:
             return self._runs.get(run_id)
 
     def latest(self, listing: str) -> AiRun | None:
-        """The listing's running or most recent run."""
         with self._lock:
             return self._runs.get(self._latest.get(listing.casefold(), ""))
 
@@ -284,8 +276,6 @@ class AiRunRegistry:
     def active(self) -> list[AiRun]:
         with self._lock:
             return [run for run in self._runs.values() if not run.finished]
-
-    # ------------------------------------------------------------ deploys
 
     def hold_for_deploy(self, listings: Iterable[str]) -> list[AiRun]:
         """ADR-0050: refuse every new run for ``listings`` until

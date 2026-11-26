@@ -1,25 +1,3 @@
-"""The FIFO worker thread that actually runs a plan or an apply (ADR-0041,
-decision 7).
-
-**One thread for the whole workspace, not one lock per listing.** The
-registry's per-listing locks decide whether a *new* run may be queued at all;
-they do not, by themselves, stop two runs from executing at once -- that
-guarantee comes from there being exactly one thread here to execute either of
-them. This is what keeps ADR-0009's "apply never parallelises writes" true one level
-up: raising the worker count later would be the whole of parallelising,
-because the lock model already exists.
-
-**Contexts are injected, never assembled here (`connections.py`'s own
-rule).** ``dependencies.ContextFactory`` is `connections.run_context`'s shape --
-``(workspace, on_event)`` -- so this module never decides which credential to
-resolve or when; it only decides *when to call the factory* and *what to do
-with the ``RunContext`` it hands back*.
-
-**No stage changes how it reports progress.** ``ctx.emit`` still accepts the
-same stage-local event. The engine attaches listing and stage identity and
-emits one :data:`EngineRunEvent` stream; this module is only its wire adapter.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -81,9 +59,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RunExecutor:
-    """Owns the worker thread. One per ``deployments.Deployments``, whose
-    ``start``/``stop`` the host calls (the UI server's lifespan)."""
-
     workspace: Workspace
     context_factory: ContextFactory
     registry: RunRegistry
@@ -102,21 +77,11 @@ class RunExecutor:
         self._thread.start()
 
     def stop(self) -> None:
-        """Shutdown (decision 7): cancel whatever is still queued, then wait
-        for whatever the worker thread is doing right now -- a plan run's next
-        boundary, or an apply run's current stage -- to finish and start
-        nothing else. Not a daemon thread, so a caller that forgets to call
-        this hangs the process on exit rather than silently dropping work.
-        A run waiting for a backup's pause is let go by the gate's own stop,
-        which the lifespan calls first.
-        """
         self._stop.set()
         self.registry.drain_and_cancel()
         self.registry.wake()
         if self._thread is not None:
             self._thread.join()
-
-    # -------------------------------------------------------------- the loop
 
     def _loop(self) -> None:
         while True:
@@ -152,8 +117,6 @@ class RunExecutor:
         return run.cancel_requested or self._stop.is_set()
 
     def _pipeline(self, run: Run) -> list[AnyStage]:
-        """This run's stages: the draft-only pipeline, plus ``etsy_activate``
-        when the run asked to publish."""
         return publishing_pipeline(self.stages, publish=run.publish)
 
     def _yield_to_deploy(self, listings: Sequence[str]) -> AbstractContextManager[None]:
@@ -161,16 +124,13 @@ class RunExecutor:
 
     def _execute(self, run: Run) -> None:
         try:
-            # ADR-0050: deploying takes precedence over AI. A plan counts as a
-            # deploy (spec, *Deployment interaction*), since what it shows
-            # is what the apply after it will be checked against.
             with self._yield_to_deploy(run.listings):
                 if run.kind == "plan":
                     self._run_plan(run)
                 else:
                     self._run_apply(run)
         except Exception:
-            # Decision 5: a defect gets a traceback in the log and a generic
+            # A defect gets a traceback in the log and a generic
             # message on the page -- never the exception text itself, which
             # might be anything from a stack of internal paths to a client
             # library's own error string.
@@ -184,15 +144,11 @@ class RunExecutor:
             else:
                 run.transition_apply("failed")
 
-    # -------------------------------------------------------------- plan runs
-
     def _append_engine_event(self, run: Run, event: EngineRunEvent) -> None:
-        """Translate one engine-domain event into the public SSE vocabulary."""
         run.append(_public_event(event))
 
     def _run_plan(self, run: Run) -> None:
         run.transition_plan("planning")
-        # One shop.yaml for the whole run, whatever the Admin page saves meanwhile.
         ctx = self.context_factory(self.workspace.snapshot(), None)
 
         def emit(event: EngineRunEvent) -> None:
@@ -227,7 +183,6 @@ class RunExecutor:
     def _preview(
         self, run: Run, ctx: RunContext, needing_preview: tuple[PlannedRun, ...], hooks: RunHooks
     ) -> None:
-        """Render each preview the plans need, then plan those listings again."""
         previewed: list[str] = []
         for result in needing_preview:
             if self._should_stop(run):
@@ -241,8 +196,6 @@ class RunExecutor:
         # `listing_planned` supersedes the first, fingerprint included.
         if previewed and not self._should_stop(run):
             plan_listings(ctx, previewed, self._pipeline(run), hooks=hooks)
-
-    # ------------------------------------------------------------- apply runs
 
     def _run_apply(self, run: Run) -> None:
         run.transition_apply("applying")
@@ -274,7 +227,6 @@ _EventFactory = Callable[[int], AnyRunEvent]
 
 @singledispatch
 def _public_event(event: EngineRunEvent) -> _EventFactory:
-    """The public SSE event an engine-domain event becomes."""
     assert isinstance(event, EngineStageFailed)  # closed union
     return lambda i: StageFailedEvent(
         id=i,

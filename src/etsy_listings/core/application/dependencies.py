@@ -6,7 +6,7 @@ satisfies it as it stands and a test passes a fake in its place:
 * :data:`EtsyStates` -- what listing operations take the UI process's memo of
   Etsy listing states through. The memo is the server's
   (``server/api/etsystate.py``), request-serving read infrastructure that
-  stays there (plan, PR 7), and core must never import the server
+  stays there, and core must never import the server
   (ADR-0052).
 * :data:`ContextFactory` -- how ``deploy.deployments.Deployments`` builds a
   run's engine context; ``connections.run_context`` in a real host.
@@ -26,7 +26,7 @@ fills without importing the machinery behind the coordinator.
 
 Everything else an operation coordinates through is core's own, so it takes
 that class directly: the AI run registry, the batch queue, AI readiness and the
-deploy-to-AI handoff (``ai/``, since PR 9). One implementation each and no
+deploy-to-AI handoff (``ai/``). One implementation each and no
 second one in sight left an interface for them nothing to vary.
 """
 
@@ -54,7 +54,7 @@ answers ``None``, which reads as not published."""
 
 ContextFactory = Callable[[Workspace, EventSink | None], RunContext]
 """How a deployment run's :class:`~etsy_listings.core.engine.context.RunContext`
-is built (ADR-0041, decision 7's "contexts are injected").
+is built (ADR-0041).
 ``connections.run_context`` is the default every real server uses; a test
 wires one to in-memory fakes instead, by swapping this one callable --
 nothing in the executor knows how a client is assembled."""
@@ -65,8 +65,6 @@ key. The AI runner wraps it in the workspace's caches itself."""
 
 
 def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
-    """The real, read-only Etsy market client (the app key only), or
-    ``None`` when the workspace has none."""
     if connections.etsy_app_key(workspace.root) is None:
         return None
     return connections.etsy_market_client(workspace.root)

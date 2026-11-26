@@ -1,6 +1,6 @@
 """Whether AI can run: for one listing, and for a batch created now
 (features/market-seo-20260924/spec.md, *AI runs*; batch-creation spec,
-*Design validation*; module-structure plan, PR 9).
+*Design validation*).
 
 The rules, their order and their wording are core's, so the **AI Mode**
 button, ``POST /api/ai/runs`` and staging's *AI drafting can't run yet* all
@@ -53,12 +53,6 @@ def current_providers(
 def default_ai_providers(
     workspace: Workspace, ai: AiSettings, *, host: CliHost = LOCAL_CLI_HOST
 ) -> Sequence[AiProvider]:
-    """Capture the enabled chain and all task preferences from ``ai`` (ADR-0056).
-
-    Newly constructed adapters never reread settings during repair or fallback.
-    Missing AI settings preserve Codex, Claude, Grok and account defaults.
-    Every adapter finds and runs its CLI through ``host``.
-    """
     adapters: dict[str, type[CodexProvider] | type[ClaudeProvider] | type[GrokProvider]] = {
         "codex": CodexProvider,
         "claude": ClaudeProvider,
@@ -111,8 +105,6 @@ def unready_reason(
 
 
 def missing_prompt(workspace: Workspace, *, draft_brief: bool) -> Path | None:
-    """The first prompt file a run needs that is not there: ``seo.md`` and
-    ``market-queries.md`` always, ``brief.md`` when the run drafts."""
     prompts = [workspace.seo_prompt_file(), workspace.market_queries_prompt_file()]
     if draft_brief:
         prompts.append(workspace.brief_prompt_file())
@@ -120,7 +112,6 @@ def missing_prompt(workspace: Workspace, *, draft_brief: bool) -> Path | None:
 
 
 def provider_problem(providers: Sequence[AiProvider]) -> str | None:
-    """``None`` when some provider is ready, else every provider's reason."""
     checks = [provider.readiness() for provider in providers]
     if any(check.ready for check in checks):
         return None
@@ -142,11 +133,6 @@ SETUP_REMEDY = "Add one in Setup, then come back. Your staging is kept."
 
 
 def batch_blocked(workspace: Workspace, providers: Sequence[AiProvider]) -> AiReadinessBlock | None:
-    """Brief-only batch readiness: the brief prompt and a ready provider.
-
-    Research prompts and market access belong to the seller's later AI Mode
-    request (ADR-0048, amendment 2026-10-29).
-    """
     prompt_file = workspace.brief_prompt_file()
     if not prompt_file.is_file():
         shown = prompt_file.relative_to(workspace.root).as_posix()

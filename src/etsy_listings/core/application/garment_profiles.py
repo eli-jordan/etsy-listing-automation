@@ -1,13 +1,3 @@
-"""Garment profiles: which catalog blueprints a workspace sells, and the
-profile ``new`` records for one.
-
-Filtering the catalog by category, keying a blueprint by brand and model,
-sorting sizes, slugging colours, and recording a profile the first time a
-garment is used -- reusing it, hand edits and all, every time after. The
-wizard that asks which garment is the CLI's (``cli/new.py``); everything
-here is tested through the fake catalog client with no terminal.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -81,7 +71,6 @@ def sort_sizes(sizes: set[str]) -> list[str]:
 
 
 def resolve_colour_slugs(variant_set: VariantSet, exceptions: ColourExceptions) -> dict[str, str]:
-    """Colour name -> slug, applying exceptions.yaml and raising on collision."""
     return slug_map(variant_set.colors, exceptions)
 
 
@@ -137,9 +126,6 @@ def build_garment_profile(
 def write_garment_profile_if_absent(
     workspace: Workspace, slug: str, garment_profile: GarmentProfile
 ) -> bool:
-    """Returns True if a new garment profile was written, False if one already
-    existed and was left untouched -- not rewritten, not even replaced, since
-    the seller may have edited it by hand (ADR-0055)."""
     path = workspace.garment_profile_file(slug)
     if path.is_file():
         return False
@@ -184,9 +170,6 @@ def ensure_garment_profile(
 
 
 def listing_colours(profile: GarmentProfile, colour_slugs: dict[str, str]) -> list[str]:
-    """The colours a new listing sells: whatever the garment profile lists --
-    reflecting any hand editing since it was written -- else every catalog
-    colour, the first time a garment is used."""
     if profile.colors:
         return sorted(profile.colors)
     return sorted(colour_slugs.values())

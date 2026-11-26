@@ -1,43 +1,3 @@
-"""The thread that runs one AI run's chain (features/market-seo-20260924/spec.md, *The chain*,
-*Failures* and *AI runs*).
-
-1. **Brief**, only when the run asks for a draft and the saved brief is
-   empty: draft it, then write it under the listing's write lock -- only if
-   the brief is *still* empty when re-read there.
-2. **Market**: extract three queries, research them through the 7-day
-   cached client, save the snapshot. An empty result is a warning and the
-   chain goes on; a failure fails the run.
-3. **SEO**: the proposal, with the market block.
-
-Batch-origin runs stop after the brief. Market and SEO wait for the seller's
-AI Mode request, using the reviewed brief (ADR-0048, amendment 2026-10-29).
-
-**A thread per run, never the plan/apply worker.** An AI run spends most of
-its time waiting on a provider CLI or on Etsy, and a deploy must not queue
-behind it (or it behind a deploy). The threads are daemons, and
-:meth:`AiRunner.shutdown` cancels every active run, so neither a server
-stopping nor a test suite ending waits on a provider.
-
-**Limits.** A run captures its providers and ``settings.yaml``'s AI time
-limits before its thread starts (ADR-0056, ADR-0057), and keeps them: an
-edit affects the next run. One :class:`~etsy_listings.core.ai.models.RunBudget`
-covers every task, fallback and market search in the run; each provider
-tried gets a fresh step from it.
-
-**Stopping.** Each run has one cancel event. ``DELETE`` sets it, the
-watchdog sets it when the run's budget runs out, and shutdown sets it. It
-is handed to every provider call, which kills the subprocess tree, and to
-``research``, which starts no new Etsy call; the chain also checks it
-between steps. What was written before it was set -- a brief, a snapshot --
-stays.
-
-**Writes.** The guarded ``brief`` is the only workspace file this package
-writes under ``listings/``. The market snapshot (``.cache/market/``) and the
-proposal (``.cache/proposals/``, ADR-0049) are saved under the same lock, so a
-rename or delete cannot move or remove the listing between the check and
-the write.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -99,16 +59,11 @@ NO_ETSY_KEY = "no Etsy API key is configured; run `etsy-listings setup`"
 
 
 def timeout_message(run_minutes: int) -> str:
-    """What a run the watchdog stopped fails with, naming its own limit."""
     return f"The AI run took longer than {run_minutes} minutes, so it was stopped. Try again."
 
 
 @dataclass(frozen=True)
 class _Captured:
-    """What a run captured before its thread started and keeps to the end
-    (ADR-0056, ADR-0057): the provider adapters, the run's budget and the
-    weights its research scores with, all from one read of ``settings.yaml``."""
-
     providers: Sequence[AiProvider]
     budget: RunBudget
     weights: MarketWeights
@@ -141,12 +96,8 @@ class AiRunner:
     _threads_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def start(self, run: AiRun) -> None:
-        """Run the chain on a new daemon thread, with its watchdog."""
         started = self.monotonic()
-        # ADR-0056/0057: capture before scheduling, not after the thread gets
-        # CPU. Every task, repair and fallback keeps these adapters and limits.
         try:
-            # One read: everything a run keeps from the same revision (ADR-0057).
             settings = self.workspace.capture_settings()
             limits = AiLimits.of(settings.ai)
             providers = tuple(self.providers(self.workspace, settings.ai))
@@ -175,7 +126,6 @@ class AiRunner:
                 self._threads.append(thread)
 
     def shutdown(self, *, timeout: float = 10.0) -> None:
-        """Cancel every active run and wait (bounded) for its thread."""
         for run in self.registry.active():
             run.request_stop("shutdown")
         with self._threads_lock:
@@ -183,8 +133,6 @@ class AiRunner:
         deadline = time.monotonic() + timeout
         for thread in threads:
             thread.join(timeout=max(0.0, deadline - time.monotonic()))
-
-    # ------------------------------------------------------------ the thread
 
     def _watch(self, run: AiRun, budget: RunBudget) -> None:
         while not run.cancel_event.wait(self.watch_interval):
@@ -234,8 +182,6 @@ class AiRunner:
             elif _is_pending(run, step):
                 run.step(step, "pending", NOT_STARTED)
         run.finish("cancelled")
-
-    # ------------------------------------------------------------- the chain
 
     def _check(self, run: AiRun) -> None:
         if run.cancel_event.is_set():
@@ -289,8 +235,6 @@ class AiRunner:
     def _research_market(
         self, run: AiRun, inputs: PreparedSeo, captured: _Captured
     ) -> tuple[MarketResult, market_snapshot.MarketSnapshot]:
-        """Choose searches from the brief, score Etsy's comparables and save
-        the snapshot with the listing."""
         workspace = self.workspace
         run.step("market", "active", "Choosing Etsy searches from the brief")
         if not inputs.request.brief.strip():
@@ -345,7 +289,6 @@ class AiRunner:
         snapshot: market_snapshot.MarketSnapshot,
         captured: _Captured,
     ) -> None:
-        """Generate the SEO proposal from the market data and cache it."""
         workspace = self.workspace
         run.step(
             "seo",
@@ -363,8 +306,6 @@ class AiRunner:
             cancel_event=run.cancel_event,
         )
         self._check(run)
-        # ADR-0049: cached before it is announced, so whoever hears the event can
-        # read it back -- and so it outlives this run and this server.
         # A delete asks the run to stop before it takes the lock, so a stop
         # seen here is one the delete's own cleanup will not come back for.
         documents = ListingDocuments(workspace)
@@ -389,9 +330,6 @@ class AiRunner:
         )
 
     def _write_brief(self, name: str, text: str) -> bool:
-        """Write ``text`` as the listing's brief if the saved one is still
-        empty, under the lock PATCH autosave and rename take."""
-
         def fill(document: Document) -> Document | None:
             if str(document.get("brief") or "").strip():
                 return None
@@ -404,7 +342,6 @@ class AiRunner:
 
 
 def _plan_steps(run: AiRun, *, drafting: bool, brief_only: bool) -> None:
-    """Announce which steps this run will take before it takes any."""
     run.step("brief", "pending" if drafting else "skipped", None if drafting else KEPT_BRIEF)
     for step in ("market", "seo"):
         run.step(

@@ -1,30 +1,3 @@
-"""The batch AI queue (spec, *Batch AI queue*; ADR-0048): every created batch row
-drafts its brief and leaves research and SEO to manual AI Mode, through the
-same :class:`~etsy_listings.core.application.ai.runner.AiRunner` a manual run uses.
-
-**One dispatcher thread**, woken by a condition whenever a row, a batch or a
-run changes. Each wake reads ``batch_ai.concurrency`` afresh, counts the
-batch runs still going, and starts queued rows until the limit is reached.
-A row is started as an ordinary run with origin ``batch``; if a manual run
-holds the listing, ``create`` answers a conflict and the row stays queued,
-skipped until the next wake. Manual runs never count against the limit.
-
-**Round-robin across batches**, oldest batch first (spec, *Scheduling*):
-after serving one batch the next row comes from the batch after it, so a
-25-row batch cannot hold back a 2-row one confirmed a minute later.
-
-**The rows are the record.** Row states live in the batch record under
-``.cache/batches/``, so the summary reads them after a restart, and
-:meth:`BatchQueue.start` returns every ``running`` row to ``queued`` -- a
-run does not survive its server, and its listing already exists, so the
-rerun creates nothing twice. A run stopped by the server shutting down is
-left ``running`` for that reason.
-
-Run only by the ``ui`` server, through its AI coordinator: there is no guard
-against two servers on one workspace, and the in-process locks are enough
-(batch plan, *Where the queue runs*). CLI apply never touches it (ADR-0050).
-"""
-
 from __future__ import annotations
 
 import logging
@@ -110,8 +83,6 @@ class BatchQueue:
         self._last: str | None = None
         registry.subscribe(self._finished)
 
-    # ------------------------------------------------------------ lifecycle
-
     def start(self) -> None:
         """Return interrupted rows to the queue, then start dispatching."""
         for batch in self._batches.all():
@@ -129,7 +100,6 @@ class BatchQueue:
             self._thread.join(timeout=timeout)
 
     def wake(self) -> None:
-        """Something changed: look at the queue again."""
         with self._wake:
             self._woken = True
             self._idle.clear()
@@ -156,12 +126,7 @@ class BatchQueue:
                 if not self._woken:
                     self._idle.set()
 
-    # ------------------------------------------------------------- dispatch
-
     def _limit(self) -> int:
-        # Invalid hand edits refuse dispatch; only an absent file uses the
-        # model defaults (Admin plan, config-validation rule). No slots leaves
-        # queued rows and active runs alone until the file is fixed.
         settings = self._workspace.settings_if_readable(skipping="dispatching batch rows")
         return settings.batch_ai.concurrency if settings is not None else 0
 
@@ -169,10 +134,7 @@ class BatchQueue:
         return sum(1 for run in self._registry.active() if run.origin == "batch")
 
     def dispatch(self) -> None:
-        """One round: start queued rows until the limit is reached or none
-        can start."""
         skipped: set[Slot] = set()
-        # A backup's pause starts no row; resume wakes the queue again.
         while not self._gate.paused and self._running() < self._limit():
             with self._state:
                 after = self._last
@@ -186,8 +148,6 @@ class BatchQueue:
                 skipped.add(slot)
 
     def _claim(self, slot: Slot) -> bool:
-        """Start ``slot``'s run, or say why not: the row moved on, or a
-        manual run holds its listing."""
         batch_id, row_id = slot
         with self._batches.lock(batch_id):
             batch = self._batches.load(batch_id)
@@ -221,23 +181,16 @@ class BatchQueue:
             _replace(batch, row.model_copy(update={"ai": "running", "ai_error": None}))
             self._batches.save(batch)
         except OSError:
-            # Finishing the run releases its gate ticket.
             run.finish("failed", "The batch row could not be saved.")
             raise
 
     def _brief_is_empty(self, name: str) -> bool:
-        """ADR-0048: a brief already there -- the seller's, or a retried row's own
-        -- is kept, and the brief-only run finishes. The runner checks again
-        under the write lock before it writes."""
         try:
             return not self._workspace.load_listing(name).brief.strip()
         except Exception:  # noqa: BLE001 -- a listing that will not load is an empty brief; the run reports it
             return True
 
     def _finished(self, run: AiRun) -> None:
-        """A run ended. A batch run's row takes its outcome; any run ending
-        can free a listing or a slot, so the queue looks again. The run
-        releases its gate ticket once this has written the row."""
         with self._state:
             slot = self._runs.pop(run.id, None)
         if slot is not None and run.stop_reason != "shutdown":
@@ -258,12 +211,7 @@ class BatchQueue:
             ai_steps=[AiStep(**step.model_dump()) for step in run.steps],
         )
 
-    # ------------------------------------------------------ seller controls
-
     def cancel(self, batch_id: str) -> Batch | None:
-        """**Cancel batch** (spec, *Cancellation and deletion*): queued rows
-        become ``stopped``; running ones are asked to stop and end
-        ``cancelled``. Written briefs and proposals stay."""
         # Under the batch's lock, so the dispatcher cannot start a row
         # between the two steps: every run it has started is in `_runs`.
         with self._batches.lock(batch_id):
@@ -278,20 +226,14 @@ class BatchQueue:
         return batch
 
     def resume(self, batch_id: str) -> Batch | None:
-        """**Resume**: stopped and cancelled rows join the queue again."""
         return self._requeue(batch_id, lambda row: row.ai in RESUMABLE)
 
     def retry(self, batch_id: str, row_id: str | None = None) -> Batch | None:
-        """Retry one row's AI, or every failed row's (UI doc §7). The saved
-        brief is kept, so a row that already has one finishes without
-        generating again. Research and SEO wait for manual AI Mode."""
         if row_id is None:
             return self._requeue(batch_id, lambda row: row.ai == "failed")
         return self._requeue(batch_id, lambda row: row.id == row_id and row.ai in RETRYABLE)
 
     def _requeue(self, batch_id: str, which: Callable[[BatchRow], bool]) -> Batch | None:
-        # a deleted listing's row is never queued again, by Resume or
-        # by Retry -- there is no listing left to draft.
         batch = self._update(
             batch_id,
             lambda row: not row.deleted and which(row),
@@ -302,25 +244,8 @@ class BatchQueue:
         self.wake()
         return batch
 
-    # --------------------------------------------------------------- deploys
-
     @contextmanager
     def yield_to_deploy(self, listings: Sequence[str]) -> Iterator[None]:
-        """ADR-0050: a UI deploy (plan or apply) takes ``listings`` from AI work
-        for as long as the ``with`` lasts (spec, *Deployment interaction*).
-
-        On entry no new run may start for them -- manual or batch; ``POST
-        /api/ai/runs`` answers ``deploying`` -- their queued rows become
-        ``cancelled_by_deploy``, every run still going on them, batch or
-        manual, is asked to stop, and this waits until each has finished
-        and its row has its outcome. Only then does the deploy read a
-        listing. On exit the listings are free again and the queue looks
-        again, for a row the seller retried meanwhile.
-
-        The runs are waited for without a limit of their own: a stop kills
-        a provider's process tree and research starts no new call, and the
-        runner's watchdog bounds any run to its captured run limit (ADR-0057).
-        """
         names = list(listings)
         # Holding first means every run the dispatcher could still start
         # for these listings is either in `active` or refused.
@@ -342,15 +267,10 @@ class BatchQueue:
             self._registry.release_deploy(names)
             self.wake()
 
-    # ------------------------------------------------------------- reading
-
     def waiting_for_backup(self, row: BatchRow) -> bool:
-        """Whether ``row`` is held by a backup's pause (plan decision P4):
-        queued while the gate is paused. Never stored in the record."""
         return self._gate.holds(queued=row.ai == "queued")
 
     def pending(self, listing: str) -> bool:
-        """Does batch work own ``listing``'s AI right now?"""
         key = listing.casefold()
         return any(
             row.name.casefold() == key and row.ai in PENDING
@@ -359,21 +279,17 @@ class BatchQueue:
         )
 
     def order(self) -> list[Slot]:
-        """The queued rows in the order they will start."""
         with self._state:
             after = self._last
         return queue_order(self._batches.all(), after)
 
     def concurrency(self) -> int | SettingsProblem:
-        """The limit a batch's detail shows, or why there is none to show."""
         settings = self._workspace.settings_or_problem()
         if isinstance(settings, SettingsProblem):
             return settings
         return settings.batch_ai.concurrency
 
     def blocked(self) -> AiReadinessBlock | None:
-        """Why a batch could not draft its briefs: the brief prompt or a
-        ready provider is missing (spec, *Design validation*)."""
         workspace = self._workspace
         providers = current_providers(self._runner.providers, workspace)
         if isinstance(providers, SettingsProblem):
@@ -382,8 +298,6 @@ class BatchQueue:
                 remedy="Correct the named key in settings.yaml, then retry. Your staging is kept.",
             )
         return batch_blocked(workspace, providers)
-
-    # -------------------------------------------------------------- helpers
 
     def _update(
         self, batch_id: str, which: Callable[[BatchRow], bool], **changes: object

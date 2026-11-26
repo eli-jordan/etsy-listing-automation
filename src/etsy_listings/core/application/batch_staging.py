@@ -1,18 +1,3 @@
-"""Staging an upload against a listing template, and the session's edits
-until it is confirmed or cancelled (batch-creation spec, *Accepted input*,
-*Frozen staging*; ADR-0051; module-structure plan, PR 7).
-
-Uploaded bytes and their filenames arrive as ``batches.Upload`` streams --
-how they were decoded off a request is the server's. Everything the upload
-must satisfy -- PNG or one ZIP, at most 25 designs, the per-file and total
-size limits, archive containment and safety -- stays ``batches``' own
-(``stage_pngs`` and ``archive``), refused as ``StagingRefusedError`` with nothing
-left on disk. What this module adds is the coordination around it: the
-listing template must exist, its content is frozen under its write lock so
-a batch never captures a half-written template (ADR-0047), and a session
-named in an edit must be there.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -105,15 +90,12 @@ def edit_staging(
 
 
 def cancel_staging(workspace: Workspace, staging: StagingStore, session_id: str) -> None:
-    """Cancel staging: the uploads go at once. The seller's own files were
-    never touched."""
     with staging.lock(session_id):
         read_staging(workspace, staging, session_id)
         staging.remove(session_id)
 
 
 def staged_upload(workspace: Workspace, staging: StagingStore, session_id: str, row: str) -> Path:
-    """Where a staged row's bytes are -- its thumbnail's source."""
     session = read_staging(workspace, staging, session_id)
     try:
         return upload_path(workspace, session, row)

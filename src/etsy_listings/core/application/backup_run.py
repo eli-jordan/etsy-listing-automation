@@ -1,13 +1,3 @@
-"""One backup run: back up, forget, the weekly prune and check, then the
-copy to each destination and its monthly check (workspace-backup spec,
-*Backup run*; plan, PRs 3 and 4).
-
-The server passes its :class:`JobGate`, so the run waits for quiet, pauses
-the background jobs for the ``restic backup`` step alone and resumes them
-whatever happened; the CLI passes none (spec, *CLI*). Each run, failed ones
-included, is appended to the history in ``~/.etsy-listings``.
-"""
-
 from __future__ import annotations
 
 import threading
@@ -75,10 +65,6 @@ BackupStep = Literal[
 
 @dataclass(frozen=True)
 class BackupProgress:
-    """Enough for the running line: the step, the job a backup waits for,
-    files read out of the total while backing up, and the destination
-    being copied or checked."""
-
     step: BackupStep
     waiting_for: str | None = None
     files_done: int | None = None
@@ -122,10 +108,6 @@ def _utc_now() -> datetime:
 
 @dataclass(frozen=True)
 class BackupRunner:
-    """Runs against ``workspace``'s configured backup, resolved once per
-    operation. ``home`` holds the state and history; tests pass one under
-    ``tmp_path`` (plan, P2)."""
-
     workspace: Workspace
     binaries: ResticBinaries
     home: Path | None = None
@@ -143,9 +125,6 @@ class BackupRunner:
         cancel: threading.Event | None = None,
         maintenance: Callable[[], AbstractContextManager[bool]] | None = None,
     ) -> RunRecord:
-        """Back up, forget, and prune and check when due. ``cancel`` stops
-        restic part way; the run is then recorded as stopped. The server
-        reserves exclusive maintenance or defers it while a restore runs."""
         settings = backup_settings(self.workspace)
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
         try:
@@ -178,8 +157,6 @@ class BackupRunner:
     def _adopt_workspace_id(
         self, backup: ConfiguredBackup, repository: Repository, run: _Run
     ) -> ConfiguredBackup:
-        """A block written by hand has no workspace ID: write the one the
-        repository's snapshots carry, or a new one (ADR-0061)."""
         chosen = ensure_workspace_id(self.workspace, repository.snapshots(lock=False))
         run.notice = chosen.notice
         settings = backup.settings.model_copy(update={"workspace_id": chosen.value})
@@ -197,8 +174,6 @@ class BackupRunner:
         run: _Run,
         cancel: threading.Event | None,
     ) -> None:
-        """Forget, then the weekly prune and check, each under restic's
-        exclusive lock."""
         run.enter("forgetting")
         repository.forget(
             backup.settings.retention, workspace_id=backup.workspace_id, cancel=cancel
@@ -277,8 +252,6 @@ class BackupRunner:
         return result
 
     def repair(self, destination: Path) -> RepairResult:
-        """Set aside what changed in ``destination`` and copy it again
-        (spec, *Changed and unexpected files*)."""
         backup = self._configured()
         if destination not in backup.destinations:
             raise MissingError(f"{destination} is not a destination in settings.yaml.")
@@ -297,8 +270,6 @@ class BackupRunner:
         return repair
 
     def check(self) -> CheckResult:
-        """``restic check`` of the local repository, recorded in the state.
-        Refuses an overlapping configuration, as a run does."""
         backup = self._configured()
         return self._check(backup.open(), backup.store)
 
@@ -358,8 +329,6 @@ def _after_check(
 
 @contextmanager
 def _paused(gate: JobGate | None, run: _Run) -> Iterator[None]:
-    """Wait for quiet, then hold background jobs for the block, and release
-    them however it ends (spec, *Backup run* steps 1, 2 and 4)."""
     if gate is None:
         yield
         return
@@ -379,9 +348,6 @@ class _StoppedError(Exception):
 
 @dataclass
 class _CopyProgress:
-    """Files copied out of those the destination lacks, for the running
-    line during a large first copy (plan, PR 5)."""
-
     run: _Run
     destination: str
     done: int = 0

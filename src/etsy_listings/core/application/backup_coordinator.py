@@ -1,34 +1,3 @@
-"""The server's backups: the schedule, Back up now, repair, and the status
-(workspace-backup spec, *Scope and decisions*, Scheduling and Manual run;
-plan, PR 5).
-
-**One operation at a time.** A backup run and a repair both write to a
-destination, so each takes the one slot :attr:`BackupCoordinator.running`
-describes. A second is refused with :class:`BackupBusyError`; the
-scheduler simply waits for its next check.
-
-**A restore beside them.** A restore only reads the repository, under
-restic's shared lock, so it has a slot of its own and backups keep running.
-Forget, prune and check need the exclusive lock, so a backup during a
-restore leaves them to a later run (spec, *Restore*).
-
-**The schedule.** A backup is due ``interval_hours`` after the newest
-snapshot restic lists, at once when there is none, and an hour after a run
-that failed (``backup_overview.next_due``). The scheduler checks at start-up,
-so an overdue backup runs straight away, then every :data:`CHECK_EVERY`
-seconds, reading ``settings.yaml`` afresh each time, so a changed interval
-counts from the next check. The clock is injected; no test sleeps for an
-interval.
-
-**No repository, no backup.** A repository folder without restic's
-``config`` stops the schedule and is reported (spec, *Missing repository*):
-nothing here creates one by itself. The seller creates a new one or
-connects an existing one (``backup_missing``); a connect holds the slot
-while it copies, so no backup or repair starts meanwhile. Set-up that finds
-a destination already holding a backup connects it the same way, holding
-the slot as a connect.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -113,10 +82,6 @@ def _utc_now() -> datetime:
 
 @dataclass(frozen=True)
 class BackupEnvironment:
-    """What a coordinator runs with, injected by tests: ``home`` keeps the
-    state and history under ``tmp_path`` (plan, P2), ``restic`` replaces
-    restic with an in-memory repository, ``now`` is the clock."""
-
     home: Path | None = None
     restic: OpenRepository | None = None
     now: Callable[[], datetime] = _utc_now
@@ -155,16 +120,12 @@ class BackupCoordinator:
         self._restorer: threading.Thread | None = None
         self._stop_restore = threading.Event()
 
-    # ------------------------------------------------------------ lifecycle
-
     def start(self) -> None:
         self._scheduler = threading.Thread(target=self._schedule, name="backup-scheduler")
         self._scheduler.daemon = True
         self._scheduler.start()
 
     def stop(self) -> None:
-        """Stop the schedule and any restic part way; the run is recorded
-        as stopped. The gate's own stop ends a backup waiting for quiet."""
         with self._lock:
             # Under the lock, so no worker starts after this reads it.
             self._stopping.set()
@@ -177,11 +138,9 @@ class BackupCoordinator:
                 thread.join()
 
     def wake(self) -> None:
-        """Check now, as after a Setup save."""
         self._wake.set()
 
     def join(self, timeout: float | None = None) -> None:
-        """Wait for the backup in progress, if any."""
         worker = self._worker
         if worker is not None:
             worker.join(timeout)
@@ -195,8 +154,6 @@ class BackupCoordinator:
                 logger.exception("backup scheduler check failed")
             self._wake.wait(self._check_every)
             self._wake.clear()
-
-    # ----------------------------------------------------------- operations
 
     def check(self) -> bool:
         """Start a backup if one is due; whether it did."""
@@ -216,17 +173,12 @@ class BackupCoordinator:
         return True
 
     def run_now(self) -> None:
-        """Back up now, whenever nothing else runs (spec, *Manual run*)."""
         settings = backup_settings(self._workspace)
         if self._refresh(settings).missing:
             raise RepositoryMissingError(settings.repository)
         self._start_backup()
 
     def set_up(self, answers: BackupSetUp, *, expected_revision: str) -> Connected | None:
-        """Set backups up (``backup_setup``), then start the first backup;
-        or, when a destination already holds a backup, connect it, answering
-        once it is connected and holding the slot meanwhile, as
-        :meth:`connect` does. What was connected, or None."""
         if self._settings() is not None:
             raise BackupsSetUpError
         prepared = prepare_set_up(
@@ -251,8 +203,6 @@ class BackupCoordinator:
                 self._running = self._running.model_copy(update={"destination": str(source)})
 
     def create_repository(self, answers: Replacement) -> None:
-        """Create a new repository where the missing one was named or the
-        seller chose, then start the first backup into it."""
         self._prepare_first_backup(
             lambda: create_new_repository(
                 self._workspace, answers, binaries=self._binaries, restic=self._env.restic
@@ -260,9 +210,6 @@ class BackupCoordinator:
         )
 
     def connect(self, source: Path, answers: Replacement) -> None:
-        """Copy the repository at ``source`` to local disk and use it;
-        answers once it is connected, holding the slot meanwhile. The
-        schedule then backs up when the copied snapshots say it is due."""
         self._claim("connect", None)
         try:
             connect_repository(
@@ -277,8 +224,6 @@ class BackupCoordinator:
         self.wake()
 
     def repair(self, destination: Path) -> RepairResult:
-        """Set aside what changed in ``destination`` and copy again, holding
-        the slot so no backup copies there meanwhile."""
         self._claim("repair", destination)
         try:
             return self._runner().repair(destination)
@@ -319,7 +264,6 @@ class BackupCoordinator:
                 self._running = None
 
     def _start_backup(self) -> None:
-        """Run a backup on its own thread, or :class:`BackupBusyError`."""
         with self._lock:
             self._claim_locked("backup", None)
             try:
@@ -375,8 +319,6 @@ class BackupCoordinator:
                 }
             )
 
-    # -------------------------------------------------------------- restore
-
     @property
     def restoring(self) -> bool:
         with self._lock:
@@ -384,7 +326,6 @@ class BackupCoordinator:
 
     @contextmanager
     def _maintenance(self) -> Iterator[bool]:
-        """Reserve the exclusive commands or defer them to a later run."""
         acquired = self._maintenance_lock.acquire(blocking=False)
         try:
             yield acquired and not self.restoring
@@ -393,10 +334,6 @@ class BackupCoordinator:
                 self._maintenance_lock.release()
 
     def start_restore(self, snapshot: str, target: Path) -> None:
-        """Restore ``snapshot`` (an id, its start, or ``latest``) into the
-        new folder ``target`` on its own thread (spec, *Restore*). What is
-        refused before restic runs, and checked again just before it writes,
-        is ``backup_restore``'s."""
         prepared = prepare_restore(
             self._workspace, snapshot, target, binaries=self._binaries, restic=self._env.restic
         )
@@ -421,8 +358,6 @@ class BackupCoordinator:
             self._restorer.start()
 
     def stop_restore(self) -> None:
-        """Stop the restore, answering once it has; the files restored so
-        far stay in its folder."""
         with self._lock:
             self._stop_restore.set()
             restorer = self._restorer
@@ -435,8 +370,6 @@ class BackupCoordinator:
             restorer.join(timeout)
 
     def _run_restore(self, prepared: PreparedRestore, stop: threading.Event) -> None:
-        """Run ``prepared`` holding the maintenance reservation, so it waits
-        for forget, prune or check underway and none starts until it ends."""
         update: dict[str, object] = {"outcome": "succeeded"}
         try:
             with self._maintenance_lock:
@@ -459,7 +392,6 @@ class BackupCoordinator:
                 self._restore = self._restore.model_copy(update=vars(figures))
 
     def _configured(self, settings: BackupSettings | None = None) -> ConfiguredBackup:
-        """The configured backup for one operation (``backup_repository``)."""
         return configured_backup(
             self._workspace,
             settings,
@@ -476,8 +408,6 @@ class BackupCoordinator:
             restic=self._env.restic,
             now=self._env.now,
         )
-
-    # --------------------------------------------------------------- status
 
     def overview(self) -> BackupOverview:
         settings = self._settings()
@@ -540,8 +470,6 @@ class BackupCoordinator:
         return reading
 
     def _read_repository(self, settings: BackupSettings) -> RepositoryReading:
-        """Missing is asked first, of the settings alone: a workspace from
-        another machine names a folder this one may not even accept."""
         if not has_repository(settings.repository):
             return RepositoryReading(missing=True)
         try:

@@ -105,9 +105,6 @@ STAGING_MARK = ".provisioning-"
 copied before it takes the storage folder's name."""
 
 
-# ------------------------------------------------------------------ refusals
-
-
 class BackupsSetUpError(ConflictError):
     def __init__(self) -> None:
         super().__init__("Backups are already set up; change them on the Setup page.")
@@ -115,7 +112,7 @@ class BackupsSetUpError(ConflictError):
 
 class DestinationHoldsRepositoryError(ConflictError):
     """A new repository refused: a destination still holds a repository's
-    copy, which a new repository would leave looking changed (plan, PR 8)."""
+    copy, which a new repository would leave looking changed."""
 
     def __init__(self, destination: Path) -> None:
         self.destination = destination
@@ -126,30 +123,20 @@ class DestinationHoldsRepositoryError(ConflictError):
         )
 
 
-class ConnectRefusedError(RefusedError):
-    """The chosen folder, or its password, does not give a repository."""
+class ConnectRefusedError(RefusedError): ...
 
 
 class ConnectPasswordError(ConnectRefusedError):
-    """The password is missing or does not open the copy at ``source``."""
-
     def __init__(self, message: str, source: Path) -> None:
         super().__init__(message)
         self.source = source
 
 
-class ExistingCopiesError(RefusedError):
-    """The destinations hold something set-up must not connect or create
-    beside: part of a copy, two repositories, or two copies that each lack
-    files the other has."""
-
-
-# ------------------------------------------------- what an entry point says
+class ExistingCopiesError(RefusedError): ...
 
 
 @dataclass(frozen=True)
-class NewRepository:
-    """``restic init`` a new, empty repository."""
+class NewRepository: ...
 
 
 @dataclass(frozen=True)
@@ -178,7 +165,6 @@ class PasswordSource:
 
     @classmethod
     def typed(cls, password: str) -> PasswordSource:
-        """Setup's: the form's password."""
         return cls(lambda _source: password, replaces_stored=True)
 
     @classmethod
@@ -197,13 +183,8 @@ class NewBlock:
     retention: RetentionSettings
 
 
-# --------------------------------------------------------------- the answer
-
-
 @dataclass(frozen=True)
 class Connected:
-    """What was connected instead of created."""
-
     source: Path
     """The copy it was copied from."""
     snapshots: tuple[Snapshot, ...]
@@ -224,17 +205,12 @@ class Provisioned:
 
 
 def source_for(destinations: Sequence[Path]) -> Source:
-    """Set-up's and ``backup init``'s choice: a destination's copy when one
-    holds a repository (:func:`existing_copies`), else a new repository."""
     copies = existing_copies(destinations)
     return DestinationCopy(copies) if copies else NewRepository()
 
 
 @dataclass(frozen=True)
 class Provisioning:
-    """What an entry point asks for: which folder, from where, with which
-    password, and the block to save."""
-
     storage: Path
     """The backup storage folder: new, or an empty folder."""
     source: Source
@@ -278,9 +254,6 @@ def provision(
     return Provisioned(connected, repository_id, workspace_id, stored_password=not stored)
 
 
-# ------------------------------------------------------------ 1. refusals
-
-
 @dataclass(frozen=True)
 class _Plan:
     workspace: Workspace
@@ -290,13 +263,11 @@ class _Plan:
     expected_revision: str
 
     def workspace_id(self, snapshots: Sequence[Snapshot]) -> WorkspaceId:
-        """The saved block's ID, kept; else the one ``snapshots`` carry."""
         if self.saved is not None and self.saved.workspace_id is not None:
             return WorkspaceId(self.saved.workspace_id)
         return workspace_id_for(snapshots)
 
     def changes(self, workspace_id: str) -> tuple[dict[str, object], tuple[str, ...]]:
-        """The settings edit that saves the block, and the keys it may change."""
         storage = self.backup.storage
         if self.new_block is not None:
             block = {
@@ -316,7 +287,6 @@ class _Plan:
         return changes, tuple(changes)
 
     def check(self) -> None:
-        """The save refused now, as it would be at the end."""
         changes, editable = self.changes(self.workspace_id(()).value)
         settings_save.check_settings_save(
             self.workspace,
@@ -392,9 +362,6 @@ def _refuse_copy(copy: Path, storage: Path) -> None:
         raise ConnectRefusedError("Choose a local folder separate from the source repository.")
 
 
-# ----------------------------------------------------------- 2. password
-
-
 def _password(workspace: Workspace, source: Source, supply: PasswordSource) -> tuple[str, bool]:
     """The password, and whether it is already stored."""
     stored = None if supply.replaces_stored else stored_password(workspace)
@@ -419,9 +386,6 @@ def _refuse_override(password: str) -> None:
             f"{BACKUP_PASSWORD_VAR} in the server environment overrides the saved password. "
             "Use the same password here or remove the override and restart the server."
         )
-
-
-# ------------------------------------------------------------ 3. storing
 
 
 def _store(workspace: Workspace, password: str, undo: ExitStack) -> None:
@@ -456,9 +420,6 @@ def _quietly(undo: Callable[..., None], *args: object, **kwargs: object) -> None
         logger.exception("undoing part of a failed backup provisioning failed")
 
 
-# ----------------------------------------------------------- 4. bringing
-
-
 def _bring(
     backup: ConfiguredBackup,
     source: Source,
@@ -490,8 +451,6 @@ def _bring(
 
 
 def _into_place[T](storage: Path, bring: Callable[[Path], T]) -> T:
-    """``bring`` a repository into a new staging folder beside ``storage``,
-    then give it ``storage``'s name; the staging folder never outlives it."""
     staging = storage.with_name(f"{storage.name}{STAGING_MARK}{secrets.token_hex(4)}")
     staging.mkdir()
     try:
@@ -551,9 +510,6 @@ def _open(repository: Repository, source: Path, *, env_file: Path | None) -> Non
         raise ConnectRefusedError(f"The copied repository did not pass a check: {checked.message}")
 
 
-# ------------------------------------------- which destination to connect
-
-
 def existing_copies(destinations: Sequence[Path]) -> tuple[Path, ...]:
     """The destinations set-up should connect from, in their order; empty
     when none holds a repository, so set-up creates one.
@@ -581,7 +537,6 @@ def existing_copies(destinations: Sequence[Path]) -> tuple[Path, ...]:
 
 
 def _complete(listings: Mapping[Path, Mapping[str, int]]) -> tuple[Path, ...]:
-    """The copies holding every file any of the others holds."""
     complete = tuple(
         path
         for path, files in listings.items()
@@ -598,8 +553,6 @@ def _complete(listings: Mapping[Path, Mapping[str, int]]) -> tuple[Path, ...]:
 
 
 def _read_copy(path: Path) -> tuple[bytes, dict[str, int]] | None:
-    """A destination copy's ``config`` bytes and listing; None for a folder
-    with none of restic's paths, or one not there yet."""
     if not path.is_absolute() or not path.is_dir() or not holds_repository(path):
         return None
     if not has_repository(path):

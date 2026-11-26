@@ -52,8 +52,6 @@ from etsy_listings.core.config.secrets import (
 )
 from etsy_listings.core.workspace import layout, scaffold
 
-# ---------------------------------------------------------------- credentials
-
 
 @dataclass(frozen=True)
 class Credential:
@@ -135,9 +133,6 @@ def _env_value(variable: str, value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-# --------------------------------------------------------------- verification
-
-
 def verify_printify_token(
     token: str,
     *,
@@ -162,15 +157,8 @@ def verify_etsy_app_key(
     *,
     transport_for: Callable[[EtsyAppKey], _Pingable] = Transport,
 ) -> int:
-    """The Etsy application id both halves of ``app_key`` identify.
-
-    One ping proves the pair together: ``x-api-key`` carries them joined, so
-    Etsy cannot say which half was wrong and this does not pretend to.
-    """
     return transport_for(app_key).ping()
 
-
-# --------------------------------------------------------------------- status
 
 REQUIRED_VARS: tuple[str, ...] = (
     PRINTIFY_TOKEN_VAR,
@@ -178,9 +166,8 @@ REQUIRED_VARS: tuple[str, ...] = (
     ETSY_SHARED_SECRET_VAR,
 )
 """The credentials without which some command fails. The Anthropic key is not
-among them: nothing before Phase 4 asks for one, and treating it as required
-would make every `auth --check` report a workspace as incomplete for a feature
-it does not have yet."""
+among them: only AI work asks for one, and treating it as required would make
+every `auth --check` report a workspace without AI as incomplete."""
 
 
 @dataclass(frozen=True)
@@ -231,7 +218,6 @@ def summarise(stored: StoredTokens | None, *, now: datetime) -> TokenSummary:
 
 
 def missing_credentials(secrets: Secrets) -> tuple[str, ...]:
-    """Which of :data:`REQUIRED_VARS` this workspace cannot supply."""
     have = {
         PRINTIFY_TOKEN_VAR: secrets.printify_api_token,
         ETSY_KEYSTRING_VAR: secrets.etsy_keystring,
@@ -246,8 +232,6 @@ def optional_credentials(secrets: Secrets) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class CredentialStatus:
-    """Everything ``auth --check`` reports, read without writing anything."""
-
     sign_in: TokenSummary
     missing: tuple[str, ...]
     optional_missing: tuple[str, ...]
@@ -270,24 +254,14 @@ def credential_status(root: Path, *, tokens: TokenStore, now: datetime) -> Crede
     )
 
 
-# --------------------------------------------------------------- Etsy sign-in
-
-
 @dataclass(frozen=True)
 class EtsySignIn:
-    """One consent request: the URL a human opens, and what checks its answer."""
-
     url: str
     pkce: oauth.Pkce
     state: str
 
 
 def begin_etsy_sign_in(app_key: EtsyAppKey) -> EtsySignIn:
-    """A fresh PKCE pair and ``state``, and the consent URL carrying them.
-
-    Every scope this tool uses, at the one registered loopback callback
-    (ADR-0026). Opening the URL is the caller's: it is a human step.
-    """
     pkce = oauth.Pkce.generate()
     state = oauth.new_state()
     url = oauth.authorize_url(keystring=app_key.keystring, pkce=pkce, state=state)
@@ -314,13 +288,6 @@ def complete_etsy_sign_in(
     oauth_client: _CodeExchange,
     tokens: TokenStore,
 ) -> SignedIn:
-    """Exchange the redirect's code and persist the tokens it buys.
-
-    A redirect that did not carry back this request's ``state`` raises
-    ``OAuthError`` before anything is exchanged or written: it belongs to a
-    request this process did not make. The tokens are persisted before they
-    are returned, so nothing can use a grant that is not on disk (ADR-0027).
-    """
     oauth.check_state(sent=sign_in.state, received=redirect.state)
     response = oauth_client.exchange(code=redirect.code, verifier=sign_in.pkce.verifier)
     recorded = tokens.record(response)

@@ -1,32 +1,3 @@
-"""``Run``, and the registry that owns which listings or workspace are held by
-which run (ADR-0041, ADR-0042, decision 7).
-
-A run is in-memory only -- "Runs are in memory only, so a restart forgets
-them, and history stays Phase 6's ``runs/`` SQLite recorder" -- so this module
-is a handful of ``dict``s guarded by one lock, not a store.
-
-**Locking is a conflict check, not a mutex.** The one thing that actually
-serialises writes is the single FIFO worker thread in ``executor.py`` -- two
-runs for two different listings can never execute concurrently no matter what
-this module does, because there is only one thread to execute either of them.
-What this module answers is a different question: *may a new run for this
-listing be **queued** at all*, so the editor gets an immediate ``409`` naming
-the run already in flight (to reattach to) rather than a run that silently
-waits behind it forever, or two runs that both believe they own one listing's
-lockfile.
-
-**Retention falls out of the same mapping, for free.** "A finished run is
-kept until the next run for any of its listings is created" turns out to need
-no separate cleanup pass: :attr:`RunRegistry._holder` always points a listing
-at its most recent run, whether that run is still going or long finished, and
-:meth:`RunRegistry.create` only refuses when the current holder is *not yet
-terminal*. Creating a new run for a listing simply overwrites the pointer --
-the old, finished ``Run`` is still sitting in :attr:`RunRegistry._runs` and
-answers ``GET /api/runs/{id}`` if anyone still has that id, but
-``GET /api/runs?listing=`` has already moved on, which is the whole of what
-"kept until superseded" means.
-"""
-
 from __future__ import annotations
 
 import queue
@@ -83,10 +54,6 @@ class WorkspaceApply:
 
 @dataclass(frozen=True)
 class BatchPlan:
-    """The reviewed rows of one listing batch that have changes to deploy
-    (ADR-0059), resolved when the plan is accepted, as a workspace plan's
-    listings are (ADR-0042)."""
-
     batch_id: str
     listings: tuple[str, ...]
     publish: bool = False  # as ListingPlan.publish
@@ -170,7 +137,6 @@ class Run:
 
     @property
     def batch_id(self) -> str | None:
-        """The listing batch a batch-scoped run deploys; ``None`` otherwise."""
         return self.command.batch_id if isinstance(self.command, BatchPlan | BatchApply) else None
 
     @property
@@ -278,8 +244,6 @@ class Run:
 
 
 def abandon(run: Run) -> None:
-    """End a run that never started in a legal terminal state: a plan is
-    cancelled and an apply fails. A run already finished is left alone."""
     if run.phase in TERMINAL_PHASES:
         return
     if run.kind == "plan":
@@ -290,25 +254,11 @@ def abandon(run: Run) -> None:
 
 @dataclass(frozen=True)
 class Conflict:
-    """``create`` refused: ``active_run`` is already holding one of the
-    requested listings, and the caller should reattach to it instead."""
-
     active_run: str
 
 
 @dataclass
 class RunRegistry:
-    """Every run this process has seen and its current scope holder.
-
-    Listing-scoped runs use ``_holder``. Workspace runs use the separate
-    ``_workspace_holder`` because a terminal workspace plan remains the
-    current review until its linked apply replaces it. Batch runs are kept
-    per listing batch in ``_batch_holder`` for the same reason, and stay out
-    of ``_holder`` so a listing's own deploy page never picks one up as that
-    listing's run; they still conflict with any active run on one of their
-    listings (ADR-0059).
-    """
-
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _runs: dict[str, Run] = field(default_factory=dict)
     _holder: dict[str, str] = field(default_factory=dict)
@@ -318,9 +268,6 @@ class RunRegistry:
     _id_source: Callable[[], str] = field(default=lambda: uuid.uuid4().hex)
 
     def create(self, command: RunCommand) -> Run | Conflict:
-        """A new run for ``listings``, queued for the executor -- or the
-        holder already busy with one of them, unmodified, for the caller to
-        report as a ``409`` naming a run to reattach to instead."""
         with self._lock:
             blocking = self._blocking_run(command)
             if blocking is not None:
@@ -338,10 +285,6 @@ class RunRegistry:
             return run
 
     def _blocking_run(self, command: RunCommand) -> Run | None:
-        """Under ``_lock``: the active run ``command`` would collide with. An
-        active workspace run blocks everything; a workspace command is also
-        blocked by any active listing or batch run, a listing or batch
-        command only by one holding one of its listings."""
         blocking = self._active(self._workspace_holder or "")
         if blocking is not None:
             return blocking
@@ -371,9 +314,6 @@ class RunRegistry:
             return self._runs.get(run_id)
 
     def all_runs(self) -> list[Run]:
-        """Every run this process still remembers, for ``GET /api/runs`` with
-        no ``listing`` filter -- a workspace-wide view a future batch runner
-        or dashboard can use; today's editor always filters by listing."""
         with self._lock:
             return list(self._runs.values())
 
@@ -387,22 +327,16 @@ class RunRegistry:
             return [run] if run is not None else []
 
     def for_workspace(self) -> list[Run]:
-        """The latest workspace-scoped run, including a finished plan that
-        remains the review source until a later workspace run replaces it."""
         with self._lock:
             run = self._runs.get(self._workspace_holder or "")
             return [run] if run is not None else []
 
     def for_batch(self, batch_id: str) -> list[Run]:
-        """The latest run deploying listing batch ``batch_id``, including a
-        finished plan that remains its review until a later batch run
-        replaces it."""
         with self._lock:
             run = self._runs.get(self._batch_holder.get(batch_id, ""))
             return [run] if run is not None else []
 
     def for_scope(self, scope: RunScope) -> list[Run]:
-        """Every retained run of one scope, for an explicit scope query."""
         with self._lock:
             return [run for run in self._runs.values() if run.scope == scope]
 
@@ -417,8 +351,6 @@ class RunRegistry:
         return None if run_id == _WAKE else run_id
 
     def wake(self) -> None:
-        """Return the worker's current or next :meth:`dequeue` at once, so a
-        stop is noticed now rather than when the poll times out."""
         self._queue.put(_WAKE)
 
     def drain_and_cancel(self) -> None:

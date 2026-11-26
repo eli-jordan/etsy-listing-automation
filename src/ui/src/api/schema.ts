@@ -3872,11 +3872,10 @@ export interface components {
     /**
      * ListingFailedEvent
      * @description The engine's ``EngineListingFailed`` wire twin. ``message`` is the
-     *     :class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word
-     *     (decision 5) -- never the generic internal-error text, which belongs to a
-     *     :class:`PhaseEvent` naming the whole run ``failed`` instead, since a
-     *     defect is not about any one listing. ``stale_plan`` is set only when the
-     *     error was a :class:`~etsy_listings.core.engine.run.StalePlanError`.
+     *     :class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for
+     *     word, or the generic internal-error text for a defect, which also fails
+     *     the run. ``stale_plan`` is set only when the error was a
+     *     :class:`~etsy_listings.core.engine.run.StalePlanError`.
      */
     ListingFailedEvent: {
       /** Id */
@@ -4456,7 +4455,7 @@ export interface components {
      * PhaseEvent
      * @description The run (or one of the two run kinds) moved to a new phase. Always the
      *     first event of a run and always its last, whichever phase that turns out
-     *     to be (ADR-0041, decision 7).
+     *     to be.
      */
     PhaseEvent: {
       /** Id */

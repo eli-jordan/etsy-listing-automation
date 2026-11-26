@@ -1,6 +1,3 @@
-"""Dotted keys into a YAML document, shared by the Admin page's two files
-(``shop_settings`` and ``workspace_settings``)."""
-
 from __future__ import annotations
 
 from typing import Any

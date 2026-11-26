@@ -8,8 +8,8 @@ calibration target is not a product.
 
 What an upload may be called and whether it is an image are decided here;
 the bundled targets are server static files, and decoding the multipart
-request is the route's (module-structure plan, PR 7: uploaded bytes and
-filenames may enter core, request objects may not).
+request is the route's: uploaded bytes and filenames may enter core,
+request objects may not.
 """
 
 from __future__ import annotations
@@ -27,10 +27,6 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 def save_uploaded_design(workspace: Workspace, filename: str, payload: bytes) -> str:
-    """Add an upload to the library and answer the id it is offered under
-    (its filename stem). Refuses with :class:`DesignUploadRefusedError`, writing
-    nothing, unless ``filename`` is a plain filename and ``payload`` decodes
-    as an image."""
     if not filename:
         raise DesignUploadRefusedError("the upload needs a filename")
     # Reject rather than sanitise: `Path("../../evil.png").stem` is a
@@ -55,8 +51,6 @@ def save_uploaded_design(workspace: Workspace, filename: str, payload: bytes) ->
 
 
 def uploaded_design(workspace: Workspace, design: str) -> Path:
-    """The file behind an uploaded design's id, or
-    :class:`CalibrationDesignMissingError`."""
     path = workspace.test_design_file(design)
     if not path.is_file():
         raise CalibrationDesignMissingError(design)

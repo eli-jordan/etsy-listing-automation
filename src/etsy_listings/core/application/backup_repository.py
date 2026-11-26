@@ -3,8 +3,8 @@ operation works from, and the repository it opens.
 
 Joins the three things restic needs: the ``backup:`` block in
 ``settings.yaml``, the password in the workspace ``.env`` (or the
-environment), and a restic binary (workspace-backup spec, *Configuration*;
-plan, PR 2). :func:`configured_backup` resolves them once per operation into
+environment), and a restic binary (workspace-backup spec, *Configuration*).
+:func:`configured_backup` resolves them once per operation into
 a :class:`ConfiguredBackup`, refusing a backup storage folder or destination
 that overlaps the workspace or another; every run, repair, restore, create,
 connect and status read takes that value instead of the settings.
@@ -47,7 +47,7 @@ from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
 MIN_PASSWORD_LENGTH = 12
-"""The set-up form's minimum (plan, PR 5), applied to ``backup init`` too."""
+"""The set-up form's minimum, applied to ``backup init`` too."""
 
 
 class BackupOffError(ConflictError):
@@ -68,8 +68,7 @@ LIVE_WORKSPACE = "That's your live workspace. Choose a new, empty folder."
 """The restore dialog's words (interactions, *Restore*)."""
 
 
-class RestoreRefusedError(ConflictError):
-    """A restore target the restore would damage or mix files into."""
+class RestoreRefusedError(ConflictError): ...
 
 
 class PasswordTooShortError(RefusedError):
@@ -80,22 +79,15 @@ class ResticNotInstalledError(UserFacingError):
     pass
 
 
-# ------------------------------------------------------------- folder rules
-
-
 def inside(path: Path, folder: Path) -> bool:
-    """Whether ``path`` is ``folder`` or within it, once both are resolved."""
     return path.resolve().is_relative_to(folder.resolve())
 
 
 def overlaps(first: Path, second: Path) -> bool:
-    """Whether either folder is, or is inside, the other."""
     return inside(first, second) or inside(second, first)
 
 
 def holds_files(folder: Path) -> bool:
-    """Whether ``folder`` is a file or a folder with anything in it: what a
-    new storage folder, a connect's copy and a restore target must not be."""
     return folder.exists() and (not folder.is_dir() or any(folder.iterdir()))
 
 
@@ -121,13 +113,11 @@ def check_backup_paths(
 
 
 def check_new_storage(folder: Path, password: str) -> None:
-    """Refuse a short password, or a new storage folder that holds files."""
     refuse_short_password(password)
     refuse_full_storage(folder)
 
 
 def refuse_short_password(password: str) -> None:
-    """A new repository's password: at least :data:`MIN_PASSWORD_LENGTH`."""
     if len(password) < MIN_PASSWORD_LENGTH or not password.strip():
         raise PasswordTooShortError(
             f"The backup password must be at least {MIN_PASSWORD_LENGTH} characters."
@@ -135,24 +125,14 @@ def refuse_short_password(password: str) -> None:
 
 
 def refuse_full_storage(folder: Path) -> None:
-    """The one refusal of a backup storage folder that already holds files,
-    whether a repository is to be made or copied into it."""
     if holds_files(folder):
         raise RepositoryNotEmptyError(
             f"{folder} already holds files. Choose an empty or new folder."
         )
 
 
-# ---------------------------------------------------- the configured backup
-
-
 @dataclass(frozen=True)
 class ConfiguredBackup:
-    """The ``backup:`` block resolved against this machine for one
-    operation. Built by :func:`configured_backup`, which has already refused
-    overlapping folders. It answers questions about folders and opens the
-    repository and the state record; it runs no operation itself."""
-
     workspace: Path
     """The live workspace's root."""
     settings: BackupSettings
@@ -167,7 +147,6 @@ class ConfiguredBackup:
 
     @property
     def storage(self) -> Path:
-        """The backup storage folder."""
         return self.settings.repository
 
     @property
@@ -176,8 +155,6 @@ class ConfiguredBackup:
 
     @property
     def workspace_id(self) -> str:
-        """``backup.workspace_id``: a run writes one first when it is
-        missing (:func:`ensure_workspace_id`)."""
         if self.settings.workspace_id is None:
             raise ConflictError(
                 f"{self.workspace / layout.SETTINGS_FILE} has no backup.workspace_id. Run "
@@ -187,7 +164,6 @@ class ConfiguredBackup:
 
     @property
     def password(self) -> str | None:
-        """The stored password, the environment first; None when there is none."""
         return self.secrets.backup_password
 
     @property
@@ -196,11 +172,9 @@ class ConfiguredBackup:
 
     @property
     def present(self) -> bool:
-        """Whether the storage folder holds a repository."""
         return has_repository(self.storage)
 
     def state(self) -> BackupState:
-        """The storage folder's state record: last prune, check and copies."""
         return self.store.load(self.storage)
 
     def check_new_storage(self, password: str) -> None:
@@ -209,11 +183,6 @@ class ConfiguredBackup:
         check_new_storage(self.storage, password)
 
     def check_restore_target(self, target: Path, *, now: BackupSettings | None = None) -> Path:
-        """``target`` resolved, or refused: not a full path, the live
-        workspace or inside it, inside the storage folder or a destination,
-        or holding files (spec, *Restore*). ``now`` is the ``backup:`` block
-        as it reads just before restic writes; its storage folder and
-        destinations are refused as destinations too."""
         if not target.is_absolute():
             raise RefusedError(f"{target} is not a full path. Name the folder from its drive.")
         target = target.resolve()
@@ -268,14 +237,6 @@ def configured_backup(
     home: Path | None = None,
     restic: OpenRepository | None = None,
 ) -> ConfiguredBackup:
-    """Resolve the configured backup once for an operation.
-
-    ``settings`` is the ``backup:`` block a caller has already read, so an
-    operation reads ``settings.yaml`` once; without it the block is read
-    here, or :class:`BackupOffError`. Create and connect pass the block
-    with the storage folder the seller is about to save. Refuses a storage
-    folder that is not a full path, and a storage folder or destination
-    that overlaps the workspace or another."""
     if settings is None:
         settings = backup_settings(workspace)
     check_backup_paths(workspace, settings.repository, settings.destinations)
@@ -291,7 +252,6 @@ def configured_backup(
 
 
 def backup_settings(workspace: Workspace) -> BackupSettings:
-    """The ``backup:`` block, or :class:`BackupOffError`."""
     settings = workspace.capture_settings().backup
     if settings is None:
         raise BackupOffError(workspace.settings_file())
@@ -299,7 +259,6 @@ def backup_settings(workspace: Workspace) -> BackupSettings:
 
 
 def new_workspace_id() -> str:
-    """A fresh workspace ID (``backup.workspace_id``)."""
     return str(uuid.uuid4())
 
 
@@ -311,8 +270,6 @@ SEVERAL_WORKSPACES = (
 
 @dataclass(frozen=True)
 class WorkspaceId:
-    """The workspace ID an operation uses, and what to tell the seller."""
-
     value: str
     notice: str | None = None
     """Set when the repository's snapshots name several workspaces, so a new
@@ -320,11 +277,6 @@ class WorkspaceId:
 
 
 def workspace_id_for(snapshots: Sequence[Snapshot]) -> WorkspaceId:
-    """The ID a workspace without one takes for a repository holding
-    ``snapshots``: the one workspace ID they are tagged with, so its schedule
-    carries on (ADR-0061); otherwise a new one. Untagged snapshots, from
-    before workspace IDs, are not counted. Several IDs are not guessed
-    between: the new one comes with :data:`SEVERAL_WORKSPACES`."""
     found = {snapshot.workspace_id for snapshot in snapshots} - {None}
     if len(found) == 1:
         (only,) = found
@@ -370,13 +322,6 @@ def stored_password(workspace: Workspace) -> str | None:
 
 
 def create_repository(backup: ConfiguredBackup, password: str) -> str:
-    """Create the repository in ``backup``'s storage folder; its restic id.
-
-    Installs the pinned restic when no other is named. It does not store
-    ``password``: ``backup_provisioning`` stores it before this runs and takes
-    it back when a later step fails, so no repository exists whose password
-    was never recorded.
-    """
     backup.check_new_storage(password)
     return backup.open(password=password, install=True).init()
 
@@ -384,15 +329,11 @@ def create_repository(backup: ConfiguredBackup, password: str) -> str:
 def repository_at(
     binary: Path, folder: Path, password: str, *, restic: OpenRepository | None = None
 ) -> Repository:
-    """The repository in ``folder``, run with the restic at ``binary``."""
     return (restic or Restic)(binary, folder, password)
 
 
 @dataclass(frozen=True)
 class BackupStatus:
-    """The configuration and whether the repository opens (plan, PR 2; PR 5
-    adds runs, destinations and warnings)."""
-
     settings: BackupSettings | None
     """None when backups are off."""
     binary: Path | None = None

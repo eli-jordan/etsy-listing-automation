@@ -1,47 +1,3 @@
-"""The pause a backup puts on the server's background jobs (workspace-backup
-spec, *Pausing jobs*; plan decision P4).
-
-One gate per server, shared by every coordinator the lifespan starts: the
-deploy executor, the AI coordinator and its batch queue, Prepare and the
-scene warmer. It lives in ``core/application`` because Import Linter keeps
-core free of server imports and every coordinator here checks it.
-
-**Admission, not a flag.** A unit of work is admitted at the moment it
-starts and holds its :class:`Ticket` until it ends. Checking ``paused`` and
-then starting would leave a window in which a backup's
-:meth:`JobGate.wait_idle` sees nothing in flight while a job is about to
-begin; taking the ticket under the gate's own lock closes it. So
-:meth:`~JobGate.wait_idle` counts tickets, and work the pause holds back is
-never counted -- it has not started, and counting it would wait for itself.
-
-**Three ways in**, one per kind of caller:
-
-- :meth:`~JobGate.admit` -- now or not at all. For a coordinator whose own
-  durable queue is the record of what waits (batch rows, Prepare's
-  journal): it leaves the work queued and looks again from
-  :meth:`~JobGate.on_resume`.
-- :meth:`~JobGate.hold` -- start now, or in line once the pause ends. For
-  work with nowhere else to wait (a manual AI run). The gate keeps the line,
-  so a resume landing just before the work joins it still starts it.
-- :meth:`~JobGate.wait_admit` -- block in line until admitted. For a worker
-  thread's loop (the deploy executor, the scene warmer).
-
-What a ticket is handed to owns it: a run releases it when it finishes, a
-``with`` block when it ends. A ``start`` that raises loses its ticket here.
-
-**Pause, then wait.** A backup calls :meth:`~JobGate.pause` first, so
-nothing new starts, then :meth:`~JobGate.wait_idle` for what is already
-running. Work in flight needs no admission to finish, so a deploy already
-waiting in ``yield_to_deploy`` for an AI run to stop still completes.
-
-**Stop overrides.** At shutdown :meth:`~JobGate.stop` closes admission for
-good, ends a pending :meth:`~JobGate.wait_idle` and every
-:meth:`~JobGate.wait_admit`, and starts nothing in line. It comes before
-each coordinator's own stop (the server lifespan's order), which drops what
-it holds as it drops queued work; a worker blocked in ``wait_admit`` is
-released only by it.
-"""
-
 from __future__ import annotations
 
 import itertools
@@ -104,17 +60,11 @@ class JobGate:
 
     @property
     def waiting_for(self) -> str | None:
-        """The oldest work still in flight, or ``None``."""
         with self._condition:
             return next(iter(self._in_flight.values()), None)
 
     def holds(self, *, queued: bool) -> bool:
-        """Whether work that is ``queued`` -- asked for, not started -- is
-        held by a backup's pause: what ``waiting_for_backup`` reports. Never
-        stored; work queued with no pause on is only waiting its turn."""
         return queued and self.paused
-
-    # ------------------------------------------------------------ the work
 
     def on_resume(self, listener: Callable[[], None]) -> None:
         """Call ``listener`` after each :meth:`resume`, so a coordinator
@@ -159,10 +109,7 @@ class JobGate:
                 self._line.remove(place)
             return place.ticket
 
-    # ---------------------------------------------------------- the backup
-
     def pause(self) -> None:
-        """Admit nothing until :meth:`resume`."""
         with self._condition:
             self._paused = True
             self._condition.notify_all()
@@ -185,9 +132,6 @@ class JobGate:
                 logger.exception("a background coordinator could not resume")
 
     def stop(self) -> None:
-        """Shutdown: admit nothing ever again, end a pending
-        :meth:`wait_idle` and every :meth:`wait_admit`, and start nothing in
-        line."""
         with self._condition:
             self._stopped = True
             self._paused = True
@@ -207,8 +151,6 @@ class JobGate:
                 named = job
                 self._condition.wait()
             return not self._stopped
-
-    # ------------------------------------------------------------- inside
 
     def _start_line(self) -> None:
         """Admit the line in order while the gate is open. A pause landing
