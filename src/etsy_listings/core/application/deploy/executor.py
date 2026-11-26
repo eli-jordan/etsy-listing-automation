@@ -92,10 +92,7 @@ class RunExecutor:
                 return
 
     def _admitted(self, run_id: str) -> None:
-        """Execute ``run_id`` once the gate admits it. While a backup is
-        paused this run waits first in line and the runs behind stay queued;
-        a shutdown -- whose gate stops first -- ends it as a queued run is
-        ended."""
+        """Execute ``run_id`` once the gate admits it."""
         run = self.registry.get(run_id)
         if run is None or run.phase in TERMINAL_PHASES:
             return
@@ -185,10 +182,7 @@ class RunExecutor:
             preview_listing(ctx, result, hooks.on_event, should_stop=hooks.should_stop)
             previewed.append(result.plan.listing)
 
-        # Plan again now the previews exist: they are the bytes apply
-        # will upload, so only now can the media stage tell a re-rendered
-        # image that differs from one that came out identical. The later
-        # `listing_planned` supersedes the first, fingerprint included.
+        # Plan again over the previews (architecture, *The calibrator*).
         if previewed and not self._should_stop(run):
             plan_listings(ctx, previewed, self._pipeline(run), hooks=hooks)
 

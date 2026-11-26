@@ -86,16 +86,8 @@ class ApplyRunState:
 @dataclass
 class Run:
     """One plan or apply run: its scope, identity, listings, and event log.
-
-    A workspace apply keeps ``reviewed_run_id`` so a client can replay the
-    completed review alongside the apply events; the registry deliberately
-    retains that source run until a later workspace run supersedes it.
-
-    The :class:`threading.Condition` is what bridges the worker thread (which
-    appends events) and the SSE route's async generator (which waits for
-    them) without a new dependency -- see ``server/api/runs.py``'s own docstring for
-    the bridge itself; this class only owns the lock and the notifying.
-    """
+    ``condition`` is the lock the worker appends under and the SSE loop
+    (``server/api/runs.py``) waits on."""
 
     id: str
     command: RunCommand
@@ -107,10 +99,8 @@ class Run:
     _state: PlanRunState | ApplyRunState = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        """The starting ``queued`` phase is itself the run's first event --
-        a client that opens the SSE stream from event 0 sees the same phase
-        history whether it connected before or after the worker thread ever
-        looked at this run."""
+        """The ``queued`` phase is the first event, so a stream read from 0
+        sees the same history however early it connects."""
 
         self._state = (
             PlanRunState()
@@ -179,10 +169,8 @@ class Run:
         return self._state.cancel_requested if isinstance(self._state, PlanRunState) else False
 
     def append(self, make_event: Callable[[int], AnyRunEvent]) -> AnyRunEvent:
-        """Append one event, its ``id`` assigned under the same lock a waiter
-        reads with -- ``make_event`` takes the id rather than this returning
-        one to stamp in, so a caller can never construct an event with an id
-        that turns out to already be taken by the time it is appended."""
+        """Append one event, its ``id`` assigned under the lock a waiter reads
+        with: ``make_event`` takes the id, so no caller holds a stale one."""
         with self.condition:
             event = make_event(self._next_event_id)
             self._next_event_id += 1
@@ -222,17 +210,10 @@ class Run:
             self.seen = True
 
     def wait_for_events(self, after_id: int, *, timeout: float) -> tuple[list[AnyRunEvent], bool]:
-        """Block up to ``timeout`` seconds for an event past ``after_id``.
-
-        Returns ``(pending, done)``. ``done`` is true only once the run has
-        reached a terminal phase *and* every event up to that phase has
-        already been returned -- so a caller that loops on this until ``done``
-        is guaranteed to see every event exactly once, in order, with nothing
-        dropped between one call and the next (``server/api/runs.py``'s SSE loop is
-        that caller). A short ``timeout`` rather than an unbounded wait is
-        what lets that same loop notice the surrounding server is shutting
-        down without this class knowing anything about shutdown.
-        """
+        """Block up to ``timeout`` seconds for events past ``after_id``.
+        ``done`` once the run is terminal and every event has been returned,
+        so a caller looping until ``done`` sees each event exactly once; the
+        bounded wait lets that loop notice shutdown."""
         with self.condition:
             pending = [e for e in self.events if e.id > after_id]
             if not pending and self.phase not in TERMINAL_PHASES:
@@ -333,9 +314,8 @@ class RunRegistry:
             return [run for run in self._runs.values() if run.scope == scope]
 
     def dequeue(self, *, timeout: float) -> str | None:
-        """The next queued run id, for the executor's worker thread. ``None``
-        on a timeout or a :meth:`wake`, which is what lets that thread notice
-        a stop flag without blocking on this forever."""
+        """The next queued run id; ``None`` on a timeout or a :meth:`wake`, so
+        the worker thread can notice a stop."""
         try:
             run_id = self._queue.get(timeout=timeout)
         except queue.Empty:
@@ -346,13 +326,9 @@ class RunRegistry:
         self._queue.put(_WAKE)
 
     def drain_and_cancel(self) -> None:
-        """Every run still sitting in the queue reaches a legal terminal state
-        without running: plan runs are cancelled and apply runs fail.
-        Whichever of this and the worker thread's own ``dequeue`` reaches a
-        given id first wins it outright (``queue.Queue`` hands each item to
-        exactly one caller), so there is no run this could cancel out from
-        under the thread already executing it.
-        """
+        """End every queued run without running it: plans cancelled, applies
+        failed. ``queue.Queue`` hands each id to one caller, so this never
+        ends a run the worker has taken."""
         while True:
             try:
                 run_id = self._queue.get_nowait()
