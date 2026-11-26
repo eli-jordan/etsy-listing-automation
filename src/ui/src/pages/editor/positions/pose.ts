@@ -1,3 +1,5 @@
+import type { components } from "../../../api/schema";
+
 /**
  * Offsets are fractions of W and H; positive rotation is clockwise in image
  * coordinates, about the box centre, before the offset.
@@ -8,8 +10,8 @@ export interface Point {
   y: number;
 }
 
-/** Top-left, top-right, bottom-right, bottom-left, as `template.yaml` orders them. */
-export type Quad = [Point, Point, Point, Point];
+/** As `template.yaml` orders them. */
+export type Quad = [topLeft: Point, topRight: Point, bottomRight: Point, bottomLeft: Point];
 
 export interface Pose {
   scale: number;
@@ -19,18 +21,16 @@ export interface Pose {
   rotation: number;
 }
 
-/** `settings.yaml`'s `template_positions` section, as the settings read serves it. */
-export interface Limits {
-  scale: { min: number; max: number };
-  offset: number;
-  rotation: number;
-}
+type Schemas = components["schemas"];
+
+export type Limits = Omit<Schemas["TemplatePositionLimits"], "scale"> & {
+  scale: Schemas["PositionScaleLimits"];
+};
 
 export interface PoseFit {
   pose: Pose;
-  /** The largest corner error in photo pixels -- above about 1, the box is not
-   * a plain move, resize or tilt of the template's (spec, *Validation* rule 1). */
-  residual: number;
+  /** The largest corner error. */
+  residualPixels: number;
 }
 
 export const IDENTITY: Pose = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 };
@@ -105,8 +105,7 @@ function invert(m: Matrix): Matrix {
   ];
 }
 
-/** The homography taking `quad` back onto the unit square. */
-export function unitFrame(quad: Quad): Matrix {
+export function quadToUnit(quad: Quad): Matrix {
   return invert(homography(quad));
 }
 
@@ -201,7 +200,7 @@ export function decompose(box: Quad, quad: Quad): PoseFit {
   const residual = Math.max(
     ...corners.map((i) => Math.hypot(back[i].x - quad[i].x, back[i].y - quad[i].y)),
   );
-  return { pose, residual };
+  return { pose, residualPixels: residual };
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));

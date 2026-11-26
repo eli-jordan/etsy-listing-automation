@@ -39,36 +39,30 @@ export interface Layer {
   id: string;
   /** The placement ID of a `multiple` template, which labels its box. */
   placement: string | null;
-  /** The template's own box. */
-  box: Quad;
+  templateBox: Quad;
   pose: Pose;
   /** What `listing.yaml` holds for it, when anything. */
   stored: Quad | null;
-  /** Why `plan` refuses the stored box (spec, *Validation* rules 1-2). */
-  invalid: "limits" | "shape" | null;
+  /** Spec, *Validation* rules 1-2. */
+  refusal: PoseRefusal | null;
 }
 
-export interface Positioning {
+export type PoseRefusal = "limits" | "shape";
+
+export interface Positioning extends Pick<PositionReadiness, "waiting" | "attempt" | "recheck"> {
   on: boolean;
   toggle: () => void;
-  /** The template cannot be adjusted yet, so the switch refuses to turn on. */
-  waiting: boolean;
-  /** Counts each time the template becomes ready, so a failed picture retries. */
-  attempt: number;
-  /** A picture failed: find out whether preparation is why. */
-  recheck: () => void;
   size: { w: number; h: number };
   layers: Layer[];
   selected: string;
   select: (id: string) => void;
   note: { text: string; warn: boolean } | null;
   /** `run` is null when there is nothing to reset: shown anyway, disabled,
-   * only on a steady foot. */
+   * only on a adjustScreen foot. */
   reset: { label: string; run: (() => void) | null } | null;
   fit: (() => void) | null;
   ghost: boolean;
-  /** The position is ahead of the composite, so the stage draws it live. */
-  live: boolean;
+  aheadOfComposite: boolean;
   look: LiveLook;
   begin: (gesture: Gesture, id: string, point: Point) => void;
   move: (point: Point) => void;
@@ -83,12 +77,11 @@ interface Args {
   template: string | null;
   pane: string;
   summary: TemplateSummary | undefined;
-  /** The composite the stage shows: the saved listing's. */
-  picture: string;
+  savedComposite: string;
   saved: Positions | null | undefined;
   onUpdate: (patch: Record<string, unknown>) => void;
   onFlush: (() => void) | undefined;
-  steady?: boolean;
+  adjustScreen?: boolean;
 }
 
 export function positionTarget(
@@ -147,14 +140,16 @@ function layerOf(
   stored: Quad | null,
   limits: Limits,
 ): Layer {
-  if (stored === null) return { id, placement, box, pose: IDENTITY, stored, invalid: null };
+  if (stored === null) {
+    return { id, placement, templateBox: box, pose: IDENTITY, stored, refusal: null };
+  }
   try {
     const fit = decompose(box, stored);
-    let invalid: Layer["invalid"] = withinLimits(fit.pose, limits) ? null : "limits";
-    if (fit.residual > RESIDUAL_PIXELS) invalid = "shape";
-    return { id, placement, box, pose: fit.pose, stored, invalid };
+    let refusal: Layer["refusal"] = withinLimits(fit.pose, limits) ? null : "limits";
+    if (fit.residualPixels > RESIDUAL_PIXELS) refusal = "shape";
+    return { id, placement, templateBox: box, pose: fit.pose, stored, refusal };
   } catch {
-    return { id, placement, box, pose: IDENTITY, stored, invalid: "shape" };
+    return { id, placement, templateBox: box, pose: IDENTITY, stored, refusal: "shape" };
   }
 }
 
@@ -188,10 +183,10 @@ function noteFor(
   template: string,
 ): Positioning["note"] {
   if (!on || layer === undefined) return null;
-  if (layer.invalid === "limits") {
+  if (layer.refusal === "limits") {
     return { text: "Outside the limits since the template's box moved", warn: true };
   }
-  if (layer.invalid === "shape") {
+  if (layer.refusal === "shape") {
     return { text: "Not a plain move, resize or tilt of the template's box", warn: true };
   }
   if (config.kind === "multiple") {
@@ -239,7 +234,7 @@ function stageable(
 function withDraft(base: Layer[], draft: Draft | null, name: string): Layer[] {
   return base.map((layer) =>
     draft?.template === name && draft.id === layer.id
-      ? { ...layer, pose: draft.pose, invalid: null }
+      ? { ...layer, pose: draft.pose, refusal: null }
       : layer,
   );
 }
@@ -249,7 +244,7 @@ function selectionOf(
   chosen: { template: string; id: string } | null,
   name: string,
 ): Layer | undefined {
-  const fallback = layers.find((l) => l.invalid !== null) ?? layers[0];
+  const fallback = layers.find((l) => l.refusal !== null) ?? layers[0];
   const pick = chosen?.template === name ? layers.find((l) => l.id === chosen.id) : undefined;
   return pick ?? fallback;
 }
@@ -301,7 +296,7 @@ function useGestures() {
         setDraftPose({
           template: ctx.name,
           id: d.id,
-          pose: dragged(d, target.box, point, ctx.limits),
+          pose: dragged(d, target.templateBox, point, ctx.limits),
         });
       },
       end: () => {
@@ -338,14 +333,14 @@ function lookOf({ renderer }: TemplateConfigState): LiveLook {
 
 function resetOf(
   layer: Layer,
-  editing: boolean,
-  steady: boolean,
+  footEditing: boolean,
+  adjustScreen: boolean,
   run: () => void,
 ): Positioning["reset"] {
   const label = layer.placement === null ? "Reset to template" : `Reset ${layer.placement}`;
   const positioned = layer.stored !== null || !isIdentity(layer.pose);
-  if (steady) return { label, run: positioned ? run : null };
-  return editing && positioned ? { label, run } : null;
+  if (adjustScreen) return { label, run: positioned ? run : null };
+  return footEditing && positioned ? { label, run } : null;
 }
 
 function toggled(on: boolean, readiness: PositionReadiness, flip: () => void) {
@@ -358,8 +353,8 @@ function refusal(readiness: PositionReadiness): Positioning["note"] {
 }
 
 export function usePositioning(args: Args): Positioning | null {
-  const { detail, template, pane, summary, picture, saved, onUpdate, onFlush } = args;
-  const steady = args.steady === true;
+  const { detail, template, pane, summary, savedComposite, saved, onUpdate, onFlush } = args;
+  const adjustScreen = args.adjustScreen === true;
   const limits = useLimits();
   const config = useConfig(template);
   const readiness = usePositionReadiness(config?.renderer.type === "marigold" ? template : null);
@@ -379,9 +374,8 @@ export function usePositioning(args: Args): Positioning | null {
   if (layer === undefined) return null;
   // Opened on by a refused *stored* box: a draft that looks valid must not
   // switch the mode off under the pointer or the keyboard.
-  const on = adjust?.pane === pane ? adjust.on : stored.some((l) => l.invalid !== null);
-  /** Whether the foot reads as it does while adjusting. */
-  const editing = on || steady;
+  const on = adjust?.pane === pane ? adjust.on : stored.some((l) => l.refusal !== null);
+  const footEditing = on || adjustScreen;
 
   // `detail` as of this render. A nudge's save runs from the render of its
   // last key press, so it builds on the positions shown then.
@@ -395,16 +389,18 @@ export function usePositioning(args: Args): Positioning | null {
   }
 
   function commit(target: Layer, pose: Pose) {
-    write(withPose(detail.template_positions, name, target.placement, target.box, pose, bounds));
+    write(
+      withPose(detail.template_positions, name, target.placement, target.templateBox, pose, bounds),
+    );
     gestures.clear();
   }
 
   const select = (id: string) => setChosen({ template: name, id });
   const savePending =
     positionSignature(detail.template_positions?.[name]) !== positionSignature(saved?.[name]);
-  const unseen = edited === name && loadedSrc !== picture;
+  const unseen = edited === name && loadedSrc !== savedComposite;
   const colours = detail.media.filter((e) => typeof e !== "string" && e.template === name).length;
-  const refused = layer.invalid === null ? null : layer.stored;
+  const refused = layer.refusal === null ? null : layer.stored;
 
   return {
     on,
@@ -416,19 +412,19 @@ export function usePositioning(args: Args): Positioning | null {
     layers,
     selected: layer.id,
     select,
-    note: refusal(readiness) ?? noteFor(layer, editing, layers, ready.config, colours, name),
-    reset: resetOf(layer, editing, steady, () => {
+    note: refusal(readiness) ?? noteFor(layer, footEditing, layers, ready.config, colours, name),
+    reset: resetOf(layer, footEditing, adjustScreen, () => {
       gestures.clear();
       write(withoutPosition(detail.template_positions, name, layer.placement));
     }),
     fit:
-      editing && refused !== null
+      footEditing && refused !== null
         ? () => {
-            commit(layer, nearestAllowedPose(layer.box, refused, bounds));
+            commit(layer, nearestAllowedPose(layer.templateBox, refused, bounds));
           }
         : null,
     ghost: on && !isIdentity(layer.pose),
-    live: on && (gestures.draft !== null || savePending || unseen),
+    aheadOfComposite: on && (gestures.draft !== null || savePending || unseen),
     look: lookOf(ready.config),
     ...gestures.handlers({ name, layers, layer, on, limits: bounds, select, commit }),
     loaded: setLoadedSrc,

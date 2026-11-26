@@ -46,11 +46,15 @@ const STEPS: Readonly<Record<string, [number, number]>> = {
   ArrowDown: [0, 1],
 };
 
-/** Arrow keys move 1% of the box's width or height; with Shift, 5%. `null` for any other key. */
+/** Fractions of the box's width or height an arrow key moves it. */
+const NUDGE_STEP = 0.01;
+const SHIFT_NUDGE_STEP = 0.05;
+
+/** `null` for a key that is not an arrow. */
 export function nudged(from: Pose, key: string, shift: boolean, limits: Limits): Pose | null {
   const step = STEPS[key];
   if (step === undefined) return null;
-  const size = shift ? 0.05 : 0.01;
+  const size = shift ? SHIFT_NUDGE_STEP : NUDGE_STEP;
   return clampPose(
     { ...from, offsetX: from.offsetX + step[0] * size, offsetY: from.offsetY + step[1] * size },
     limits,

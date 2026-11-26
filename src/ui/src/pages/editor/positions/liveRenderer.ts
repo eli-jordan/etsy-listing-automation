@@ -1,4 +1,4 @@
-import { type Matrix, type Quad, proportions, toPhoto, unitFrame } from "./pose";
+import { type Matrix, type Quad, proportions, toPhoto, quadToUnit } from "./pose";
 
 /**
  * A Photo warp template's shade is `passes.py`'s arithmetic, on the luminance
@@ -28,6 +28,8 @@ export interface LiveRenderer {
   dispose: () => void;
 }
 
+const BLEND = { marigold: 0, multiply: 1, "soft-light": 2, "grey-pivot": 3 } as const;
+
 const VERTEX = `#version 300 es
 out vec2 vUv;
 void main() {
@@ -54,9 +56,9 @@ uniform float uOpacity;
 // Mip filtering softens a downscaled picture; the stage should read as sharply
 // as the composite under it.
 const float SHARPEN = -0.5;
-const int BLEND_MARIGOLD = 0;
-const int BLEND_MULTIPLY = 1;
-const int BLEND_SOFT_LIGHT = 2;
+const int BLEND_MARIGOLD = ${BLEND.marigold};
+const int BLEND_MULTIPLY = ${BLEND.multiply};
+const int BLEND_SOFT_LIGHT = ${BLEND["soft-light"]};
 
 vec3 linear(vec3 c) { return pow(c, vec3(2.2)); }
 vec3 display(vec3 c) { return pow(c, vec3(1.0 / 2.2)); }
@@ -95,11 +97,9 @@ void main() {
   colour = vec4(shaded(ink.rgb / max(ink.a, 0.001)) * alpha, alpha);
 }`;
 
-/** The fragment shader's `uBlend` and `uOpacity` for `look`. */
 function lookUniforms(look: LiveLook): { blend: number; opacity: number } {
-  if (look.kind === "marigold") return { blend: 0, opacity: 1 };
-  const blend = { multiply: 1, "soft-light": 2, "grey-pivot": 3 }[look.blend];
-  return { blend, opacity: look.opacity };
+  if (look.kind === "marigold") return { blend: BLEND.marigold, opacity: 1 };
+  return { blend: BLEND[look.blend], opacity: look.opacity };
 }
 
 /** `m` for a GLSL `mat3`, which is column-major. */
@@ -151,8 +151,7 @@ function texture(gl: WebGL2RenderingContext, source: TexImageSource): WebGLTextu
   return made;
 }
 
-/** A mask that cuts nothing, for a template without one. */
-function uncut(gl: WebGL2RenderingContext): WebGLTexture {
+function blankMask(gl: WebGL2RenderingContext): WebGLTexture {
   const made = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, made);
   const white = new Uint8Array([255, 255, 255, 255]);
@@ -185,7 +184,7 @@ function rendererOn(canvas: HTMLCanvasElement, gl: WebGL2RenderingContext): Live
   gl.bindVertexArray(gl.createVertexArray());
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-  const none = uncut(gl);
+  const none = blankMask(gl);
   let photo: WebGLTexture | null = null;
   const prints = new Map<string, { artwork: WebGLTexture; mask: WebGLTexture | null }>();
 
@@ -194,7 +193,7 @@ function rendererOn(canvas: HTMLCanvasElement, gl: WebGL2RenderingContext): Live
     if (print === undefined) return;
     bind(gl, 1, print.artwork);
     bind(gl, 2, print.mask ?? none);
-    gl.uniformMatrix3fv(uniforms.toUnit, false, columns(unitFrame(layer.quad)));
+    gl.uniformMatrix3fv(uniforms.toUnit, false, columns(quadToUnit(layer.quad)));
     gl.uniform3fv(uniforms.garment, garmentSample(layer.box, size));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

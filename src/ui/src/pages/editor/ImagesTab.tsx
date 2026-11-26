@@ -92,7 +92,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   );
   const [actualSize, setActualSize] = useViewState(scope, "actual-size", false, isBoolean);
 
-  const { adjusting, startAdjusting, stopAdjusting } = useAdjustSheet();
+  const { adjusting, startAdjusting, stopAdjusting } = useAdjustScreen();
 
   function pointAt(next: Focus) {
     setPointed(next);
@@ -145,7 +145,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   const focus =
     pointed ??
     restoreFocus(remembered, templates, files) ??
-    opening(upright, detail, templates, files);
+    initialFocus(upright, detail, templates, files);
   const view = focus === null ? null : viewFocus(focus, detail, templates, scene, listing);
   const selectedIndex = view !== null && view.reelIndex >= 0 ? view.reelIndex : null;
 
@@ -158,12 +158,11 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
     detail,
     ...target,
     summary: templates.find((t) => t.name === target.template),
-    picture: view?.picture ?? "",
+    savedComposite: view?.picture ?? "",
     saved,
     onUpdate,
     onFlush,
-    // Only Adjust's screen shows the pane on an upright phone.
-    steady: upright,
+    adjustScreen: upright,
   });
 
   const adjustable = adjustTarget(upright, selectedIndex, positioning);
@@ -193,7 +192,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
       onOpen={setLightboxIndex}
       onToggle={toggleFocused}
       phone={phone}
-      steady={upright}
+      adjustScreen={upright}
     />
   );
 
@@ -266,9 +265,9 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   );
 }
 
-/** Adjust, on an upright phone: whether its screen is open, and its way in
- * -- straight into Position mode, since adjusting is what it is for. */
-function useAdjustSheet() {
+/** Adjust, on an upright phone, opens straight into Position mode, since
+ * adjusting is what it is for. */
+function useAdjustScreen() {
   const [adjusting, setAdjusting] = useState(false);
   const stopAdjusting = useCallback(() => setAdjusting(false), []);
   const startAdjusting = useCallback((positioning: Positioning) => {
@@ -278,10 +277,9 @@ function useAdjustSheet() {
   return { adjusting, startAdjusting, stopAdjusting };
 }
 
-/** What the stage shows before the seller points at anything: the reel's
- * first picture, so reviewing starts without a click. Not on an upright
- * phone, where there is no pane and a selection is only a moves bar. */
-function opening(
+/** None on an upright phone, where there is no pane and a selection is only a
+ * moves bar. */
+function initialFocus(
   upright: boolean,
   detail: ListingDetail,
   templates: readonly TemplateSummary[],
@@ -391,7 +389,7 @@ function PreviewPane({
   onOpen,
   onToggle,
   phone,
-  steady,
+  adjustScreen,
 }: {
   view: FocusView | null;
   positioning: Positioning | null;
@@ -399,9 +397,9 @@ function PreviewPane({
   onOpen: (index: number) => void;
   onToggle: () => void;
   phone: boolean;
-  /** Adjust's screen: the foot the same with the switch on or off, so no
-   * Add or Remove (the reel's bar removes) appearing as it turns off. */
-  steady: boolean;
+  /** The foot stays the same with the switch on or off, so no Add or Remove
+   * (the reel's bar removes) appears as it turns off. */
+  adjustScreen: boolean;
 }) {
   const adjusting = positioning?.on === true ? positioning : null;
   return (
@@ -430,7 +428,7 @@ function PreviewPane({
         {view?.kind === "image" && adjusting !== null && source !== null && (
           <PositionStage
             positioning={adjusting}
-            picture={view.picture}
+            composite={view.picture}
             title={view.title}
             source={source}
           />
@@ -471,7 +469,7 @@ function PreviewPane({
               ))}
               <PositionNote note={positioning?.note ?? null} />
             </span>
-            <FootActions positioning={positioning} steady={steady}>
+            <FootActions positioning={positioning} adjustScreen={adjustScreen}>
               <button
                 type="button"
                 className={
@@ -512,14 +510,14 @@ function liveSource(detail: ListingDetail, focus: Focus | null): LiveSource | nu
 
 function FootActions({
   positioning,
-  steady,
+  adjustScreen,
   children,
 }: {
   positioning: Positioning | null;
-  steady: boolean;
+  adjustScreen: boolean;
   children: ReactNode;
 }) {
   if (positioning === null) return <span className="preview-actions">{children}</span>;
-  if (steady) return <PositionControls positioning={positioning} />;
+  if (adjustScreen) return <PositionControls positioning={positioning} />;
   return <PositionControls positioning={positioning}>{children}</PositionControls>;
 }
