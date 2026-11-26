@@ -28,11 +28,9 @@ class MissingDefaultError(ValueError):
 class PrintifyDefaults(BaseModel):
     """Which Printify shop this workspace creates products in.
 
-    Every product call is shop-scoped -- ``/v1/shops/{shop}/products.json`` --
-    so nothing in Phase 2 can run without it. Optional at load anyway, for the
-    same reason the Etsy ids are: a workspace that only renders mockups has no
-    use for it, and every workspace written before Phase 2 has no ``printify:``
-    block at all.
+    Optional at load, like the Etsy ids: a workspace that only renders mockups
+    has no use for it, and a product call that needs it raises
+    :class:`MissingDefaultError` then.
     """
 
     model_config = ConfigDict(extra="forbid")

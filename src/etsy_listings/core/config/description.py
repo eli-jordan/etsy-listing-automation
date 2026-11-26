@@ -22,16 +22,8 @@ class DescriptionConfig(BaseModel):
 
 
 def compose_description(lead: str, text: str | None) -> str:
-    """The final concrete description Printify, Etsy, snapshots, diffs,
-    validation and the UI preview all consume.
-
-    Joins a non-empty ``lead`` and a non-empty ``text`` with exactly one blank
-    line. A lead without a body is valid -- it composes to itself. An empty
-    lead (a listing still being edited) preserves the body as-is, verbatim,
-    rather than joining an empty string onto it. ``.strip()`` only decides
-    which of those three branches applies; neither string's own content is
-    otherwise touched, so a body's internal formatting survives untouched.
-    """
+    """The final description Printify, Etsy, snapshots, diffs, validation and
+    the UI preview all consume."""
     body = text or ""
     if not lead.strip():
         return body
