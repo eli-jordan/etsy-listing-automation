@@ -25,7 +25,7 @@ RELEASE_URL = f"https://github.com/restic/restic/releases/download/v{RESTIC_VERS
 
 
 class ResticInstallError(UserFacingError):
-    """The pinned restic could not be installed; nothing was left half done."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -37,9 +37,7 @@ class ReleaseAsset:
     unpack: Literal["zip", "bz2"]
 
 
-# Digests copied from the release's SHA256SUMS,
-# https://github.com/restic/restic/releases/download/v0.19.1/SHA256SUMS,
-# and checked against a download of the Windows zip on 2026-11-23.
+# From the release's SHA256SUMS; the Windows zip's checked by download on 2026-11-23.
 ASSETS: dict[tuple[str, str], ReleaseAsset] = {
     ("Windows", "AMD64"): ReleaseAsset(
         name=f"restic_{RESTIC_VERSION}_windows_amd64.zip",
@@ -94,12 +92,6 @@ class ResticBinaries:
         return self.locate(configured) or self.install()
 
     def install(self) -> Path:
-        """Install the pinned release unless it already is; its binary.
-
-        Downloads, checks the SHA-256, unpacks into a staging directory and
-        renames that into place, so a failure at any step leaves nothing that
-        :meth:`installed` would mistake for a release.
-        """
         existing = self.installed()
         if existing is not None:
             return existing

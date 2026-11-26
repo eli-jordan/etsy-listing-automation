@@ -28,16 +28,15 @@ DOWNLOAD_TIMEOUT_SECONDS = 120.0
 
 
 class InstallationError(Exception):
-    """Why an install stopped; ``binary`` turns it into the user's message."""
+    pass
 
 
 def download(url: str, target: Path) -> None:
-    """Stream ``url`` into ``target``. GitHub serves release files through a
-    redirect to its object store, so redirects are followed."""
     import httpx  # noqa: PLC0415 -- httpx loads only for an explicit install
 
     try:
         with (
+            # GitHub redirects release files to its object store.
             httpx.stream(
                 "GET", url, follow_redirects=True, timeout=DOWNLOAD_TIMEOUT_SECONDS
             ) as reply,
@@ -53,12 +52,6 @@ def download(url: str, target: Path) -> None:
 def install(
     asset: ReleaseAsset, *, url: str, target: Path, fetch: Callable[[str, Path], None]
 ) -> Path:
-    """Install ``asset``'s binary at ``target``; ``target``.
-
-    ``target``'s directory must not exist yet: it appears, holding only the
-    binary, by one rename. When another install wins that race, its binary is
-    the answer and this one's staging is discarded.
-    """
     release = target.parent
     staging = release.parent / f".staging-{uuid.uuid4().hex}"
     staging.mkdir(parents=True)
