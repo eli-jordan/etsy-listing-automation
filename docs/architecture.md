@@ -392,6 +392,14 @@ still matches what is saved, through the rules gathered in
 picture into a response: the WebP encoding of a frame, and the identity headers
 and `304` of a rendered scene.
 
+Calibration is judged by eye, so the artwork a preview may use is open: the
+server's bundled targets plus whatever the seller uploads.
+`application.calibration_designs` stores uploads in the workspace's
+`test-designs/`, never in `designs/`, which holds artwork listings ship; a
+calibration target is not a product. It decides what an upload may be called
+and refuses bytes that do not decode as an image before writing anything; the
+route decodes the multipart request, so only bytes and a filename enter core.
+
 Position mode is the one place a browser composes a scene. While a listing's
 position is ahead of its composite, `pages/editor/positions/liveRenderer.ts` draws
 the photo and each layer's artwork with WebGL, so a gesture never waits on a
@@ -1062,7 +1070,11 @@ later. Each traces to a decision.
   three-way, against the dump of the model the file held, so defaults and
   normalised values the seller never wrote stay out. Only a new file is
   rendered whole, in its owner's layout. Garment profiles and pricing plans are
-  create-if-absent and never touch an existing file (ADR-0055).
+  create-if-absent and never touch an existing file (ADR-0055), so a hand
+  edit such as a trimmed colour list carries into every later listing. A
+  profile records the catalog's brand and model verbatim, `®` included;
+  matching normalises both sides, so a hand edit need not reproduce the
+  symbol.
 - **A client is built through `core/connections.py`.** Which credential is
   resolved when, what a missing one means, and where the Etsy token file lives
   are one set of answers, not four (`cli`, `setup`, `auth` and the e2e layer
@@ -1082,8 +1094,16 @@ later. Each traces to a decision.
   prove it are core's; what to say before asking, how to ask, and what to say
   when it fails are the CLI's. Capturing stays separate from storing because
   `auth` writes per credential as it goes while `setup` writes once every
-  question is answered. OAuth consent and the loopback callback are a
-  credential workflow, not the application server.
+  question is answered. `auth`'s credentials are independent, so a proved
+  Printify token survives abandoning the Etsy sign-in; `setup` stores last
+  because a token left by a cancelled run is a workspace that looks configured
+  and is not. No operation combines proving with storing, and a token is
+  verified from the value in hand, never from `.env`. Printify's proof is the
+  shop list itself, which `setup` needs next. An Etsy consent near the end of
+  its 90 days is only ever a warning: the credential still works, and
+  refusing two weeks early would break commands over a failure that has not
+  happened. OAuth consent and the loopback callback are a credential workflow,
+  not the application server.
 - **Secrets never enter the repo.** Tokens in `.auth/`, keys in `.env`, both
   gitignored, and both in the *workspace*, not the repo. `core/config/secrets.py`
   is the reader for environment/file API keys; `core/clients/etsy/tokens.py`
