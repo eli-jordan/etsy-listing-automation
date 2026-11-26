@@ -7,12 +7,10 @@ import { useSwipe } from "./useSwipe";
 export interface PagerOptions<T> {
   items: readonly T[];
   current: T;
-  /** Shows `item`. The pager has already slid the old one out. */
   onPick: (item: T) => void;
   enabled?: boolean;
   /** The element that moves, when it is not `zone` itself. */
   moves?: RefObject<HTMLElement | null>;
-  /** How far the element follows the finger, as a share of its travel. */
   follow?: number;
 }
 
@@ -64,9 +62,7 @@ export function usePager<T>(
   const previous = neighbour(items, current, -1);
   const next = neighbour(items, current, 1);
   const shown = useRef(current);
-  /** Slid out and waiting for `current` to change; a pick the caller
-   * refused would otherwise leave the element off to one side. */
-  const away = useRef(false);
+  const slidOutAwaitingPick = useRef(false);
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -74,7 +70,7 @@ export function usePager<T>(
   useLayoutEffect(() => {
     const from = shown.current;
     shown.current = current;
-    away.current = false;
+    slidOutAwaitingPick.current = false;
     const element = moves.current;
     if (from === current || !enabled || element === null || prefersReducedMotion()) return;
     slideIn(element, items.indexOf(current) >= items.indexOf(from));
@@ -84,11 +80,11 @@ export function usePager<T>(
     const travel = direction === "left" ? -TRAVEL_PERCENT : TRAVEL_PERCENT;
     const transition = `transform ${OUT_MS}ms ease-in, opacity ${OUT_MS}ms ease-in`;
     pose(element, `translateX(${travel}%)`, transition, OPACITY_AT_FULL_TRAVEL);
-    away.current = true;
+    slidOutAwaitingPick.current = true;
     timer.current = window.setTimeout(() => {
       onPick(target);
       timer.current = window.setTimeout(() => {
-        if (away.current) springBack(element);
+        if (slidOutAwaitingPick.current) springBack(element);
       }, IN_MS);
     }, OUT_MS);
   };

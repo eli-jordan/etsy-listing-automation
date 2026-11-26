@@ -129,7 +129,6 @@ export function Lightbox({
             {slides.map(({ at, position }) => {
               const slide = items[position] as LightboxItem;
               return (
-                // Keyed by item: the slid-in picture keeps its loaded element.
                 <div
                   key={slide.id}
                   className={`lightbox__slide lightbox__slide--${at}`}

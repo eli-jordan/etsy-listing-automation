@@ -4,21 +4,7 @@ import type { SwipeDirection } from "./swipe";
 import { resist } from "./usePager";
 import { useSwipe } from "./useSwipe";
 
-/**
- * A pager laid out like a native photo viewer, for the Lightbox's pictures on
- * a phone. The neighbours sit either side of the shown item inside `track`,
- * so a finger drags the whole strip and a part-swipe shows both. Released past
- * a swipe, the strip carries on until the neighbour is centred, and only then
- * does the index move to it; short of one, it springs back. Past the first and
- * the last it resists (no wrap-around), as `usePager`'s pagers do.
- *
- * Its own hook rather than `usePager`, whose pages slide one out and the next
- * in, because only here are the neighbours on screen at once. The caller lays
- * the slides out: the previous one a track's width plus `--lightbox-gap` to
- * the left, the next one as far to the right.
- *
- * With `prefers-reduced-motion`, a swipe steps at once and nothing slides.
- */
+/** The Lightbox's phone pager (src/ui/AGENTS.md, *Phone layout*). */
 
 export interface CarouselOptions {
   count: number;
@@ -47,9 +33,6 @@ export function useCarousel(
 
   useEffect(() => () => window.clearTimeout(settleTimer.current), []);
 
-  // When the index moves, the new current slide is where the neighbour was,
-  // so the strip goes back to rest without a transition and nothing on
-  // screen moves.
   useLayoutEffect(() => {
     window.clearTimeout(settleTimer.current);
     settleTimer.current = undefined;
