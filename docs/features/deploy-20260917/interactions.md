@@ -245,6 +245,9 @@ Image badges use the individual deploy vocabulary:
 | **New**     | After side  | This image will be uploaded.                         | The seller can distinguish a new upload from an unchanged image at a glance.      |
 | **was N**   | After side  | The image remains but moves from its previous rank.  | Order changes matter on Etsy even when the underlying image is unchanged.         |
 
+Each field is one row across both columns rather than two free-standing
+columns, so a drifted field's two sides line up and open together.
+
 An existing Etsy listing uses **On Etsy now** and **After apply** columns. A new
 listing has one **After apply** column with **Not on Etsy yet.** Lifecycle
 removal shows what is being removed and the retract stage that performs it.
@@ -368,6 +371,21 @@ credentials never appear in the browser.
   its single-line compact count treatment.
 - The drawer height is bounded by the viewport. Its header remains visible and
   its body provides the scroll area for the complete diff.
+
+On a phone:
+
+- **Deploy changes** only starts the plan, and its candidate counts are a
+  button of their own that opens the candidate list in a sheet. A phone has
+  no hover, and focus arrives with the same tap that starts the plan, so the
+  desktop's hover and focus summary card has no moment to open.
+- The listing drawer is a bottom sheet. A finger anywhere on it outside its
+  scrolling body drags it: down follows the finger and a swipe down closes
+  it, up grows it and a swipe up expands it. A height it grew to is fitted to
+  the screen again when the screen changes size, such as the phone turning on
+  its side, so the sheet never rises past the top. A mouse keeps the
+  desktop's resize handle, and a tap on the handle still toggles the sheet.
+- The individual deploy route's head carries one back link, drawn with a
+  chevron, instead of the desktop's Back button and two crumbs.
 
 ## 11. Implementation-facing acceptance criteria
 

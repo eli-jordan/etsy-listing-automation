@@ -273,8 +273,7 @@ export function BatchListingDrawer({
 
   function handleHandlePointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (event.button !== 0) return;
-    // On a phone a finger drags the whole sheet (useDrawerSwipe); a tap on
-    // the handle still toggles it.
+    // useDrawerSwipe owns a finger's drag on a phone.
     if (isPhone && event.pointerType === "touch") return;
     const panel = panelRef.current;
     if (panel === null) return;

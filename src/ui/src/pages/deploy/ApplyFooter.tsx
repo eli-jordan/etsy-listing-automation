@@ -56,9 +56,6 @@ export function ApplyFooter({
   appliedStepCount?: number;
   backLabel?: string;
   onBack?: () => void;
-  /** The listing's Etsy id after apply, when it has one. A new listing is
-   * an Etsy draft the seller still has to publish there, and a live one is
-   * worth checking, so either way Etsy is the next step. */
   etsyListingId?: number | null;
 }) {
   if (controlPhase === "applied") {

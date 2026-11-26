@@ -36,12 +36,6 @@ function CandidateCounts({ names }: { names: CandidateNames }) {
   );
 }
 
-/**
- * The phone's control. There is no hover, and focus arrives with the very
- * tap that starts the plan, so the candidate list cannot open as the
- * desktop's does: the counts are a button of their own that opens it in a
- * sheet, and Deploy changes only starts the plan.
- */
 function PhoneBatchCandidateControl({
   names,
   description,

@@ -263,8 +263,6 @@ function TextDiff({
 
 type Side = "before" | "after";
 
-/** One field across the comparison. Fields are rows, not two free-standing
- * columns, so a drifted field's two sides line up and can open together. */
 interface FieldRow {
   key: string;
   cell: (side: Side) => React.ReactNode;
