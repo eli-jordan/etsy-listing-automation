@@ -78,8 +78,6 @@ export interface AfterVideoTile {
   badge: "new" | null;
 }
 
-/** One video Etsy has now, drawn from its own `thumbnail_url`. `ref` is
- * `null` for one this tool never uploaded. */
 export interface BeforeVideoTile {
   videoId: number;
   ref: string | null;
@@ -125,8 +123,6 @@ export interface Comparison {
   colours: ColoursBlock | null;
   price: PriceBlock | null;
   images: ImagesBlock | null;
-  /** `etsy_videos`, shown under Etsy media; `null` when neither
-   * side has a video. */
   videos: VideosBlock | null;
   priceRows: PriceRow[];
   belowCost: BelowCostRow[];
@@ -299,14 +295,6 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
 
 const VIDEO_SLOTS = ["videos.featured", "videos.second"] as const;
 
-/**
- * The videos block. Every badge reads the stage's own changes: a slot
- * change names the ref before and after (`etsy_videos._changes`), so a ref
- * that arrives in a slot without leaving another is new, and one that leaves
- * without arriving is removed -- a swap is neither. New bytes on the same ref
- * (`.contents`) replace its upload, so it is both. A video this tool never
- * uploaded is swept whenever the stage runs, which the outcome says.
- */
 function buildVideos(stagePlan: StagePlanFor<"etsy_videos"> | undefined): VideosBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!stagePlan || !snapshot) return null;
@@ -392,9 +380,7 @@ function driftAfter(drift: DriftDTO, stagePlan: StagePlanDTO): string {
   return drift.last_applied_label ?? displayValue(drift.last_applied);
 }
 
-/** Printify republishes linked copy onto Etsy, so the same external edit can
- * appear in both stages. Show that event once, preferring the buyer-facing
- * Etsy observation when both sides are byte-for-byte identical. */
+/** Printify republishes linked copy onto Etsy, so one external edit can drift in both stages. */
 function uniqueDrifts(plan: PlanDTO): { drift: DriftDTO; stagePlan: StagePlanDTO }[] {
   const found = new Map<string, { drift: DriftDTO; stagePlan: StagePlanDTO }>();
   for (const stagePlan of plan.stage_plans) {
@@ -470,7 +456,6 @@ export function buildComparison(plan: PlanDTO): Comparison {
   const videos = buildVideos(findStage(plan, "etsy_videos"));
   const drifted = buildDrifted(plan);
 
-  // Setting drifted copy back changes what buyers read as much as an edit does.
   const orDrifted = <Block extends { changed: boolean }>(block: Block | null, key: string) =>
     block && { ...block, changed: block.changed || drifted.some((d) => d.key === key) };
 
