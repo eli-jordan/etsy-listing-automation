@@ -16,7 +16,7 @@ from etsy_listings.core.application.mockup_templates import require_template
 from etsy_listings.core.application.refusals import TemplateInUseError, TemplateNameTakenError
 from etsy_listings.core.batches.records import BatchRecords
 from etsy_listings.core.config.template_refs import rename_template_refs
-from etsy_listings.core.engine.template_refs import follow_template_rename
+from etsy_listings.core.engine.template_refs import follow_template_rename_locked
 from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
@@ -63,7 +63,9 @@ def rename_template(workspace: Workspace, old: str, new: str, hosts: RenameHosts
         return TemplateRename()
     if hosts.deploying():
         raise TemplateInUseError("A deploy is running; rename the template when it finishes")
-    hosts.preparations.rename_template(old, new, lambda: _move(workspace, old, new, destination))
+    hosts.preparations.rename_template(
+        old, new, lambda: _move_locked(workspace, old, new, destination)
+    )
     hosts.records.rename_mockup_template(old, new)
     outcome = _Outcome()
     _follow_listing_templates(workspace, old, new, outcome)
@@ -72,9 +74,8 @@ def rename_template(workspace: Workspace, old: str, new: str, hosts: RenameHosts
     return TemplateRename(tuple(outcome.updated), tuple(outcome.unresolved))
 
 
-def _move(workspace: Workspace, old: str, new: str, destination: Path) -> None:
-    """Caller holds both templates' locks. A name Windows refuses surfaces
-    only here, as a non-permission ``OSError``."""
+def _move_locked(workspace: Workspace, old: str, new: str, destination: Path) -> None:
+    """A name Windows refuses surfaces only here, as a non-permission ``OSError``."""
     require_template(workspace, old)
     if destination.exists():
         raise TemplateNameTakenError(new)
@@ -108,7 +109,6 @@ def _follow_garment_profiles(workspace: Workspace, old: str, new: str, outcome: 
 
 
 def _follow_file(workspace: Workspace, path: Path, change: Change, outcome: _Outcome) -> None:
-    """ADR-0055. The caller holds whatever lock guards ``path``."""
     relative = workspace.relative_path(path)
     try:
         document = yaml.safe_load(read_bytes_retrying(path))
@@ -128,7 +128,7 @@ def _follow_listings(workspace: Workspace, old: str, new: str, outcome: _Outcome
         relative = workspace.relative_path(workspace.listing_file(listing))
         try:
             with documents.lock(listing):
-                updated = _follow_listing(workspace, documents, listing, old, new)
+                updated = _follow_listing_locked(workspace, documents, listing, old, new)
         except _UNUPDATABLE:
             outcome.unresolved.append(relative)
         else:
@@ -136,10 +136,10 @@ def _follow_listings(workspace: Workspace, old: str, new: str, outcome: _Outcome
                 outcome.updated.append(relative)
 
 
-def _follow_listing(
+def _follow_listing_locked(
     workspace: Workspace, documents: ListingDocuments, listing: str, old: str, new: str
 ) -> bool:
-    """Caller holds the listing's lock. A listing awaiting retraction may be only a lockfile."""
+    """A listing awaiting retraction may be only a lockfile."""
     written = None
     if documents.exists(listing):
         written = documents.edit(listing, lambda document: rename_template_refs(document, old, new))
@@ -150,5 +150,5 @@ def _follow_listing(
             if target.is_dir():
                 remove_tree(target)
             source.replace(target)
-    follow_template_rename(workspace, listing, old, new)
+    follow_template_rename_locked(workspace, listing, old, new)
     return written is not None

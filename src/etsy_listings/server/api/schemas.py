@@ -190,7 +190,6 @@ class SinglePreviewRequest(ApiModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["single"] = "single"
     colour: str | None = None
-    artwork: str | None = None
     bounding_box: BoundingBox
     renderer: Renderer
     labels: list[str] = []
@@ -779,6 +778,13 @@ class ApplyRunDetail(ApplyRunSummary):
 
 
 RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind")]
+
+
+class RunConflict(ApiModel):
+    """The run already holding one of the listings: reattach to it with
+    ``GET /api/runs/{active_run}`` rather than retrying."""
+
+    active_run: str
 
 
 class SeoReadinessResponse(ApiModel):

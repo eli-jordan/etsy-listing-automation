@@ -481,13 +481,7 @@ def test_the_brief_is_the_only_write_under_listings(chain: Chain) -> None:
     changed = {path for path in after if after[path] != before_draft.get(path)}
     assert changed == {f"listings/{LISTING}/listing.yaml"}
     document_after = yaml.safe_load(listing_file.read_text(encoding="utf-8"))
-    # Every write normalises `design:` to its map form (multi-artwork plan),
-    # so the fixture's bare-string shorthand comes back as one.
-    assert document_after == {
-        **document_before,
-        "brief": DRAFTED_BRIEF,
-        "design": {"default": document_before["design"]},
-    }
+    assert document_after == {**document_before, "brief": DRAFTED_BRIEF}
 
 
 # -------------------------------------------------------------- cancellation

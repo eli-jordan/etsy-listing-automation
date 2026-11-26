@@ -56,10 +56,4 @@ class HttpEtsyShopClient(ShopMetadataReads):
             if exc.status_code == HTTP_NOT_FOUND:
                 return None
             raise
-        body = response.json()
-        # Documented as a single Shop; a `results` list is what the sibling
-        # search returns, and tolerating both costs one line.
-        rows = results_of(body)
-        if rows:
-            return Shop.model_validate(rows[0])
-        return Shop.model_validate(body) if isinstance(body, dict) and "shop_id" in body else None
+        return Shop.model_validate(response.json())

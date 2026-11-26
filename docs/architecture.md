@@ -1114,8 +1114,7 @@ later. Each traces to a decision.
   Templates choose no artwork. An artwork group — a render layer's design
   identity, a Printify print area — is the resolved file's **content hash**,
   so renaming a file or reshaping `design:` without changing what any garment
-  prints plans nothing. `design:` is always written as a map
-  (`ListingDocuments` normalises a bare string or `null`).
+  prints plans nothing. `design:` is always a map.
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
   variants sell, not which photos get rendered.
@@ -1338,7 +1337,8 @@ configuration. `npm run build` writes `src/ui/dist/`, which is gitignored. The
 Vite dev server proxies `/api` to a running `etsy-listings ui`. The typed
 client is generated: `scripts/export_openapi.py` writes `docs/openapi.json`
 from the FastAPI app and `npm run gen:api` turns it into
-`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011). Only the modules
+`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011), and `poe check`
+and CI fail when either differs from a fresh export. Only the modules
 under `src/ui/src/api/` call the server: everything above them works in domain
 types and never touches `fetch`, URLs or the generated schema.
 
@@ -1453,9 +1453,9 @@ dependency instead of giving everything jsdom. Prototype tests stay required
 prototype frame exercising production components is not production coverage.
 Real-API E2E stays in its separate main/manual workflow.
 
-The CLI currently exposes `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and
-`ui`. Dedicated `render`, `generate`, `catalog refresh`, `status`, a persisted
-run-history recorder and a general persisted rate-budget module are absent.
+The CLI exposes `auth`, `setup`, `new`, `plan`, `apply`, `unlock`, `ui`, `backup`
+and `marigold`. A persisted run-history recorder and a general persisted
+rate-budget module are absent.
 Current transports already share retries, and Etsy has a per-transport,
 header-driven `RateGate`; their existence does not imply those future modules.
 

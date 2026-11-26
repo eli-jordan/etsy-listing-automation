@@ -211,6 +211,9 @@ jobs:
       - name: eslint
         run: npm run lint
 
+      - name: schema.ts matches docs/openapi.json
+        run: npm run check:api
+
       - name: tsc
         run: npm run typecheck
 

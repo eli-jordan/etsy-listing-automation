@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, Response
 from etsy_listings.core.config.media import media_kind
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.server.api import app_state
+from etsy_listings.server.api.refusal_status import refusals
 from etsy_listings.server.api.schemas import MediaFileSummary
 from etsy_listings.server.api.thumbnails import thumbnail_response
 
@@ -55,12 +56,14 @@ def common_media_file(request: Request, name: str) -> FileResponse:
     return _file(_existing(app_state.workspace(request).common_media_file(name), name))
 
 
-@router.get("/api/listings/{listing}/media-files", response_model=list[MediaFileSummary])
+@router.get(
+    "/api/listings/{listing}/media-files",
+    response_model=list[MediaFileSummary],
+    responses=refusals({404: "No such listing (an empty list is a listing with no files)"}),
+)
 def list_listing_media_files(request: Request, listing: str) -> list[MediaFileSummary]:
     """The *This listing* group: the listing's own files, each with the
-    ``./`` ref that names it. A ``404`` for a listing that does not
-    exist, rather than an empty group that would look like one with nothing
-    in it."""
+    ``./`` ref that names it."""
     workspace = app_state.workspace(request)
     if not ListingDocuments(workspace).exists(listing):
         raise HTTPException(status_code=404, detail=f"no listing {listing!r}")

@@ -51,24 +51,22 @@ explicitly.
 
 ## Running the CLI
 
+`uv run etsy-listings --help` lists every command, and `<command> --help`
+its options.
+
 ```bash
-uv run etsy-listings auth --root ~/etsy-listings  # capture credentials before setup
-uv run etsy-listings setup --root ~/etsy-listings # initialise a workspace
-uv run etsy-listings new                    # interactive design/garment/provider picker
-uv run etsy-listings new <design-name>      # ...or name the design up front
-uv run etsy-listings plan <listing-name>    # diff against live state
-uv run etsy-listings plan --all
-uv run etsy-listings apply <listing-name>   # execute the plan; writes state.lock.json
-uv run etsy-listings apply --all
-uv run etsy-listings apply --all --publish  # also publish new and still-draft listings (opt-in)
-uv run etsy-listings unlock <listing-name>  # clear a stuck Printify publish
-uv run etsy-listings ui --root <workspace>  # serves the UI at :8000
-uv run etsy-listings marigold setup        # explicit native GPU worker + weights
-uv run etsy-listings marigold status       # inspect capabilities; never install
-uv run etsy-listings marigold update       # select required engine; retain old installs
-uv run etsy-listings backup init           # create the restic repository settings.yaml names
-uv run etsy-listings backup snapshots      # list its snapshots
-uv run etsy-listings backup status         # configuration and whether the repository opens
+uv run etsy-listings auth --root ~/etsy-listings   # store the Printify and Etsy credentials
+uv run etsy-listings auth printify|etsy            # ...or one of them
+uv run etsy-listings setup --root ~/etsy-listings  # create a workspace, or fill in what it lacks
+uv run etsy-listings new [<design>]                # create a listing: design, garment, provider
+uv run etsy-listings plan <listing>|--all          # show what apply would change
+uv run etsy-listings apply <listing>|--all         # make those changes; --publish also publishes
+uv run etsy-listings unlock <listing>              # clear a Printify product stuck publishing
+uv run etsy-listings ui                            # serve the web UI (--host, --port)
+uv run etsy-listings backup init|run|check         # set up, run or check the restic backup
+uv run etsy-listings backup snapshots|status       # list snapshots; show the configuration
+uv run etsy-listings backup restore <snapshot> <folder>  # restore into a new folder
+uv run etsy-listings marigold setup|status|update  # install or check the template-preparation worker
 ```
 
 ## Shop administration
@@ -142,10 +140,11 @@ npm run test          # vitest, every project (node, dom, design)
 npm run test:coverage # node + dom projects with the coverage gate
 npm run test:design   # design prototype tests (required, not coverage)
 npm run gen:api       # regenerate src/api/schema.ts from docs/openapi.json
+npm run check:api     # fail if src/api/schema.ts is stale (poe check and CI run this)
 ```
 
 After changing a FastAPI endpoint's shape, regenerate the typed client — it is
-generated, never hand-written:
+generated, never hand-written. `poe check` and CI fail when either file is stale:
 
 ```bash
 uv run python scripts/export_openapi.py   # writes docs/openapi.json
@@ -253,24 +252,15 @@ exec bit), and `LF → CRLF` warnings from git are harmless.
 ### Marigold runtime
 
 Marigold inference is an optional authoring dependency on native Windows x64.
-Run etsy-listings marigold setup explicitly. It installs Python 3.12.14 and a
-complete pinned worker environment, verifies the three pinned checkpoints,
-and runs normals, lighting and depth before selecting the installation. No
-workspace is needed for these commands. Packages and weights live under
-`<home>/.etsy-listings/marigold`, separate from production imaging dependencies.
-Status and preparation never install packages or download weights.
+`etsy-listings marigold setup` installs a pinned Python and worker environment,
+verifies the pinned model weights, and runs normals, lighting and depth before
+selecting the installation. No workspace is needed for these commands. Packages
+and weights live under `<home>/.etsy-listings/marigold`, separate from the
+production imaging dependencies. `status` and template preparation never install
+packages or download weights.
 
-Marigold update retains previous installations and an active job's engine
-selection. It also repairs a damaged installation into a new immutable directory.
-Failed setup does not replace the last usable installation. Status --json
-returns capabilities and operational bounds. Engine 1.0.0 accepts 1-10 inference
-steps, 1-3 ensemble members and images up to 4096 pixels on each axis. These are
-conservative safety bounds, not quality guarantees. It keeps one pipeline in
-RAM, caps retained model tensors at 4 GiB and exits after five idle minutes.
-
-The production setup and cancellation checks passed on an RTX 3070 with 8 GiB
-VRAM. This stage installs inference only; durable Marigold maps and editor
-preparation arrive in subsequent integration stages. Full-resolution
-photo quality and supported input limits still require the feature's final
-integration validation. Measurements and current limits are recorded in the
-[Marigold runtime report](docs/features/marigold-20261001/runtime-validation.md).
+`marigold update` keeps previous installations and an active job's engine
+selection, and repairs a damaged installation into a new directory. A failed
+setup does not replace the last usable installation. `status --json` reports
+the engine's capabilities and its operational bounds. Measurements are recorded
+in the [Marigold runtime report](docs/features/marigold-20261001/runtime-validation.md).

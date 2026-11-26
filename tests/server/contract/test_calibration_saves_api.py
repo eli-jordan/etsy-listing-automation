@@ -59,7 +59,6 @@ def test_save_refuses_wrong_kind_and_brush_outside_photo(workspace_root: Path) -
     malformed = {**config, "kind": "multiple", "placements": []}
     malformed.pop("bounding_box")
     malformed.pop("colour", None)
-    malformed.pop("artwork", None)
     assert (
         client.put(
             url,

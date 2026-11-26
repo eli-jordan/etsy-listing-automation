@@ -696,33 +696,6 @@ def test_compact_maps_roundtrip_at_their_photo_origin_and_hash_the_extent(worksp
     assert moved.content_digest != generation.content_digest
 
 
-def test_schema_one_generation_keeps_its_original_numeric_identity(workspace_root) -> None:
-    import json
-
-    from tests.support.marigold import rewrite_map_manifest
-
-    store = Artifacts(Workspace.discover(root_override=workspace_root))
-    inputs = preparation_inputs()
-    generation = store.publish(
-        "shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs
-    )
-    manifest_path = store.workspace.template_map_manifest("shirt", generation.generation_id)
-    document = json.loads(manifest_path.read_bytes())
-    document["schema_version"] = 1
-    # Fixed result from the original schema1 implementation on this synthetic fixture.
-    document["content_digest"] = "cbbbedece4ddcd84201d4764512c6e1c5cf666979f9c4b7f13f488aecfc4e888"
-    rewrite_map_manifest(store.workspace, "shirt", generation.generation_id, document)
-    pointer_path = store.workspace.template_map_current("shirt")
-    pointer = json.loads(pointer_path.read_bytes())
-    pointer["schema_version"] = 1
-    pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
-    with Artifacts(store.workspace).acquire("shirt", inputs) as acquired:
-        assert acquired.manifest.schema_version == 1
-        assert acquired.maps[None].origin == (0, 0)
-        assert acquired.maps[None].size == (16, 16)
-        np.testing.assert_array_equal(acquired.maps[None].material, material_maps().material)
-
-
 def test_reusing_maps_does_not_hold_template_lock_during_archive_read(
     workspace_root, monkeypatch
 ) -> None:
@@ -772,6 +745,7 @@ def test_reusing_maps_does_not_hold_template_lock_during_archive_read(
 @pytest.mark.parametrize(
     ("change", "reason"),
     [
+        ({"schema_version": 1}, "unsupported_schema"),
         ({"schema_version": 3}, "unsupported_schema"),
         ({"schema_version": True}, "unsupported_schema"),
         ({"schema_version": 2.0}, "unsupported_schema"),

@@ -791,8 +791,7 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
 # ===========================================================================
 # 7. Proposal persistence: the proposal is cached on the server (ADR-0049; spec,
 # *Durable AI proposals*), so a reload restores the drawers still open and
-# none the seller resolved, and the browser-local copies an older version
-# kept are purged on load.
+# none the seller resolved.
 # ===========================================================================
 
 
@@ -821,8 +820,7 @@ def test_generate_then_reload_and_the_suggestions_are_still_waiting(
         title_drawer.get_by_role("button", name="Persisted Title One").wait_for(state="visible")
         assert _cached_proposal(page)["proposal"]["titles"][0] == "Persisted Title One"
 
-        # -- Dismiss one drawer, and leave behind what an older version of
-        # the app kept in the browser --
+        # -- Dismiss one drawer --
         page.get_by_role("region", name="description lead AI suggestions").get_by_role(
             "button", name="Reject all"
         ).click()
@@ -833,10 +831,6 @@ def test_generate_then_reload_and_the_suggestions_are_still_waiting(
             page.wait_for_timeout(100)
         else:
             raise AssertionError("the dismissal never reached the server")
-        page.evaluate(
-            "() => { localStorage.setItem('ai-seo-proposal:ws:take-a-hike', '{}');"
-            " localStorage.setItem('ai-seo-received:ws:take-a-hike', 'x') }"
-        )
 
         # -- An ordinary refresh restores the open drawers in place, with no
         # second run, and the dismissed one stays closed even though the
@@ -850,10 +844,6 @@ def test_generate_then_reload_and_the_suggestions_are_still_waiting(
         page.wait_for_timeout(300)
         assert page.get_by_role("region", name="description lead AI suggestions").count() == 0
         assert provider.count("seo") == 1  # never asked again
-        legacy = page.evaluate(
-            "() => Object.keys(localStorage).filter(k => k.startsWith('ai-seo-'))"
-        )
-        assert legacy == []
 
 
 # ===========================================================================

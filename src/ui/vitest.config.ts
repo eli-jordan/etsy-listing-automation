@@ -28,6 +28,7 @@ const NODE_TESTS = [
   "src/hooks/listingAutosave.test.ts",
   "src/hooks/writeLoop.test.ts",
   "src/media.test.ts",
+  "src/pixels.test.ts",
   "src/components/quadGeometry.test.ts",
   "src/pages/batchDeploy/batchDeployPresentation.test.ts",
   "src/pages/batchDeploy/batchDeployState.test.ts",

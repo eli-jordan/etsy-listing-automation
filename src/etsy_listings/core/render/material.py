@@ -53,8 +53,8 @@ class MaterialMaps:
         region = (slice(top, bottom), slice(left, right))
 
         def crop(field: NDArray[Any]) -> NDArray[Any]:
-            # Own the cropped bytes: retaining a view would keep the legacy
-            # full-photo backing allocation alive and undercount the cache.
+            # Own the cropped bytes: retaining a view would keep the whole
+            # backing allocation alive and undercount the cache.
             value = np.array(field[region], copy=True, order="C")
             value.flags.writeable = False
             return value

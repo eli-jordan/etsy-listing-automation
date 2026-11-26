@@ -17,7 +17,6 @@ from etsy_listings.core.application import credentials as logic
 from etsy_listings.core.clients.etsy.oauth import TokenResponse
 from etsy_listings.core.clients.etsy.tokens import StoredTokens
 from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -123,14 +122,3 @@ def test_a_complete_workspace_is_missing_nothing(tmp_path: Path) -> None:
     )
 
     assert logic.missing_credentials(secrets) == ()
-
-
-def test_the_anthropic_key_is_optional_rather_than_missing(tmp_path: Path) -> None:
-    """Nothing before Phase 4 asks for one, and reporting a workspace as
-    incomplete for a feature it does not have yet teaches people to ignore the
-    report."""
-    secrets = _secrets(tmp_path, printify_api_token="p", etsy_keystring="k", etsy_shared_secret="s")
-
-    assert logic.missing_credentials(secrets) == ()
-    assert logic.optional_credentials(secrets) == (ANTHROPIC_KEY_VAR,)
-    assert logic.optional_credentials(_secrets(tmp_path, anthropic_api_key="a")) == ()

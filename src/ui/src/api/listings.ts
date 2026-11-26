@@ -29,9 +29,8 @@ export async function getListing(name: string): Promise<ListingDetail> {
   return withTuples<ListingDetail>(data);
 }
 
-/** The same, but `null` on a 404 rather than a thrown error -- what the
- * deploy view uses to tell "this listing no longer exists" (a retract just
- * applied) apart from a genuine failure it should surface. */
+/** The same, but `null` on a 404 rather than a thrown error, so the deploy
+ * view can tell a listing that no longer exists from a failure. */
 export async function tryGetListing(name: string): Promise<ListingDetail | null> {
   const { data, error, response } = await api.GET("/api/listings/{name}", {
     params: { path: { name } },
@@ -67,11 +66,8 @@ export async function describeListingDraft(
   return withTuples<ListingDetail>(data);
 }
 
-/** Naming a listing is what creates it. Resolves for a document the server
- * would not write, exactly as `patchListing` does -- `field_errors` is set and
- * `name` comes back empty, which is the "not created" signal. It *rejects*
- * only for what a name can be wrong about: not a usable directory name (400),
- * or already taken (409). */
+/** An empty `name` in the answer is the "not created" signal; it rejects only
+ * for a refused name. */
 export async function createListing(body: CreateListingRequest): Promise<ListingDetail> {
   const { data, error } = await api.POST("/api/listings", { body });
   if (error || !data) throw new ListingsApiError("could not create listing");
@@ -190,11 +186,8 @@ export function commonMediaFileUrl(name: string): string {
   return `/api/common-media/${escapedEachSegment(name)}/file`;
 }
 
-/** The Description tab's common-copy selector: every reusable description
- * body, each with a ref ready to write straight into `description.ref`. Empty
- * (never an error) for a workspace with no `common-copy/` yet, the same
- * convention `listEtsySections` follows for an unconfigured shop -- an editor
- * with nothing to pick from is an ordinary state, not a failure. */
+/** Empty, never an error: an editor with nothing to pick from is an ordinary
+ * state, as `listEtsySections` treats an unconfigured shop. */
 export async function listCommonCopy(): Promise<CommonCopySummary[]> {
   try {
     const { data, error } = await api.GET("/api/common-copy");
@@ -221,9 +214,6 @@ export async function listListingDesigns(): Promise<ListingDesignSummary[]> {
   return data;
 }
 
-/** Adds a PNG to `designs/` and answers where it landed -- not always its
- * filename: a name taken by other artwork gets a `-2` suffix. Hand-rolled
- * multipart, as `uploadDesign` is; the error carries the server's reason. */
 export async function uploadListingDesign(file: File): Promise<ListingDesignSummary> {
   const form = new FormData();
   form.append("file", file);

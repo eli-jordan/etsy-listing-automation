@@ -1,21 +1,19 @@
-import {
-  type Limits,
-  type Point,
-  type Pose,
-  type Quad,
-  clampPose,
-  proportions,
-  toUnit,
-} from "./pose";
+import { type Limits, type Pose, clampPose, proportions, toUnit } from "./pose";
+import type { PhotoPoint, PhotoQuad, RectifiedPoint } from "../../../pixels";
 
-/** The pointer relative to the posed box's centre, in rectified pixels. */
-function fromCentre(box: Quad, pose: Pose, point: Point): Point {
+function fromCentre(box: PhotoQuad, pose: Pose, point: PhotoPoint): RectifiedPoint {
   const { w, h } = proportions(box);
   const p = toUnit(box, point);
   return { x: (p.x - 0.5 - pose.offsetX) * w, y: (p.y - 0.5 - pose.offsetY) * h };
 }
 
-export function moved(box: Quad, from: Pose, start: Point, point: Point, limits: Limits): Pose {
+export function moved(
+  box: PhotoQuad,
+  from: Pose,
+  start: PhotoPoint,
+  point: PhotoPoint,
+  limits: Limits,
+): Pose {
   const a = toUnit(box, start);
   const b = toUnit(box, point);
   return clampPose(
@@ -24,14 +22,14 @@ export function moved(box: Quad, from: Pose, start: Point, point: Point, limits:
   );
 }
 
-export function resized(box: Quad, from: Pose, point: Point, limits: Limits): Pose {
+export function resized(box: PhotoQuad, from: Pose, point: PhotoPoint, limits: Limits): Pose {
   // A corner sits half the rectified diagonal from the centre at scale 1.
   const { w, h } = proportions(box);
   const d = fromCentre(box, from, point);
   return clampPose({ ...from, scale: Math.hypot(d.x, d.y) / (Math.hypot(w, h) / 2) }, limits);
 }
 
-export function tilted(box: Quad, from: Pose, point: Point, limits: Limits): Pose {
+export function tilted(box: PhotoQuad, from: Pose, point: PhotoPoint, limits: Limits): Pose {
   const d = fromCentre(box, from, point);
   const degrees = (Math.atan2(d.y, d.x) * 180) / Math.PI + 90;
   // Into (-180, 180], so a pointer below-left reads as a large anticlockwise turn.

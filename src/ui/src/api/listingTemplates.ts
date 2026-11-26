@@ -44,11 +44,9 @@ export async function getListingTemplateDraft(
   return data;
 }
 
-/** Naming the draft is what writes it. Resolves for a template the server
- * would not write -- `saved: false` with its issues, nothing on disk -- and
- * rejects with {@link ListingTemplateNameRefused} for a name it will not
- * take, which is never suffixed. `document` is the seller's edits made
- * before naming it. */
+/** Resolves `saved: false` with its issues for a template the server would
+ * not write, and rejects with {@link ListingTemplateNameRefused} for a name it
+ * will not take. `document` is the seller's edits made before naming it. */
 export async function createListingTemplate(
   name: string,
   source: ListingTemplateSource,

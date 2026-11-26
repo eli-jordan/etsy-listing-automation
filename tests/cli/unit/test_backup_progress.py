@@ -11,10 +11,10 @@ from etsy_listings.core.backup.repository import RestoreProgress
 
 
 def test_a_status_line_without_files_restored_counts_none_yet() -> None:
-    figures = RestoreProgress(percent=0.02, files_total=4100)
+    figures = RestoreProgress(fraction=0.02, files_total=4100)
 
     assert restore_progress_line(figures) == "  2% · 0 of 4,100 files"
 
 
 def test_before_restic_knows_the_total_only_the_percentage_shows() -> None:
-    assert restore_progress_line(RestoreProgress(percent=0.5)) == "  50%"
+    assert restore_progress_line(RestoreProgress(fraction=0.5)) == "  50%"

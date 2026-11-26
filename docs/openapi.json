@@ -2965,6 +2965,8 @@
           },
           "strength": {
             "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Strength",
             "type": "number"
           }
@@ -3234,7 +3236,6 @@
         "type": "object"
       },
       "EtsyListingSnapshot": {
-        "description": "Both sides of the review, in full.",
         "properties": {
           "desired": {
             "$ref": "#/components/schemas/EtsyListingFacts"
@@ -3508,7 +3509,7 @@
         "type": "object"
       },
       "EtsyVideosSnapshot": {
-        "description": "Both sides for the deploy review. The live side comes in Etsy's\nresponse order, which says nothing about the gallery (decision 9).",
+        "description": "Both sides for the deploy review. The live side comes in Etsy's\nresponse order, which says nothing about the gallery.",
         "properties": {
           "desired": {
             "items": {
@@ -5854,7 +5855,6 @@
       },
       "Placement": {
         "additionalProperties": false,
-        "description": "One garment within a ``multiple``-kind scene.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -7161,6 +7161,20 @@
         "title": "PublishStagePlanDTO",
         "type": "object"
       },
+      "Refusal": {
+        "description": "A refusal :data:`REFUSAL_STATUS` answers: ``detail`` is its message.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "Refusal",
+        "type": "object"
+      },
       "RenameListingRequest": {
         "properties": {
           "new_name": {
@@ -7467,6 +7481,11 @@
             ],
             "title": "Finished At"
           },
+          "fraction": {
+            "default": 0.0,
+            "title": "Fraction",
+            "type": "number"
+          },
           "message": {
             "anyOf": [
               {
@@ -7489,12 +7508,6 @@
             ],
             "title": "Outcome",
             "type": "string"
-          },
-          "percent": {
-            "default": 0.0,
-            "description": "0 to 1.",
-            "title": "Percent",
-            "type": "number"
           },
           "seconds_left": {
             "anyOf": [
@@ -7683,8 +7696,21 @@
         "title": "ReviewedRequest",
         "type": "object"
       },
+      "RunConflict": {
+        "description": "The run already holding one of the listings: reattach to it with\n``GET /api/runs/{active_run}`` rather than retrying.",
+        "properties": {
+          "active_run": {
+            "title": "Active Run",
+            "type": "string"
+          }
+        },
+        "required": [
+          "active_run"
+        ],
+        "title": "RunConflict",
+        "type": "object"
+      },
       "RunRecord": {
-        "description": "One run's outcome, as the history keeps it.",
         "properties": {
           "copies": {
             "default": [],
@@ -7796,7 +7822,6 @@
         "type": "object"
       },
       "RunningBackup": {
-        "description": "The operation in progress, for the running line.",
         "properties": {
           "destination": {
             "anyOf": [
@@ -8277,6 +8302,8 @@
           },
           "opacity": {
             "default": 0.6,
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Opacity",
             "type": "number"
           }
@@ -8579,17 +8606,6 @@
       "SinglePreviewRequest": {
         "additionalProperties": false,
         "properties": {
-          "artwork": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artwork"
-          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,
@@ -8687,7 +8703,6 @@
       },
       "SingleTemplate": {
         "additionalProperties": false,
-        "description": "One photo, one garment.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -10118,7 +10133,7 @@
         ]
       },
       "patch": {
-        "description": "Save ``changes`` against ``revision``: 412 when the file changed since,\n422 for an edit it refuses. What the save sets off is ``settings_save``'s;\nthis hands it the host's coordinators, and coverage jobs it queues are\nqueued after the response.",
+        "description": "Save ``changes`` against ``revision``. Coverage jobs the save queues\nrun after the response.",
         "operationId": "edit_settings_api_admin_settings_patch",
         "requestBody": {
           "content": {
@@ -10149,7 +10164,7 @@
                 }
               }
             },
-            "description": "Precondition Failed"
+            "description": "settings.yaml changed since `revision`"
           },
           "422": {
             "content": {
@@ -10159,7 +10174,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "An edit it refuses"
           }
         },
         "summary": "Edit Settings",
@@ -10393,7 +10408,14 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No run for this listing"
           },
           "422": {
             "content": {
@@ -10412,7 +10434,7 @@
         ]
       },
       "post": {
-        "description": "Start a run for a saved listing. A ``409`` either names the active run\nto reattach to, or gives the readiness rule that failed.",
+        "description": "Start a run for a saved listing.",
         "operationId": "create_ai_run_api_ai_runs_post",
         "requestBody": {
           "content": {
@@ -10436,7 +10458,14 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such listing"
           },
           "409": {
             "content": {
@@ -10446,7 +10475,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "The active run to reattach to, or the readiness rule that failed"
           },
           "422": {
             "content": {
@@ -10492,10 +10521,24 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such run"
           },
           "409": {
-            "description": "Conflict"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "The run has already finished"
           },
           "422": {
             "content": {
@@ -10538,7 +10581,14 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such run"
           },
           "422": {
             "content": {
@@ -10581,7 +10631,14 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "Not Found"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such run"
           },
           "422": {
             "content": {
@@ -10623,7 +10680,7 @@
     },
     "/api/backup/connect": {
       "post": {
-        "description": "Copy an existing repository to local disk, check the password opens\nit, then use it; answers once it is connected. A wrong password or a\nfolder that is not a repository is a 422, and nothing is saved.",
+        "description": "Copy an existing repository to local disk, check the password opens\nit, then use it; answers once it is connected and saves nothing on a\nrefusal.",
         "operationId": "connect_repository_api_backup_connect_post",
         "requestBody": {
           "content": {
@@ -10654,7 +10711,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "What the workspace holds now forbids it"
           },
           "412": {
             "content": {
@@ -10664,7 +10721,7 @@
                 }
               }
             },
-            "description": "Precondition Failed"
+            "description": "settings.yaml changed since the page read it"
           },
           "422": {
             "content": {
@@ -10674,7 +10731,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "A wrong password or a folder that is not a repository"
           }
         },
         "summary": "Connect Repository",
@@ -10748,7 +10805,7 @@
     },
     "/api/backup/repository": {
       "post": {
-        "description": "Create a new repository while the configured one is missing, save\nits folder, and start the first backup. Refuses a folder that holds\nfiles (409) and a missing or short password (422).",
+        "description": "Create a new repository while the configured one is missing, save\nits folder, and start the first backup.",
         "operationId": "create_repository_api_backup_repository_post",
         "requestBody": {
           "content": {
@@ -10779,7 +10836,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A folder that holds files"
           },
           "412": {
             "content": {
@@ -10789,7 +10846,7 @@
                 }
               }
             },
-            "description": "Precondition Failed"
+            "description": "settings.yaml changed since the page read it"
           },
           "422": {
             "content": {
@@ -10799,7 +10856,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "A missing or short password"
           }
         },
         "summary": "Create Repository",
@@ -10810,7 +10867,7 @@
     },
     "/api/backup/restore": {
       "post": {
-        "description": "Restore a snapshot into a new folder; 409 for the live workspace, a\nfolder that holds files or a restore already running.",
+        "description": "Restore a snapshot into a new folder.",
         "operationId": "start_restore_api_backup_restore_post",
         "requestBody": {
           "content": {
@@ -10832,6 +10889,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "The target is the live workspace or holds files, or a restore is running"
           },
           "422": {
             "content": {
@@ -10874,7 +10941,7 @@
     },
     "/api/backup/run": {
       "post": {
-        "description": "Start a backup; 409 while another backup operation runs.",
+        "description": "Start a backup.",
         "operationId": "back_up_now_api_backup_run_post",
         "responses": {
           "202": {
@@ -10886,6 +10953,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Another backup operation is running"
           }
         },
         "summary": "Back Up Now",
@@ -10896,7 +10973,7 @@
     },
     "/api/backup/setup": {
       "post": {
-        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. Refuses a\nshort password (422), a folder that holds files (409) and a destination\nwhose parent is missing (422), writing nothing.\n\nWhen a destination already holds a backup, connects it instead, as\n``/connect`` does, answering once it is copied: ``connected`` names the\ndestination. Refuses a password that does not open it (422, field\n``password``), part of a copy, and two different repositories (422).",
+        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. A refusal\nwrites nothing.\n\nWhen a destination already holds a backup, connects it instead, as\n``/connect`` does, answering once it is copied: ``connected`` names the\ndestination.",
         "operationId": "set_up_api_backup_setup_post",
         "requestBody": {
           "content": {
@@ -10927,7 +11004,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A folder that holds files"
           },
           "412": {
             "content": {
@@ -10937,7 +11014,7 @@
                 }
               }
             },
-            "description": "Precondition Failed"
+            "description": "settings.yaml changed since the page read it"
           },
           "422": {
             "content": {
@@ -10947,7 +11024,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "A short password, a destination whose parent is missing, or a destination that holds part of a backup, another repository, or one the password does not open (field `password`)"
           }
         },
         "summary": "Set Up",
@@ -11317,7 +11394,7 @@
     },
     "/api/batches/{batch_id}/rows/{row}/reviewed": {
       "put": {
-        "description": "Mark reviewed / Mark needs review (spec, *Review workflow*). Refused\nfor a row still queued or drafting, deleted, or never created.",
+        "description": "Mark reviewed / Mark needs review.",
         "operationId": "set_reviewed_api_batches__batch_id__rows__row__reviewed_put",
         "parameters": [
           {
@@ -11361,7 +11438,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The row has no listing to review yet"
+            "description": "The row is still queued or drafting, deleted, or never created"
           },
           "422": {
             "content": {
@@ -12012,7 +12089,7 @@
         ]
       },
       "post": {
-        "description": "Naming the draft is what writes it (UI doc \u00a71). The name is checked\nfirst, so a bad one is a 400 before any source is read.",
+        "description": "Naming the draft is what writes it.",
         "operationId": "create_listing_template_api_listing_templates_post",
         "requestBody": {
           "content": {
@@ -12034,6 +12111,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "An unusable name, refused before any source is read"
           },
           "422": {
             "content": {
@@ -12249,7 +12336,7 @@
     },
     "/api/listing-templates/{name}/rename": {
       "post": {
-        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). A taken name is a 409 and never\nsuffixed (spec, *Storage and identity*); the staging sessions and\nbatches made from it follow it by name\n(:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`).",
+        "description": "Move a listing template, whole, to a new name. The staging sessions\nand batches made from it follow it.",
         "operationId": "rename_listing_template_api_listing_templates__name__rename_post",
         "parameters": [
           {
@@ -12282,6 +12369,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "A taken name; it is never suffixed"
           },
           "422": {
             "content": {
@@ -12472,7 +12569,7 @@
         ]
       },
       "post": {
-        "description": "Naming a listing is what creates it.\n\nMirrors PATCH exactly, one level up: a document that fails\n``Listing.model_validate`` is a **200** carrying ``field_errors`` with\nnothing written. The two things a *name* can be wrong about keep their\nstatus codes instead -- not a single path segment is the 400, and\nalready taken (the directory, not just ``listing.yaml``) is a 409.",
+        "description": "Naming a listing is what creates it. As with PATCH, a document that\nwill not validate writes nothing and answers 200 with ``field_errors``.",
         "operationId": "create_listing_api_listings_post",
         "requestBody": {
           "content": {
@@ -12495,6 +12592,26 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Not a single path segment"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "A listing directory of that name exists"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -12514,7 +12631,7 @@
     },
     "/api/listings/{listing}/media-files": {
       "get": {
-        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it. A ``404`` for a listing that does not\nexist, rather than an empty group that would look like one with nothing\nin it.",
+        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it.",
         "operationId": "list_listing_media_files_api_listings__listing__media_files_get",
         "parameters": [
           {
@@ -12541,6 +12658,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such listing (an empty list is a listing with no files)"
           },
           "422": {
             "content": {
@@ -12659,7 +12786,7 @@
     },
     "/api/listings/{name}": {
       "delete": {
-        "description": "Delete from the listings table.\n\nNo remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering\nwith the row left pending. Published: 409 -- retire it instead. Confirm\nis the UI's. What goes with the listing either way is\n:func:`~etsy_listings.core.application.listing_identity.delete_listing`'s.",
+        "description": "Delete from the listings table.",
         "operationId": "delete_listing_api_listings__name__delete",
         "parameters": [
           {
@@ -12676,10 +12803,25 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ListingSummary"
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "Remote copies: marked `lifecycle: deleted`, the row left pending"
+          },
+          "204": {
+            "description": "No remote copies: wiped"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "Published: retire it instead"
           },
           "422": {
             "content": {
@@ -12887,7 +13029,7 @@
     },
     "/api/listings/{name}/market": {
       "get": {
-        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose\nsearch succeeded, so a failed run leaves the previous one here. 404 until\nthe first search -- the panel is not rendered then -- and for a snapshot\nthat no longer reads as one, which the next run replaces.",
+        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload. Written only by an AI run whose search succeeded, so a\nfailed run leaves the previous one here.",
         "operationId": "get_market_snapshot_api_listings__name__market_get",
         "parameters": [
           {
@@ -12912,7 +13054,7 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "No such listing, or no market search for it yet"
+            "description": "No such listing, no market search for it yet, or a snapshot that no longer reads, which the next run replaces"
           },
           "422": {
             "content": {
@@ -13232,7 +13374,7 @@
     },
     "/api/listings/{name}/scene-artwork": {
       "get": {
-        "description": "The file one layer of this listing's scene prints, as the editor's live\nPosition mode draws it: downscaled and with its transparency, unlike a list\nthumbnail. Resolved here for the reason :func:`scene_preview` is, so the\npicture under a drag and the render that replaces it print the same file.\n``404`` for a layer left bare.",
+        "description": "The file one layer of this listing's scene prints, as the editor's live\nPosition mode draws it: downscaled and with its transparency, unlike a list\nthumbnail. Resolved here for the reason :func:`scene_preview` is, so the\npicture under a drag and the render that replaces it print the same file.",
         "operationId": "scene_artwork_picture_api_listings__name__scene_artwork_get",
         "parameters": [
           {
@@ -13294,6 +13436,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such listing, or a layer that prints nothing"
           },
           "422": {
             "content": {
@@ -13957,7 +14109,7 @@
         ]
       },
       "post": {
-        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace or batch apply that is not\nexactly its review is a ``409`` too, carrying the refusal's message, and\nso is a batch plan with nothing to deploy; a batch nobody holds is a\n``404``.",
+        "description": "Queue a plan or apply run.",
         "operationId": "create_run_api_runs_post",
         "requestBody": {
           "content": {
@@ -14015,6 +14167,34 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such batch"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunConflict"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    }
+                  ],
+                  "title": "Response 409 Create Run Api Runs Post"
+                }
+              }
+            },
+            "description": "The run already holding one of these listings, to reattach to; or an apply that is not exactly its review, or a batch plan with nothing to deploy"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -14034,7 +14214,7 @@
     },
     "/api/runs/{run_id}": {
       "delete": {
-        "description": "Cancel a queued or running **plan**. An ``apply`` is always refused\n(leaving the page never cancels one), and so is a finished run.",
+        "description": "Cancel a queued or running plan. Leaving the page never cancels an\napply.",
         "operationId": "cancel_run_api_runs__run_id__delete",
         "parameters": [
           {
@@ -14072,6 +14252,26 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "No such run"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "An apply, or a finished run"
           },
           "422": {
             "content": {
@@ -14916,7 +15116,7 @@
     },
     "/api/templates/{name}/kind": {
       "post": {
-        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape. Refused for a template that\nalready has one -- changing kind would discard its calibration.",
+        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.",
         "operationId": "assign_kind_api_templates__name__kind_post",
         "parameters": [
           {
@@ -14969,15 +15169,25 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "The template already has a kind; changing it would discard its calibration"
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Refusal"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "No photos, or a photo count the kind does not take"
           }
         },
         "summary": "Assign Kind",
@@ -15420,7 +15630,7 @@
     },
     "/api/templates/{name}/rename": {
       "post": {
-        "description": "Move a template, and everything naming it, to a new name\n(:mod:`~etsy_listings.core.application.template_rename`). A taken name, a\nrunning deploy or a preparing template is a ``409``; an unusable name is a\n``400``.",
+        "description": "Move a template, and everything naming it, to a new name.",
         "operationId": "rename_template_api_templates__name__rename_post",
         "parameters": [
           {
@@ -15453,6 +15663,26 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "An unusable name"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "A taken name, a running deploy, or a template still preparing"
           },
           "422": {
             "content": {

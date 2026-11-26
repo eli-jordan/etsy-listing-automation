@@ -13,7 +13,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from etsy_listings.core.errors import UserFacingError
 
 PRINTIFY_TOKEN_VAR = "PRINTIFY_API_TOKEN"
-ANTHROPIC_KEY_VAR = "ANTHROPIC_API_KEY"
 ETSY_KEYSTRING_VAR = "ETSY_KEYSTRING"
 ETSY_SHARED_SECRET_VAR = "ETSY_SHARED_SECRET"
 """Etsy's app key is a *pair*, and both halves are required on every v3
@@ -50,7 +49,6 @@ class _EnvValues(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     printify_api_token: str | None = None
-    anthropic_api_key: str | None = None
     etsy_keystring: str | None = None
     etsy_shared_secret: str | None = None
 
@@ -78,7 +76,6 @@ class EtsyAppKey:
 class Secrets:
     env_file: Path
     printify_api_token: str | None = None
-    anthropic_api_key: str | None = None
     etsy_keystring: str | None = None
     etsy_shared_secret: str | None = None
     backup_password: str | None = field(default=None, repr=False)
@@ -90,7 +87,6 @@ class Secrets:
         return cls(
             env_file=env_file,
             printify_api_token=values.printify_api_token or None,
-            anthropic_api_key=values.anthropic_api_key or None,
             etsy_keystring=values.etsy_keystring or None,
             etsy_shared_secret=values.etsy_shared_secret or None,
             backup_password=_backup_password(env_file),
@@ -123,16 +119,6 @@ class Secrets:
                 "visibility icon. `etsy-listings auth` captures and verifies them.",
             )
         return value
-
-    def require_anthropic_api_key(self) -> str:
-        if not self.anthropic_api_key:
-            raise MissingCredentialError(
-                ANTHROPIC_KEY_VAR,
-                self.env_file,
-                "generate listing copy",
-                "Create a key at console.anthropic.com -- see docs/guides/setup.md.",
-            )
-        return self.anthropic_api_key
 
     def require_backup_password(self) -> str:
         if not self.backup_password:

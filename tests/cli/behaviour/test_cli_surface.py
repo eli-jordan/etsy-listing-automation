@@ -41,7 +41,6 @@ def test_top_level_help_documents_every_environment_variable() -> None:
     for variable in (
         "ETSY_LISTINGS_ROOT",
         "PRINTIFY_API_TOKEN",
-        "ANTHROPIC_API_KEY",
         "ETSY_LISTINGS_BACKUP_PASSWORD",
         "ETSY_LISTINGS_RESTIC_BINARY",
         "NO_COLOR",
