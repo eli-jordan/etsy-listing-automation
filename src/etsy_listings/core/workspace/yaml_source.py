@@ -41,6 +41,7 @@ from ruamel.yaml.scalarstring import (
 )
 
 from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.workspace.yaml_values import merge, plain, same
 
 __all__ = ["ITSELF", "UNSET", "UneditableYamlError", "edit_yaml", "edit_yaml_bytes"]
 
@@ -126,84 +127,14 @@ def _edited(
     sequence_keys: Mapping[tuple[str, ...], str] | None,
 ) -> str:
     current = yaml.safe_load(source)
-    wanted = _plain(after)
-    target = wanted if before is UNSET else _merge(current, _plain(before), wanted)
-    if _same(current, target):
+    wanted = plain(after)
+    target = wanted if before is UNSET else merge(current, plain(before), wanted)
+    if same(current, target):
         return source
     edited = _Editor(source, sequence_keys=sequence_keys).edit(current, target)
-    if not _same(yaml.safe_load(edited), target):
+    if not same(yaml.safe_load(edited), target):
         raise UneditableYamlError("the edited text would not read back as the intended document")
     return edited
-
-
-# ------------------------------------------------------------------ values
-
-
-def _plain(value: object) -> Any:
-    if isinstance(value, Mapping):
-        return {key: _plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    return value
-
-
-def _same(a: object, b: object) -> bool:
-    """Equal as a reader sees them: key order ignored, but ``1``, ``1.0`` and
-    ``True`` are three different values in a file."""
-    if type(a) is not type(b):
-        return False
-    if isinstance(a, dict):
-        assert isinstance(b, dict)
-        return a.keys() == b.keys() and all(_same(a[key], b[key]) for key in a)
-    if isinstance(a, list):
-        assert isinstance(b, list)
-        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b, strict=True))
-    return a == b
-
-
-def _merge(source: Any, before: Any, after: Any) -> Any:
-    if _same(before, after):
-        return source
-    if not all(isinstance(value, dict) for value in (source, before, after)):
-        return after
-    result = {key: value for key, value in source.items() if key in after or key not in before}
-    for key, value in after.items():
-        if not (key in before and _same(before[key], value)):
-            result = _merge_key(result, before, key, value, order=list(after))
-    return result
-
-
-def _merge_key(
-    result: dict[Any, Any], before: dict[Any, Any], key: Any, value: Any, *, order: list[Any]
-) -> dict[Any, Any]:
-    """``result`` with ``key`` changed to ``value``: merged where the source
-    still holds it, else placed by ``order``."""
-    if key in before and key in result:
-        result[key] = _merge(result[key], before[key], value)
-        return result
-    return _insert_after_predecessor(result, key, value, order=order)
-
-
-def _insert_after_predecessor(
-    mapping: dict[Any, Any], key: Any, value: Any, *, order: list[Any]
-) -> dict[Any, Any]:
-    """``mapping`` with ``key`` placed after the nearest key that precedes it
-    in ``order`` and is already present, else last."""
-    if key in mapping:
-        mapping[key] = value
-        return mapping
-    preceding = [other for other in order[: order.index(key)] if other in mapping]
-    if not preceding:
-        return {**mapping, key: value}
-    result: dict[Any, Any] = {}
-    for existing, item in mapping.items():
-        result[existing] = item
-        if existing == preceding[-1]:
-            result[key] = value
-    return result
-
-
-# ------------------------------------------------------------------ text
 
 
 def _identity(row: Any, key: str) -> Any:
@@ -233,10 +164,10 @@ class _Rows:
 def _common_ends(old: list[Any], new: list[Any]) -> tuple[int, int]:
     shortest = min(len(old), len(new))
     prefix = 0
-    while prefix < shortest and _same(old[prefix], new[prefix]):
+    while prefix < shortest and same(old[prefix], new[prefix]):
         prefix += 1
     suffix = 0
-    while suffix < shortest - prefix and _same(old[-1 - suffix], new[-1 - suffix]):
+    while suffix < shortest - prefix and same(old[-1 - suffix], new[-1 - suffix]):
         suffix += 1
     return prefix, suffix
 
@@ -325,7 +256,7 @@ class _Editor:
         self.edits.append((start, end, len(self.edits), text.replace("\n", self.newline)))
 
     def _edit(self, node: Node, old: Any, new: Any, replace: Replace) -> None:
-        if _same(old, new):
+        if same(old, new):
             return
         try:
             if self._edit_collection(node, old, new):
