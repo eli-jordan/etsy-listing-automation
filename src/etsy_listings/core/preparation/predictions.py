@@ -1,5 +1,3 @@
-"""Numeric-only inference evidence validation; deliberately no runtime imports."""
-
 from __future__ import annotations
 
 import hashlib
@@ -24,11 +22,10 @@ ROLES = ("normals", "lighting", "depth")
 
 
 class PredictionError(ValueError):
-    """Evidence cannot be trusted; retry preparation rather than using it."""
+    pass
 
 
 def cache_path(root: Path, relative: str, *, suffix: str) -> Path:
-    """Reject native/Windows escapes even on a non-Windows test host."""
     if not relative or chr(92) in relative or ":" in relative:
         raise PredictionError("Expected a relative cache path")
     parts = relative.split("/")
@@ -83,11 +80,6 @@ def _validated_file(
 def validate_prediction_file(
     path: Path, *, role: str, checksum: str, size: tuple[int, int]
 ) -> None:
-    """Validate reusable immutable evidence without repeatedly decoding it.
-
-    Retain at most 128 small validation proofs, never prediction arrays.
-    Replacement, writes and removal invalidate the file-identity stamp.
-    """
     stamp = file_version(path)
     _validated_file(path.resolve(), role, checksum, size, stamp)
 
@@ -95,7 +87,6 @@ def validate_prediction_file(
 def read_prediction(
     path: Path, *, role: str, checksum: str, size: tuple[int, int]
 ) -> NDArray[np.float32]:
-    """Validate ZIP bounds and NPY headers before allocating, with pickle disabled."""
     try:
         _check_archive(path, role=role, checksum=checksum, size=size)
         with np.load(path, allow_pickle=False) as arrays:

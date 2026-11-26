@@ -1,5 +1,3 @@
-"""Explicit versioned native Windows inference installation (ADR-0054)."""
-
 from __future__ import annotations
 
 import threading
@@ -20,7 +18,7 @@ _LOCK = threading.Lock()
 
 
 class SetupError(RuntimeError):
-    """Installation failed without switching the last verified runtime."""
+    pass
 
 
 def _setup_failed(message: str) -> NoReturn:
@@ -59,9 +57,6 @@ class Capability:
 
 
 class InstallationPointer(BaseModel):
-    """``current.json``: the installation selected for an engine version, both
-    globally and per engine."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
     schema_version: Literal[1]
     engine_version: str
@@ -171,7 +166,6 @@ class Runtime:
         return self.update()
 
     def update(self) -> Capability:
-        """Stage, validate, then switch. Keep failed and in-use installations immutable."""
         with _LOCK:
             existing = self._reselect_current()
             if existing is not None:
@@ -185,8 +179,6 @@ class Runtime:
             return report
 
     def _reselect_current(self) -> Capability | None:
-        """Point back at a fully verified installation of the required engine,
-        if one exists; None when a new one must be installed."""
         try:
             existing = self.selection(self.engine_version, verify=True)
             if existing.available and existing.installation_id is not None:
@@ -200,8 +192,6 @@ class Runtime:
         return None
 
     def _install(self, engine: Path, installation_id: str) -> Capability:
-        """Install into staging, relocate it to its immutable directory and
-        verify it there. Staging is removed on any failure."""
         staging = engine / (".staging-" + installation_id)
         staging.mkdir(parents=True)
         try:
@@ -216,8 +206,7 @@ class Runtime:
                 _setup_failed(report.problem or "Relocated worker is unavailable")
         except BaseException as exc:
             _discard_staging(staging, exc)
-            # A failed relocated installation is unreferenced. Retain it for
-            # diagnostics; the next explicit retry gets a new immutable ID.
+            # A failed relocated installation stays for diagnostics; a retry gets a new ID.
             raise
         return report
 
