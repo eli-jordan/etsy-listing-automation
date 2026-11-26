@@ -8,7 +8,6 @@ export function PositionControls({
   positioning: Positioning;
   children?: ReactNode;
 }) {
-  // Still clickable: the click is what says why, and what starts the wait's end.
   const unavailable = positioning.waiting && !positioning.on;
   return (
     <span className="tp-controls">

@@ -9,14 +9,7 @@ import {
   withinLimits,
 } from "./pose";
 
-/**
- * `listing.yaml`'s `template_positions:` as the editor reads and replaces it.
- *
- * The PATCH merge replaces the whole map (and `null` removes it), so every
- * edit here answers the next whole map. A position equal to the template's
- * box, and a Reset, write *no entry* rather than a copy of the template's
- * corners (spec, *Listing file*).
- */
+/** A PATCH replaces the whole map (`null` removes it), so every edit here answers the next whole map. */
 export type Positions = NonNullable<ListingDetail["template_positions"]>;
 type Entry = Positions[string];
 type BoxEntry = { bounding_box: Quad };

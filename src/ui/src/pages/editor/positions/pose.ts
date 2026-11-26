@@ -57,9 +57,7 @@ const quadMap = (quad: Quad, f: (point: Point, index: 0 | 1 | 2 | 3) => Point): 
   f(quad[3], 3),
 ];
 
-/** The homography taking the unit square onto `box`, in closed form
- * (Heckbert's square-to-quad). Python solves the same 8 x 8 system
- * numerically; the answer is the same matrix. */
+/** Heckbert's closed-form square-to-quad; Python solves the 8 x 8 system for the same matrix. */
 export function homography(box: Quad): Matrix {
   const [p0, p1, p2, p3] = box;
   const dx1 = p1.x - p2.x;

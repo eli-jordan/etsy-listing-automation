@@ -37,11 +37,9 @@ export type Gesture = "move" | "scale" | "rotate";
 
 export interface Layer {
   id: string;
-  /** The placement ID of a `multiple` template, which labels its box. */
   placement: string | null;
   templateBox: Quad;
   pose: Pose;
-  /** What `listing.yaml` holds for it, when anything. */
   stored: Quad | null;
   /** Spec, *Validation* rules 1-2. */
   refusal: PoseRefusal | null;
@@ -57,8 +55,6 @@ export interface Positioning extends Pick<PositionReadiness, "waiting" | "attemp
   selected: string;
   select: (id: string) => void;
   note: { text: string; warn: boolean } | null;
-  /** `run` is null when there is nothing to reset: shown anyway, disabled,
-   * only on a adjustScreen foot. */
   reset: { label: string; run: (() => void) | null } | null;
   fit: (() => void) | null;
   ghost: boolean;
@@ -73,7 +69,6 @@ export interface Positioning extends Pick<PositionReadiness, "waiting" | "attemp
 
 interface Args {
   detail: ListingDetail;
-  /** The entry the pane shows, when it is a template entry in this listing. */
   template: string | null;
   pane: string;
   summary: TemplateSummary | undefined;
@@ -264,8 +259,6 @@ function useGestures() {
   const drag = useRef<Drag | null>(null);
   const draftRef = useRef<Draft | null>(null);
   const nudging = useRef<{ timer: ReturnType<typeof setTimeout>; save: () => void } | null>(null);
-  // Saved now rather than dropped: a tab switch unmounts this, and the editor
-  // that takes the edit outlives it, or still flushes when it does not.
   useEffect(
     () => () => {
       if (nudging.current === null) return;
@@ -372,13 +365,10 @@ export function usePositioning(args: Args): Positioning | null {
   const layers = withDraft(stored, gestures.draft, name);
   const layer = selectionOf(layers, chosen, name);
   if (layer === undefined) return null;
-  // Opened on by a refused *stored* box: a draft that looks valid must not
-  // switch the mode off under the pointer or the keyboard.
   const on = adjust?.pane === pane ? adjust.on : stored.some((l) => l.refusal !== null);
   const footEditing = on || adjustScreen;
 
-  // `detail` as of this render. A nudge's save runs from the render of its
-  // last key press, so it builds on the positions shown then.
+  // Deliberately this render's `detail`: a nudge's save builds on the positions its last key press saw.
   function write(positions: Positions | null) {
     onUpdate({ template_positions: positions });
     setEdited(name);

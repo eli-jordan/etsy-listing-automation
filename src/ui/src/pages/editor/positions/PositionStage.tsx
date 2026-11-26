@@ -109,7 +109,6 @@ export function PositionStage({ positioning, composite, title, source }: Props) 
   return (
     <svg
       ref={svg}
-      // Its drags move the design; the phone's tab swipe must leave them be.
       {...(phone ? { "data-swipe-ignore": "" } : {})}
       className="tp-stage"
       viewBox={`0 0 ${size.w} ${size.h}`}

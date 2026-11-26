@@ -6,8 +6,6 @@ import {
   createLiveRenderer,
 } from "./liveRenderer";
 
-/** The pictures a live scene is drawn from. `artwork` answers for one layer,
- * by its placement ID: a scene's layers can print different files. */
 export interface LiveSource {
   photo: string;
   artwork: (placement: string | null) => string;
@@ -26,7 +24,7 @@ interface Args {
   size: { w: number; h: number };
   /** Canvas pixels: what the stage shows, not the photo's own size. */
   backing: { width: number; height: number };
-  /** Worth drawing now. Pictures load regardless, so a first drag finds them. */
+  /** Pictures load even while false, so a first drag finds them. */
   visible: boolean;
 }
 
@@ -39,9 +37,7 @@ function load(url: string): Promise<HTMLImageElement> {
 const optional = (url: string | null) =>
   url === null ? Promise.resolve(null) : load(url).catch(() => null);
 
-/** Fetches a scene's pictures and answers the upload to run if they are still
- * wanted. A layer whose artwork did not load prints nothing, as the render
- * leaves it bare. */
+/** A layer whose artwork fails to load is left bare, as the render leaves it. */
 async function fetched(renderer: LiveRenderer, urls: SceneUrls) {
   const [photo, ...prints] = await Promise.all([
     load(urls.photo),
@@ -73,16 +69,13 @@ function urlsOf(source: LiveSource, masked: boolean, layers: readonly SceneLayer
   };
 }
 
-/** Draws `layers` on `canvas` as they change, and answers whether it can: `false`
- * until the pictures have loaded, and for good where WebGL is unavailable or
- * its context is lost. */
+/** `false` until the pictures load, and for good once WebGL is unavailable or its context is lost. */
 export function useLiveScene(canvas: RefObject<HTMLCanvasElement | null>, args: Args): boolean {
   const { source, look, layers, size, backing, visible } = args;
   const renderer = useRef<LiveRenderer | null>(null);
   const [loaded, setLoaded] = useState<string | null>(null);
   const [lost, setLost] = useState(false);
-  // The URLs, as a key: a layer's pose changes every frame and must not
-  // reload its pictures.
+  // A key of URLs alone: `layers` changes every frame and must not reload pictures.
   const pictures = JSON.stringify(urlsOf(source, look.kind === "marigold", layers));
 
   useEffect(() => {
@@ -120,8 +113,7 @@ export function useLiveScene(canvas: RefObject<HTMLCanvasElement | null>, args: 
 
   const ready = loaded === pictures && !lost;
 
-  // Every render: a pose is a new `layers`, and a frame costs far less than a
-  // comparison of what changed would save.
+  // No deps: every pose is a new `layers`, and a frame is cheaper than diffing them.
   useLayoutEffect(() => {
     if (!ready || !visible) return;
     renderer.current?.resize(backing.width, backing.height);
