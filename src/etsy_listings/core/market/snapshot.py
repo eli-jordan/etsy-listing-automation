@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import contextlib
-import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from etsy_listings.core.market.block import market_block
 from etsy_listings.core.market.models import MarketResult, PhraseScore, ScoredListing
+from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -44,18 +43,10 @@ class MarketSnapshot(BaseModel):
 
 
 def save(workspace: Workspace, name: str, snapshot: MarketSnapshot) -> None:
-    """Replace ``name``'s snapshot atomically: written beside the old file
-    and swapped in, so a reader sees the old snapshot or the new one, never
-    half of either."""
-    path = workspace.market_snapshot_file(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
-        temporary.replace(path)
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            temporary.unlink()
+    write_bytes_atomic(
+        workspace.market_snapshot_file(name),
+        snapshot.model_dump_json(indent=2).encode("utf-8"),
+    )
 
 
 def load(workspace: Workspace, name: str) -> MarketSnapshot | None:
