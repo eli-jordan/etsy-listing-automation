@@ -43,13 +43,7 @@ def wait_for_redirect(
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     monotonic: Any = time.monotonic,
 ) -> Callback:
-    """Serve until Etsy redirects the browser here, then answer with the code.
-
-    Requests to any other path are answered 404 and **do not** end the wait:
-    a browser asking for `/favicon.ico` used to consume the single request
-    this server was willing to handle, and the flow would hang holding a code
-    it had thrown away.
-    """
+    """Serve until Etsy redirects the browser here, then answer with the code."""
     split = urlsplit(redirect_uri)
     path = split.path or "/"
     port = split.port

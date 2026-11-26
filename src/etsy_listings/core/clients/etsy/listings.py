@@ -19,7 +19,12 @@ from etsy_listings.core.clients.etsy.models import (
     VariationImageLink,
 )
 from etsy_listings.core.clients.etsy.shops import ShopMetadataReads
-from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+from etsy_listings.core.clients.etsy.transport import (
+    HTTP_NOT_FOUND,
+    EtsyApiError,
+    Transport,
+    results_of,
+)
 
 HTTP_BAD_REQUEST = 400
 HTTP_CONFLICT = 409
@@ -182,7 +187,7 @@ class HttpEtsyListingClient(ShopMetadataReads):
                 "/v3/application/listings/batch",
                 params={"listing_ids": ",".join(str(i) for i in chunk)},
             )
-            for row in _results(response.json()):
+            for row in results_of(response.json()):
                 listing = Listing.model_validate(row)
                 if listing.state is not None:
                     states[listing.listing_id] = listing.state
@@ -209,15 +214,15 @@ class HttpEtsyListingClient(ShopMetadataReads):
         response = self._transport.get(
             f"/v3/application/shops/{shop_id}/listings/{listing_id}/variation-images"
         )
-        return [VariationImageLink.model_validate(row) for row in _results(response.json())]
+        return [VariationImageLink.model_validate(row) for row in results_of(response.json())]
 
     def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:
         response = self._transport.get(f"/v3/application/shops/{shop_id}/shipping-profiles")
-        return [ShippingProfile.model_validate(row) for row in _results(response.json())]
+        return [ShippingProfile.model_validate(row) for row in results_of(response.json())]
 
     def production_partners(self, shop_id: int) -> list[ProductionPartner]:
         response = self._transport.get(f"/v3/application/shops/{shop_id}/production-partners")
-        return [ProductionPartner.model_validate(row) for row in _results(response.json())]
+        return [ProductionPartner.model_validate(row) for row in results_of(response.json())]
 
     def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
         response = self._transport.post(
@@ -317,9 +322,3 @@ def video_content_type(file_name: str) -> str:
     if content_type is None:
         raise ValueError(f"{file_name}: a listing video is .mp4 or .mov, not {suffix!r}")
     return content_type
-
-
-def _results(body: Any) -> list[Any]:
-    if isinstance(body, dict) and isinstance(body.get("results"), list):
-        return list(body["results"])
-    return []

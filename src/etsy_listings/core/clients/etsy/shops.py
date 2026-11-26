@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
 from etsy_listings.core.clients.etsy.models import ReturnPolicy, Shop, ShopSection
-from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+from etsy_listings.core.clients.etsy.transport import (
+    HTTP_NOT_FOUND,
+    EtsyApiError,
+    Transport,
+    results_of,
+)
 
 
 class ShopMetadataClient(Protocol):
@@ -25,11 +30,11 @@ class ShopMetadataReads:
 
     def shop_sections(self, shop_id: int) -> list[ShopSection]:
         response = self._transport.get(f"/v3/application/shops/{shop_id}/sections")
-        return [ShopSection.model_validate(row) for row in _results(response.json())]
+        return [ShopSection.model_validate(row) for row in results_of(response.json())]
 
     def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
         response = self._transport.get(f"/v3/application/shops/{shop_id}/policies/return")
-        return [ReturnPolicy.model_validate(row) for row in _results(response.json())]
+        return [ReturnPolicy.model_validate(row) for row in results_of(response.json())]
 
 
 class HttpEtsyShopClient(ShopMetadataReads):
@@ -40,7 +45,7 @@ class HttpEtsyShopClient(ShopMetadataReads):
         """Search by shop name. Etsy matches loosely, so the caller decides
         what counts as *the* match rather than trusting the first row."""
         response = self._transport.get("/v3/application/shops", params={"shop_name": name})
-        return [Shop.model_validate(row) for row in _results(response.json())]
+        return [Shop.model_validate(row) for row in results_of(response.json())]
 
     def shop_by_owner(self, user_id: int) -> Shop | None:
         """The shop belonging to a user, or ``None`` if they have none.
@@ -60,16 +65,7 @@ class HttpEtsyShopClient(ShopMetadataReads):
         body = response.json()
         # Documented as a single Shop; a `results` list is what the sibling
         # search returns, and tolerating both costs one line.
-        rows = _results(body)
+        rows = results_of(body)
         if rows:
             return Shop.model_validate(rows[0])
         return Shop.model_validate(body) if isinstance(body, dict) and "shop_id" in body else None
-
-
-def _results(body: Any) -> list[Any]:
-    """Etsy's list envelope is always ``{count, results}``. Anything else is
-    read as empty rather than raising: `setup` treats "no sections" and "a
-    shape we did not expect" the same way -- it asks."""
-    if isinstance(body, dict) and isinstance(body.get("results"), list):
-        return list(body["results"])
-    return []

@@ -314,3 +314,12 @@ class OAuthClient:
         # the shape that matters: Etsy reports `invalid_grant` with a 400, and
         # the caller needs the reason rather than the number.
         return oauth.TokenResponse.parse(body)
+
+
+def results_of(body: Any) -> list[Any]:
+    """The ``results`` of Etsy's ``{count, results}`` list envelope; anything
+    else reads as empty, so "nothing listed" and an unexpected shape are
+    handled alike."""
+    if isinstance(body, dict) and isinstance(body.get("results"), list):
+        return list(body["results"])
+    return []

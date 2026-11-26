@@ -19,7 +19,7 @@ from etsy_listings.core.clients.etsy.listings import (
     VideoSlotsFullError,
     video_content_type,
 )
-from etsy_listings.core.clients.etsy.market import EtsyMarketClient
+from etsy_listings.core.clients.etsy.market import BATCH_LIMIT, EtsyMarketClient
 from etsy_listings.core.clients.etsy.models import (
     ALREADY_DECODED,
     Inventory,
@@ -408,9 +408,6 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
 
 MarketMethod = Literal["search_active", "listings_by_ids", "review_count"]
 
-MARKET_BATCH_LIMIT = 100
-"""The real batch's chunk size, so the fake's call log counts as it does."""
-
 
 class MarketCall(NamedTuple):
     method: MarketMethod
@@ -516,8 +513,8 @@ class FakeEtsyMarketClient(EtsyMarketClient):
     def listings_by_ids(self, ids: Sequence[int]) -> list[MarketListing]:
         wanted = list(ids)
         found: list[MarketListing] = []
-        for start in range(0, len(wanted), MARKET_BATCH_LIMIT):
-            chunk = tuple(wanted[start : start + MARKET_BATCH_LIMIT])
+        for start in range(0, len(wanted), BATCH_LIMIT):
+            chunk = tuple(wanted[start : start + BATCH_LIMIT])
             self._record("listings_by_ids", chunk)
             with self._lock:
                 found.extend(self._listings[i] for i in chunk if i in self._listings)

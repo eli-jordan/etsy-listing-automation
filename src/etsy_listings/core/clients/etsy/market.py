@@ -8,7 +8,12 @@ from collections.abc import Sequence
 from typing import Any, Protocol
 
 from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing
-from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+from etsy_listings.core.clients.etsy.transport import (
+    HTTP_NOT_FOUND,
+    EtsyApiError,
+    Transport,
+    results_of,
+)
 
 SEARCH_PATH = "/v3/application/listings/active"
 BATCH_PATH = "/v3/application/listings/batch"
@@ -43,7 +48,7 @@ class HttpEtsyMarketClient:
 
     def search_active(self, query: str, *, limit: int = 25) -> list[MarketCandidate]:
         response = self._transport.get(SEARCH_PATH, params=search_params(query, limit=limit))
-        return [MarketCandidate.model_validate(row) for row in _results(response.json())]
+        return [MarketCandidate.model_validate(row) for row in results_of(response.json())]
 
     def listings_by_ids(self, ids: Sequence[int]) -> list[MarketListing]:
         """Each listing's stats, shop and thumbnail, in chunks of
@@ -78,7 +83,7 @@ class HttpEtsyMarketClient:
                 "includes": "Shop,Images",
             },
         )
-        return [MarketListing.model_validate(row) for row in _results(response.json())]
+        return [MarketListing.model_validate(row) for row in results_of(response.json())]
 
     def review_count(self, listing_id: int) -> int:
         """A listing gone since the batch counts zero rather than failing the
@@ -104,13 +109,6 @@ class HttpEtsyMarketClient:
 
 def search_params(query: str, *, limit: int) -> dict[str, str | int]:
     return {"keywords": query, "limit": limit, **SEARCH_DEFAULTS}
-
-
-def _results(body: Any) -> list[Any]:
-    """Etsy's list envelope is always ``{count, results}``."""
-    if isinstance(body, dict) and isinstance(body.get("results"), list):
-        return list(body["results"])
-    return []
 
 
 def _missing_ids(error: EtsyApiError) -> set[int] | None:
