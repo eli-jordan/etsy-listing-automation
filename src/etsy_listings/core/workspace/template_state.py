@@ -136,8 +136,6 @@ def template_state(workspace: Workspace, name: str) -> TemplateState:
 
 
 def _read(path: Path) -> AnyTemplate:
-    """One ``template.yaml``, parsed into whichever of the three kinds it is.
-    Anything that stops that is a :class:`ConfigLoadError` naming the file."""
     try:
         text = path.read_text(encoding="utf-8")
         if len(text.encode("utf-8")) > _LARGE_TEMPLATE_BYTES:

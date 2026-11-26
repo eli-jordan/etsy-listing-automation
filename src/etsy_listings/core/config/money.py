@@ -1,11 +1,3 @@
-"""Money type: explicit-currency prices only.
-
-ADR-0006: every price carries an explicit currency (``349 NOK``); bare numbers and
-mismatched currencies are rejected. A bare YAML number (``349``) is valid YAML but
-must fail validation here, so the parser only ever accepts the ``"<amount>
-<CURRENCY>"`` string form.
-"""
-
 from __future__ import annotations
 
 import re
@@ -20,8 +12,7 @@ from pydantic_core import core_schema
 _MONEY_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s+([A-Z]{3})\s*$")
 
 
-class MoneyFormatError(ValueError):
-    """Raised when a price is not the required ``"<amount> <CURRENCY>"`` string."""
+class MoneyFormatError(ValueError): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,15 +58,8 @@ class Money:
     @property
     def minor_units(self) -> int:
         """The amount as an integer number of minor units -- ``349 NOK`` is
-        ``34900``.
-
-        The form every price reaches Printify in. **No conversion
-        happens**: Printify sends the bare number to the sales channel, which
-        renders it in the shop's own currency, so an NOK price travels as NOK
-        minor units and no exchange rate enters `apply` or a hash.
-
-        Rounded half-up rather than truncated: banker's rounding on a price
-        is a surprise, and truncation loses a øre on every odd amount.
+        ``34900``. Rounded half-up rather than truncated: banker's rounding on
+        a price is a surprise, and truncation loses a øre on every odd amount.
         """
         return int((self.amount * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
@@ -83,7 +67,6 @@ class Money:
     def __get_pydantic_core_schema__(
         cls, _source_type: Any, _handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
-        # Pydantic supplies both arguments; this plain validator needs neither (S04).
         return core_schema.no_info_plain_validator_function(
             cls.parse,
             serialization=core_schema.plain_serializer_function_ser_schema(str),
@@ -102,12 +85,6 @@ class Money:
 
 
 def require_currency(money: Money, expected: str, field: str) -> None:
-    """Raise an actionable error if ``money`` is not denominated in ``expected``.
-
-    Cross-field validation (a listing's prices against the workspace's
-    ``shop.yaml`` currency) can't live inside :class:`Money` itself, since a
-    bare ``Money`` has no notion of what currency the shop expects.
-    """
     if money.currency != expected:
         raise MoneyFormatError(
             f"{field}: price is in {money.currency}, but this workspace's "

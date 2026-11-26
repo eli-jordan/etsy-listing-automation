@@ -30,7 +30,6 @@ _QUICKTIME_FAMILY = frozenset({"mov", "mp4"})
 
 
 def probe_video(path: Path) -> VideoFacts | ProbeFailure:
-    """The file's size, duration, pixel size and whether it carries audio."""
     try:
         size_bytes = path.stat().st_size
     except OSError:

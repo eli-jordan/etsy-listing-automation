@@ -1,14 +1,6 @@
 """A locked least-recently-used cache bounded by total size.
 
-Every in-process cache of decoded arrays has the same needs: a budget in bytes
-rather than entries (one full-size design array is worth fifty editor-scale
-bases), thread safety (FastAPI runs ``def`` endpoints on a thread pool, and
-preparation runs beside it), and one rule for an item bigger than the whole
-budget -- it is served without being kept, since keeping it would evict
-everything and then itself. ``cachetools.LRUCache`` does the eviction and the
-size accounting; it is not thread-safe, so every access here holds a lock. The
-lock covers bookkeeping only, never ``compute()``: decoding under a mutex would
-serialise exactly the requests a cache exists to make cheap.
+``cachetools.LRUCache`` is not thread-safe, so every access here holds a lock.
 """
 
 from __future__ import annotations
@@ -29,14 +21,10 @@ class BoundedCache[K: Hashable, V]:
         self._lock = threading.Lock()
 
     def get(self, key: K) -> V | None:
-        """The kept value, now the most recently used; ``None`` when absent."""
         with self._lock:
             return self._entries.get(key)
 
     def put(self, key: K, value: V) -> None:
-        """Keep ``value``, replacing ``key``'s old value. An oversized value
-        still drops the old one, so a reader never gets the superseded value,
-        and evicts nothing else."""
         with self._lock:
             self._store(key, value)
 
@@ -77,6 +65,5 @@ class BoundedCache[K: Hashable, V]:
 
     @property
     def held(self) -> int:
-        """Total ``size`` of what is kept."""
         with self._lock:
             return int(self._entries.currsize)

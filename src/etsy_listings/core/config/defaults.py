@@ -1,5 +1,3 @@
-"""``shop.yaml``: shop-wide configuration."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -78,16 +76,6 @@ class EtsyReturnPolicyDefaults(BaseModel):
 
 
 class EtsyListingDefaults(BaseModel):
-    """Every field a listing inherits, and nothing that identifies the shop
-    (features/etsy-listing-20260910/spec.md, "Config, after this phase"). Overridable per listing in
-    `listing.yaml`'s own `etsy:` block.
-
-    `who_made` defaults to `someone_else`: the shirt genuinely was
-    made by another company, and that declaration requires a production
-    partner attached to the *listing* -- checked at plan time (decision 3),
-    not here, since resolving a name to a partner needs the shop's live list.
-    """
-
     model_config = ConfigDict(extra="forbid")
 
     who_made: str = "someone_else"
@@ -120,9 +108,6 @@ class EtsyDefaults(BaseModel):
     """The shop's name on Etsy -- the human-readable half of its identity, and
     what `findShops` resolves the id from."""
 
-    # Deferrable, like `printify.shop_id`: it normally comes back *from* the
-    # Etsy API, so demanding it at load time made a workspace unusable before
-    # an Etsy shop exists to discover it from.
     shop_id: int | None = None
 
     listing_defaults: EtsyListingDefaults = EtsyListingDefaults()

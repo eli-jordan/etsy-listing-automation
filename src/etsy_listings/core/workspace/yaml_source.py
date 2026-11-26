@@ -162,7 +162,6 @@ def _same(a: object, b: object) -> bool:
 
 
 def _merge(source: Any, before: Any, after: Any) -> Any:
-    """``source`` with the changes from ``before`` to ``after`` applied."""
     if _same(before, after):
         return source
     if not all(isinstance(value, dict) for value in (source, before, after)):
@@ -232,7 +231,6 @@ class _Rows:
 
 
 def _common_ends(old: list[Any], new: list[Any]) -> tuple[int, int]:
-    """How many leading and trailing items ``old`` and ``new`` share."""
     shortest = min(len(old), len(new))
     prefix = 0
     while prefix < shortest and _same(old[prefix], new[prefix]):
@@ -254,7 +252,6 @@ def _children(node: Node) -> list[Node]:
 
 
 def _nested_blocks_in(root: Node) -> Iterator[tuple[Node, Node]]:
-    """Every `_nested_blocks` entry under ``root``, breadth first."""
     pending = deque([root])
     while pending:
         node = pending.popleft()
@@ -298,7 +295,6 @@ class _Editor:
                     self.sequence_keys[id(node)] = key
 
     def _node_at(self, root: Node, path: tuple[str, ...]) -> Node | None:
-        """The node under ``root`` at mapping keys ``path``, if there is one."""
         node = root
         for part in path:
             if not isinstance(node, MappingNode):
@@ -327,8 +323,6 @@ class _Editor:
 
     def _splice(self, start: int, end: int, text: str) -> None:
         self.edits.append((start, end, len(self.edits), text.replace("\n", self.newline)))
-
-    # -- walking
 
     def _edit(self, node: Node, old: Any, new: Any, replace: Replace) -> None:
         if _same(old, new):
@@ -463,7 +457,6 @@ class _Editor:
         self._insert_items(rows, changed_new[paired:], last_kept=prefix + paired - 1)
 
     def _insert_items(self, rows: _Rows, added: list[Any], *, last_kept: int) -> None:
-        """``added`` after the last kept item, or before the first when none was kept."""
         for value in added:
             lines = self._render_item(value).split("\n")
             if last_kept >= 0:
@@ -506,8 +499,6 @@ class _Editor:
             return edit_yaml(source, [row], before=[original])
         rendered = self._lines(self._render_item(row), indent=column)
         return " " * column + rendered.replace("\n", self.newline) + self.newline
-
-    # -- replacing one node
 
     def _replace_root(self, new: Any) -> None:
         assert self.root is not None
@@ -580,8 +571,6 @@ class _Editor:
         indent = "\n" + " " * column
         self._splice(position, position, indent.join(lines) + indent)
 
-    # -- rendering
-
     def _styled(self, node: Node, new: Any) -> Any:
         """``new`` in the old scalar's style, where that style can hold it."""
         if not isinstance(node, ScalarNode) or not isinstance(new, str):
@@ -636,8 +625,6 @@ class _Editor:
     @staticmethod
     def _lines(text: str, *, indent: int) -> str:
         return text.replace("\n", "\n" + " " * indent)
-
-    # -- positions
 
     def _content_end(self, node: Node) -> int:
         """Where the node's own text ends: before trailing blank lines and

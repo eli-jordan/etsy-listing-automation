@@ -98,11 +98,6 @@ def _readable(ref: str, path: Path) -> Path:
 
 
 def from_listing(workspace: Workspace, listing: str) -> ListingTemplateDraft:
-    """The spec's copy table, applied to ``listing``: garment, colours,
-    pricing, gallery in order, description body (text or ref) and the four
-    Etsy production settings. Design, artwork, brief, title, tags, lead and
-    lifecycle are not carried, and nothing from the lockfile or any cache is
-    read at all."""
     source = workspace.load_listing(listing)
     etsy = source.etsy
     template = ListingTemplate.model_validate(

@@ -1,52 +1,20 @@
 """What a local listing check reads off the workspace, read once per request.
 
-`config/listing_validation.py` deliberately takes no workspace: it is pure, so
-it can run on every autosave against a draft that is on disk nowhere. Somebody
-still has to open the files it checks *against* -- the garment profile a
-listing names, every template's real kind and colours -- and that somebody used
-to be each check's own caller.
-
-It cost what unowned work costs. ``_describe`` loaded one listing's garment
-profile twice, because the issues call and the pricing call each loaded their
-own. Worse, the whole template catalogue was re-listed and re-parsed inside
-every call, and the listings table makes one call *per row*: opening a table of
-twenty listings over twenty templates parsed four hundred ``template.yaml``
-files, and did it again on the next paint. Nothing was wrong with any one call;
-there was simply no module whose job it was to know that a request needs these
-facts once.
-
-That is this module. Construct it once where a request begins and hand it down.
-
-Two different costs, so two different strategies:
-
 * **Templates are gathered eagerly**, in ``gather``, because every check of
-  every listing needs the whole map -- there is nothing to defer, and putting
-  the O(templates) scan in a constructor is what makes it visible at one call
-  site instead of hidden inside a check.
+  every listing needs the whole map.
 * **Garment profiles are read on demand and kept**, because a request usually
-  wants one or two of them and a workspace may hold many. The listings table
-  asks for each row's; the picker asks for all of them; neither pays for the
-  other's.
-* **Videos are probed on demand and kept, by file**, for the same
-  reason and one more: a shared clip in ``common-media/`` is named by many
-  listings, and opening it once per row would be the four-hundred-parses
-  mistake again, with FFmpeg doing the parsing.
+  wants one or two of them and a workspace may hold many.
+* **Videos are probed on demand and kept, by file**: a shared clip in
+  ``common-media/`` is named by many listings.
 
-Two of those answers also outlive the request, because the listings table
-asks for them on every visit and they rarely change. Measured on an
-18-listing, 9-template shop, the catalogue cost 0.4-1.2s of every table load
-and the video probes 0.1-1.2s:
+Two of those answers also outlive the request:
 
 * **A template's entry is kept until a file in its directory changes**
-  (:func:`~etsy_listings.core.workspace.file_version.tree_version`, a stat
-  walk of a few milliseconds). Readiness is advisory here -- a listing issue
-  -- and the render stage asks it again from the files before it acts.
+  (:func:`~etsy_listings.core.workspace.file_version.tree_version`). Readiness
+  is advisory here -- a listing issue -- and the render stage asks it again
+  from the files before it acts.
 * **A video's probe is kept until the file changes**
   (:func:`~etsy_listings.core.workspace.file_version.file_version`).
-
-It holds the `Workspace` rather than copying paths out of it: reading is
-`Workspace`'s job, and a snapshot that resolved its own paths would be a
-second place that knows the layout.
 """
 
 from __future__ import annotations
@@ -113,7 +81,6 @@ class WorkspaceFacts:
 
     @classmethod
     def gather(cls, workspace: Workspace) -> WorkspaceFacts:
-        """Read the catalogue. The one expensive call, and it is named."""
         return cls(
             workspace,
             garment_profile_names=tuple(workspace.garment_profile_names()),

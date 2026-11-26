@@ -1,43 +1,3 @@
-"""``settings.yaml``: the workspace's tunable settings, next to ``shop.yaml``.
-
-It holds market scoring weights (features/market-seo-20260924/spec.md,
-*Scoring*), the batch AI queue's limit (ADR-0048), the ordered AI provider
-preferences (ADR-0056), AI time limits (ADR-0057) and mockup position
-limits (ADR-0058)::
-
-    market_seo:
-      weights:
-        reviews: 30
-...
-    batch_ai:
-      concurrency: 1
-    ai:
-      providers: [{name: codex}, {name: claude}, {name: grok}]
-      step_limit_minutes: 5
-      run_limit_minutes: 20
-    template_positions:
-      scale: {min: 0.80, max: 1.10}
-      offset: 0.10
-      rotation: 15
-    backup:
-      repository: C:/Users/Admin/naturally-inked-studio-backups
-      destinations: [C:/Users/Admin/iCloudDrive/naturally-inked-studio-backups]
-      interval_hours: 12
-      retention: {keep_within_days: 7, weekly: 4, monthly: 3}
-
-Everything is optional. ``backup`` alone has no defaults to fall back to:
-without the block backups are off (features/workspace-backup-20261123/spec.md,
-*Configuration*). A missing file, section or key falls back to the
-spec's defaults -- :class:`~etsy_listings.core.market.models.MarketWeights` owns
-those, and its validation (no negatives, not all zero, no unknown metric) is
-the file's. Unknown keys are refused rather than ignored: a misspelt
-``market-seo:`` that quietly changed nothing would look like tuning that
-did not work.
-
-Kept apart from ``shop.yaml`` because that file describes the shop and is
-largely written by ``setup``; these are the seller's own knobs.
-"""
-
 from __future__ import annotations
 
 import uuid
@@ -103,12 +63,6 @@ PROVIDER_NAMES: tuple[ProviderName, ...] = ("codex", "claude", "grok")
 
 
 class AiProviderSettings(BaseModel):
-    """One provider's preferences for every task (ADR-0056).
-
-    Discovery is advisory, so model and effort are intentionally not enums.
-    A retired value stays usable until the seller replaces it.
-    """
-
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: ProviderName
@@ -171,12 +125,10 @@ class AiSettings(BaseModel):
         return run
 
     def run_floor_minutes(self) -> int:
-        """The lowest run limit this chain and step limit allow."""
         return run_floor_minutes(self.providers, self.step_limit_minutes)
 
 
 def run_floor_minutes(providers: tuple[AiProviderSettings, ...], step_minutes: int) -> int:
-    """``max(5, enabled providers x step)`` (ADR-0057)."""
     enabled = sum(provider.enabled for provider in providers)
     return max(MIN_RUN_LIMIT_MINUTES, enabled * step_minutes)
 
@@ -254,7 +206,7 @@ class BackupSettings(BaseModel):
 
     @field_validator("repository", "restic_binary", mode="before")
     @classmethod
-    def native_path(cls, value: object) -> object:  # pre-validation YAML
+    def native_path(cls, value: object) -> object:
         r"""A ``/cygdrive/c/...`` or Cygwin ``/home/...`` path from a hand edit,
         translated as ``--root`` is. It must happen before pydantic makes a
         ``Path``: on Windows that already reads it as ``\cygdrive\c\...``."""
@@ -275,7 +227,7 @@ class BackupSettings(BaseModel):
 
     @field_validator("destinations", mode="before")
     @classmethod
-    def native_paths(cls, value: object) -> object:  # pre-validation YAML
+    def native_paths(cls, value: object) -> object:
         if isinstance(value, list | tuple):
             return [_native(item) if isinstance(item, str) else item for item in value]
         return value
@@ -319,8 +271,6 @@ class Settings(BaseModel):
 
     @classmethod
     def load(cls, path: Path) -> Settings:
-        """The file at ``path``, or every default when there is none. Errors
-        are :class:`ConfigLoadError`, naming the file and the dotted key."""
         if not path.is_file():
             return cls()
         try:
@@ -331,13 +281,10 @@ class Settings(BaseModel):
 
     @classmethod
     def from_text(cls, path: Path, text: str) -> Settings:
-        """``text``, read from ``path``, under :meth:`load`'s rules."""
         return cls.from_document(path, parse_yaml(path, text))
 
     @classmethod
     def from_document(cls, path: Path, raw: object) -> Settings:
-        """A parsed document under :meth:`load`'s rules: an empty one is every
-        default; anything else must be a mapping of known keys."""
         if raw is None:
             return cls()
         if not isinstance(raw, dict):

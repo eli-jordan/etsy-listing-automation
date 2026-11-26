@@ -1,23 +1,3 @@
-"""Everything in a workspace keyed by a listing's name, moved and removed together.
-
-A listing's identity is its directory name. Its render cache, previews,
-market snapshot and cached AI proposal (ADR-0049) are keyed by that name too.
-When the listing is renamed they must follow it, and when it goes they must
-go with it. Anything left behind would be inherited by a new listing given
-the old name, or orphaned where nothing ever deletes it. This module holds the
-one list of those artifacts. Rename (:func:`move_listing`), wipe
-(:func:`remove_listing`) and a pending delete (:func:`discard_research`) all
-work from that list, so a store added to it cannot be missed by one of them.
-
-Every operation holds the listing's lock (``workspace/listing_documents.py``).
-That is the same lock every ``listing.yaml`` edit and every proposal record
-write takes, so nothing can write to a listing while it moves or goes.
-
-Batch rows and AI runs are keyed by the name too, but they are application
-state with their own ordering rules. ``core/application/listing_identity.py``
-carries those.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path

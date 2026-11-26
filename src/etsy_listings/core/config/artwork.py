@@ -1,28 +1,3 @@
-"""Which design file a garment colour prints (ADR-0053).
-
-One pure function answers the question, and every reader asks it: listing
-validation, the render stage, the Printify stage, the editor's scene preview
-and the AI workflow. It used to be answered by a class inside the
-engine, while validation and the API each guessed at it separately -- so the
-editor could show one file and Printify print another, and nothing that tested
-either reader alone would notice.
-
-No I/O, no workspace, no garment-profile loading: callers pass the design map,
-the colour and the profile's tones. A resolution that fails is a value, never
-an exception, so a caller turns it into an ``Issue`` or a ``Blocked`` rather
-than letting a ``ValueError`` end a ``--all`` batch.
-
-The rules (docs/features/multi-artwork-20260928/spec.md, *Artwork resolution*):
-
-1. ``design[colour]``, a direct exception, when present;
-2. in light/dark mode, ``on-light`` or ``on-dark`` by the colour's tone;
-3. in single mode, ``default``.
-
-A depicted colour of ``None`` -- a ``single`` mockup template that names no
-colour -- prints ``default`` in single mode, and cannot be resolved in
-light/dark mode: the tool does not guess which base file a photograph shows.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -84,7 +59,6 @@ def is_light_dark(design: DesignMap) -> bool:
 
 
 def resolve(design: DesignMap, colour: str | None, tones: Mapping[str, Tone]) -> Resolution:
-    """The file ``colour`` prints, or why there is none."""
     if colour is not None:
         own = design.get(colour)
         if own is not None:
@@ -100,7 +74,6 @@ def resolve(design: DesignMap, colour: str | None, tones: Mapping[str, Tone]) ->
 def _resolve_by_tone(
     design: DesignMap, colour: str | None, tones: Mapping[str, Tone]
 ) -> Resolution:
-    """The light/dark slot ``colour``'s tone prints, or why there is none."""
     if colour is None:
         return NeedsColour()
     tone = tones.get(colour)
@@ -113,11 +86,6 @@ def _resolve_by_tone(
 
 
 def representative(design: DesignMap) -> str | None:
-    """The one file that stands for the whole listing -- its thumbnail and the
-    image the AI workflow reads. The first non-null base file in
-    ``default``, ``on-light``, ``on-dark`` order; a colour key is never
-    promoted, because it expresses print treatment rather than the listing's
-    concept (spec: *Representative artwork*)."""
     for key in BASE_KEYS:
         ref = design.get(key)
         if ref is not None:

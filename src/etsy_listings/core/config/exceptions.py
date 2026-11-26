@@ -11,7 +11,6 @@ from etsy_listings.core.config.slug import ColourExceptions
 
 
 def load_exceptions(path: Path) -> ColourExceptions:
-    """Load ``exceptions.yaml`` if present; an absent file means "no exceptions"."""
     if not path.is_file():
         return ColourExceptions(root={})
     raw = parse_yaml(path, path.read_text(encoding="utf-8")) or {}

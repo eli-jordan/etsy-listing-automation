@@ -1,5 +1,3 @@
-"""``listings/{name}/listing.yaml``: everything commercial and creative, configuration layering."""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -130,15 +128,6 @@ def canonical_document(document: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _check_gallery(media: list[MediaEntry]) -> None:
-    """`media:` is the gallery in order, and these are the layouts
-    Etsy cannot show at all -- malformed rather than incomplete, so
-    they refuse the write instead of waiting in the issues banner.
-
-    Position 1 is the thumbnail and Etsy only ever puts an image there. Etsy
-    pins the featured video at position 2 (decision 9), so a listing with any
-    video has one there; the second may sit anywhere after it. Images and
-    videos have separate caps because Etsy counts them apart.
-    """
     try:
         kinds: list[MediaKind] = [media_kind(entry) for entry in media]
     except UnknownMediaTypeError as exc:
@@ -334,19 +323,6 @@ class Listing(BaseModel):
 
         Answers ``Self`` rather than ``Listing`` because the UI's
         ``ListingDetail`` *is* a ``Listing`` with display fields hung off it.
-
-        There is no ``draft()`` beside this one any more. This model used to
-        hold one rule an unsaved draft was allowed to fail -- "set
-        ``pricing_plan`` or ``prices``" -- which made a document that merely
-        had nothing chosen yet indistinguishable from one that was malformed.
-        ADR-0043 moved that refusal to where the other seven incompletenesses
-        already lived: `config/listing_validation.py` explains it in the
-        banner, and `engine/stages/gates.py` turns it into the `Blocked` that
-        stops a deploy. What this model still refuses is a document that
-        contradicts itself -- a ``media[].colour`` naming a colour the listing
-        does not sell, a price in the wrong currency, a title over Etsy's
-        limit -- and those are failures about a field somebody filled in, not
-        about one they have not reached.
         """
         return cls.model_validate(dict(EMPTY_DRAFT), context={"currency": currency})
 
@@ -363,11 +339,6 @@ class Listing(BaseModel):
     def resolved_price(
         self, color: str, size: str, *, pricing_plan: PricingPlan | None = None
     ) -> Money:
-        """``price_overrides`` > ``prices`` > the referenced pricing plan's own
-        (override-then-flat) resolution. ``pricing_plan`` is an already-loaded
-        object, not the ``str`` ref -- loading it is the caller's job, the same
-        point ``design`` refs get resolved (see the ``pricing_plan`` field's
-        docstring)."""
         return resolve_price(
             self.prices, self.price_overrides, color, size, pricing_plan=pricing_plan
         )
@@ -381,9 +352,6 @@ def resolve_price(
     *,
     pricing_plan: PricingPlan | None = None,
 ) -> Money:
-    """The one precedence rule for a price, for a listing and for a listing
-    template alike (ADR-0047 reuses the price models, so it reuses their
-    resolution): ``price_overrides`` > ``prices`` > the plan's own."""
     override = price_overrides.get(color, {}).get(size)
     if override is not None:
         return override

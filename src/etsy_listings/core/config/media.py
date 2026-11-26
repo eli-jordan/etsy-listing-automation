@@ -62,8 +62,6 @@ no prefix for the workspace, ``./`` for the listing's own directory)."""
 
 
 class UnknownMediaTypeError(ValueError):
-    """A file ref whose extension is neither an image's nor a video's."""
-
     def __init__(self, ref: str) -> None:
         allowed = ", ".join((*IMAGE_EXTENSIONS, *VIDEO_EXTENSIONS))
         super().__init__(
@@ -72,7 +70,6 @@ class UnknownMediaTypeError(ValueError):
 
 
 def media_kind(entry: MediaEntry) -> MediaKind:
-    """``"image"`` or ``"video"``; :class:`UnknownMediaTypeError` otherwise."""
     if isinstance(entry, TemplateMediaEntry):
         return "image"
     suffix = PurePosixPath(entry).suffix.lower()

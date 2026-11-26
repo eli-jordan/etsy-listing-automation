@@ -1,11 +1,7 @@
-"""Workspace root discovery and path resolution. ADR-0013.
+"""Workspace root discovery and path resolution (ADR-0013).
 
-The data tree (``shop.yaml``, ``designs/``, ``listings/``,
-``mockup-templates/``, ``.cache/``) is a separate directory the user owns, never
-this repository. ``Workspace.resolve()`` is the single chokepoint every path
-reference in a config file passes through, and it refuses to resolve outside the
-workspace root — this is a security boundary (it is also what keeps the UI's
-future file-serving endpoints safe), not a tidiness rule.
+``Workspace.resolve()`` refuses to resolve outside the workspace root. That is
+a security boundary: the media and preview endpoints resolve through it.
 """
 
 from __future__ import annotations
@@ -33,12 +29,6 @@ from etsy_listings.core.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.config.settings import Settings, SettingsProblem
 from etsy_listings.core.config.slug import ColourExceptions
-
-# `template.yaml` is render geometry and render settings from top to bottom, so
-# its models belong to `render`, next to the passes that consume them -- not to
-# `config`, which owns the commercial/product files. Loading it here is the same
-# edge `load_listing` already has to `config`: the workspace knows where every
-# file lives, and asks whichever module owns a file's shape to parse it.
 from etsy_listings.core.render.config import AnyTemplate, PlacementId
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
@@ -248,11 +238,6 @@ class Workspace:
         return Workspace(self.root, self.defaults)
 
     def browser_storage_id(self) -> str:
-        """Stable workspace identity without exposing its absolute path to the UI.
-
-        ADR-0003 scopes pending SEO proposals to a workspace and listing. Shop
-        name cannot identify a workspace: two roots can use the same name.
-        """
         native_root = os.path.normcase(str(self.root.resolve()))
         return hashlib.sha256(native_root.encode("utf-8")).hexdigest()
 
@@ -313,16 +298,9 @@ class Workspace:
     def resolve_ref(self, ref: str, *, listing_dir: Path) -> Path:
         """The one interpreter of a path written in ``listing.yaml``.
 
-        Two roots: no prefix is the workspace root (``designs/x.png``), and
-        ``./`` is the listing's own directory (``./shots/back.png``).
-        Subdirectories are fine under either; ``..`` is refused anywhere, so a
-        ref says where its file is without a reader having to count levels.
-        The result still goes through :meth:`resolve`'s escape check, which
-        is what catches a symlink out of the root.
-
         ``listing_dir`` rather than a name, because the editor's unnamed draft
         has no directory of its own and resolves against a stand-in at the
-        same depth. Every refusal is an :class:`InvalidRefError`.
+        same depth.
         """
         return self._resolve_owned_ref(ref, listing_dir, layout.LISTING_FILE)
 
@@ -362,16 +340,6 @@ class Workspace:
 
     def cache(self, *parts: str) -> Path:
         return self.root.joinpath(layout.CACHE_DIR, *parts)
-
-    # ------------------------------------------------------------------
-    # Layout accessors.
-    #
-    # These are the *only* place that knows the shape of the workspace tree.
-    # Everything else asks for "this listing's lockfile" rather than joining
-    # "listings" / name / "state.lock.json" for itself, so renaming a
-    # directory is a one-line change here and the UI cannot accidentally grow
-    # its own path handling (see `_segment`).
-    # ------------------------------------------------------------------
 
     def listing_names(self) -> list[str]:
         """Directories that still have ``listing.yaml``, or a lockfile with
@@ -539,8 +507,6 @@ class Workspace:
         return self.batch_dir(batch) / layout.STAGING_UPLOADS_DIR / f"{_segment(sha256)}.png"
 
     def _cache_entries(self, directory: str, *, directories: bool) -> list[str]:
-        """The ids under ``.cache/<directory>/``: its subdirectories, or the
-        stems of its ``*.json`` records."""
         parent = self.cache(directory)
         if not parent.is_dir():
             return []
@@ -622,7 +588,6 @@ class Workspace:
         return digest.hexdigest()
 
     def _readable_hash(self, ref: str, listing_dir: Path) -> str | None:
-        """The file's sha256, or ``None`` when it cannot be read."""
         try:
             path = self.resolve_ref(ref, listing_dir=listing_dir)
             file_digest = hashlib.sha256()
@@ -731,23 +696,12 @@ class Workspace:
         )
 
     def seo_prompt_file(self) -> Path:
-        """``prompts/seo.md`` -- the seller-editable AI SEO prompt (AI SEO
-        implementation plan, PR3). Reading, seeding, and appending the
-        delimited JSON context around it are the ``ai`` package's job; this
-        accessor only names the file, the same split every other layout
-        accessor draws."""
         return self.root / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE
 
     def brief_prompt_file(self) -> Path:
-        """``prompts/brief.md`` -- the seller-editable prompt that drafts a
-        listing brief from its design image. Same split as
-        :meth:`seo_prompt_file`: this accessor only names the file."""
         return self.root / layout.PROMPTS_DIR / layout.BRIEF_PROMPT_FILE
 
     def market_queries_prompt_file(self) -> Path:
-        """``prompts/market-queries.md`` -- the seller-editable prompt that
-        extracts three buyer searches for market research (features/market-seo-20260924/spec.md,
-        *Query extraction*). Same split: this accessor only names the file."""
         return self.root / layout.PROMPTS_DIR / layout.MARKET_QUERIES_PROMPT_FILE
 
     def common_copy_dir(self) -> Path:
@@ -791,14 +745,6 @@ class Workspace:
         return sorted(p for p in shared.glob("*.md") if p.is_file())
 
     def load_common_copy(self, ref: str) -> CommonCopyDocument:
-        """A `description.ref`'s parsed front matter and body.
-
-        The one place a common-copy file's bytes are read: `common_copy.py`'s
-        :func:`~etsy_listings.core.workspace.common_copy.parse_common_copy` owns the
-        parsing itself (pure, tested directly against string fixtures), and
-        this is the I/O around it -- the same split `template_state`
-        already draws between reading `template.yaml` and parsing it.
-        """
         path = self.common_copy_file(ref)
         if not path.is_file():
             raise CommonCopyError(f"{ref!r}: file not found")
@@ -819,20 +765,6 @@ class Workspace:
         return DescriptionResolution(compose_description(description.lead, text))
 
     def compose_description(self, description: DescriptionConfig) -> str:
-        """The final concrete `etsy.description` text -- the one shared
-        resolver every deployment reader (Printify, Etsy, snapshots, diffs,
-        local validation) is required to call, rather than each re-deriving
-        it. The editor reads :meth:`resolve_description` once for both its
-        preview and its issue check (docs/features/ai-seo-20260922/plan.md,
-        "Description and common-copy boundaries").
-
-        Loads ``description.ref`` through :meth:`load_common_copy` when one is
-        set -- raising :class:`~etsy_listings.core.workspace.common_copy.CommonCopyError`
-        for a caller to turn into a `Blocked` stage or a banner issue -- then
-        hands the resolved lead/body pair to the pure
-        :func:`~etsy_listings.core.config.description.compose_description`, which
-        knows nothing about `ref` or the filesystem.
-        """
         resolved = self.resolve_description(description)
         if resolved.error is not None:
             raise resolved.error
@@ -869,8 +801,6 @@ class Workspace:
         return self.root / layout.EXCEPTIONS_FILE
 
     def env_file(self) -> Path:
-        """The workspace's gitignored ``.env``. Secrets live in the *workspace*,
-        never in this repository -- see ``config/secrets.py``."""
         return self.root / layout.ENV_FILE
 
     def etsy_tokens_file(self) -> Path:
@@ -938,11 +868,6 @@ class Workspace:
         return sorted(p for p in directory.glob("*.png") if p.stem != _SCENE_STEM)
 
     def template_colours(self, template: str) -> list[str]:
-        """The colours a ``colour-matrix`` set offers, read from its filenames.
-
-        ADR-0004: the mockup filename *is* the slugified colour name, which is
-        why this is a directory listing and not a lookup table.
-        """
         return [photo.stem for photo in self.template_photos(template)]
 
     def template_preview_photo(self, template: str) -> Path | None:
@@ -1076,8 +1001,6 @@ class Workspace:
         return matches[0] if matches else exact
 
     def template_scene_image(self, template: str) -> Path:
-        """``multiple``/``single``-kind templates: exactly one photo, fixed
-        filename -- there's no per-colour name to derive it from."""
         return self.template_dir(template) / f"{_SCENE_STEM}.png"
 
     def scene_photo(self, template: str, colour: str | None) -> ScenePhoto:
@@ -1105,21 +1028,12 @@ class Workspace:
         return self.test_designs_dir() / f"{_segment(name)}.png"
 
     def test_design_names(self) -> list[str]:
-        """Every uploaded calibration target, by the id the library offers it
-        under -- which is its filename stem, the same way
-        :meth:`test_design_file` resolves one back."""
         directory = self.test_designs_dir()
         if not directory.is_dir():
             return []
         return sorted(p.stem for p in directory.glob("*.png") if p.is_file())
 
     def renders_dir(self, listing: str) -> Path:
-        """Every render this listing has cached.
-
-        Exists because the render cache is keyed by listing *name*, so renaming
-        a listing has to move it -- and the rename endpoint knowing how to spell
-        `.cache/renders/{listing}` itself would be the second place that knows
-        where renders live."""
         return self.cache(layout.RENDERS_DIR, _segment(listing))
 
     def render_file(self, listing: str, template: str, colour: str | None = None) -> Path:
@@ -1151,24 +1065,14 @@ class Workspace:
         return self.cache(layout.MARKET_DIR, layout.MARKET_STATS_DIR)
 
     def market_snapshot_file(self, listing: str) -> Path:
-        """The listing's latest market research (features/market-seo-20260924/spec.md, *Cache*).
-        Keyed by listing name, like :meth:`renders_dir`, so it moves and goes
-        with the listing (``core/listing_artifacts.py``)."""
         return self.cache(
             layout.MARKET_DIR, layout.MARKET_SNAPSHOTS_DIR, f"{_segment(listing)}.json"
         )
 
     def proposal_file(self, listing: str) -> Path:
-        """The listing's cached AI SEO proposal, keyed by its exact
-        name as :meth:`market_snapshot_file` is."""
         return self.cache(layout.PROPOSALS_DIR, f"{_segment(listing)}.json")
 
     def preview_dir(self, listing: str) -> Path:
-        """Every preview this listing currently holds, one subdirectory per
-        template -- the same split :meth:`renders_dir` uses, since a preview
-        is the same pixels :meth:`render_file` would produce, just rendered
-        ahead of ``apply``. Sibling to the render cache, not nested in
-        it, so either can be wiped independently of the other."""
         return self.cache(layout.PREVIEWS_DIR, _segment(listing))
 
     def scene_cache_dir(self) -> Path:
@@ -1178,11 +1082,9 @@ class Workspace:
         return self.cache(layout.AI_IMAGES_DIR)
 
     def relative_path(self, path: Path) -> str:
-        """Serialize an owned path for API responses, with portable separators."""
         return path.relative_to(self.root).as_posix()
 
     def prune_previews(self, listing: str, valid: dict[str, set[str]]) -> None:
-        """Keep current content-addressed scenes, removing unused templates."""
         root = self.preview_dir(listing)
         if not root.is_dir():
             return
@@ -1194,18 +1096,11 @@ class Workspace:
         self, listing: str, template: str, colour: str | None, scene_hash: str
     ) -> Path:
         """One scene's full-size preview, content-addressed by its own
-        ``scene_hash``: a plan that changes nothing finds the file
-        already there, and a stale one simply stops matching rather than
-        needing to be found and deleted by name. Filename mirrors
-        :meth:`render_file`'s own convention -- the colour for a
-        ``colour-matrix`` scene, ``scene`` otherwise -- with the hash appended
-        so two different states of the same scene never collide. ``scene_hash``
-        goes through :func:`_segment` like every other name here: it is a
-        security boundary (ADR-0008's future preview endpoint resolves through
-        this accessor, never a path from the URL), not just a naming rule, so
-        it refuses anything that is not a single, filesystem-safe segment --
-        which is exactly why the caller strips the hash's ``sha256:`` prefix
-        before handing it here."""
+        ``scene_hash``: a plan that changes nothing finds the file already
+        there, and a stale one stops matching rather than needing to be found
+        and deleted by name. ``scene_hash`` goes through :func:`_segment`
+        because the preview endpoint resolves through this accessor, never a
+        path from the URL; the caller strips the hash's ``sha256:`` prefix."""
         stem = _segment(colour) if colour is not None else "scene"
         filename = f"{stem}-{_segment(scene_hash)}.png"
         return self.preview_dir(listing) / _segment(template) / filename
@@ -1274,8 +1169,6 @@ class Workspace:
 
 
 def _prune_template_previews(directory: Path, keep: set[str] | None) -> None:
-    """One template's previews: all of them for a template no scene uses any
-    more, else every file not in ``keep``."""
     if keep is None:
         remove_tree(directory)
         return

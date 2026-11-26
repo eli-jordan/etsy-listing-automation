@@ -1,14 +1,3 @@
-"""The label rules: what a label the app saves becomes, and what refuses it.
-
-A label is free-form text a seller tags a mockup template with, for finding it
-later (spec *Labels*). The rules bind only labels the template does not already
-hold. The template model takes any list of strings, so a hand-edited label
-that breaks them still loads, still shows, and cannot block a save; a typo in a
-label cannot affect a pixel. The Labels bar keeps a copy of these rules so its
-field can explain them before anything is sent, and the messages here are what
-it shows.
-"""
-
 from __future__ import annotations
 
 import re
@@ -24,9 +13,7 @@ MAX_LABELS = 10
 _ALLOWED = re.compile(r"[a-z0-9 :-]+")
 
 
-class TemplateLabelRefusedError(RefusedError):
-    """A label the template did not already hold breaks a rule. The message
-    names the rule in the words the seller reads."""
+class TemplateLabelRefusedError(RefusedError): ...
 
 
 def _tidied(label: str) -> str:
@@ -34,7 +21,6 @@ def _tidied(label: str) -> str:
 
 
 def _refusal(label: str) -> str | None:
-    """Why ``label``, already tidied, cannot be saved; None when it can."""
     if len(label) > MAX_LABEL_LENGTH:
         return f"Labels can be up to {MAX_LABEL_LENGTH} characters"
     if _ALLOWED.fullmatch(label) is None:

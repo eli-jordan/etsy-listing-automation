@@ -51,17 +51,7 @@ OAuthFactory = Callable[[str], OAuthClient]
 Clock = Callable[[], datetime]
 
 
-# ------------------------------------------------------------------ Printify
-
-
 def printify_transport(root: Path) -> Transport:
-    """One connection to Printify, with its token resolved lazily.
-
-    Shared by both clients because it is one host and one token: they differ
-    in what they are allowed to *ask*, which is a matter of which protocol the
-    caller holds, not of which socket the bytes leave through.
-    """
-
     def token() -> str:
         return Secrets.load(root / layout.ENV_FILE).require_printify_api_token()
 
@@ -94,11 +84,7 @@ def catalog_client(workspace: Workspace, *, credentials_root: Path | None = None
 def printify_client(
     workspace: Workspace, *, credentials_root: Path | None = None
 ) -> PrintifyClient:
-    """The shop-scoped, writing half of the Printify surface."""
     return HttpPrintifyClient(printify_transport(credentials_root or workspace.root))
-
-
-# ---------------------------------------------------------------------- Etsy
 
 
 def etsy_tokens_file(root: Path) -> Path:
@@ -166,7 +152,6 @@ def etsy_transport(
 def etsy_listing_client(
     root: Path, *, http: httpx.Client | None = None, oauth: OAuthFactory = OAuthClient
 ) -> EtsyListingClient:
-    """Build the listing connection without demanding credentials."""
     return HttpEtsyListingClient(etsy_transport(root, http=http, oauth=oauth))
 
 
@@ -183,11 +168,7 @@ def etsy_shop_client(
 
 
 def etsy_market_client(root: Path, *, http: httpx.Client | None = None) -> EtsyMarketClient:
-    """Read-only research with a lazy app key and no rotating bearer."""
     return HttpEtsyMarketClient(EtsyTransport(_etsy_app_key_source(root), client=http))
-
-
-# ------------------------------------------------------------------- the run
 
 
 def run_context(

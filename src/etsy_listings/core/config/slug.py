@@ -1,12 +1,3 @@
-"""Colour slugification: ADR-0004.
-
-A mockup filename must equal the slugified Printify colour name (``"Blue Jean"``
--> ``blue-jean.png``), and ``listing.yaml`` refers to colours by that same slug.
-The rules here are the stable, single source of truth for that mapping. A sparse,
-empty-by-default ``exceptions.yaml`` overrides names that don't slugify cleanly
-(ampersands, slashes, parenthesised names) or that collide on one slug.
-"""
-
 from __future__ import annotations
 
 import re
@@ -21,14 +12,11 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
 def slugify(name: str) -> str:
-    """Lowercase, collapse runs of non-alphanumerics to a single hyphen, trim."""
     lowered = name.strip().lower()
     return _NON_ALNUM.sub("-", lowered).strip("-")
 
 
 class ColourExceptions(RootModel[dict[str, str]]):
-    """``exceptions.yaml``: colour name -> explicit slug override. Empty by default."""
-
     root: dict[str, str] = {}
 
     def get(self, name: str) -> str | None:
@@ -52,11 +40,6 @@ class SlugCollisionError(RefusedError):
 
 
 def slug_map(names: list[str], exceptions: ColourExceptions) -> dict[str, str]:
-    """Map each colour name to its slug, applying ``exceptions`` overrides first.
-
-    Raises :class:`SlugCollisionError` if two distinct names resolve to the same
-    slug, naming every offending slug and its colliding names in one error.
-    """
     result: dict[str, str] = {}
     by_slug: dict[str, list[str]] = defaultdict(list)
     for name in names:

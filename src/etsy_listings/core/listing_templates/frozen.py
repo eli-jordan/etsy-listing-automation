@@ -1,11 +1,3 @@
-"""Frozen listing-template content.
-
-Document, owned files and saved-at time are captured together, before an
-upload can outlive the template. Shared refs still resolve through Workspace
-and are checked again at confirm. Batches owns durable row writes, not the
-protocol for locating frozen content.
-"""
-
 from __future__ import annotations
 
 import shutil
@@ -56,14 +48,12 @@ class FrozenListingTemplate:
     def restore(
         cls, workspace: Workspace, document: Mapping[str, Any], directory: Path, saved_at: datetime
     ) -> FrozenListingTemplate:
-        """Read a staging or batch record's content, independent of its source."""
         template = ListingTemplate.model_validate(
             dict(document), context={"currency": workspace.defaults.etsy.currency}
         )
         return cls(workspace, template, directory, saved_at)
 
     def assets(self) -> tuple[AssetCopy, ...]:
-        """Only owned content; shared refs are never copied."""
         return tuple(
             AssetCopy(
                 ref=ref,

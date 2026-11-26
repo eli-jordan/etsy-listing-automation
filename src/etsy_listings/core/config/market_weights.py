@@ -1,5 +1,3 @@
-"""Workspace-owned market scoring weights."""
-
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator

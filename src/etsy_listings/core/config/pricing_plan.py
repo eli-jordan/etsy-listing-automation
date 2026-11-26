@@ -1,15 +1,3 @@
-"""``pricing-plans/{name}.yaml``: a reusable, per-size starting price table.
-
-Referenced by a listing's ``pricing_plan:`` field as a workspace-relative
-path, resolved the same way ``design:`` is -- not a bare name
-against a fixed directory the way ``garment_profile:``/``media[].template``
-are. No name/label field: the filename is the identity.
-``garment_profile`` is a bare-name back-reference to the garment profile
-this plan was built for, in the same style as ``Listing.garment_profile`` --
-unvalidated against an actual garment profile file at load time, for the
-same reason ``Listing.garment_profile`` is.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,10 +40,6 @@ class PricingPlan(BaseModel):
             raise format_validation_error(path, exc) from exc
 
     def resolved_price(self, color: str, size: str) -> Money | None:
-        """``None`` (not ``KeyError``) when this plan doesn't cover the size --
-        the caller (``Listing.resolved_price``) still has its own
-        ``prices``/``price_overrides`` to fall back to before it's a real
-        error."""
         override = self.price_overrides.get(color, {}).get(size)
         if override is not None:
             return override

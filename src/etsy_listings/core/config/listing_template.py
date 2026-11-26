@@ -57,9 +57,6 @@ class TemplateDescriptionConfig(BaseModel):
 
 
 class TemplateEtsyConfig(BaseModel):
-    """`EtsyListingConfig` without the copy an instance writes for itself.
-    The four settings keep the meanings `EtsyListingConfig` documents."""
-
     model_config = ConfigDict(extra="forbid")
 
     description: TemplateDescriptionConfig = TemplateDescriptionConfig()
@@ -94,8 +91,6 @@ class ListingTemplate(BaseModel):
     def resolved_price(
         self, color: str, size: str, *, pricing_plan: PricingPlan | None = None
     ) -> Money:
-        """`Listing.resolved_price`'s rule: what a listing made from this
-        template would charge, which is what the editor's Pricing tab shows."""
         return resolve_price(
             self.prices, self.price_overrides, color, size, pricing_plan=pricing_plan
         )

@@ -1,39 +1,3 @@
-"""Every reason a listing cannot run, as far as its own files can tell.
-
-Answers one question: is this listing's *own* configuration complete and
-self-consistent? Not "would the live shop accept it" -- that needs a real
-`plan()` against Etsy/Printify (price-below-cost, shop-section validity) and
-is explicitly out of scope here; a static note in the issues banner points at
-`etsy-listings plan` for those instead.
-
-**One module, two readers.** The editor's issues banner asks for all of them
-(`check_listing`); a stage asks for the two or three it ships and turns each
-into a `Blocked` through the adapter in `engine/stages/gates.py`. They used to
-be two *modules*, and the same rule was spelled in both: a whitespace-only
-`garment_profile` passed the engine's pre-flight and failed the editor's, so
-the banner and `apply` disagreed about one file on disk. A rule stated twice
-is a rule that will diverge, so each is stated here once -- predicate, message
-and all -- and the two readers differ only in what they do with it.
-
-The three rules `gates.py` used to own (`check_design_resolution`,
-`check_garment_profile_chosen`, `check_copy_is_concrete`) are here for the same
-reason the other eleven are, and the dependency now points the way the rest of
-the codebase does: `engine` reads `config`, never the reverse.
-
-Reuses `Listing`'s own pydantic validators for everything structural (money
-parsing, cross-reference subsets, length limits) -- a `Listing.model_validate`
-failure blocks the write outright and is surfaced by the API layer as inline
-field errors, and never reaches this module.
-
-Deliberately not a `Stage`: stages diff local vs. remote state, and this only
-ever looks at local config, callable synchronously on every autosave with no
-network I/O and no workspace.
-
-Structured as a list of independent check functions rather than a monolith,
-since more checks are expected later (see the module's own docstring in
-features/listings-ui-20260915/spec.md).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -77,10 +41,6 @@ judged by the very rules the listings made from it will be."""
 
 @dataclass(frozen=True)
 class Issue:
-    """One entry in the editor's issues banner -- the exact shape the design
-    mockup's `issues`/`raw` array already expects, so only the source of the
-    list changes: from a hardcoded demo array to this module's real output."""
-
     severity: Severity
     tab: Tab
     where: str
@@ -89,13 +49,6 @@ class Issue:
 
 @dataclass(frozen=True)
 class TemplateInfo:
-    """The kind, colours and map refusal a listing checks, per template it
-    references -- a slice of the calibrator's `TemplateSummary`
-    (`GET /api/templates`), so kind and colours are the real ones on disk,
-    never re-derived here. A template this listing names that isn't in the
-    map at all (renamed or deleted from under it) is not this module's check
-    to make -- nothing in the agreed rule list covers it."""
-
     kind: Literal["colour-matrix", "multiple", "single"]
     colours: frozenset[str]
     preparation_error: str | None = None
@@ -143,8 +96,6 @@ refusal; the live catalog remains the authority on what can actually be sent.
 
 
 def required_design_pixels(profile: GarmentProfile) -> tuple[int, int]:
-    """The smallest design ``profile`` prints: 90% of its print area on each
-    axis. Public for New batch's size hint (UI doc §4)."""
     return (
         int(profile.print_area.width * RESOLUTION_TOLERANCE),
         int(profile.print_area.height * RESOLUTION_TOLERANCE),
@@ -152,16 +103,6 @@ def required_design_pixels(profile: GarmentProfile) -> tuple[int, int]:
 
 
 def check_design_resolution(design: Path, profile: GarmentProfile) -> list[Issue]:
-    """Refuse a design that will print soft, or print its background.
-
-    Never auto-upscaled and never converted: a silently upscaled
-    design produces a blurry shirt discovered by customer complaint, which is
-    the one failure mode this whole gate exists to make impossible.
-
-    The `where` is the bare ``Design``; a multi-artwork listing's caller
-    narrows it to the key that failed.
-    """
-
     def blocked(message: str) -> list[Issue]:
         return [Issue("block", "variants", _DESIGN_WHERE, message)]
 
@@ -230,22 +171,6 @@ def check_garment_profile_chosen(garment_profile: str) -> list[Issue]:
 
 
 def check_copy_is_concrete(*, title: str, lead: str) -> list[Issue]:
-    """Refuse blank copy before a product is created.
-
-    The product carries the listing's own title and composed description -- Printify's
-    create call requires both, and they are the duplicate
-    guard's match key. ``lead`` rather than the full composed
-    description: the description model's lead is required and its body is
-    optional, so this is the same "deployment
-    blocked until it is non-empty" rule the lead itself carries, checked here
-    for the one reason nothing downstream would catch it.
-
-    One issue per offending field, so the banner can point at the field that is
-    actually wrong. That used to need a placeholder string passed in for
-    whichever field wasn't being asked about, because the rule answered with a
-    single refusal and the caller had to isolate the cause by calling it twice
-    -- a workaround for a shape, now that the shape is a list.
-    """
     issues: list[Issue] = []
     for field, value in (("title", title), ("description", lead)):
         if value.strip():
@@ -263,16 +188,6 @@ def check_copy_is_concrete(*, title: str, lead: str) -> list[Issue]:
 
 
 def check_description_ref(ref: str | None, error: str | None) -> list[Issue]:
-    """Refuse a `description.ref` that does not resolve to usable common copy.
-
-    ``error`` is the message a caller's own
-    :meth:`~etsy_listings.core.workspace.workspace.Workspace.load_common_copy`
-    attempt raised, or ``None`` when it resolved fine -- this module never
-    touches the filesystem itself (see this file's own docstring), so the
-    caller has already done the one read that can fail and hands back only
-    the sentence, the same way `design_paths` arrives pre-resolved for
-    :func:`check_design_resolution`'s caller to have tried first.
-    """
     if ref is None or error is None:
         return []
     return [Issue("block", "details", _COPY_WHERE["description"], error)]
@@ -344,10 +259,6 @@ def _check_printify_variant_limit(listing: Production, profile: GarmentProfile) 
 def _check_garment_profile_exists(
     listing: Production, garment_profile_names: Iterable[str]
 ) -> list[Issue]:
-    # A new listing starts unchosen: the editor opens on a document with nothing
-    # picked, so "not chosen yet" is the ordinary case and reporting it as
-    # `'' does not exist` would describe a mistake nobody made. That half of the
-    # rule is `check_garment_profile_chosen`'s, shared with every stage.
     unchosen = check_garment_profile_chosen(listing.garment_profile)
     if unchosen:
         return unchosen
@@ -364,20 +275,6 @@ def _check_garment_profile_exists(
 
 
 def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> list[Issue]:
-    """Nothing says what a variant costs.
-
-    Public, and narrow-argument, like every other rule a stage shares: this one
-    became one when ADR-0043 took it out of `Listing` itself. It used to block
-    the *write*, which made it the single incompleteness out of eight that a
-    seller met as the tool refusing to save their work; now it blocks the
-    deploy, through `engine/stages/gates.py.check_price_source`, exactly as the
-    other seven do.
-
-    That move is also what makes the rule safe to state once. While it lived in
-    the model, this module had to restate it so the banner could say *something*
-    about a refusal the model made silently -- two expressions of one rule, and
-    the comment here used to say so.
-    """
     if pricing_plan is not None or priced_sizes:
         return []
     return [
@@ -587,25 +484,6 @@ def check_artwork(
     profile: GarmentProfile | None,
     templates: Mapping[str, TemplateInfo],
 ) -> list[Issue]:
-    """Which file every enabled and every depicted colour prints, asked of
-    `config/artwork.py` (ADR-0053), and every reason one cannot be answered.
-
-    Incomplete rather than malformed (spec: *Saving, blockers and warnings*):
-    the listing saves, and these stop it deploying. The wording and `where`
-    are docs/features/multi-artwork-20260928/interactions.md's (Part 1 §10, Part 2 §9).
-
-    * no design at all -- an empty map, or a pair with both slots empty;
-    * an enabled colour the garment profile gives no tone, in *either* mode,
-      because classification is mandatory shared data a listing cannot fix;
-      a colour only *depicted* needs one only when there is a pair to pick
-      from;
-    * a light/dark slot an automatic colour needs but nobody has filled;
-    * a ``single`` scene that names no colour, in light/dark mode;
-    * and, as a warning, a pair only one of whose slots is in use.
-
-    With no loadable garment profile only the first applies; the others
-    need its tones.
-    """
     design = listing.design
     if representative(design) is None:
         return [
@@ -652,7 +530,6 @@ def _empty_slot_issues(empty: Mapping[Tone, list[str]]) -> list[Issue]:
 def _light_dark_issues(
     listing: Listing, tones: Mapping[str, Tone], colourless: list[str]
 ) -> list[Issue]:
-    """A scene that cannot pick between the pair, and a pair only half used."""
     issues = [
         Issue(
             "block",
@@ -692,18 +569,6 @@ axis, and a clip whose shorter side reaches 500 reaches it on both."""
 
 
 def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> list[Issue]:
-    """Refuse a video Etsy's help page would reject.
-
-    The help page, not the API, because the API is no guide: it accepted a
-    3 s and a 20 s clip and answered a non-video with a bare ``500``
-    (decision 9). Keyed by the ref ``media:`` names it by, so every message
-    names the file the seller has to go and fix. No aspect rule -- the help
-    page states none.
-
-    The extension is not checked here: `Listing` refuses a ref that is neither
-    an image nor a video when it loads, and the probe refuses a file whose
-    contents are not MP4/MOV whatever it is called.
-    """
     return [issue for ref, facts in videos.items() for issue in _video_issues(ref, facts)]
 
 
@@ -742,13 +607,6 @@ def _video_issues(ref: str, facts: VideoFacts | ProbeFailure) -> list[Issue]:
 
 
 def check_lifecycle_verb(lifecycle: str | None, *, published: bool) -> list[Issue]:
-    """Refuse the wrong end-of-life verb.
-
-    ``deleted`` on something that has left Etsy ``draft`` would throw away
-    reviews, favourites and search history -- the same history ADR-0017
-    refused to discard to change a garment. ``retired`` on a never-live
-    listing pauses nothing. Wrong verb is never rewritten as the right one.
-    """
     if lifecycle == "deleted" and published:
         return [
             Issue("block", "details", _LIFECYCLE_WHERE, DELETED_ON_PUBLISHED),
@@ -788,7 +646,6 @@ def _similarity_pose(template_box: BoundingBox, box: BoundingBox) -> Pose | None
 
 
 def _limit_problems(pose: Pose, limits: TemplatePositionLimits) -> list[str]:
-    """Where ``pose`` lies outside ``limits`` (spec Validation 2)."""
     problems = []
     if (
         not limits.scale.min - _POSITION_ROUNDOFF
@@ -863,14 +720,6 @@ def check_template_positions(
     *,
     name: str = "",
 ) -> list[Issue]:
-    """Spec Validation 1–4, pure and read against current geometry (ADR-0058).
-    Rule 5 (Marigold refused) is lifted: Marigold positions render with a fit
-    per position (option B).
-
-    Limits arrive from the caller. Refuse rather than clamp; absolute corners
-    remain unchanged after recalibration or a limits edit. ``name`` labels a saved
-    listing's refusal; unnamed editor drafts omit the prefix.
-    """
     referenced = {
         entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
     }
@@ -915,7 +764,6 @@ def positions_outside_limits(
 
 
 def _limited(template_box: BoundingBox, box: BoundingBox, limits: TemplatePositionLimits) -> bool:
-    """Whether ``box`` is a similarity of ``template_box`` that ``limits`` refuse."""
     pose = _similarity_pose(template_box, box)
     return pose is not None and bool(_limit_problems(pose, limits))
 
@@ -923,8 +771,6 @@ def _limited(template_box: BoundingBox, box: BoundingBox, limits: TemplatePositi
 def _positioned_boxes(
     key: str, position: BoxPosition | PlacementPositions, template: AnyTemplate
 ) -> list[tuple[str, BoundingBox, BoundingBox]]:
-    """Each well-formed position under ``key`` with its template box. A
-    shape mismatch or a stale placement yields none."""
     if isinstance(template, MultipleTemplate):
         if not isinstance(position, PlacementPositions):
             return []
@@ -941,24 +787,6 @@ def _positioned_boxes(
 
 @dataclass(frozen=True)
 class CheckInputs:
-    """What :func:`check_listing` and :func:`check_listing_template` need from
-    outside the document, pre-resolved by the caller: this module opens no
-    file.
-
-    ``garment_profile`` is ``None`` when the document's ``garment_profile``
-    does not resolve to a real file; the profile-dependent checks (design
-    resolution, colour classification) have nothing to check against then and
-    are skipped, leaving :func:`_check_garment_profile_exists`'s block as the
-    one issue that matters.
-
-    ``description_ref_error`` is the caller's own
-    ``Workspace.load_common_copy(...etsy.description.ref)`` attempt -- ``None``
-    when there is no ref to check, or when it resolved fine.
-
-    ``videos`` is every video ``media:`` names, probed by the caller --
-    `WorkspaceFacts.videos` -- and keyed by its ref.
-    """
-
     garment_profile: GarmentProfile | None
     garment_profile_names: Iterable[str]
     templates: Mapping[str, TemplateInfo]
@@ -993,11 +821,6 @@ def check_listing(
     design_paths: Mapping[str, Path],
     published: bool | None = None,
 ) -> list[Issue]:
-    """Every business-level issue with ``listing``, assuming it already passed
-    `Listing.model_validate` -- structural failures are the API layer's to
-    catch and never reach here. ``design_paths`` arrive resolved, like the
-    rest of ``inputs``.
-    """
     garment_profile, templates = inputs.garment_profile, inputs.templates
     issues: list[Issue] = []
     issues += _check_garment_profile_exists(listing, inputs.garment_profile_names)
@@ -1029,14 +852,10 @@ def check_listing_template(template: ListingTemplate, inputs: CheckInputs) -> li
     """Every production issue with a listing template: the checks
     :func:`check_listing` makes about garment, colours, price source,
     gallery, videos and mockup-template kinds, and none of its design, brief,
-    copy or lifecycle checks -- a template has none of those fields, and their
-    absence is the point of it rather than something to finish.
+    copy or lifecycle checks.
 
     Any ``block`` refuses the write: a listing template on disk is always
-    complete, so the server keeps the last complete version instead. Its
-    inputs arrive pre-resolved, exactly as :func:`check_listing`'s do (this
-    module opens no file), and nothing here asks a provider -- live facts such
-    as a price under Printify's cost stay deployment-time checks.
+    complete, so the server keeps the last complete version instead.
     """
     garment_profile = inputs.garment_profile
     issues: list[Issue] = []

@@ -33,18 +33,6 @@ every place that turns "not a UserFacingError" into a client-visible message
 says the same thing, rather than each guessing its own wording."""
 
 
-# ---------------------------------------------------------------- refusals
-#
-# What kind of "no" a refusal is, so that each adapter decides once what each
-# kind becomes -- the HTTP app has one table of category to status
-# (``server/api/app.py``), and no route reads a message to decide. Core names
-# categories, never status codes (ADR-0052). A refusal inherits exactly one,
-# including one an adapter answers with its own body (an AI run's reason, a
-# staging refusal's remedy), so its status still agrees with its category.
-# ``workspace.InvalidNameError`` stays its own refusal: a name that is not a
-# path segment is a security boundary (ADR-0013), not a user message.
-
-
 class MissingError(UserFacingError, LookupError):
     """What the request names is not there: never was, or something removed
     or moved it first."""

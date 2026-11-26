@@ -56,7 +56,6 @@ from etsy_listings.core.config.secrets import (
 from etsy_listings.core.config.slug import ColourExceptions, SlugCollisionError, slug_map, slugify
 
 __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
-    # One class per config file.
     "Defaults",
     "Listing",
     "ListingTemplate",
@@ -67,7 +66,6 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "MediaEntry",
     "TemplateMediaEntry",
     "PrintArea",
-    # What a media: entry is, and the gallery's caps.
     "MediaKind",
     "media_kind",
     "UnknownMediaTypeError",
@@ -75,25 +73,20 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "MAX_VIDEOS",
     "VideoFacts",
     "ProbeFailure",
-    # The description model and its one shared join rule (AI SEO plan PR2).
     "DescriptionConfig",
     "compose_description",
-    # Money. Every price carries an explicit currency.
     "Money",
     "PriceField",
     "require_currency",
-    # Colour slugification, and the sparse exceptions file behind it.
     "ColourExceptions",
     "SlugCollisionError",
     "slug_map",
     "slugify",
     "load_exceptions",
-    # Credentials. Read from the *workspace*.env, never this repo.
     "Secrets",
     "MissingCredentialError",
     "ANTHROPIC_KEY_VAR",
     "PRINTIFY_TOKEN_VAR",
-    # Actionable load failures: never a bare pydantic traceback.
     "ConfigLoadError",
     "format_validation_error",
 ]

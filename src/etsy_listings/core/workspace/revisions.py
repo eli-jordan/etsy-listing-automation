@@ -44,8 +44,6 @@ __all__ = [
 
 
 class RevisionConflictError(UserFacingError, RuntimeError):
-    """The file changed since the revision a save was made against."""
-
     def __init__(self, path: Path) -> None:
         super().__init__(f"{path.name} changed on disk since it was loaded; reload it first")
         self.path = path

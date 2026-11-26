@@ -71,22 +71,16 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "Workspace",
     "DescriptionResolution",
     "ScenePhoto",
-    # Which durable mask file `Workspace.template_mask_file` names.
     "MaskSource",
-    # What a listing check reads off the tree, gathered once per request.
     "WorkspaceFacts",
-    # One loaded template as that check sees it, for a stage that has the config.
     "template_info",
     # A video file's facts, never an exception.
     "probe_video",
-    # The five refusals, each naming what it refused and why.
     "WorkspaceNotFoundError",
     "PathEscapesWorkspaceError",
-    # A `listing.yaml` path that is not a two-root ref.
     "InvalidRefError",
     "InvalidNameError",
     "AmbiguousColourSuffixError",
-    # Every filename and directory name in the tree, in one module.
     "layout",
     # Cygwin/Windows path translation, for user-supplied path options (--root).
     "to_native_path",

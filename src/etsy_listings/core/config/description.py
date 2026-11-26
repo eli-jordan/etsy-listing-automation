@@ -1,22 +1,3 @@
-"""`etsy.description`'s structured model, and the one pure join rule every
-deployment reader shares (AI SEO implementation plan, PR2).
-
-`DescriptionConfig` replaces the old bare `description: str`: a required
-`lead` (the opening paragraph a shopper reads) plus at most one body source --
-inline `text` or a portable `ref` beneath `common-copy/`. `lead` may be empty
-while a listing is being edited; deployment is blocked until it is non-empty
-(`config/listing_validation.py`'s `check_copy_is_concrete`), not this model,
-which has to stay satisfiable by an unsaved draft.
-
-`compose_description` is the pure half of "the one shared composition path":
-it only joins an already-resolved `lead`/`text` pair, and knows nothing about
-`ref`, `common-copy/`, or the filesystem -- resolving a `ref` into text is
-`Workspace.load_common_copy`'s job, and `Workspace.resolve_description` is the
-one place that calls both in order (see `workspace/common_copy.py`). No other
-stage, API serializer, or UI handler may independently concatenate, parse, or
-path-resolve description text.
-"""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, model_validator

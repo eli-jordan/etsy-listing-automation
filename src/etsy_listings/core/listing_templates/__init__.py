@@ -29,16 +29,13 @@ from etsy_listings.core.listing_templates.frozen import FrozenListingTemplate
 
 __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "FrozenListingTemplate",
-    # A draft: the document, and the files it will own.
     "ListingTemplateDraft",
     "AssetCopy",
     "from_listing",
     "from_template",
     "owned_refs",
-    # Completeness, for a draft and for a named template.
     "draft_issues",
     "template_issues",
-    # The one write, and its two refusals.
     "save",
     "ListingTemplateExistsError",
     "UnreadableAssetError",

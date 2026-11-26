@@ -1,9 +1,3 @@
-"""Durable calibration documents and mask edits, protected by template locks.
-
-ADR-0054: revision tokens protect editor saves; they are not render hashes.
-Import this module directly. Its storage implementation is not re-exported.
-"""
-
 from __future__ import annotations
 
 import base64
@@ -161,8 +155,7 @@ class CalibrationRequestReusedError(ConflictError):
     same save answers as the first did; this is not one."""
 
 
-class MaskUnavailableError(ConflictError):
-    """Mask editing or Undo has no usable saved baseline/history."""
+class MaskUnavailableError(ConflictError): ...
 
 
 class MaskEditRefusedError(RefusedError):
@@ -604,8 +597,6 @@ class CalibrationStore:
         return files, histories
 
     def _apply_edit(self, name: str, edit: MaskEdit) -> tuple[dict[Path, bytes], BrushHistory]:
-        """One placement's edited mask and metadata files, and its new brush
-        history."""
         mask = self.mask(name, edit.placement_id)
         history = self.history(name, edit.placement_id, mask.checksum)
         metadata_path = self.workspace.template_mask_file(
@@ -629,7 +620,6 @@ class CalibrationStore:
         return files, BrushHistory(checksum=digest(data), strokes=tuple(history))
 
     def _undone(self, history: list[BrushStroke], size: tuple[int, int]) -> bytes:
-        """The mask before the last stroke, popped off ``history``."""
         if not history:
             raise MaskUnavailableError("Undo brush stroke unavailable; cached history was lost")
         data = base64.b64decode(history.pop().before, validate=True)
@@ -639,7 +629,6 @@ class CalibrationStore:
     def _stroked(
         self, data: bytes, stroke: Stroke, history: list[BrushStroke], size: tuple[int, int]
     ) -> bytes:
-        """``data`` with ``stroke`` painted on, recorded in ``history``."""
         image = self.decode_mask(data, size)
         if any(x < 0 or y < 0 or x >= image.width or y >= image.height for x, y in stroke.points):
             raise MaskEditRefusedError("Brush coordinates must be within the main photo")
@@ -653,7 +642,6 @@ class CalibrationStore:
         return self.encode_mask(image)
 
     def write_config(self, name: str, config: AnyTemplate) -> None:
-        """Initial assignment and trusted local writers still use recovery storage."""
         with self.lock(name):
             self.workspace.template_dir(name).mkdir(parents=True, exist_ok=True)
             state = self.state(name)
@@ -692,12 +680,6 @@ class CalibrationStore:
         self.write_durable(path, json_bytes(manifest.model_dump(mode="json")))
 
     def commit(self, name: str, files: dict[Path, bytes]) -> None:
-        """Stage all payloads and backups before durable intent. ADR-0054.
-
-        After intent, recovery rolls forward. Payloads remain until every
-        destination is verified; an ordinary sequence of renames is insufficient.
-        """
-
         with self.lock(name):
             self._recover(name)
             transaction = self.workspace.template_calibration_transaction(name)
@@ -744,8 +726,6 @@ class CalibrationStore:
             raise CalibrationRepairRequiredError("Calibration transaction verification failed")
 
     def _recover(self, name: str) -> None:
-        """Server-side recovery, always under the shared template lock."""
-
         with self.lock(name):
             transaction = self.workspace.template_calibration_transaction(name)
             if not transaction.exists():
