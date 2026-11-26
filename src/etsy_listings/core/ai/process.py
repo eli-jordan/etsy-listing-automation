@@ -85,7 +85,7 @@ def run_managed(
 
     Normal/error completion also ends remaining descendants. Exit is observed
     separately from pipe EOF: an exited launcher cannot abandon pipe readers.
-    The five-second cleanup allowance covers termination, drain and reaping.
+    :data:`_REAP_TIMEOUT` covers termination, drain and reaping.
     """
     try:
         scope = _OwnedProcess(argv, cwd)

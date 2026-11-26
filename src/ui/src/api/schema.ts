@@ -3936,10 +3936,7 @@ export interface components {
     };
     /**
      * ListingProposal
-     * @description A listing's cached proposal as the editor and the batch summary read
-     *     it: the record, and whether it still describes the saved listing.
-     *     ``stale`` is computed from the saved listing on every read, never
-     *     stored.
+     * @description A listing's cached proposal, with ``stale`` computed on every read.
      */
     ListingProposal: {
       /**
@@ -5376,10 +5373,8 @@ export interface components {
     };
     /**
      * SeoProposalSnapshot
-     * @description The generation inputs, frozen before the provider starts: everything
-     *     `ai/models.py.SeoRequest` sent except the design image itself, plus the
-     *     design's identity and content hash. :func:`proposal_staleness` compares
-     *     one of these against the same inputs read from the listing now.
+     * @description The generation inputs, frozen before the provider starts: the
+     *     request's fields but the image, plus the design's name and content hash.
      */
     SeoProposalSnapshot: {
       /** Brief */

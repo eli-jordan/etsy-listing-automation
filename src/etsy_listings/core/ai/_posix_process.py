@@ -59,13 +59,12 @@ class PosixProcess:
         return info[0] != 0
 
     def kill(self) -> None:
-        # An unreaped leader reserves both PID and PGID. Never rediscover the
-        # group through a launcher PID which may already have disappeared.
+        # The unreaped leader pins both PID and PGID; never rediscover the group.
         try:
             os.__dict__["killpg"](self.proc.pid, signal.__dict__["SIGKILL"])
         except (ProcessLookupError, PermissionError):
-            # Darwin's killpg skips zombies, reporting ESRCH or EPERM for a
-            # group whose only member is this exited, unreaped leader.
+            # Darwin's killpg skips zombies: ESRCH or EPERM for a group whose
+            # only member is this exited, unreaped leader.
             if not self.exited:
                 raise
 

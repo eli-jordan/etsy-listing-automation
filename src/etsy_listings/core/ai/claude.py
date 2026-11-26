@@ -146,24 +146,11 @@ class ClaudeProvider(cli_support.LocalCliProvider):
 
     def _extract_result_text(self, stdout: str) -> str:
         """Pull the final response text out of `--output-format json`'s one
-        envelope. Any shape this does not recognise -- not JSON, not an
-        object, or no ``result`` string -- is a generation error, not an
-        availability failure: the process itself exited 0, so
-        `classify_process_failure` never runs on that path.
-
-        An ``is_error: true`` envelope is different: the CLI can report an
-        auth/quota/rate-limit failure this way, with exit code 0, so the raw
-        envelope is routed through the same `classify_process_failure` an
-        exit-code failure already goes through above. Passing the envelope
-        rather than only its ``result`` string keeps ``api_error_status``
-        visible -- an availability failure must be recognised as one
-        regardless of which of the two shapes carried it."""
+        envelope; an unrecognised shape is a generation error. Claude reports
+        auth and quota failures as ``is_error: true`` with exit code 0, so that
+        whole envelope is classified like a failed exit."""
         envelope = cli_support.json_object(PROVIDER_NAME, stdout)
         if envelope.get("is_error"):
-            # An envelope with no sentence, status or error object is reported
-            # as a fixed line rather than as kilobytes of telemetry. A status
-            # with no sentence still goes through, which is what makes
-            # `api_error_status` 429 readable as "HTTP 429".
             has_sentence = any(
                 isinstance(envelope.get(key), str) and envelope[key].strip()
                 for key in ("result", "message")

@@ -66,8 +66,7 @@ def _market_queries_decoder(raw_output: str) -> MarketQueries:
 
 
 def _out_of_time(provider_name: str, budget: RunBudget, what: str) -> SeoDeadlineExceededError:
-    """Name the limit that ran out, in the seller's configured minutes
-    (ADR-0057). A step clipped by the run deadline ran out the run."""
+    """Name the limit that ran out in the seller's configured minutes (ADR-0057)."""
     if budget.deadline.expired:
         limit = f"{budget.limits.run_minutes}-minute run limit"
     else:
