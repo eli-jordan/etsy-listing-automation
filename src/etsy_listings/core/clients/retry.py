@@ -56,12 +56,7 @@ def should_retry(method: str, response: httpx.Response) -> bool:
 
 
 def _retry_after_seconds(response: httpx.Response | None) -> float | None:
-    """``Retry-After`` as a number of seconds, or ``None``.
-
-    Its other legal form is an HTTP-date, and a proxy in between can put
-    anything there at all. Neither is worth crashing on while on the way to a
-    retry, so anything unparseable simply falls back to the computed backoff.
-    """
+    """``Retry-After`` as seconds, or ``None`` for an HTTP-date or proxy junk."""
     if response is None:
         return None
     raw = response.headers.get("Retry-After")
@@ -85,9 +80,7 @@ def wait_for(
     if asked is not None:
         return min(asked, policy.max_delay)
 
-    # `2.0**attempt`, not `2**attempt`: mypy types `int ** int` as `Any`
-    # (it is float for a negative exponent), which quietly makes every value
-    # downstream of it untyped.
+    # 2.0, not 2: mypy types `int ** int` as `Any`.
     delay = min(policy.base_delay * (2.0**attempt), policy.max_delay)
     if not policy.jitter:
         return delay
@@ -115,13 +108,8 @@ def with_retries(
     random: Callable[[], float] = _random.random,
 ) -> httpx.Response:
     """Call ``send`` until it succeeds, is refused for a reason retrying cannot
-    fix, or runs out of attempts.
-
-    The final response is **returned, not raised**. The caller's own error
-    decoding is what turns a response into something a human can act on
-    (``errors.reason``, in Printify's case), and it should see the real
-    response rather than a wrapper's summary of it. A transport error has no
-    response to return, so that one does propagate.
+    fix, or runs out of attempts. The final response is returned, not raised,
+    so the caller decodes the real error; a transport error propagates.
     """
     last = _send_once(send, method)
     for attempt in range(1, policy.attempts):

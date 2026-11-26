@@ -120,10 +120,7 @@ class FakePrintifyClient(PrintifyClient):
 
     @override
     def upload_image(self, file_name: str, contents: bytes) -> Upload:
-        """Content-addressed, like the real one: the same bytes give the same
-        id, and the file name takes no part in it. A stage that re-uploads
-        needlessly is a stage wasting megabytes, and only this property makes
-        that visible in a test."""
+        """Content-addressed like the real one, so a needless re-upload shows."""
         upload_id = hashlib.sha256(contents).hexdigest()[:24]
         self.uploads[upload_id] = contents
         return Upload(id=upload_id, file_name=file_name, width=4200, height=4800)
@@ -154,10 +151,8 @@ class FakePrintifyClient(PrintifyClient):
     def update_product(
         self, shop_id: int, product_id: str, spec: ProductSpec, *, live: Product
     ) -> Product:
-        """Merges variants by id, exactly as measured: a variant absent from
-        the spec keeps whatever it had. Only the caller's explicit disables
-        retire anything, which is the behaviour the retire path has to get
-        right."""
+        """Merges variants by id as measured: one absent from the spec keeps
+        its state."""
         merged = {variant.id: (variant.price, variant.is_enabled) for variant in live.variants}
         for variant_id, price in spec.variants.items():
             merged[variant_id] = (price, True)
@@ -194,11 +189,8 @@ class FakePrintifyClient(PrintifyClient):
 
     @override
     def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
-        """Fire-and-forget, like the real one: `is_locked` and `external` are
-        set immediately here rather than after a poll, since the fake has no
-        asynchronous side to simulate unless a test asks for one via
-        `publish_external` (left unset, `is_locked` stays true forever --
-        the timeout path)."""
+        """Lands at once with ``publish_external[product_id]``; without one the
+        product stays ``is_locked`` forever (the timeout path)."""
         self.published.append((product_id, dict(sync_flags)))
         product = self.products.get(product_id)
         if product is None:

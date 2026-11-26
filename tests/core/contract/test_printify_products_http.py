@@ -330,6 +330,33 @@ def test_an_update_covers_every_variant_the_product_has() -> None:
     assert set(seen["body"]["print_areas"][0]["variant_ids"]) == {73196, 73200, 99999}
 
 
+def test_coverage_widens_only_the_last_print_area_so_the_ink_split_survives() -> None:
+    front = (Placeholder(position="front", images=(PlacedImage(id=UPLOAD_ID),)),)
+    split = SPEC.model_copy(
+        update={
+            "print_areas": (
+                PrintAreaSpec(variant_ids=(73196,), placeholders=front),
+                PrintAreaSpec(variant_ids=(73200,), placeholders=front),
+            )
+        }
+    )
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=PRODUCT_PAYLOAD)
+        seen["body"] = httpx.Response(200, content=request.read()).json()
+        return httpx.Response(200, json=PRODUCT_PAYLOAD)
+
+    client = _client(handler)
+    live = client.get_product(SHOP_ID, PRODUCT_ID)
+    assert live is not None
+    client.update_product(SHOP_ID, PRODUCT_ID, split, live=live)
+
+    areas = [area["variant_ids"] for area in seen["body"]["print_areas"]]
+    assert areas == [[73196], [73200, 99999]]
+
+
 def test_an_update_leaves_out_variants_the_print_areas_never_named() -> None:
     """Measured on 2026-11-23: an older product's `variants` listed 399 while
     its print areas named 238. The other 161 were unavailable and disabled, and

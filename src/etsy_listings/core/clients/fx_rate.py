@@ -31,7 +31,7 @@ class FxRate:
 
 
 def fetch_usd_to(target_currency: str, *, client: httpx.Client | None = None) -> FxRate | None:
-    """``None`` on any failure -- fail-soft, never raises."""
+    """The rate, or ``None`` on any failure."""
     http = client or httpx.Client(timeout=10.0)
     try:
         response = http.get(

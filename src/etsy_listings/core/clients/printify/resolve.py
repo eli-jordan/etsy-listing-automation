@@ -21,14 +21,7 @@ _BLUEPRINT_BRAND_ALIASES = {"comfort colors print on demand": "comfort colors"}
 
 
 def normalise(value: str) -> str:
-    """Fold the differences nobody means: case, spacing, and the trademark
-    signs Printify puts in brand names.
-
-    Without this a hand-written ``brand: Comfort Colors`` never matches the
-    catalog's ``Comfort Colors®`` -- and expecting a human to type ® into a
-    YAML file to make their profile resolve is the kind of papercut that
-    reads as "the tool is broken".
-    """
+    """Fold case, spacing and the trademark signs Printify puts in brand names."""
     return _WHITESPACE.sub(" ", _TRADEMARK.sub("", value)).strip().casefold()
 
 
@@ -76,8 +69,6 @@ def resolve_blueprint(brand: str, model: str, blueprints: list[Blueprint]) -> Bl
     raise CatalogResolutionError(
         "blueprint",
         f"{brand} {model}".strip(),
-        # Offered as the brand/model pairs a profile would have to name, not
-        # as titles: a list of titles cannot be pasted into a `blueprint:`.
         sorted({f"{b.brand} {b.model}".strip() for b in blueprints}),
     )
 
@@ -90,13 +81,7 @@ def resolve_print_provider(name: str, providers: list[PrintProvider]) -> PrintPr
 
 
 class UnknownSizeError(UserFacingError, ValueError):
-    """A size no colour of this garment is made in.
-
-    Distinct from a discontinued *cell*, which is Printify's business
-    and merely reported: a size absent from the entire catalog entry is a
-    profile naming something this blank does not come in, and no amount of
-    skipping produces the product the user asked for.
-    """
+    """A size no colour of this garment is made in (unlike a missing cell, fatal)."""
 
     def __init__(self, size: str, valid_sizes: list[str]) -> None:
         self.size = size
@@ -106,12 +91,8 @@ class UnknownSizeError(UserFacingError, ValueError):
 
 @dataclass(frozen=True)
 class ResolvedVariant:
-    """One colour × size cell, carrying the name each side of the join uses.
-
-    ``colour`` is Printify's own (``"Blue Jean"``), ``colour_slug`` is what the
-    listing and the mockup filenames say (``"blue-jean"``). Both, because
-    re-deriving either at a call site is how the two drift apart.
-    """
+    """One colour × size cell: Printify's ``colour`` (``"Blue Jean"``) and the
+    listing's ``colour_slug`` (``"blue-jean"``)."""
 
     id: int
     colour: str
@@ -127,12 +108,7 @@ class VariantResolution:
     fatal -- missing variant cells."""
 
     def ids(self, *, colours: Collection[str] | None = None) -> tuple[int, ...]:
-        """Variant ids, optionally narrowed to some colour slugs.
-
-        ``print_areas.*.variant_ids`` wants ids and nothing else, and the
-        narrowing is what on-light/on-dark split needs to partition
-        one product's variants across two print areas.
-        """
+        """Variant ids, optionally narrowed to some colour slugs."""
         return tuple(v.id for v in self.variants if colours is None or v.colour_slug in colours)
 
 
@@ -142,20 +118,9 @@ def resolve_variants(
     sizes: Sequence[str],
     exceptions: ColourExceptions,
 ) -> VariantResolution:
-    """The variant ids for ``colour_slugs`` × ``sizes``, in that order.
-
-    Order is the listing's colours outer, the profile's sizes inner, so the
-    payload reads like the config it came from and a diff of it is legible.
-
-    Three failure modes, and they are deliberately not the same shape:
-
-    - a colour slug matching nothing is a typo -- fatal, listing the slugs
-      that do exist;
-    - a size no colour offers is a profile naming a size this blank is not
-      made in -- fatal;
-    - a single colour × size cell the catalog has dropped is Printify's doing
-      -- reported in :attr:`VariantResolution.missing` and skipped.
-    """
+    """The variant ids for ``colour_slugs`` × ``sizes``, colours outer. An
+    unknown colour or size is fatal; a cell the catalog dropped is reported in
+    :attr:`VariantResolution.missing`."""
     by_slug = {slug: name for name, slug in slug_map(variant_set.colors, exceptions).items()}
 
     unknown = [slug for slug in colour_slugs if slug not in by_slug]

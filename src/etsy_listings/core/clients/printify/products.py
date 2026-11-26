@@ -173,15 +173,8 @@ def _print_area_body(area: PrintAreaSpec) -> dict[str, Any]:
 def _print_area_bodies(
     areas: tuple[PrintAreaSpec, ...], *, cover: tuple[int, ...] | None = None
 ) -> list[dict[str, Any]]:
-    """Print areas as Printify wants them, optionally widened to ``cover``.
-
-    ``cover`` is the update coverage rule: the union across all entries must
-    name every variant the product has. Widening the **last** area rather than
-    spreading the extras keeps every earlier area's variant set exactly as the
-    caller partitioned it, which is what on-light/on-dark split
-    depends on -- a dark-ink group that quietly gained the whole matrix would
-    print the wrong file on half the shirts.
-    """
+    """Print areas as Printify wants them, the last widened to ``cover``
+    (Printify's update coverage rule) so earlier areas keep their ink split."""
     bodies = [_print_area_body(area) for area in areas]
     if cover is not None and bodies:
         named = {vid for body in bodies for vid in body["variant_ids"]}

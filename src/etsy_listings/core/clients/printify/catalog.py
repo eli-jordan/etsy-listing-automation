@@ -43,9 +43,7 @@ class HttpCatalogClient(CatalogClient):
             f"/v1/catalog/blueprints/{blueprint_id}/print_providers/{provider_id}/variants.json"
         )
         payload = response.json()
-        # `placeholders` is nested inside each variant -- the response has no
-        # top-level one, and reading it as though it did silently produced a
-        # set with no print areas at all. See `Variant.placeholders`.
+        # Printify nests `placeholders` inside each variant; there is no top-level key.
         variants = tuple(
             Variant(
                 id=item["id"],

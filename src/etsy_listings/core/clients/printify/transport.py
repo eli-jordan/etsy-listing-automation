@@ -95,12 +95,8 @@ class PrintifyApiError(UserFacingError, RuntimeError):
 
 
 def decode_error(response: httpx.Response) -> PrintifyApiError:
-    """Pull ``errors.reason`` out of the envelope, tolerating its absence.
-
-    A 502 from a proxy is HTML, not JSON. Crashing while decoding the thing
-    that explains the failure is the worst possible time to crash, so every
-    step here degrades rather than raising.
-    """
+    """Pull ``errors.reason`` out of the envelope, degrading to the body text
+    for a proxy's HTML error page rather than raising."""
     reason = response.text.strip() or "no response body"
     code: int | None = None
     try:
