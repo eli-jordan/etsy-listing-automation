@@ -1,30 +1,5 @@
 """A workspace's configured backup: the facts and folder rules one backup
 operation works from, and the repository it opens.
-
-Joins the three things restic needs: the ``backup:`` block in
-``settings.yaml``, the password in the workspace ``.env`` (or the
-environment), and a restic binary (workspace-backup spec, *Configuration*).
-:func:`configured_backup` resolves them once per operation into
-a :class:`ConfiguredBackup`, refusing a backup storage folder or destination
-that overlaps the workspace or another; every run, repair, restore, create,
-connect and status read takes that value instead of the settings.
-
-Nothing here downloads restic except an ``install`` open (the one explicit
-setup step), and nothing creates a repository by itself (spec, *Missing
-repository*).
-
-Every repository the backup opens is opened here, as a
-:class:`~etsy_listings.core.backup.repository.Repository`. ``restic``, where
-a function takes it, replaces the real restic adapter; tests pass an
-in-memory one.
-
-**One "inside" rule.** :func:`inside` resolves both paths and asks
-``pathlib``, which on Windows compares case-insensitively by ``str.lower``.
-It replaced a second rule the restore used (``os.path.normcase`` and a
-string prefix). The two agree on every ordinary path; where they did not,
-for letters such as the Kelvin sign that ``str.lower`` folds and Windows'
-own mapping keeps, this one calls the folders the same, so it refuses where
-the other let a restore through.
 """
 
 from __future__ import annotations
