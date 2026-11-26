@@ -52,8 +52,6 @@ export function PricingTab({ detail, onUpdate, onFlush }: Props) {
             {plans.map((plan) => (
               <option key={plan.ref} value={plan.ref}>
                 {plan.name}
-                {/* Only worth saying against a garment that was actually
-                    chosen: with none, nothing *is* different. */}
                 {plan.compatible || detail.garment_profile === "" ? "" : " (different garment)"}
               </option>
             ))}
@@ -71,8 +69,7 @@ export function PricingTab({ detail, onUpdate, onFlush }: Props) {
                   <input
                     className="input price-table__input"
                     type="number"
-                    // A phone's keyboard with the decimal point, not the
-                    // full one a number field gets on iOS.
+                    // iOS gives a number field its full keyboard.
                     {...(phone ? { inputMode: "decimal" as const } : {})}
                     step="0.01"
                     aria-label={`Price for size ${price.size}`}

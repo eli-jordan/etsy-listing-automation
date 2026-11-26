@@ -3,6 +3,8 @@ import { useId } from "react";
 const BODY =
   "M140 34 C160 56 240 56 260 34 L344 70 L384 158 L322 184 L312 156 L314 402 L86 402 L88 156 L78 184 L16 158 L56 70 Z";
 
+const EDGE_ON_A_LIGHT_CARD = { stroke: "#000", strokeOpacity: "0.14", strokeWidth: "5" };
+
 export function ShirtThumb({
   cloth,
   artwork,
@@ -22,8 +24,7 @@ export function ShirtThumb({
           <stop offset="1" stopColor="#000" stopOpacity="0.18" />
         </linearGradient>
       </defs>
-      {/* An outline, so a light shirt still has an edge on a light card. */}
-      <path d={BODY} fill={cloth} stroke="#000" strokeOpacity="0.14" strokeWidth="5" />
+      <path d={BODY} fill={cloth} {...EDGE_ON_A_LIGHT_CARD} />
       <path d={BODY} fill={`url(#${shade})`} />
       <path
         d="M140 34 C156 70 244 70 260 34"

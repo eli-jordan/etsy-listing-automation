@@ -24,8 +24,7 @@ export function SavedChip({
   const close = useCallback(() => setOpen(false), []);
 
   const phone = useIsPhone();
-  // A phone shows the card as a bottom sheet on the page body, which closes
-  // itself: an outside-press check would read a tap on its Copy as outside.
+  // The phone's sheet is portalled out of `rootRef`, so a tap on its Copy reads as outside.
   useMenuDismiss(open && !phone, rootRef, setOpen);
 
   useEffect(() => {
@@ -35,8 +34,7 @@ export function SavedChip({
   }, [copied]);
 
   function copy() {
-    // Said only once the clipboard took it: a page without clipboard access
-    // (an insecure origin) leaves the path selectable in the card instead.
+    // `navigator.clipboard` is absent on an insecure origin.
     void navigator.clipboard
       ?.writeText(path)
       .then(() => setCopied(true))
@@ -64,8 +62,6 @@ export function SavedChip({
         type="button"
         className="save-chip__trigger"
         aria-expanded={open}
-        // On a phone the card is a sheet on the page body, which has no id of
-        // its own to point at; it says it opens a dialog instead.
         aria-controls={open && !phone ? cardId : undefined}
         {...(phone ? { "aria-haspopup": "dialog" as const } : {})}
         title="Where this is saved"

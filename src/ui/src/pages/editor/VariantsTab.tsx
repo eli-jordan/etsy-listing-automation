@@ -40,11 +40,6 @@ interface Props {
   artwork?: Artwork | null;
 }
 
-/** The garment profile's colour-matrix, used to judge colours before the
- * listing has picked its Etsy images. Not a `media:` default. The
- * templates list is only consulted to refuse a name we *know* is not
- * colour-matrix -- a new listing must not wait on GET /api/templates
- * (or on a colour-matrix entry in `media:`) before the stage can render. */
 function previewTemplate(
   profile: GarmentProfileSummary | undefined,
   templates: TemplateSummary[],
@@ -88,9 +83,6 @@ export function VariantsTab({
   }, []);
 
   const profile = profiles.find((p) => p.name === detail.garment_profile);
-  // Every colour the profile classifies, plus any the listing already enables
-  // that the profile doesn't (so toggling one off never makes it vanish from
-  // the list before the edit is saved).
   const colourNames = useMemo(
     () =>
       Array.from(
@@ -109,10 +101,6 @@ export function VariantsTab({
   const scene = ownArtwork ? sceneSource(detail.name, detail.design_content_hash) : artwork;
   const tones: Record<string, Tone> = profile?.colors ?? {};
 
-  // Every colour's stage picture, fetched into the browser cache in list
-  // order while the seller looks at the first: each is a full-size render
-  // the first time, and judging which colours suit a design means clicking
-  // through most of them.
   usePreloadedPictures(
     template === null ? [] : colourNames.map((colour) => templatePicture(template, colour, scene)),
   );
@@ -320,8 +308,6 @@ export function VariantsTab({
             </div>
           )}
         </div>
-        {/* Once the profile has loaded: before then every colour of a
-            light/dark listing would read as having no tone. */}
         {ownArtwork && shown !== null && profile !== undefined && (
           <PrintsCard
             colour={shown}
