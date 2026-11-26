@@ -67,9 +67,9 @@ def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test
     backup: BackupEnvironment | None = None,
     model_discovery: ModelDiscovery | None = None,
 ) -> FastAPI:
-    # One of each per process, so their locks mean something: the cache
-    # records' stores. Listing, mockup-template and listing-template locks need
-    # no instance; `core/workspace/locks.py` keys them by workspace root.
+    # One of each per app: the gate and stores lock in process, so a second
+    # instance would not exclude the first. (`core/workspace/locks.py` keys the
+    # listing and template locks by workspace root instead.)
     job_gate = JobGate()
     preparations = Preparations(workspace, runtime=preparation_runtime, gate=job_gate)
     proposal_store = ProposalStore(workspace)
@@ -169,14 +169,10 @@ def _refusal_handler(status: int) -> Callable[[Request, Exception], Awaitable[Re
 
 
 def _serve_frontend(app: FastAPI, dist: Path) -> None:
-    """Built assets under /assets; everything else falls back to
-    index.html so client-side routing works on a hard refresh.
-    `npm run build` must have run first -- in dev, use the Vite
-    dev server instead and hit uvicorn only for /api."""
+    """Built assets under /assets; everything else falls back to index.html
+    so client-side routing survives a hard refresh. Needs `npm run build`."""
     app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
 
-    # Out of the schema: it is not API, and the exported contract must
-    # not depend on whether this checkout has a built SPA.
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str) -> Response:
         if full_path.startswith("api/"):
