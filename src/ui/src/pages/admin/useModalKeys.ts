@@ -18,8 +18,7 @@ export function useModalKeys(dialog: RefObject<HTMLElement | null>, onCancel: ()
       event.preventDefault();
       focusable[next]?.focus();
     };
-    // Clicking non-focusable modal content can leave focus on body. Capture
-    // Tab on window so the next key still stays inside the dialog.
+    // On window: a click on non-focusable dialog content leaves focus on body.
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [dialog, onCancel]);
