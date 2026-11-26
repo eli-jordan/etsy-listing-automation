@@ -1,13 +1,3 @@
-"""Renaming and deleting a listing: the operations that change what a
-listing name refers to.
-
-A listing's identity is its directory name. ``core/listing_artifacts.py``
-moves and removes what the workspace keys by that name. This module adds the
-application state keyed by it, which is the listing's batch rows and its AI
-run (batch spec, rename and delete hooks), and the rules about when a delete
-is allowed at all.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -44,24 +34,13 @@ def rename_listing(
     batches: BatchStore,
     ai_runs: AiRunRegistry,
 ) -> None:
-    """Move listing ``old``, whole, to ``new`` (``listing_artifacts.move_listing``).
-    Every batch row naming ``old`` follows, and ``old``'s finished AI run is
-    forgotten.
-
-    Renaming to the same name changes nothing, since the editor commits an
-    unchanged name on every blur. Refusals: :class:`ListingMissingError` (also
-    after waiting for the lock), ``InvalidNameError`` for a ``new`` that is
-    not a path segment, and :class:`ListingNameTakenError` for a directory already
-    at ``new``.
-    """
     documents = ListingDocuments(workspace)
     if not documents.exists(old):
         raise ListingMissingError(old)
     workspace.listing_dir(new)
     if new == old:
         return
-    # The batch locks come first, in the order creating a batch row takes
-    # them. See `BatchStore.following_rename`.
+    # Batch locks first, in batch-row creation's order (`BatchStore.following_rename`).
     with batches.following_rename(old, new):
         move_listing(workspace, old, new)
     ai_runs.forget(old)
@@ -75,21 +54,7 @@ def delete_listing(
     ai_runs: AiRunRegistry,
     etsy_states: EtsyStates,
 ) -> Deletion:
-    """Delete listing ``name`` (ADR-0035).
-
-    A listing published on Etsy is refused with
-    :class:`PublishedListingDeletionError` before anything changes; it should be
-    retired instead. A listing with no remotes is wiped now. A listing with
-    remotes is marked ``lifecycle: deleted`` and left pending. Its market
-    snapshot and proposal go now all the same, because the seller has
-    finished researching it.
-
-    Either way, its batch rows are marked deleted first, so the queue cannot
-    start one between the stop and the delete. Its active AI run is then
-    asked to stop, so it writes no proposal for a listing being deleted, and
-    is forgotten. Raises :class:`ListingMissingError` when there is no listing,
-    whether before or after waiting for its lock.
-    """
+    """ADR-0035."""
     documents = ListingDocuments(workspace)
     if not documents.exists(name):
         raise ListingMissingError(name)
@@ -99,6 +64,7 @@ def delete_listing(
     )
     if is_live_etsy_state(etsy_state):
         raise PublishedListingDeletionError(name)
+    # Before the stop, or the queue could start a row between the stop and the delete.
     batches.mark_deleted(name)
     run = ai_runs.latest(name)
     if run is not None:

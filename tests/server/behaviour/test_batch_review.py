@@ -303,6 +303,8 @@ def test_clearing_the_cache_loses_the_batches_and_keeps_the_workspace(
         "/api/listings/night-hike-club", json={"etsy": {"title": "Night Hike Club Tee"}}
     )
     assert accepted.status_code == 200, accepted.text
+    assert client.app.state.scene_warmer.wait_idle(timeout=30)  # type: ignore[attr-defined]  # -- TestClient types app as ASGIApp
+    assert client.app.state.ai.queue.wait_idle(timeout=30)  # type: ignore[attr-defined]  # -- TestClient types app as ASGIApp
 
     remove_tree(workspace.cache())
 

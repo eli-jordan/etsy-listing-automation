@@ -1,4 +1,3 @@
-/** A drifted field's page anchor, shared by its row and the warning's links. */
 export function driftRowId(key: string): string {
   return `drift-${key.replace(":", "-")}`;
 }

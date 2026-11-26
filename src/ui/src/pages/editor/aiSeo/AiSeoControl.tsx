@@ -3,16 +3,6 @@ import { createPortal } from "react-dom";
 import { useIsPhone } from "../../../phone/usePhone";
 import type { AiSeoMode } from "./useAiSeoMode";
 
-/** The sparkle **AI Mode** control and its hover card.
- * It remains visible while prerequisites are missing, but cannot start a request.
- * While a request runs, the button glows. The timer and Cancel sit under the
- * brief, aligned to its right edge, and the generating card appears only
- * while the button is hovered.
- *
- * The same click handler starts the first request and regenerates a stale
- * one (`useAiSeoMode.generate`'s own docstring): the v3 mockup's "not
- * disabled while stale" button is the one place this control's behaviour
- * changes by state, so there is no separate "Regenerate" button to build. */
 export function AiSeoControl({
   mode,
   buttonRef,
@@ -58,7 +48,6 @@ export function AiSeoControl({
       {loading && (
         <div className="seo-ai-mode-progress">
           {mode.run.phase === "queued" ? (
-            // Held by a workspace backup's pause (plan decision P4).
             <span className="seo-ai-mode-elapsed">Waiting for backup</span>
           ) : (
             <span className="seo-ai-mode-elapsed">
@@ -66,8 +55,6 @@ export function AiSeoControl({
             </span>
           )}
           {mode.run.origin === "batch" ? (
-            // No per-row cancel (spec, *Cancellation and deletion*): the
-            // batch summary's Cancel batch stops it.
             <span className="seo-ai-mode-elapsed">Drafting as part of a batch</span>
           ) : (
             <button type="button" onClick={mode.cancel}>
@@ -99,8 +86,6 @@ export function AiSeoControl({
   );
 }
 
-/** The hover card: what a running request is doing, what AI Mode will do,
- * or what it still needs. */
 function AiModeTip({ mode, loading }: { mode: AiSeoMode; loading: boolean }) {
   if (loading) {
     return (
@@ -133,16 +118,12 @@ function AiModeTip({ mode, loading }: { mode: AiSeoMode; loading: boolean }) {
   );
 }
 
-/** The sentence the toast says. The timer row keeps only **Try again**. */
 function failureMessage(failure: string | null): string {
   return failure
     ? `AI Mode couldn’t finish: ${failure}`
     : "AI Mode couldn’t generate valid suggestions. Nothing changed.";
 }
 
-/** Whole seconds since `startedAt` (the run's own start, from the server,
- * so a reload mid-run keeps counting rather than starting again at 0:00);
- * 0 while there is no running run. */
 function useElapsed(startedAt: number | null): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -174,9 +155,6 @@ function SparkleIcon() {
   );
 }
 
-/** On a phone the toast goes on the page body: the tab content it is written
- * in is moved by the tab swipe, whose transform would carry a fixed toast
- * along with it. */
 function OnBodyOnPhone({ phone, children }: { phone: boolean; children: ReactNode }) {
   return phone ? createPortal(children, document.body) : children;
 }

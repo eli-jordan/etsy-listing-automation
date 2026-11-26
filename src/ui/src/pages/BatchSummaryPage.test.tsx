@@ -447,6 +447,32 @@ describe("BatchSummaryPage, a created listing's name", () => {
     expect(within(row).queryByRole("link", { name: "Open" })).toBeNull();
   });
 
+  it("asks for the hover cards' summaries once, not on every poll", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(MID_RUN));
+    const summaries = vi.spyOn(listingsApi, "listListings").mockResolvedValue([]);
+    renderPage();
+    await waitFor(() => expect(counts()).toContain("1 drafting"));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS * 3);
+    });
+
+    expect(batchesApi.getBatch).toHaveBeenCalledTimes(4);
+    expect(summaries).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the names as plain links when the summaries will not load", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW, { status: "in_review" }));
+    const summaries = vi.spyOn(listingsApi, "listListings").mockRejectedValue(new Error("500"));
+    renderPage();
+
+    const row = await waitFor(() => rowFor("night-hike-club"));
+    await waitFor(() => expect(summaries).toHaveBeenCalled());
+    expect(within(row).getByRole("link", { name: "night-hike-club" })).toBeInTheDocument();
+    expect(within(row).queryByText("comfort-colors-1717")).toBeNull();
+  });
+
   it("deploys the batch's reviewed rows with changes, on the shared review page", async () => {
     vi.spyOn(batchesApi, "getBatch").mockResolvedValue(
       batch(

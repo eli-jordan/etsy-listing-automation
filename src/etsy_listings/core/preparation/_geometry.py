@@ -1,13 +1,12 @@
-"""Internal robust normal/depth integration and metric fitting. ADR-0054.
+"""Robust normal/depth integration and metric fitting (ADR-0054).
 
 Camera normals X right/Y up/Z viewer become image X right/Y down/Z viewer.
-No experimental anchors or overlap controls are exposed.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import Any, cast
 
@@ -22,14 +21,19 @@ Float = NDArray[np.float32]
 # Thresholds of the evaluated prototype (ADR-0054). Named, not tuned here.
 _MIN_FACING_Z = 0.22  # a normal's camera-facing component below this is grazing
 _CG_BREAKDOWN = 1e-25  # conjugate-gradient curvature at which the solve stops
-_CONFIDENT = 0.15  # normals confidence above which a pixel is trusted
-_MIN_DEPTH_SAMPLES = 30  # confident depth pixels needed to fit depth to height
-_MIN_DEPTH_SPREAD = 1e-5  # depth standard deviation below which the fit is skipped
-_FOLDED_AREA = 1e-9  # a mesh triangle at or below this signed area has folded
-_FLATTEN_CONVERGED = 1e-6  # largest vertex move at which flattening has converged
-_CLOTH_COVERAGE = 0.95  # cloth mask value of a pixel inside the garment
-_LIGHTING_CONFIDENCE = 0.35  # confidence above which a pixel informs lighting
+_TRUSTED_CONFIDENCE = 0.15
+_MIN_DEPTH_SAMPLES = 30
+_MIN_DEPTH_SPREAD = 1e-5
+_FOLDED_AREA = 1e-9
+_FLATTEN_CONVERGED = 1e-6
+_INSIDE_CLOTH_MASK = 0.95
+_LIGHTING_CONFIDENCE = 0.35
+LIGHTING_BLUR_SIGMA = 3
+MIN_LIGHTING_SAMPLES = 100
 _CLIPPED_GAIN = 1.7  # shading over exposure above which a gain counts as clipped
+_MAD_TO_SIGMA = 1.4826
+_OUTLIER_SIGMAS = 2.5
+_MIN_OUTLIER_THRESHOLD = 0.002
 Pixels = NDArray[np.uint8]
 
 
@@ -111,8 +115,7 @@ class SurfaceEvidence:
 @dataclass(frozen=True)
 class _HeightSystem:
     """The sparse system :func:`integrate` solves for vertex heights: weighted
-    slope targets along mesh edges, a weak prior, and same-patch smoothing.
-    ``prior`` is a mutable array the depth fit raises in place."""
+    slope targets along mesh edges, a weak prior, and same-patch smoothing."""
 
     a: NDArray[Any]
     b: NDArray[Any]
@@ -160,7 +163,7 @@ class _HeightSystem:
 @dataclass(frozen=True)
 class _Equations:
     """One height solve's edge weights, right-hand side and preconditioner
-    diagonal. The depth fit adds to ``rhs`` and ``diagonal`` in place."""
+    diagonal."""
 
     edge_weight: NDArray[Any]
     rhs: NDArray[Any]
@@ -196,7 +199,7 @@ def integrate(
     equations = system.equations(original_weight)
     z = system.solve(equations, np.zeros(len(p)))
     for _ in range(3):
-        equations = system.equations(_downweighted(system, z, original_weight))
+        equations = system.equations(_robust_edge_weights(system, z, original_weight))
         z = system.solve(equations, z)
     z, depth_metrics = _fit_depth(system, equations, z, evidence, conf)
     edge_weight = equations.edge_weight
@@ -208,23 +211,25 @@ def integrate(
             ((edge_weight < original_weight * 0.95) & (original_weight > 0)).mean()
         ),
         "grazing_fraction": float(1 - usable.mean()),
-        "uncertain_fraction": float((conf < _CONFIDENT).mean()),
+        "uncertain_fraction": float((conf < _TRUSTED_CONFIDENCE).mean()),
         "depth": depth_metrics,
         "camera": "orthographic visible height patches",
         "boundary_height": "free",
     }
 
 
-def _downweighted(
+def _robust_edge_weights(
     system: _HeightSystem, z: NDArray[Any], original_weight: NDArray[Any]
 ) -> NDArray[Any]:
-    """Edge weights with robust outliers of the slope residual reduced."""
     residual = z[system.b] - z[system.a] - system.target
     selected = original_weight > 0
     threshold = (
-        max(0.002, 2.5 * 1.4826 * float(np.median(np.abs(residual[selected]))))
+        max(
+            _MIN_OUTLIER_THRESHOLD,
+            _OUTLIER_SIGMAS * _MAD_TO_SIGMA * float(np.median(np.abs(residual[selected]))),
+        )
         if selected.any()
-        else 0.002
+        else _MIN_OUTLIER_THRESHOLD
     )
     weight: NDArray[Any] = original_weight * np.minimum(
         1, threshold / np.maximum(np.abs(residual), 1e-8)
@@ -247,7 +252,7 @@ def _fit_depth(
     d = -evidence.depth.ravel().astype(np.float64)
     dc = np.ones_like(d) if evidence.depth_confidence is None else evidence.depth_confidence.ravel()
     dc = dc * conf
-    selected = dc > _CONFIDENT
+    selected = dc > _TRUSTED_CONFIDENCE
     if not (selected.sum() > _MIN_DEPTH_SAMPLES and np.std(d[selected]) > _MIN_DEPTH_SPREAD):
         return z, {"used": False, "fallback": "insufficient confident, varying depth"}
     design = np.stack([d, np.ones_like(d)], axis=-1)
@@ -255,14 +260,15 @@ def _fit_depth(
     scale, offset = np.linalg.lstsq(
         design[selected] * weight[:, None], z[selected] * weight, rcond=None
     )[0]
-    # A negative fitted scale contradicts the near/far convention.
     if not scale > 0:
         return z, {"used": False, "fallback": "depth scale disagrees with the normals/camera frame"}
     fitted = scale * d + offset
-    prior, rhs, diagonal = system.prior, equations.rhs, equations.diagonal
-    prior += 0.015 * dc
-    rhs += 0.015 * dc * fitted
-    diagonal += 0.015 * dc
+    system = replace(system, prior=system.prior + 0.015 * dc)
+    equations = replace(
+        equations,
+        rhs=equations.rhs + 0.015 * dc * fitted,
+        diagonal=equations.diagonal + 0.015 * dc,
+    )
     z = system.solve(equations, z)
     return z, {
         "used": True,
@@ -309,16 +315,12 @@ class _Flattening:
 
 
 def _valid_triangles(ids: NDArray[Any]) -> NDArray[Any]:
-    """Which mesh triangles lie inside one patch, in the order signed_areas uses."""
-    triangles_valid = np.stack(
+    return np.stack(
         [
             (ids[:-1, :-1] == ids[:-1, 1:]) & (ids[:-1, :-1] == ids[1:, :-1]) & (ids[:-1, :-1] > 0),
             (ids[1:, 1:] == ids[:-1, 1:]) & (ids[1:, 1:] == ids[1:, :-1]) & (ids[1:, 1:] > 0),
-        ],
-        axis=-1,
-    )
-    # Existing signed_areas stacks two triangle fields, rather than interleaving them.
-    return np.concatenate([triangles_valid[..., 0].ravel(), triangles_valid[..., 1].ravel()])
+        ]
+    ).ravel()
 
 
 def _unfolded_step(
@@ -420,9 +422,6 @@ def polygon_mask(size: tuple[int, int], points: list[list[float]]) -> Float:
 
 @dataclass(frozen=True)
 class Intrinsics:
-    """A photo region's intrinsic decomposition: shading, albedo and the
-    residual neither explains."""
-
     shading: Float
     albedo: Float
     residual: Float
@@ -434,10 +433,10 @@ def lighting_fields(
     cloth: Float,
     confidence: Float,
     *,
-    minimum_samples: int = 100,
+    minimum_samples: int = MIN_LIGHTING_SAMPLES,
 ) -> tuple[dict[str, Float], dict[str, Any]]:
     shading, albedo, residual = intrinsics.shading, intrinsics.albedo, intrinsics.residual
-    selected = (cloth > _CLOTH_COVERAGE) & (confidence > _LIGHTING_CONFIDENCE)
+    selected = (cloth > _INSIDE_CLOTH_MASK) & (confidence > _LIGHTING_CONFIDENCE)
     if selected.sum() < minimum_samples:
         raise ValueError("Not enough confident visible cloth to normalize lighting")
     luminance = np.sum(shading * np.array([0.2126, 0.7152, 0.0722]), -1)
@@ -446,7 +445,7 @@ def lighting_fields(
     photo_luminance = np.sum(surface_math.linear(base) * [0.2126, 0.7152, 0.0722], -1).astype(
         np.float32
     )
-    broad = surface_math.blur(photo_luminance, 3)
+    broad = surface_math.blur(photo_luminance, LIGHTING_BLUR_SIGMA)
     photo_exposure = max(float(np.percentile(broad[selected], 70)), 0.005)
     photographic = np.repeat(np.clip(broad / photo_exposure, 0.04, 1.7)[..., None], 3, -1)
     # Keep microtexture separate from broad shading and dyed wash. Opaque ink

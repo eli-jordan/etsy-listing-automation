@@ -86,7 +86,8 @@ placements:
 that colour in a specific ink regardless of what artwork resolution would
 otherwise pick. `shade`/`displace` are scene-level only — one photo, one
 lighting pass; a placement needing different rendering treatment belongs in
-its own template.
+its own template. Displacement is off by default: too strong, it looks melted, so
+each template tunes it by eye in the calibrator's live preview.
 
 `colour_coverage` governs a mismatch between the chart's placement colours
 and a listing's `colors:`: `exact` (default) fails `plan` if they don't match
@@ -94,6 +95,12 @@ exactly — right when a chart is meant to represent one specific listing.
 `subset` skips placements the listing doesn't sell — right for one
 shop-wide chart reused across listings that each sell a different subset of
 the garment's colour range.
+
+The calibrator's colour field for a placement or a `single` template is free
+text, suggesting every colour already in use across the workspace's templates.
+A closed list would need to know which colours a listing sells, and nothing in
+the calibrator does; wiring in the Printify catalog to learn them would be a much
+larger dependency than a typo it could prevent.
 
 ### `kind: single` — one photo, one garment
 

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { getPreparation, type Preparation, type PreparationJob } from "../api/preparation";
 import type { TemplateSummary } from "../types";
 
-/** Fill catalog readiness one row at a time; selected status has its own event lifecycle. */
 export function useTemplateReadiness(
   templates: TemplateSummary[],
   selected: string | null,
@@ -10,8 +9,6 @@ export function useTemplateReadiness(
 ) {
   const names = templates.filter((t) => t.renderer === "marigold").map((t) => t.name);
   const key = JSON.stringify(names);
-  // The selected editor follows its own job events. Its autosaves must not
-  // restart catalog discovery and compete with every interactive composite.
   const jobKey = JSON.stringify(
     jobs
       .filter((job) => job.template !== selected)
@@ -34,7 +31,7 @@ export function useTemplateReadiness(
         checked.current.set(name, token);
         setFacts((current) => ({ ...current, [name]: status.maps }));
       } catch {
-        // Keep the catalog row unknown. Selecting it exposes the actionable error.
+        // The row stays unknown; selecting it shows the error.
       }
     }
     async function read() {

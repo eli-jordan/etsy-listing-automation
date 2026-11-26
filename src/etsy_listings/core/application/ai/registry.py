@@ -1,12 +1,6 @@
-"""``AiRun`` and the registry of them, in memory (features/market-seo-20260924/spec.md, *AI runs*).
-
-One active run per listing: a second ``create`` while one is running is a
-:class:`Conflict` naming it. A finished run stays the listing's latest until
-the next run replaces it, and is then forgotten. Nothing survives a restart.
-
-Unlike ``core/application/deploy``, nothing here is queued: every run gets its own thread
-(``runner.py``), so the registry only answers who holds a listing. Listing
-names are compared case-insensitively, as the write locks compare them.
+"""``AiRun`` and the in-memory registry answering which run holds a listing
+(features/market-seo-20260924/spec.md, *AI runs*). Listing names compare
+case-insensitively, as the write locks compare them.
 """
 
 from __future__ import annotations
@@ -50,11 +44,8 @@ def _now() -> datetime:
 @dataclass(eq=False)
 class AiRun:
     """One run: its listing, its event buffer, and the cancel event every
-    provider call and the market research share.
-
-    The :class:`threading.Condition` bridges the run's thread, which appends,
-    and the SSE route, which waits (``api/airuns.py``).
-    """
+    provider call and the market research share. ``condition`` is the lock
+    the run's thread appends under and the SSE route waits on."""
 
     id: str
     listing: str
@@ -99,10 +90,8 @@ class AiRun:
         return self._phase not in ("queued", "running")
 
     def begin(self, ticket: Ticket) -> bool:
-        """A held run starts under the gate's ``ticket``: ``queued`` becomes
-        ``running`` and the run holds the ticket until it finishes. ``False``
-        when it was stopped while held, so it must not start; the ticket is
-        released."""
+        """Start a held run under the gate's ``ticket``, which it then owns.
+        ``False``, releasing the ticket, when it was stopped while held."""
         with self.condition:
             if self._phase == "queued":
                 self._phase = "running"
@@ -137,8 +126,6 @@ class AiRun:
         self.emit(lambda seq: AiStepEvent(seq=seq, id=step, state=state, detail=detail))
 
     def finish(self, phase: TerminalPhase, message: str | None = None) -> None:
-        """Emit the terminal ``phase`` event, then tell the listeners. Only
-        the first call counts."""
         with self.condition:
             if self.finished:
                 return
@@ -153,17 +140,18 @@ class AiRun:
             if self._ticket is not None:
                 self._ticket.release()
 
+    def fail_unless_finished(self, message: str) -> None:
+        self.finish("failed", message)
+
     def wait_settled(self, timeout: float | None = None) -> bool:
         """Block until the run has finished and its listeners have heard.
         ``False`` on timeout."""
         return self._settled.wait(timeout)
 
     def request_stop(self, reason: StopReason) -> bool:
-        """Ask the run to stop: sets the cancel event, which kills a provider's
-        subprocess tree and stops research at its next call. ``False`` when
-        the run has already finished. The first reason wins. A run still
-        held by a backup's pause has no thread to notice, so it ends
-        ``cancelled`` here."""
+        """Set the cancel event, which kills a provider's subprocess tree and
+        stops research at its next call; ``False`` once finished. A run held
+        by a backup's pause has no thread to notice, so it ends here."""
         with self.condition:
             if self.finished:
                 return False
@@ -178,9 +166,8 @@ class AiRun:
     def wait_for_events(
         self, after_seq: int, *, timeout: float
     ) -> tuple[list[AnyAiRunEvent], bool]:
-        """Block up to ``timeout`` seconds for events past ``after_seq``.
-        ``done`` is true once the run has finished and every event has been
-        returned -- ``core/application/deploy``' contract, so the SSE loop is the same."""
+        """Block up to ``timeout`` seconds for events past ``after_seq``, with
+        the deploy registry's ``done`` contract."""
         with self.condition:
             pending = self.events[after_seq:]
             if not pending and not self.finished:
@@ -191,14 +178,11 @@ class AiRun:
 
 @dataclass(frozen=True)
 class Conflict:
-    """``create`` refused: ``active_run`` already holds the listing."""
-
     active_run: str
 
 
 @dataclass(frozen=True)
-class Deploying:
-    """``create`` refused: a UI deploy holds the listing."""
+class Deploying: ...
 
 
 class AiRunRegistry:
@@ -211,8 +195,6 @@ class AiRunRegistry:
         self._deploying: Counter[str] = Counter()
 
     def subscribe(self, listener: FinishListener) -> None:
-        """Hear every run this registry creates from now on finish -- the
-        batch queue's wake-up, and how its rows learn their outcome."""
         with self._lock:
             self._listeners.append(listener)
 
@@ -225,12 +207,12 @@ class AiRunRegistry:
         queued: bool = False,
         ticket: Ticket | None = None,
     ) -> AiRun | Conflict | Deploying:
-        """A new run holding ``listing``; ``queued`` when a backup's pause
-        holds it from starting, until :meth:`AiRun.begin`. The run owns the
-        gate's ``ticket`` until it finishes; a refusal releases it."""
+        """A new run holding ``listing``, ``queued`` until :meth:`AiRun.begin`
+        when a backup's pause holds it. The run owns ``ticket``; a refusal
+        releases it."""
         key = listing.casefold()
         with self._lock:
-            refused = self._refusal(key)
+            refused = self._refusal_locked(key)
             if refused is not None:
                 if ticket is not None:
                     ticket.release()
@@ -251,8 +233,7 @@ class AiRunRegistry:
             self._latest[key] = run.id
             return run
 
-    def _refusal(self, key: str) -> Conflict | Deploying | None:
-        """Under the lock: why no new run may hold ``key`` now."""
+    def _refusal_locked(self, key: str) -> Conflict | Deploying | None:
         if self._deploying[key]:
             return Deploying()
         previous = self._runs.get(self._latest.get(key, ""))
@@ -265,15 +246,13 @@ class AiRunRegistry:
             return self._runs.get(run_id)
 
     def latest(self, listing: str) -> AiRun | None:
-        """The listing's running or most recent run."""
         with self._lock:
             return self._runs.get(self._latest.get(listing.casefold(), ""))
 
     def forget(self, listing: str) -> None:
-        """Drop the listing's finished run: the listing was deleted or
-        renamed, so a new listing given that name must not reattach to it
-        and replay a brief and proposal that belong to another. A running
-        run is left to end on its own -- it fails once the listing is gone."""
+        """Drop the deleted or renamed listing's finished run, so a new
+        listing given that name cannot reattach to it and replay another's
+        brief and proposal."""
         key = listing.casefold()
         with self._lock:
             run = self._runs.get(self._latest.get(key, ""))
@@ -285,13 +264,10 @@ class AiRunRegistry:
         with self._lock:
             return [run for run in self._runs.values() if not run.finished]
 
-    # ------------------------------------------------------------ deploys
-
     def hold_for_deploy(self, listings: Iterable[str]) -> list[AiRun]:
-        """ADR-0050: refuse every new run for ``listings`` until
-        :meth:`release_deploy`, and answer the runs still going on them --
-        in one step, so no run can start between the two. Counted, so two
-        holds on one listing need two releases."""
+        """Refuse every new run for ``listings`` until :meth:`release_deploy`
+        (ADR-0050), and answer the runs still going on them, in one step so
+        no run can start between the two."""
         keys = {name.casefold() for name in listings}
         with self._lock:
             self._deploying.update(keys)
@@ -304,8 +280,10 @@ class AiRunRegistry:
     def release_deploy(self, listings: Iterable[str]) -> None:
         keys = {name.casefold() for name in listings}
         with self._lock:
-            self._deploying.subtract(keys)
-            self._deploying += Counter()  # drop the zeroes
+            for key in keys:
+                self._deploying[key] -= 1
+                if self._deploying[key] <= 0:
+                    del self._deploying[key]
 
     def deploying(self, listing: str) -> bool:
         with self._lock:

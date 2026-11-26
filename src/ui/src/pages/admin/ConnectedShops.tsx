@@ -9,12 +9,6 @@ import type { ReactNode, Ref } from "react";
 import type { ConnectionRow, ShopConnections, ShopSettings } from "../../api/shop";
 import { Info, type InfoState } from "./Info";
 
-/**
- * Read-only identities and the currency danger zone (interactions,
- * *Connected shops and currency*). Names and ids are text, not disabled
- * pickers; a missing connection names the command to run, and a failed
- * lookup keeps the configured identity beside its problem.
- */
 export function ConnectedShops({
   shop,
   connections,
@@ -160,7 +154,6 @@ function currencyLabel(currency: string | undefined, name: string | undefined | 
   return name ? `${currency} · ${name}` : currency;
 }
 
-/** What a seller runs next for a shop that is not connected. */
 function notConnectedHint(commands: string[], missing: string): string {
   if (!commands.includes("etsy-listings setup")) return "Sign in again to use this shop.";
   return commands.length > 1 ? missing : "Configure this workspace.";

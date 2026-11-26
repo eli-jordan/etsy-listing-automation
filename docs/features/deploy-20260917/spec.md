@@ -383,6 +383,11 @@ The applied phase's single "On Etsy now" column is the reviewed plan's
 (§5), so the column states what was sent. Checking what Etsy did with it is
 the next deploy's plan.
 
+Once applied, a listing with an Etsy id leads with **Open on Etsy** and
+demotes the way back to a secondary button. A new listing is an Etsy draft the
+seller still has to publish there, and a live one is worth checking, so either
+way Etsy is the next step.
+
 ### 11. Lifecycle deploys use the same view
 
 The editor's status control can mark a listing to retire, delete or renew, and
@@ -489,6 +494,10 @@ The control-state table in the spec gains three rows and changes one:
 | Previewing | Enabled (cancels) | Shown | Disabled | Rendering previews (2 of 4)… |
 | Stale | Enabled | Shown, highlighted | Disabled | This listing changed after it was planned. Plan again to review the current version. |
 | Applying | **Enabled (leaves; apply continues)** | Hidden | Spinner, disabled | Running steps in order. You can leave; this keeps going. |
+
+The run's `planned` phase, between the planning walk finishing and the run
+entering Previewing or Ready, reads as Planning. Apply cannot unlock yet either
+way, so it needs no row of its own.
 
 ---
 

@@ -1,13 +1,3 @@
-"""What the backup status says, and every warning it raises
-(workspace-backup spec, *Status and warnings*; plan, PR 5).
-
-Worked out afresh from the state file, the run history and restic's
-snapshots on every read, so a warning clears as soon as its problem does and
-there is nothing to dismiss. The server's status endpoint is the single
-source for the Backup page, the banner and the nav icons (interactions,
-*What the production implementation must finish*).
-"""
-
 from __future__ import annotations
 
 import re
@@ -19,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.application.backup_repository import MIN_PASSWORD_LENGTH
+from etsy_listings.core.application.backup_repository import MIN_PASSWORD_LENGTH, seller_today
 from etsy_listings.core.application.backup_restore import RestoreStatus
 from etsy_listings.core.backup.destinations import ChangedFile, planned_set_aside
 from etsy_listings.core.backup.repository import Snapshot
@@ -118,8 +108,6 @@ class BackupOverview(_Model):
 
 @dataclass(frozen=True)
 class RepositoryReading:
-    """What was read from the repository for one overview."""
-
     missing: bool
     snapshots: tuple[Snapshot, ...] | None = None
     """Oldest first; None when they could not be read."""
@@ -133,25 +121,20 @@ def last_success(reading: RepositoryReading) -> datetime | None:
 def next_due(
     settings: BackupSettings, success: datetime | None, runs: Sequence[RunRecord], now: datetime
 ) -> datetime:
-    """``interval_hours`` after the last success, at once when there is
-    none, and never sooner than :data:`RETRY_AFTER` after a failed run."""
     due = now if success is None else success + timedelta(hours=settings.interval_hours)
-    latest = _latest_attempt(runs)
+    latest = _latest_run_not_stopped(runs)
     failed_since = latest is not None and latest.outcome == "failed"
     if latest is not None and failed_since and (success is None or latest.started_at > success):
         due = max(due, latest.finished_at + RETRY_AFTER)
     return due
 
 
-def _latest_attempt(runs: Sequence[RunRecord]) -> RunRecord | None:
-    """The newest run that was not stopped by the app shutting down."""
+def _latest_run_not_stopped(runs: Sequence[RunRecord]) -> RunRecord | None:
     return next((run for run in reversed(runs) if run.outcome != "stopped"), None)
 
 
 @dataclass(frozen=True)
 class BackupFacts:
-    """Everything an overview is worked out from."""
-
     settings: BackupSettings | None
     state: BackupState
     runs: Sequence[RunRecord]
@@ -195,15 +178,13 @@ SHORT_PROBLEM = 24
 
 
 def destination_name(path: Path) -> str:
-    """ "iCloud Drive" for an iCloud folder, else the folder's own name."""
     if "icloud" in str(path).lower():
         return ICLOUD_DRIVE
     return path.name or "Folder"
 
 
 def short_problem(problem: str | None) -> str | None:
-    """A copy's problem as a pill says it: its first phrase when that is
-    short, as "Folder not found: ..." is, else only that it was not copied."""
+    """A copy's problem as its pill says it."""
     if problem is None:
         return None
     first = re.split(r"[.:]", problem, maxsplit=1)[0].strip()
@@ -214,10 +195,10 @@ def _destination(facts: BackupFacts, path: Path) -> DestinationOverview:
     recorded = facts.state.destination(path)
     copied = recorded.last_copy
     snapshots = facts.reading.snapshots or ()
-    # The oldest snapshot the destination has not had yet.
-    pending = min((s.time for s in snapshots if copied is None or s.time > copied), default=None)
-    # The same day as the repair takes: the seller's, not UTC's.
-    today = facts.now.astimezone().date()
+    oldest_uncopied = min(
+        (s.time for s in snapshots if copied is None or s.time > copied), default=None
+    )
+    today = seller_today(facts.now)
     to_repair = recorded.changed or recorded.unexpected
     return DestinationOverview(
         path=str(path),
@@ -229,7 +210,7 @@ def _destination(facts: BackupFacts, path: Path) -> DestinationOverview:
         last_check=recorded.last_check,
         changed=recorded.changed,
         unexpected=recorded.unexpected,
-        behind=pending is not None and facts.now - pending > WARN_AFTER,
+        behind=oldest_uncopied is not None and facts.now - oldest_uncopied > WARN_AFTER,
         set_aside=str(planned_set_aside(path, today)) if to_repair else None,
     )
 
@@ -275,8 +256,7 @@ def _destination_warnings(destination: DestinationOverview) -> list[BackupWarnin
 
 
 def _failure(facts: BackupFacts) -> str | None:
-    """restic's message for the last run, the last check, or the read that failed."""
-    latest = _latest_attempt(facts.runs)
+    latest = _latest_run_not_stopped(facts.runs)
     check = facts.state.last_check
     if latest is not None and latest.outcome == "failed":
         return f"The last backup failed: {latest.message or 'no reason was given'}"
@@ -302,7 +282,6 @@ def history(
     retention: RetentionSettings,
     now: datetime,
 ) -> list[HistoryEntry]:
-    """Every run, newest first, with the bucket its snapshot is kept in."""
     times = {s.id: s.time for s in snapshots}
     return [
         HistoryEntry(
@@ -319,8 +298,6 @@ def history(
 def _kept_as(
     time: datetime | None, times: dict[str, datetime], retention: RetentionSettings, now: datetime
 ) -> KeptAs | None:
-    """The spec's wording of the retention (*Backup run* step 5): recent,
-    else the latest of its week, else the latest of its month."""
     if time is None:
         return None
     if now - time <= timedelta(days=retention.keep_within_days):

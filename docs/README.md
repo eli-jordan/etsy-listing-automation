@@ -91,7 +91,9 @@ Research provides dated evidence, and history provides the original project
 context. Neither overrides current requirements or decisions. The historical
 decision ids remain in the frozen originals, while current citations use
 `ADR-NNNN` where the rationale is needed. Smaller rules stay in their owning
-specification, reference or code rather than acquiring a duplicate index row.
+specification or reference, or in the code that enforces them, rather than
+acquiring a duplicate index row. Code comments carry no rationale; see the
+comment policy in [AGENTS.md](../AGENTS.md).
 
 `openapi.json` is generated API reference, exported from FastAPI for the typed
 frontend client. Regenerate it from the code rather than editing it here.

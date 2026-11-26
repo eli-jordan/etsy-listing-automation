@@ -1,5 +1,3 @@
-"""Workspace-scoped foreground priority at CPU phase and solver boundaries."""
-
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from threading import Condition
@@ -32,7 +30,7 @@ def interactive(workspace: Workspace) -> Iterator[None]:
 
 
 def yield_to_interactive(workspace: Workspace, check: Callable[[], None]) -> None:
-    """Wait between work chunks, checking cancellation without holding our lock."""
+    """Calls ``check`` outside the lock."""
     key = _key(workspace)
     while True:
         with _CONDITION:

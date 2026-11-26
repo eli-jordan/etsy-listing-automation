@@ -1,5 +1,3 @@
-// Set up and Setup, one form (workspace-backup interactions, *Set up and
-// Setup*), from the mockup's `SettingsForm` in `_prototype.tsx`.
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
 import { CloudArrowUpIcon } from "@phosphor-icons/react/dist/csr/CloudArrowUp";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
@@ -21,10 +19,8 @@ import {
   type Password,
   nameOf,
   passwordProblem,
+  type SubmitFailure,
 } from "./backupText";
-
-/** A failure to show under the form, or null once it worked. */
-export type Answer = Promise<string | null>;
 
 const SAVED_NOTE_MS = 4000;
 
@@ -42,17 +38,19 @@ export function BackupForm({
 }: {
   mode: "create" | "edit";
   initial: BackupAnswers;
-  /** The server's status: its names for saved destinations and the
-   * shortest password it accepts. */
   status: BackupStatus;
   onCancel?: () => void;
-  onCreate?: (answers: BackupAnswers, password: string) => Answer;
-  onSave?: (answers: BackupAnswers, base: BackupAnswers) => Answer;
+  onCreate?: (answers: BackupAnswers, password: string) => Promise<SubmitFailure>;
+  onSave?: (answers: BackupAnswers, base: BackupAnswers) => Promise<SubmitFailure>;
 }) {
   const [base, setBase] = useState(initial);
   const [s, setS] = useState(initial);
   const [destinations, setDestinations] = useState<Row[]>(() => rows(initial.destinations));
-  const [password, setPassword] = useState<Password>({ pw: "", pw2: "", stored: false });
+  const [password, setPassword] = useState<Password>({
+    typed: "",
+    repeated: "",
+    savedInManager: false,
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
@@ -72,7 +70,9 @@ export function BackupForm({
   const submit = async () => {
     setBusy(true);
     setError(null);
-    const failure = create ? await onCreate?.(answers, password.pw) : await onSave?.(answers, base);
+    const failure = create
+      ? await onCreate?.(answers, password.typed)
+      : await onSave?.(answers, base);
     setBusy(false);
     if (failure) return setError(failure);
     if (create) return;
@@ -181,7 +181,6 @@ export function BackupForm({
   );
 }
 
-/** While set-up runs: connecting, once the server says so. */
 function settingUpLine(status: BackupStatus): string {
   const running = status.running;
   if (running?.operation === "connect") return connectingLine(status, running.destination);
@@ -191,7 +190,7 @@ function settingUpLine(status: BackupStatus): string {
 function createReady(answers: BackupAnswers, password: Password, minLength: number): boolean {
   return (
     passwordProblem(password, minLength) === null &&
-    password.stored &&
+    password.savedInManager &&
     answers.repository.trim() !== ""
   );
 }
@@ -290,16 +289,16 @@ export function PasswordFields({
           type={type}
           aria-label="Password"
           placeholder="Password"
-          value={value.pw}
-          onChange={(e) => onChange({ ...value, pw: e.target.value })}
+          value={value.typed}
+          onChange={(e) => onChange({ ...value, typed: e.target.value })}
         />
         <input
           className="input"
           type={type}
           aria-label="Repeat password"
           placeholder="Repeat password"
-          value={value.pw2}
-          onChange={(e) => onChange({ ...value, pw2: e.target.value })}
+          value={value.repeated}
+          onChange={(e) => onChange({ ...value, repeated: e.target.value })}
         />
         <button
           type="button"
@@ -310,12 +309,12 @@ export function PasswordFields({
           {show ? <EyeSlashIcon size={16} /> : <EyeIcon size={16} />} {show ? "Hide" : "Show"}
         </button>
       </div>
-      {value.pw !== "" && problem && <span className="adm-error-text">{problem}</span>}
+      {value.typed !== "" && problem && <span className="adm-error-text">{problem}</span>}
       <label className="bk-check">
         <input
           type="checkbox"
-          checked={value.stored}
-          onChange={(e) => onChange({ ...value, stored: e.target.checked })}
+          checked={value.savedInManager}
+          onChange={(e) => onChange({ ...value, savedInManager: e.target.checked })}
         />
         <span>
           I&apos;ve saved this password in my password manager. A backup restored to a new computer
@@ -392,19 +391,26 @@ function Keep({
   const set = (key: keyof RetentionSettings) => (n: number) => onChange({ ...value, [key]: n });
   return (
     <div className="bk-keep">
-      <Num
+      <PositiveCountInput
         label="days of every backup"
         value={value.keep_within_days}
         onChange={set("keep_within_days")}
       />
-      <Num label="weeks, latest each week" value={value.weekly} onChange={set("weekly")} />
-      <Num label="months, latest each month" value={value.monthly} onChange={set("monthly")} />
+      <PositiveCountInput
+        label="weeks, latest each week"
+        value={value.weekly}
+        onChange={set("weekly")}
+      />
+      <PositiveCountInput
+        label="months, latest each month"
+        value={value.monthly}
+        onChange={set("monthly")}
+      />
     </div>
   );
 }
 
-/** Digits only; zero and empty are refused, keeping the last good number. */
-function Num({
+function PositiveCountInput({
   label,
   value,
   onChange,

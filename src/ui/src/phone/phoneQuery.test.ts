@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import mainSource from "../main.tsx?raw";
 import { PHONE_LANDSCAPE_QUERY, PHONE_QUERY } from "./usePhone";
 
 // CSS has no constants a media query can name, so each stylesheet spells the
@@ -46,5 +47,14 @@ describe("the phone query in the stylesheets", () => {
     expect(Object.keys(stylesheets)).toEqual(
       expect.arrayContaining(["./shell.css", "../index.css", "../pages/admin/admin.css"]),
     );
+  });
+});
+
+describe("the phone stylesheet", () => {
+  it("is main.tsx's last import, so its rules come after every desktop rule", () => {
+    const imports = [...mainSource.matchAll(/(?:^import|\bfrom)\s+["']([^"']+)["']/gm)].map(
+      (match) => match[1],
+    );
+    expect(imports.at(-1)).toBe("./phone/index.css");
   });
 });

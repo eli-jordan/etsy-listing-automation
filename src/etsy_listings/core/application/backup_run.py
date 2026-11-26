@@ -1,13 +1,3 @@
-"""One backup run: back up, forget, the weekly prune and check, then the
-copy to each destination and its monthly check (workspace-backup spec,
-*Backup run*; plan, PRs 3 and 4).
-
-The server passes its :class:`JobGate`, so the run waits for quiet, pauses
-the background jobs for the ``restic backup`` step alone and resumes them
-whatever happened; the CLI passes none (spec, *CLI*). Each run, failed ones
-included, is appended to the history in ``~/.etsy-listings``.
-"""
-
 from __future__ import annotations
 
 import threading
@@ -23,6 +13,7 @@ from etsy_listings.core.application.backup_repository import (
     backup_settings,
     configured_backup,
     ensure_workspace_id,
+    seller_today,
 )
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
@@ -75,10 +66,6 @@ BackupStep = Literal[
 
 @dataclass(frozen=True)
 class BackupProgress:
-    """Enough for the running line: the step, the job a backup waits for,
-    files read out of the total while backing up, and the destination
-    being copied or checked."""
-
     step: BackupStep
     waiting_for: str | None = None
     files_done: int | None = None
@@ -94,8 +81,8 @@ EXCLUDES: tuple[str, ...] = (
     #
     # Every temp-then-rename writer that ends its names in .tmp: a dot, the
     # name and a random part from workspace/atomic.py, engine/stages/render.py
-    # and preparation/scene_cache.py; the name and a uuid from market/cache.py
-    # and market/snapshot.py; the name, pid and thread from ai/viewable.py;
+    # and preparation/scene_cache.py (market/ writes through atomic.py); the
+    # name, pid and thread from ai/viewable.py;
     # the bare name from clients/etsy/tokens.py and engine/lock.py.
     "*.tmp",
     # The Marigold worker's predictions, ".{name}.npz.{uuid}" (server.py _publish).
@@ -122,10 +109,6 @@ def _utc_now() -> datetime:
 
 @dataclass(frozen=True)
 class BackupRunner:
-    """Runs against ``workspace``'s configured backup, resolved once per
-    operation. ``home`` holds the state and history; tests pass one under
-    ``tmp_path`` (plan, P2)."""
-
     workspace: Workspace
     binaries: ResticBinaries
     home: Path | None = None
@@ -143,13 +126,9 @@ class BackupRunner:
         cancel: threading.Event | None = None,
         maintenance: Callable[[], AbstractContextManager[bool]] | None = None,
     ) -> RunRecord:
-        """Back up, forget, and prune and check when due. ``cancel`` stops
-        restic part way; the run is then recorded as stopped. The server
-        reserves exclusive maintenance or defers it while a restore runs."""
         settings = backup_settings(self.workspace)
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
         try:
-            # Inside the try: a refused configuration is a failed run.
             backup = self._configured(settings)
             repository = backup.open()
             if settings.workspace_id is None:
@@ -178,8 +157,6 @@ class BackupRunner:
     def _adopt_workspace_id(
         self, backup: ConfiguredBackup, repository: Repository, run: _Run
     ) -> ConfiguredBackup:
-        """A block written by hand has no workspace ID: write the one the
-        repository's snapshots carry, or a new one (ADR-0061)."""
         chosen = ensure_workspace_id(self.workspace, repository.snapshots(lock=False))
         run.notice = chosen.notice
         settings = backup.settings.model_copy(update={"workspace_id": chosen.value})
@@ -197,8 +174,6 @@ class BackupRunner:
         run: _Run,
         cancel: threading.Event | None,
     ) -> None:
-        """Forget, then the weekly prune and check, each under restic's
-        exclusive lock."""
         run.enter("forgetting")
         repository.forget(
             backup.settings.retention, workspace_id=backup.workspace_id, cancel=cancel
@@ -234,9 +209,7 @@ class BackupRunner:
     def _copy_all(
         self, backup: ConfiguredBackup, run: _Run, cancel: threading.Event | None
     ) -> None:
-        """Steps 7 and 8, after the jobs resumed. An unreachable or changed
-        destination is recorded and the run goes on: the local backup still
-        counts. A damaged local file is a failed check and ends the run."""
+        """Copy to every destination, after the jobs resumed."""
         for destination in backup.destinations:
             run.enter("copying", destination)
             result = self._copy_one(backup, destination, run, cancel)
@@ -277,8 +250,6 @@ class BackupRunner:
         return result
 
     def repair(self, destination: Path) -> RepairResult:
-        """Set aside what changed in ``destination`` and copy it again
-        (spec, *Changed and unexpected files*)."""
         backup = self._configured()
         if destination not in backup.destinations:
             raise MissingError(f"{destination} is not a destination in settings.yaml.")
@@ -289,7 +260,7 @@ class BackupRunner:
         repair = repair_destination(
             backup.storage,
             destination,
-            today=self.now().astimezone().date(),
+            today=seller_today(self.now()),
             suspect=_suspects(before),
         )
         after = _after_copy(before.model_copy(update={"changed": ()}), repair.copy, self.now())
@@ -297,8 +268,6 @@ class BackupRunner:
         return repair
 
     def check(self) -> CheckResult:
-        """``restic check`` of the local repository, recorded in the state.
-        Refuses an overlapping configuration, as a run does."""
         backup = self._configured()
         return self._check(backup.open(), backup.store)
 
@@ -358,8 +327,6 @@ def _after_check(
 
 @contextmanager
 def _paused(gate: JobGate | None, run: _Run) -> Iterator[None]:
-    """Wait for quiet, then hold background jobs for the block, and release
-    them however it ends (spec, *Backup run* steps 1, 2 and 4)."""
     if gate is None:
         yield
         return
@@ -379,9 +346,6 @@ class _StoppedError(Exception):
 
 @dataclass
 class _CopyProgress:
-    """Files copied out of those the destination lacks, for the running
-    line during a large first copy (plan, PR 5)."""
-
     run: _Run
     destination: str
     done: int = 0

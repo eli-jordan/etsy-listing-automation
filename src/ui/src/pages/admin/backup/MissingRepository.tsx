@@ -1,7 +1,3 @@
-// The missing-repository banner and its two actions (workspace-backup spec,
-// *Missing repository*; plan, PR 8). Never mocked: the interactions doc's
-// *Warnings* table names the actions, and the dialog follows the repair and
-// restore dialogs' layout.
 import { BackupDialog } from "./BackupDialog";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
@@ -62,9 +58,6 @@ const TEXT = {
   },
 } as const;
 
-/** Create or connect. `onSubmit` answers with a refusal, or null once the
- * repository is there. A Create refused over a destination's copy offers to
- * switch to Connect with that copy as the source (plan, PR 8). */
 export function RepositoryDialog({
   mode: initialMode,
   repository,
@@ -84,7 +77,11 @@ export function RepositoryDialog({
   const text = TEXT[mode];
   const [folder, setFolder] = useState(repository);
   const [source, setSource] = useState("");
-  const [password, setPassword] = useState<Password>({ pw: "", pw2: "", stored: false });
+  const [password, setPassword] = useState<Password>({
+    typed: "",
+    repeated: "",
+    savedInManager: false,
+  });
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<Refused | null>(null);
   const edit =
@@ -94,12 +91,14 @@ export function RepositoryDialog({
       setError(null);
     };
 
-  const given = passwordStored ? null : password.pw;
+  const given = passwordStored ? null : password.typed;
   let ready = folder.trim() !== "";
-  if (mode === "connect") ready &&= source.trim() !== "" && (passwordStored || password.pw !== "");
+  if (mode === "connect")
+    ready &&= source.trim() !== "" && (passwordStored || password.typed !== "");
   else
     ready &&=
-      passwordStored || (passwordProblem(password, passwordMinLength) === null && password.stored);
+      passwordStored ||
+      (passwordProblem(password, passwordMinLength) === null && password.savedInManager);
 
   const submit = async () => {
     setWorking(true);
@@ -168,8 +167,8 @@ export function RepositoryDialog({
             type="password"
             aria-label="Password"
             placeholder="The repository's password"
-            value={password.pw}
-            onChange={(e) => edit(setPassword)({ ...password, pw: e.target.value })}
+            value={password.typed}
+            onChange={(e) => edit(setPassword)({ ...password, typed: e.target.value })}
           />
         )}
       </div>

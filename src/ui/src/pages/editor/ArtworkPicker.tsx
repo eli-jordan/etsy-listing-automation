@@ -7,29 +7,17 @@ import { SheetGrabber } from "../../phone/SheetGrabber";
 import { useIsPhone } from "../../phone/usePhone";
 import type { ListingDesignSummary } from "../../types";
 
-/**
- * The full design list, for whichever target is choosing a file (interactions
- * Part 1 §4, Part 2 §4): titled for it, hinting who prints it, with every
- * thumbnail on that target's cloth and the current file marked. Base slots
- * reach it through **Find a design…**; a colour's own design opens it
- * directly, with no Recent panel, because an own design is rare and
- * deliberate (Part 1 §6).
- */
-
 interface Props {
   title: string;
   hint: string;
-  /** The cloth each thumbnail sits on. */
-  tile: string;
-  /** The ref the target prints now, marked **✓ Current**. */
+  cloth: string;
   current: string | null;
   library: readonly ListingDesignSummary[];
-  /** A workspace-rooted ref (PRD 73). */
   onPick: (ref: string) => void;
   onClose: () => void;
 }
 
-export function ArtworkPicker({ title, hint, tile, current, library, onPick, onClose }: Props) {
+export function ArtworkPicker({ title, hint, cloth, current, library, onPick, onClose }: Props) {
   const [query, setQuery] = useState("");
   const sheet = useRef<HTMLDivElement>(null);
   const phone = useIsPhone();
@@ -59,8 +47,7 @@ export function ArtworkPicker({ title, hint, tile, current, library, onPick, onC
             type="text"
             placeholder="Search your designs…"
             value={query}
-            // A phone opening the keyboard over half the sheet before
-            // anything is chosen hides the list being chosen from.
+            // A phone's keyboard would cover the list being chosen from.
             autoFocus={!phone}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -79,7 +66,7 @@ export function ArtworkPicker({ title, hint, tile, current, library, onPick, onC
                 }
                 onClick={() => onPick(d.file)}
               >
-                <span className="modal-design-row__thumb design-tile" style={{ background: tile }}>
+                <span className="modal-design-row__thumb design-tile" style={{ background: cloth }}>
                   <img src={listingDesignThumbnailUrl(d.name)} alt="" loading="lazy" />
                 </span>
                 <span className="design-picker__text">
@@ -99,7 +86,5 @@ export function ArtworkPicker({ title, hint, tile, current, library, onPick, onC
       </div>
     </div>
   );
-  // On the body on a phone: inside the Variants tab the picker would sit in
-  // the tab swipe's element, and its grab bar must not swipe the tab.
   return phone ? createPortal(dialog, document.body) : dialog;
 }

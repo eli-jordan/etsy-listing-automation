@@ -1,20 +1,3 @@
-"""Staging one ZIP or loose PNGs, and the review of what was staged (spec
-*Accepted input*, *Frozen staging*, *Staging validation and naming*,
-*Content deduplication*; name allocation, ADR-0051).
-
-:func:`stage_pngs` is the one write: it streams each PNG -- loose, or read
-out of the ZIP by `archive` -- to ``uploads/<sha256>.png``, merges identical
-bytes into one row, refuses more than 25 designs, freezes the listing
-template and checks every design against its garment, then writes
-``session.json`` last. Any refusal removes the session's directory, so a
-refused upload leaves nothing on disk.
-
-:func:`review` writes nothing. Names depend on the workspace -- a listing
-created a minute ago takes its name from a generated row -- so they are
-worked out on every read from the stored base names rather than stored,
-and so is which ``designs/`` file a row's bytes already are.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -51,10 +34,6 @@ _UNDO = "Nothing was uploaded or changed."
 
 
 class StagingRefusedError(RefusedError):
-    """The upload as a whole cannot be staged. ``message`` says why, the page
-    heading it *... was not staged*; ``remedy`` says how to fix it and always
-    ends by saying nothing was kept (UI doc §4)."""
-
     def __init__(self, message: str, remedy: str) -> None:
         self.message = message
         self.remedy = remedy
@@ -72,10 +51,6 @@ def _stem(filename: str) -> str:
 
 
 class _Received:
-    """The unique designs of one upload, stored under their content hash as
-    they stream in. Identical bytes become one row that names every
-    source (spec, *Content deduplication*)."""
-
     def __init__(self, workspace: Workspace, session: str, total_limit: int | None) -> None:
         self._workspace = workspace
         self._session = session
@@ -137,15 +112,11 @@ class _Receipt:
 
 
 def _archive_name(filename: str) -> str:
-    """``C:\\exports\\Coding x Music.zip`` -> ``Coding x Music``: a browser
-    sends the bare name, but a name with folders is still only its last part."""
     name = re.split(r"[\\/]", filename)[-1]
     return name[: -len(".zip")] if name.lower().endswith(".zip") else name
 
 
 def _receive(workspace: Workspace, session: str, uploads: Iterable[Upload]) -> _Receipt:
-    """Every design in the upload. One ZIP, or loose PNGs, never both (spec,
-    *Accepted input*)."""
     heads = [(upload, upload.stream.read(len(PNG_MAGIC))) for upload in uploads]
     zips = [upload for upload, head in heads if _is_zip(upload, head)]
     if len(zips) > 1:
@@ -187,8 +158,6 @@ _SPLITS = {2: "two", 3: "three", 4: "four"}
 
 
 def _limit(received: _Received, subject: str, remedy: str) -> None:
-    """More than 25 unique designs is refused, never truncated or split
-    (spec, *Accepted input*). The remedy says into how many."""
     count = len(received.rows)
     if count > MAX_DESIGNS:
         parts = -(-count // MAX_DESIGNS)
@@ -201,8 +170,6 @@ def _limit(received: _Received, subject: str, remedy: str) -> None:
 def _receive_zip(
     workspace: Workspace, session: str, upload: Upload, head: bytes, received: _Received
 ) -> list[str]:
-    """Stream the ZIP to disk, then read each PNG out of it entry by entry
-    ; the ZIP itself goes before the session is saved."""
     path = workspace.staging_archive_file(session)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -218,9 +185,6 @@ def _receive_zip(
 
 
 def _default_label(listing_template: str, now: datetime, archive: str | None = None) -> str:
-    """The listing template and the date and time, in the server's local
-    time -- the seller's, for a desktop tool -- led by the ZIP's name when
-    the designs came in one (spec, *Confirming a batch*)."""
     local = now.astimezone()
     label = f"{listing_template} · {local.day} {local:%b %H:%M}"
     return f"{archive} · {label}" if archive else label
@@ -233,12 +197,6 @@ def stage_pngs(
     *,
     now: datetime | None = None,
 ) -> StagingSession:
-    """Stage ``uploads`` against ``listing_template``, or raise
-    :class:`StagingRefusedError` with nothing left on disk.
-
-    Each row is checked with the existing design rules against the frozen
-    template's garment profile (spec, *Design validation*); a design that
-    fails is a row that will not be created, not a refusal of the upload."""
     workspace = store.workspace
     now = now or datetime.now(UTC)
     session = uuid.uuid4().hex
@@ -317,27 +275,17 @@ class StagingReview:
 
 
 def workspace_names(workspace: Workspace) -> dict[str, str]:
-    """Every name a batch row must not take, casefolded, and what holds it:
-    listing directories (with a ``listing.yaml`` or not -- create refuses
-    either) and design stems."""
     taken = {path.stem.casefold(): "design" for path in workspace.design_files()}
     return taken | {name.casefold(): "listing" for name in workspace.listing_directory_names()}
 
 
 def designs_by_content(workspace: Workspace, sizes: dict[str, int]) -> dict[str, str]:
-    """The ``designs/`` stem holding each of these contents, by SHA-256, for
-    the ones some design holds (spec, *Content deduplication*). ``sizes``
-    maps each wanted hash to its byte count: identical bytes are the same
-    length, so only a design of a wanted length is ever read, and a review
-    does not hash the whole of ``designs/`` on every read. The first design
-    by name wins when two hold the same bytes."""
     lengths = set(sizes.values())
     found: dict[str, str] = {}
     for path in sorted(workspace.design_files()):
         if path.stat().st_size not in lengths:
             continue
-        # A confirm may be writing designs/ atomically at the same moment,
-        # which Windows answers with a PermissionError on open.
+        # Windows refuses the open while a confirm atomically replaces the file.
         sha = hashlib.sha256(read_bytes_retrying(path)).hexdigest()
         if sha in sizes:
             found.setdefault(sha, path.stem)
@@ -345,10 +293,6 @@ def designs_by_content(workspace: Workspace, sizes: dict[str, int]) -> dict[str,
 
 
 def taken_for(workspace_taken: dict[str, str], reuse: str | None) -> set[str]:
-    """What a row may not be named. A row reusing ``designs/<r>.png`` may
-    take ``r`` itself when nothing but that design holds it, since its one
-    name then drives both paths as name allocation intends -- the listing ``r`` over the
-    design ``r`` -- rather than a needless ``r-2`` over ``designs/r.png``."""
     taken = set(workspace_taken)
     if reuse is not None and workspace_taken.get(reuse.casefold()) == "design":
         taken.discard(reuse.casefold())
@@ -371,9 +315,6 @@ def _typed_problem(name: str, holder: str | None) -> str | None:
 
 @dataclass(frozen=True)
 class _RowName:
-    """What name allocation decided for one valid row. ``note`` is added to
-    whatever the row's note already says."""
-
     name: str
     state: RowState = "ready"
     message: str | None = None
@@ -387,9 +328,6 @@ def _with_note(note: str | None, addition: str) -> str:
 
 @dataclass
 class _NameAllocation:
-    """:func:`review`'s pass over the rows in upload order. Typed names are
-    claimed up front; ``allocated`` grows as each row takes its name."""
-
     workspace_taken: dict[str, str]
     typed: dict[str, str]
     reused: dict[str, str]
@@ -425,8 +363,6 @@ class _NameAllocation:
         return _row_review(row, named, note, reuse)
 
     def _typed(self, row: StagingRow, taken: set[str], claimed: set[str]) -> _RowName:
-        """A typed name is never changed: a taken one is flagged, with the
-        next free suffix as a suggestion."""
         folded = row.base.casefold()
         holder = (self.workspace_taken.get(folded) if folded in taken else None) or (
             "row" if self.typed.get(folded) != row.id else None
@@ -463,13 +399,6 @@ def _row_review(row: StagingRow, named: _RowName, note: str | None, reuse: str |
 
 
 def review(workspace: Workspace, session: StagingSession) -> StagingReview:
-    """Every row's name, state and note (name allocation; UI doc §5).
-
-    Typed names are claimed first and never changed: one that is taken is
-    flagged, with the next free suffix as a suggestion. Generated names then
-    take the smallest free suffix around the workspace, the typed names and
-    each other, in upload order. Rows that will not be created claim
-    nothing."""
     workspace_taken = workspace_names(workspace)
     valid = [row for row in session.rows if row.error is None]
     typed: dict[str, str] = {}
@@ -489,7 +418,6 @@ def review(workspace: Workspace, session: StagingSession) -> StagingReview:
 
 
 def upload_path(workspace: Workspace, session: StagingSession, row: str) -> Path:
-    """Where row ``row``'s bytes are, for its thumbnail."""
     for candidate in session.rows:
         if candidate.id == row:
             return workspace.staging_upload_file(session.id, candidate.sha256)

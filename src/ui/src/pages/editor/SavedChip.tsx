@@ -7,16 +7,6 @@ import { useIsPhone } from "../../phone/usePhone";
 import { PhoneSheet } from "../../phone/PhoneSheet";
 import { SavedAgo } from "./SavedAgo";
 
-/**
- * The editor head's auto-save chip -- *● Saved 3 mins ago ▾* beside the
- * status -- and the card it opens: the file this editor writes, with Copy,
- * and when it saved (UI doc, *The editor head*).
- *
- * The path is here rather than printed in the head because the head had
- * become a row of competing facts; it matters because this editor writes a
- * file the seller also edits by hand and runs the CLI against, so it is one
- * click away rather than gone.
- */
 export function SavedChip({
   path,
   savedAt,
@@ -34,8 +24,7 @@ export function SavedChip({
   const close = useCallback(() => setOpen(false), []);
 
   const phone = useIsPhone();
-  // A phone shows the card as a bottom sheet on the page body, which closes
-  // itself: an outside-press check would read a tap on its Copy as outside.
+  // The phone's sheet is portalled out of `rootRef`, so a tap on its Copy reads as outside.
   useMenuDismiss(open && !phone, rootRef, setOpen);
 
   useEffect(() => {
@@ -45,8 +34,7 @@ export function SavedChip({
   }, [copied]);
 
   function copy() {
-    // Said only once the clipboard took it: a page without clipboard access
-    // (an insecure origin) leaves the path selectable in the card instead.
+    // `navigator.clipboard` is absent on an insecure origin.
     void navigator.clipboard
       ?.writeText(path)
       .then(() => setCopied(true))
@@ -74,8 +62,6 @@ export function SavedChip({
         type="button"
         className="save-chip__trigger"
         aria-expanded={open}
-        // On a phone the card is a sheet on the page body, which has no id of
-        // its own to point at; it says it opens a dialog instead.
         aria-controls={open && !phone ? cardId : undefined}
         {...(phone ? { "aria-haspopup": "dialog" as const } : {})}
         title="Where this is saved"

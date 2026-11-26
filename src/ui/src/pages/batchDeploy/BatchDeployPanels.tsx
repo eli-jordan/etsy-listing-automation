@@ -10,7 +10,6 @@ function countLabel(count: number, singular: string, plural = `${singular}s`): s
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-/** What a finished workspace apply did, listing by listing. */
 export function BatchResultCallout({ result }: { result: BatchResult }) {
   return (
     <div
@@ -28,7 +27,6 @@ export function BatchResultCallout({ result }: { result: BatchResult }) {
   );
 }
 
-/** The ready plan's headline counts and how far its previews are. */
 export function ReviewSummary({
   affected,
   counts,
@@ -58,7 +56,6 @@ export function ReviewSummary({
   );
 }
 
-/** The footer's one action: wait, plan again, or apply the reviewed plan. */
 export function FooterAction({
   stage,
   planningFailed,

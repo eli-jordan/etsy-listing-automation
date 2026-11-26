@@ -1,13 +1,3 @@
-"""Garment profiles: which catalog blueprints a workspace sells, and the
-profile ``new`` records for one.
-
-Filtering the catalog by category, keying a blueprint by brand and model,
-sorting sizes, slugging colours, and recording a profile the first time a
-garment is used -- reusing it, hand edits and all, every time after. The
-wizard that asks which garment is the CLI's (``cli/new.py``); everything
-here is tested through the fake catalog client with no terminal.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -53,17 +43,8 @@ def filter_blueprints_by_category(blueprints: list[Blueprint], category: str) ->
 
 
 def local_blueprint_keys(workspace: Workspace) -> set[tuple[str, str]]:
-    """The ``(brand, model)`` pairs this workspace already has a garment
-    profile for, normalised for comparison.
-
-    Keyed on brand+model rather than title, because that is what a garment
-    profile now identifies a blueprint by -- and it is what makes
-    the marker survive Printify retitling a garment.
-
-    A garment profile that will not parse is skipped rather than fatal: it
-    costs a row its marker, and refusing to open the picker over one
-    unrelated broken file would be a poor trade.
-    """
+    """The normalised ``(brand, model)`` pairs this workspace already has a
+    garment profile for (ADR-0005), skipping profiles that will not parse."""
     keys: set[tuple[str, str]] = set()
     for name in workspace.garment_profile_names():
         try:
@@ -81,29 +62,16 @@ def sort_sizes(sizes: set[str]) -> list[str]:
 
 
 def resolve_colour_slugs(variant_set: VariantSet, exceptions: ColourExceptions) -> dict[str, str]:
-    """Colour name -> slug, applying exceptions.yaml and raising on collision."""
     return slug_map(variant_set.colors, exceptions)
 
 
 def garment_profile_slug_for(blueprint: Blueprint) -> str:
-    """``garment-profiles/{slug}.yaml``, from brand and model.
-
-    Not from the title: Printify's is generic, so a title slug would file the
-    Comfort Colors 1717 under ``unisex-garment-dyed-t-shirt.yaml`` alongside
-    every other brand's version of the same shirt. Brand and model give
-    ``comfort-colors-1717`` -- the name the docs have always shown, and one
-    that survives a retitle.
-    """
+    """``garment-profiles/{slug}.yaml``, from brand and model: Printify's
+    titles are generic and shared across brands (ADR-0005)."""
     return slugify(f"{blueprint.brand} {blueprint.model}")
 
 
 def blueprint_ref(blueprint: Blueprint) -> BlueprintRef:
-    """The catalog entry as a garment profile records it.
-
-    Brand and model are written verbatim, ® and all, because that is what the
-    catalog says; resolution normalises both sides, so a human editing the
-    file afterwards need not reproduce the symbol.
-    """
     return BlueprintRef(brand=blueprint.brand, model=blueprint.model, title=blueprint.title)
 
 
@@ -137,9 +105,6 @@ def build_garment_profile(
 def write_garment_profile_if_absent(
     workspace: Workspace, slug: str, garment_profile: GarmentProfile
 ) -> bool:
-    """Returns True if a new garment profile was written, False if one already
-    existed and was left untouched -- not rewritten, not even replaced, since
-    the seller may have edited it by hand (ADR-0055)."""
     path = workspace.garment_profile_file(slug)
     if path.is_file():
         return False
@@ -164,13 +129,9 @@ def ensure_garment_profile(
     *,
     placeholder: str = DEFAULT_PLACEHOLDER,
 ) -> SavedGarmentProfile:
-    """The garment profile for ``blueprint``, recorded if this is its first use.
-
-    An existing profile is never overwritten and is read back as it stands,
-    so hand edits since it was written -- a trimmed colour list -- carry into
-    every listing made from it. Raises ``ValueError`` when the provider offers
-    no ``placeholder`` print area.
-    """
+    """The garment profile for ``blueprint``, recorded if this is its first
+    use and otherwise read back as edited. Raises ``ValueError`` when the
+    provider offers no ``placeholder`` print area."""
     built = build_garment_profile(
         blueprint=blueprint,
         provider_title=provider.title,
@@ -184,9 +145,6 @@ def ensure_garment_profile(
 
 
 def listing_colours(profile: GarmentProfile, colour_slugs: dict[str, str]) -> list[str]:
-    """The colours a new listing sells: whatever the garment profile lists --
-    reflecting any hand editing since it was written -- else every catalog
-    colour, the first time a garment is used."""
     if profile.colors:
         return sorted(profile.colors)
     return sorted(colour_slugs.values())

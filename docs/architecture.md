@@ -111,11 +111,11 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | Module | Owns | Boundary |
 |---|---|---|
 | `cli` | Typer commands, terminal presentation of engine reports (`cli/render.py`), command options, prompts and the `auth`/`setup`/`new` wizards' question order (`cli/auth.py`, `cli/setup.py`, `cli/new.py`, with `cli/credentials.py` and `cli/pickers.py`) | Uses engine reports rather than computing a second diff; wizards call core operations for every decision and write; only `cli/ui.py` imports the server, and only `server.hosting` |
-| `server` | FastAPI routing and wire schemas (`server/api/`), the one refusal-to-status table (`REFUSAL_STATUS` in `server/api/app.py`), SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator and store per process and starts and stops them; decides no workflow rule itself |
+| `server` | FastAPI routing and wire schemas (`server/api/`), the one refusal-to-status table (`REFUSAL_STATUS` in `server/api/refusal_status.py`), SSE framing (`server/api/sse.py`), reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator and store per process and starts and stops them; decides no workflow rule itself |
 | `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and holds a listing template's lock around each of its check-then-writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 | `core/engine` | Stage protocol, comparison, lockfile, lifecycle, runs, previews and status | Stages return values; the engine decides execution and records progress |
 | `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `locks.py`, the process-wide keyed locks for listings, mockup templates and listing templates; `listing_documents.py` is the one reader and writer of `listing.yaml` and takes each listing's lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
-| `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Batch rows and AI runs stay with `core/application/listing_identity.py` |
+| `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Designs, garment profiles and pricing plans are reusable and stay. A delete pending its remote retraction (ADR-0035) drops only the snapshot and proposal, since the seller has finished researching the listing. Batch rows and AI runs stay with `core/application/listing_identity.py` |
 | `core/render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
 | `core/clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs, OAuth tokens and fakes | Shared transport per vendor; separate caller authority through protocols |
 | `core/config` | Validated documents, settings, money, slugs, secrets and local listing refusals | No knowledge of directory layout; path-based loaders and the design-resolution check currently perform file I/O |
@@ -133,6 +133,20 @@ data tree, including how to enumerate it. Only `core/engine` computes
 deployment changes and folds a run's lockfile. Render passes are pure, so
 input hashes and golden images describe deterministic work shared by
 calibration and deployment.
+
+A `UserFacingError` means the run stopped for a reason the user can act on (a
+design too small, a colour that does not exist, copy still carrying a
+sentinel), and its message is the whole useful output: the CLI prints it, and
+`--all` carries on to the next listing. Anything else is a defect and prints a
+traceback; a client sees `INTERNAL_ERROR_MESSAGE` in its place. A refusal picks
+one of four categories:
+
+| Category | Means |
+|---|---|
+| `MissingError` | What the request names is not there: it never was, or something removed or moved it first |
+| `ConflictError` | The request is well formed, but what the workspace holds now forbids it: a name already taken, a row with nothing to retry, a template that must be prepared first |
+| `StaleError` | The request was made against a revision that has since changed; nothing was written, and the caller reloads and asks again |
+| `RefusedError` | The request's own content cannot be taken, whatever the workspace holds: a file that is not an image, a kind the photos cannot be, mask strokes outside the photo |
 
 A core refusal reaches HTTP through one seam. Each refusal class inherits a
 category from `core/errors.py` (missing, conflict, stale or refused), and
@@ -152,9 +166,23 @@ still answer it themselves. `template.yaml` is the exception, because
 
 ### Clients, credentials and prompts
 
-`core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
-bearers resolve at request time, but the Etsy app key pair is read during
-construction to decide whether an optional client exists. Nothing in the
+`core/connections.py` builds clients and `RunContext` without reading a
+credential. Printify tokens, the Etsy app key pair and signed-in bearers
+resolve on each request, so a workspace that only renders mockups still plans,
+a stage that needs a missing credential reports itself blocked, and a rotated
+key takes effect without a restart. `etsy_app_key` is the separate,
+non-raising availability question readiness and setup ask; half a pair reads
+as absent, since `auth etsy` captures both halves at once and is the remedy
+either way. The token store resolves its keystring inside each refresh, so
+`auth --check` can build one for a workspace with no credentials. Shop lookups
+attach a bearer only when a sign-in exists, and market requests never attach
+one: Etsy rotates the refresh token on every use, and a refresh research does
+not need is a chance to race a deploy for the one valid token. `setup` and
+`auth` verify a token the user has just typed through `printify_client_for`
+before it is stored, because a stored unverified credential makes a workspace
+that looks configured and is not. `credentials_root` lets the e2e layer borrow
+a configured workspace's credentials while every cache stays in its disposable
+workspace. Nothing in the
 server calls `connections` for a client. `create_app` takes
 `connections.run_context` as `Deployments`' `ContextFactory`, and an
 `application.dependencies.ClientFactories` for every other client: the Etsy
@@ -173,6 +201,14 @@ that needs `connections`' real token handling over a scripted network passes
 module-level patch because a patch silently reaches every caller of the
 module, including ones the test never meant to fake, and stops working once a
 caller holds the function rather than the module.
+
+Every seam a host fills lives in `application/dependencies.py`, not beside the
+worker that calls it, because the deploy executor and the AI runner are
+implementation-only: a host names the seam without importing the machinery
+behind the coordinator. Everything else an operation coordinates through (the
+AI run registry, the batch queue, AI readiness and the deploy-to-AI handoff) is
+core's own and taken as its concrete class; with one implementation each, an
+interface would have had nothing to vary.
 
 `core/application/credentials.py` owns finding, verifying and storing a
 credential and both halves of the Etsy grant around the browser step;
@@ -385,12 +421,20 @@ and `draft_scene` take a size and a decoder (`SceneImages`) and answer with a
 finished picture for either renderer, a `RenderedScene` (the PNG the render stage
 writes, with its identity) or an editor-size `SceneFrame`. It owns whether a draft
 still matches what is saved, through the rules gathered in
-`application.preparation.previews`, and turns prepared files it cannot use into
+`application.preparation.draft_rules`, and turns prepared files it cannot use into
 `PreparationRequiredError`. The decoder is a real seam: the server's memo
 (`server/api/imagecache.py`, request-serving state that stays out of core) and
 `DISK_IMAGES`, which the scene warmer uses. `server/api/scene_responses.py` turns a
 picture into a response: the WebP encoding of a frame, and the identity headers
 and `304` of a rendered scene.
+
+Calibration is judged by eye, so the artwork a preview may use is open: the
+server's bundled targets plus whatever the seller uploads.
+`application.calibration_designs` stores uploads in the workspace's
+`test-designs/`, never in `designs/`, which holds artwork listings ship; a
+calibration target is not a product. It decides what an upload may be called
+and refuses bytes that do not decode as an image before writing anything; the
+route decodes the multipart request, so only bytes and a filename enter core.
 
 Position mode is the one place a browser composes a scene. While a listing's
 position is ahead of its composite, `pages/editor/positions/liveRenderer.ts` draws
@@ -405,6 +449,12 @@ reads the list again after each save: `positioned_listings()` in
 `application.mockup_templates`, served at
 `GET /api/templates/{name}/positioned-listings`. It reads raw listing documents
 and writes none.
+
+The design a preview prints comes from an open library: the three bundled
+targets in `server/api/static/` plus PNGs the user uploads into the workspace's
+`test-designs/` (`core/application/calibration_designs.py`). A fixed set would
+not do, because calibration is judged by eye: the grid target shows whether the
+warp is right and says nothing about how a real ink weight sits on a garment.
 
 ### Renderer configuration and calibration recovery
 
@@ -610,16 +660,43 @@ proposals remain reviewable. A proposal is persisted before its streamed
 event, and full successful apply clears it through the engine, including CLI
 apply (ADR-0049, ADR-0050).
 
+In the editor, `useProposalReview` (`pages/editor/aiSeo/`) is the one owner of
+which proposal is shown and how a seller's drawer choices reach the store. A
+live run's `proposal` event outranks any cache read; a finished run's replay is
+history and is ignored, because the server's record owns the resolutions.
+Resolution writes go one at a time, and a choice not yet acknowledged overlays
+every read, so an autosave's read cannot reopen a drawer whose resolution is
+still in flight. Queued choices still go out after the editor navigates away.
+An answer that lands after a newer read acknowledges its section without
+replacing that read's staleness, then reads again. The accepted text itself
+travels through ordinary autosave, not these writes.
+
 Listing templates are distinct from mockup templates: they capture commercial
 configuration and media references, while mockup templates define render
 geometry. Upload staging freezes the selected listing-template document and
 owned assets under its write lock. The server decodes multipart uploads into
 byte streams; bounded loose-PNG/ZIP inspection in `core/batches` precedes
-review. Confirm and retry revalidate shared references and allocate names
+review. Staging is the one write: each PNG is streamed to
+`uploads/<sha256>.png`, identical bytes merge into one row, and `session.json`
+is written last; any refusal removes the session's folder. Review writes
+nothing. A row's name and the `designs/` file its bytes already are depend on
+the workspace, which changes between reads, so both are worked out on every
+read from the stored base names. Confirm and retry revalidate shared references and allocate names
 under the listing's document lock. They create ordinary listings and retained batch records,
-idempotently, without deploying (ADR-0047, ADR-0051). Staging expires seven
-days after its last edit and is swept at startup. `BatchQueue` dispatches
-queued rows through the existing AI runner, defaults to one concurrent batch
+idempotently, without deploying (ADR-0047, ADR-0051). Only a new batch asks
+whether AI could draft; a confirm finishing a batch an earlier one began does
+not, because its listings are already half made. Each row's upload is kept
+beside the batch, so Retry and the summary of a never-created row still have it
+after the staging session has gone. A staging session
+(`.cache/staging/<id>/session.json`) and a batch (`.cache/batches/<id>.json`)
+are schema-versioned JSON written atomically; a record with an unknown
+`schema`, or one that will not parse, is absent, since it is cache. A batch
+keeps its staging session's id, so a second confirm finds the batch the first
+wrote. A failed row keeps its last run's steps, so it still shows where it
+failed after the server that ran it has gone. Staging expires seven days after
+its last edit, a session folder with no readable record by the folder's own
+age, and is swept at startup and before Recent batches is listed. `BatchQueue`
+dispatches queued rows through the existing AI runner, defaults to one concurrent batch
 row, reads the workspace concurrency setting, round-robins across batches and
 recovers interrupted rows on restart (ADR-0048).
 
@@ -683,8 +760,15 @@ build their clients through the app's `ClientFactories` (`app_state.clients`).
 configured-identity retention and the editable key set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
 revision refuses with 412 and `kind: "stale"`; invalid values refuse with field
-errors and 422.
-Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
+errors and 422. Both are a typed `ShopSaveRefusal` body rather than
+`{"detail": ...}`, so the page tells a conflict from field errors without
+parsing text.
+Semantic no-ops leave the source bytes and file untouched, per ADR-0055. A
+conflict never overwrites an external edit, even a comment-only one: the page
+reloads instead. An optional file such as `settings.yaml` is read with
+`absent_ok`, as no bytes at `ABSENT_REVISION`, and a save against that
+revision creates it. Absent is not the empty file's hash, so a file that
+appears meanwhile, even an empty one, is an external edit like any other.
 
 A successful save replaces the server workspace's defaults inside the same
 revision lock, after the replace succeeds (`replace_if_unchanged(adopt=...)`),
@@ -820,6 +904,16 @@ File references without a prefix resolve from the workspace root. `./` resolves
 from the owning listing or listing-template directory; subdirectories are
 allowed, while absolute paths, backslashes and `..` segments are refused
 (ADR-0046). Reference resolution checks the resolved target against the root.
+One interpreter serves every owner (a listing, a listing template, and a
+template frozen into a staging session or batch, whose `./` is the frozen copy
+and whose bare refs stay live), so a template's refs mean the same once it
+becomes a listing. The editor's unnamed draft resolves against a stand-in
+listing directory at the same depth: a workspace-rooted ref lands on the same
+file, and a `./` ref finds nothing, since a listing with no directory has no
+files of its own. Picture endpoints serve only images and videos whose
+resolved path is inside the directory asked of, never the `listing.yaml`,
+`template.yaml` or lockfile beside them. A listing template's own files are
+the ones under its `assets/`, where Save as listing template puts them.
 Layout names are validated as single segments, but not all layout accessors
 check symlink/junction containment; that remaining gap is audit finding F02.
 
@@ -1027,7 +1121,10 @@ later. Each traces to a decision.
   one.** Everything else asks for `workspace.lock_file(name)` rather than
   joining `listings/<name>/state.lock.json`, and for
   `workspace.template_photos(name)` rather than globbing
-  `mockup-templates/<name>/*.png`. Two rules enforce it: `resolve()` rejects
+  `mockup-templates/<name>/*.png`. Reading is the same: `load_listing`,
+  `load_garment_profile`, `load_pricing_plan` and `load_exceptions` open the
+  tree's files, so no caller runs its own `yaml.safe_load` on a path it
+  assembled. Two rules enforce it: `resolve()` rejects
   paths escaping the root (`ADR-0013`), and the layout accessors reject any
   name that is not a single path segment. Together they keep the server's
   endpoints safe — template names arrive from URLs — so this is a security
@@ -1062,7 +1159,22 @@ later. Each traces to a decision.
   three-way, against the dump of the model the file held, so defaults and
   normalised values the seller never wrote stay out. Only a new file is
   rendered whole, in its owner's layout. Garment profiles and pricing plans are
-  create-if-absent and never touch an existing file (ADR-0055).
+  create-if-absent and never touch an existing file (ADR-0055), so a hand
+  edit such as a trimmed colour list carries into every later listing. A
+  profile records the catalog's brand and model verbatim, `®` included;
+  matching normalises both sides, so a hand edit need not reproduce the
+  symbol.
+  The mechanism: ruamel's composer gives each node's exact span, the smallest
+  node whose value changed is re-rendered with ruamel at that spot, and every
+  other byte is copied through, because even a ruamel round-trip dump would
+  normalise indentation, quoting and line endings the seller never touched.
+  Values are compared with PyYAML's `safe_load`, the reader every owner uses,
+  and ruamel is held to the same YAML 1.1 rules, so a rendered `'yes'` stays a
+  string. The result is read back and must equal the intended document; when it
+  cannot (an edit through an alias, say) the edit is refused and the owner
+  writes nothing. Ordered rows with a declared identity, such as the named AI
+  providers (ADR-0056), move with their source text when reordered, so a
+  comment stays with its provider rather than its index.
 - **A client is built through `core/connections.py`.** Which credential is
   resolved when, what a missing one means, and where the Etsy token file lives
   are one set of answers, not four (`cli`, `setup`, `auth` and the e2e layer
@@ -1082,8 +1194,16 @@ later. Each traces to a decision.
   prove it are core's; what to say before asking, how to ask, and what to say
   when it fails are the CLI's. Capturing stays separate from storing because
   `auth` writes per credential as it goes while `setup` writes once every
-  question is answered. OAuth consent and the loopback callback are a
-  credential workflow, not the application server.
+  question is answered. `auth`'s credentials are independent, so a proved
+  Printify token survives abandoning the Etsy sign-in; `setup` stores last
+  because a token left by a cancelled run is a workspace that looks configured
+  and is not. No operation combines proving with storing, and a token is
+  verified from the value in hand, never from `.env`. Printify's proof is the
+  shop list itself, which `setup` needs next. An Etsy consent near the end of
+  its 90 days is only ever a warning: the credential still works, and
+  refusing two weeks early would break commands over a failure that has not
+  happened. OAuth consent and the loopback callback are a credential workflow,
+  not the application server.
 - **Secrets never enter the repo.** Tokens in `.auth/`, keys in `.env`, both
   gitignored, and both in the *workspace*, not the repo. `core/config/secrets.py`
   is the reader for environment/file API keys; `core/clients/etsy/tokens.py`
@@ -1106,7 +1226,9 @@ later. Each traces to a decision.
 
 Every editor that autosaves a document writes through one module,
 `src/ui/src/hooks/writeLoop.ts`. It owns the 800ms debounce from the last edit,
-one write at a time, collapsing edits into the next write, holding an edit until
+long enough that a run of keystrokes collapses into one request and short enough
+that "Saved a moment ago" reads as true; a blur, a tab switch and an unmount cut it
+short, so no save waits on the timer alone. It also owns one write at a time, collapsing edits into the next write, holding an edit until
 it is written, and what a flush reports. A failed or refused edit stays held and
 goes with the next edit or flush; it never retries on its own. The loop has no
 React, no payload and no clock of its own: an owner gives it `send`, `merge` and
@@ -1116,8 +1238,17 @@ transport and a manual clock.
 Two owners sit on it. `ListingAutosave` (`hooks/listingAutosave.ts`, bound by
 `useAutosave`) adds the listing editor's three states, unnamed, named but not on
 disk and on disk, chosen when a write goes, so an edit made during a create or
-rename is sent under the name it settled on. A listing template uses the same
-class through its own `AutosaveTransport`. A rename runs through the loop's
+rename is sent under the name it settled on. A value the server has already
+written, such as an AI run's drafted brief, is adopted: shown without being sent
+back, since sending it would write it twice and race the seller's next edit to
+that field. A save sent before the adopt answers with the file as it was, so the
+adopted values are laid over every response until a save sent after them answers,
+and the seller's own unsent edits win over both. A listing template uses the same
+class through its own `AutosaveTransport` (`listingTemplateDocument.ts`): a
+valid-only `PUT` of the whole document, naming the draft as a create from its
+source that carries the edits made before it, and the rename. It has no
+`describe`, because an unnamed template's issues are its draft's until it is
+named. A rename runs through the loop's
 `afterWrite`: it waits for any write out, drains under the old name, and runs
 only if that wrote, with no write going out during it. `useTemplateSession` keeps
 one loop per opening of a template. Its edit carries only whether a save is owed
@@ -1125,17 +1256,51 @@ and whether it must go even with nothing changed, an approval; the draft is read
 when the write goes. Payload shape stays with the owners, and so does the
 preview hold, which answers the loop's `due` hook instead of flushing. A template
 switch or reload makes the next read wait for the old opening's writes.
+
+The template session's saves carry three further rules. Approving from the
+Preview tab writes template.yaml even when nothing changed, because calibration
+status is derived from that file: the write is the approval. A save refused
+because template.yaml moved on (409 or 412) is a conflict, which only a reload
+clears; retrying would send the same stale `If-Match`. A completed preparation
+this session queued rewrites template.yaml's revision without changing what it
+saved, so the session adopts that revision as its `If-Match` baseline, but only
+while the disk holds exactly the saved document at exactly the prepared revision;
+anyone else's completion, or an edit made since, still surfaces as a conflict.
+Label-only saves move the revision without invalidating the preparation, so the
+session lists those revisions and a preparation at one of them is up to date.
 `pages/admin/useSaveQueue.ts` is a different model, acknowledging per key, and
 does not use the loop.
 
-A flush resolves once no write is out and answers `Settled`: `written`, or not
-with a message. It never rejects, because the debounce, a blur and an unmount
+A flush resolves once no write is out and answers `Settled`: `written`, meaning
+the disk holds every edit made before the flush, or not, with a message in the
+seller's terms. It never rejects, because the debounce, a blur and an unmount
 have nowhere to send a rejection. Callers about to act on the file read the
 answer. Deploy, Create listing template, Back to batch and Clone stay on the page
 when an edit was not written, since each goes on to read a file without it, and
 the page head already says why. A template rename and a preparation refuse with
 the message. Delete waits for the flush and goes on regardless: an edit that
 would not save goes with the listing.
+
+## Phone sheets and Back
+
+On a phone, Back closes the open sheet the way it closes a native one, rather
+than leaving the page under it. `src/ui/src/phone/sheetHistory.ts` does it, used
+through `usePhoneModal`. Opening a sheet pushes one history entry: the same URL,
+React Router's own state copied so the router reads it as the page it is on, and
+a `phoneSheet` token carrying a per-page-load id, since a reload leaves an earlier
+load's tokens in history. Back pops the entry; a capture listener on the window,
+registered before the router's, sees the `popstate` first, keeps the router from
+hearing it, and closes the sheet. The page never navigates.
+
+A sheet closed any other way (Done, a swipe, an action) drops its entry with
+`history.back()`, again unheard by the router. It waits a tick first, because an
+action may navigate as it closes: React Router pushes the new page a microtask
+later, and going back then would undo the navigation. When something else is on
+top by then, the entry stays, an orphan: Back from the new page lands on it and
+the router shows the old page, and the next Back skips the orphan's duplicate of
+that page, so one Back still goes one page back. `test_phone_listings_browser.py`
+covers Back on a sheet, on a sheet that hands over to a confirm, and after a
+sheet closed by Cancel.
 
 ## Frontend build and asset distribution
 
@@ -1145,7 +1310,9 @@ configuration. `npm run build` writes `src/ui/dist/`, which is gitignored. The
 Vite dev server proxies `/api` to a running `etsy-listings ui`. The typed
 client is generated: `scripts/export_openapi.py` writes `docs/openapi.json`
 from the FastAPI app and `npm run gen:api` turns it into
-`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011).
+`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011). Only the modules
+under `src/ui/src/api/` call the server: everything above them works in domain
+types and never touches `fetch`, URLs or the generated schema.
 
 `hatch_build.py` is a wheel-only hook configured in `pyproject.toml`. For a
 release wheel it always runs `npm ci` and `npm run build` in `src/ui`, so an
@@ -1383,9 +1550,13 @@ the repository passes a check. `EXCLUDES` leaves out the temporary names the app
 writers use, and `tests/core/behaviour/test_backup_excludes.py` fails when a
 writer renames its temporaries. A backup that skipped unreadable files (restic's
 exit code 3) still counts, with those files as warnings. `core/backup/state.py` keeps the last prune and check in
-`~/.etsy-listings/backup-state.json`, keyed to the repository path. Every run,
-including a failed one, is appended to `backup-history.jsonl` as one JSON
-line. The last successful backup is read from `restic snapshots`.
+`~/.etsy-listings/backup-state.json`, with each destination's last copy, last
+check and the changed and unexpected files found there. The state names its
+repository, so pointing the app at another one starts afresh instead of
+reusing a prune time that belongs elsewhere. Every run, including a failed
+one, is appended to `backup-history.jsonl` as one JSON line: a run only ever
+adds an entry, so an append rewrites nothing, and a line a crash cut short
+loses only itself. The last successful backup is read from `restic snapshots`.
 
 After a successful run, `BackupRunner` copies the repository to each
 destination with `core/backup/destinations.py`, which is plain file operations
@@ -1504,8 +1675,26 @@ folder beside the target (`restic init`, or the destinations' own one-way copy
 that the password must open and that must pass a `check`), renames it into
 place, chooses the workspace ID (ADR-0061) and saves the block last. A failure
 at any step undoes the ones before it, so the workspace is left as it was: no
-password, no block, no repository and no staging folder. The module docstring
-gives the reasons for the order.
+password, no block, no repository and no staging folder; an undo that fails is
+logged rather than raised over the failure it undoes.
+
+The order is what makes that hold. Refusing first means a stale page or an
+invalid interval is refused before a copy that can take many minutes, and a
+terminal never prompts for a password an attempt would refuse anyway. The
+password is stored before any repository exists, so even a process killed part
+way never leaves a repository on this disk whose password this machine did not
+record; killed there, it leaves at most the password, which is only a retry,
+and a failure the process sees puts `.env` back byte for byte. The repository
+is built in staging and renamed whole, so the storage folder is never half a
+repository, and the undo removes only a folder holding restic's `config`,
+remaking the empty folder the seller named. The block is saved last as the
+commit point: once it names the folder the schedule may back up into it, so
+the folder must already hold a complete, checked repository; the save checks
+the revision again. A new repository is refused beside a destination's copy
+because the copy would then look changed. When connecting, a wrong password
+stops at the first copy, since every copy has the same keys, and a wrong
+password read from `.env` says how to change it there, because it is never
+asked for again.
 
 A missing repository has two ways back, in `core/application/backup_missing.py`,
 both refused while the configured folder holds restic's `config`.
@@ -1521,6 +1710,10 @@ First-time set-up connects too. `backup_setup.prepare_set_up` refuses what
 only set-up refuses, and asks `backup_provisioning.source_for` whether the
 destinations hold a repository: copies of one repository share `config`'s
 bytes, and only a copy holding every file the others hold may be the source.
+A copy whose files are all in another (one still syncing) is left out, so the
+first copy back only adds to it; a source missing files the other has would
+have them deleted as expired. Part of a copy without `config`, two different
+repositories, and copies that each lack files the other has are refused.
 When one does, `POST /api/backup/setup` and `backup init` connect it (the
 first copy that opens and passes a check) instead of creating, and the
 coordinator holds the `connect` slot meanwhile. The answer's `connected` names

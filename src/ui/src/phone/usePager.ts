@@ -4,45 +4,17 @@ import type { SwipeDirection } from "./swipe";
 import { useIsPhone } from "./usePhone";
 import { useSwipe } from "./useSwipe";
 
-/**
- * A sideways pager for the phone layout: a swipe left on `zone` picks the
- * item after `current`, a swipe right the one before, the way a native pager
- * reads. Every phone pager -- the editor's tabs, Admin's sections, the
- * template switcher -- goes through here, so they all feel the same (the
- * Lightbox's pictures sit side by side instead, through `useCarousel`):
- *
- * - The moving element follows the finger one to one while there is an item
- *   to go to, and resists past the first or the last (no wrap-around, so the
- *   ends read as ends).
- * - A swipe slides it out towards the finger in 110ms, then picks; whenever
- *   `current` changes, by a swipe or a tap elsewhere, the new item slides in
- *   from its side over 200ms. A release short of a swipe springs back.
- * - With `prefers-reduced-motion`, a swipe picks at once and nothing slides.
- *
- * Phone only, and a finger only: off the phone layout nothing listens and
- * nothing moves, so a desktop page that mounts it keeps its DOM and styles.
- * Anything inside that owns a sideways drag (a slider, a sideways scroller,
- * the field being typed in, `data-swipe-ignore`) keeps it.
- */
-
 export interface PagerOptions<T> {
-  /** Every item, in the order the swipes walk. */
   items: readonly T[];
   current: T;
-  /** Shows `item`. The pager has already slid the old one out. */
   onPick: (item: T) => void;
-  /** Off for a while on the phone too (the Lightbox at 1:1, where a finger
-   * pans the picture). */
   enabled?: boolean;
   /** The element that moves, when it is not `zone` itself. */
   moves?: RefObject<HTMLElement | null>;
-  /** How far the element follows the finger, as a share of its travel. */
   follow?: number;
 }
 
 export interface Pager<T> {
-  /** The neighbours a swipe would pick, null at an end, for arrows beside
-   * the pager. */
   previous: T | null;
   next: T | null;
 }
@@ -50,15 +22,16 @@ export interface Pager<T> {
 const OUT_MS = 110;
 const IN_MS = 200;
 /** How far an item travels out and in, as a share of its own width. */
-const TRAVEL = 28;
-/** How faint an item is at the far end of its travel. */
-const DIM = "0.2";
+const TRAVEL_PERCENT = 28;
+const OPACITY_AT_FULL_TRAVEL = "0.2";
+const RESIST_RATIO = 0.35;
+const RESIST_MAX_PX = 80;
 
-/** Rubber-banding past an end: the further the drag, the less it moves, the
- * way a native list resists being pulled past its end. */
+/** Rubber-banding past an end, the way a native list resists being pulled
+ * past its end. */
 export function resist(distance: number): number {
   const sign = distance < 0 ? -1 : 1;
-  return sign * Math.min(Math.abs(distance) * 0.35, 80);
+  return sign * Math.min(Math.abs(distance) * RESIST_RATIO, RESIST_MAX_PX);
 }
 
 function neighbour<T>(items: readonly T[], current: T, step: 1 | -1): T | null {
@@ -67,7 +40,12 @@ function neighbour<T>(items: readonly T[], current: T, step: 1 | -1): T | null {
 }
 
 function slideIn(element: HTMLElement, fromRight: boolean) {
-  pose(element, `translateX(${fromRight ? TRAVEL : -TRAVEL}%)`, "none", DIM);
+  pose(
+    element,
+    `translateX(${fromRight ? TRAVEL_PERCENT : -TRAVEL_PERCENT}%)`,
+    "none",
+    OPACITY_AT_FULL_TRAVEL,
+  );
   // Reading layout commits the start position before the transition starts.
   element.getBoundingClientRect();
   pose(element, "", `transform ${IN_MS}ms ease-out, opacity ${IN_MS}ms ease-out`);
@@ -84,9 +62,7 @@ export function usePager<T>(
   const previous = neighbour(items, current, -1);
   const next = neighbour(items, current, 1);
   const shown = useRef(current);
-  /** Slid out and waiting for `current` to change; a pick the caller
-   * refused would otherwise leave the element off to one side. */
-  const away = useRef(false);
+  const slidOutAwaitingPick = useRef(false);
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -94,21 +70,21 @@ export function usePager<T>(
   useLayoutEffect(() => {
     const from = shown.current;
     shown.current = current;
-    away.current = false;
+    slidOutAwaitingPick.current = false;
     const element = moves.current;
     if (from === current || !enabled || element === null || prefersReducedMotion()) return;
     slideIn(element, items.indexOf(current) >= items.indexOf(from));
   }, [current, enabled, items, moves]);
 
   const leave = (element: HTMLElement, target: T, direction: SwipeDirection) => {
-    const travel = direction === "left" ? -TRAVEL : TRAVEL;
+    const travel = direction === "left" ? -TRAVEL_PERCENT : TRAVEL_PERCENT;
     const transition = `transform ${OUT_MS}ms ease-in, opacity ${OUT_MS}ms ease-in`;
-    pose(element, `translateX(${travel}%)`, transition, DIM);
-    away.current = true;
+    pose(element, `translateX(${travel}%)`, transition, OPACITY_AT_FULL_TRAVEL);
+    slidOutAwaitingPick.current = true;
     timer.current = window.setTimeout(() => {
       onPick(target);
       timer.current = window.setTimeout(() => {
-        if (away.current) springBack(element);
+        if (slidOutAwaitingPick.current) springBack(element);
       }, IN_MS);
     }, OUT_MS);
   };

@@ -404,6 +404,22 @@ describe("adopting what the server wrote", () => {
     expect(view().detail.brief).toBe("Mine.");
     expect(save.mock.lastCall?.[1]).toEqual({ brief: "Mine." });
   });
+
+  it("shows the seller's held edit over a value adopted while their save was out", async () => {
+    const answer = deferred<SaveOutcome>();
+    const { autosave, view, settle } = editing("take-a-hike", detail(), {
+      save: () => answer.promise,
+    });
+
+    autosave.update({ colors: ["white"] });
+    await settle();
+    autosave.adopt({ brief: BRIEF });
+    autosave.update({ brief: "Mine." });
+    answer.resolve(written(detail({ colors: ["white"] })));
+    await turns();
+
+    expect(view().detail.brief).toBe("Mine.");
+  });
 });
 
 describe("before the listing exists", () => {

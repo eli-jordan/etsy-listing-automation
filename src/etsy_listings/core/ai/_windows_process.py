@@ -1,9 +1,4 @@
-"""Windows 10+ process ownership, private to ``process``.
-
-JOB_LIST assigns the new process before it can execute. Its job is retained
-after launcher exit and is never inherited. HANDLE_LIST confines inheritance
-to stdio. No process-name matching, descendant snapshot or helper is needed.
-"""
+"""Windows 10+ process ownership, private to ``process``."""
 
 from __future__ import annotations
 
@@ -141,7 +136,6 @@ _INHERITABLE = True
 
 
 def _pipe(fds: set[int]) -> tuple[int, int]:
-    """A new pipe, both ends recorded in ``fds`` until handed to a stream."""
     read, write = os.pipe()
     fds.update((read, write))
     return read, write

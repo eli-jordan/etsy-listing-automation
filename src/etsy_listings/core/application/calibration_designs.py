@@ -1,16 +1,5 @@
-"""The calibrator's uploaded test designs.
-
-Calibration is judged by eye, so the set of artwork a preview can use is open:
-the server's bundled targets plus whatever the seller uploads. Uploads land in
-the *workspace* (``test-designs/``), never in this repo and never in
-``designs/`` -- that directory holds artwork listings actually ship, and a
-calibration target is not a product.
-
-What an upload may be called and whether it is an image are decided here;
-the bundled targets are server static files, and decoding the multipart
-request is the route's (module-structure plan, PR 7: uploaded bytes and
-filenames may enter core, request objects may not).
-"""
+"""The calibrator's uploaded test designs, kept in the workspace's
+``test-designs/`` (architecture, *The calibrator*)."""
 
 from __future__ import annotations
 
@@ -27,22 +16,14 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 def save_uploaded_design(workspace: Workspace, filename: str, payload: bytes) -> str:
-    """Add an upload to the library and answer the id it is offered under
-    (its filename stem). Refuses with :class:`DesignUploadRefusedError`, writing
-    nothing, unless ``filename`` is a plain filename and ``payload`` decodes
-    as an image."""
     if not filename:
         raise DesignUploadRefusedError("the upload needs a filename")
-    # Reject rather than sanitise: `Path("../../evil.png").stem` is a
-    # perfectly innocent "evil", so trusting the stem alone would silently
-    # accept a traversal attempt instead of reporting it.
+    # Reject, never sanitise: the stem of "../../evil.png" is a harmless "evil".
     if filename != Path(filename).name:
         raise DesignUploadRefusedError(f"{filename!r} is not a plain filename")
 
     destination = workspace.test_design_file(Path(filename).stem)
 
-    # Decoded before it is written, so a file that is not an image is refused
-    # rather than sitting in the library until a preview fails on it.
     try:
         with Image.open(BytesIO(payload)) as probe:
             probe.verify()
@@ -55,8 +36,6 @@ def save_uploaded_design(workspace: Workspace, filename: str, payload: bytes) ->
 
 
 def uploaded_design(workspace: Workspace, design: str) -> Path:
-    """The file behind an uploaded design's id, or
-    :class:`CalibrationDesignMissingError`."""
     path = workspace.test_design_file(design)
     if not path.is_file():
         raise CalibrationDesignMissingError(design)

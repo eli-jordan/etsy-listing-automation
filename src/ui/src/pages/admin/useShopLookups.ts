@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getShopLookups, type ShopLookups } from "../../api/shop";
 import { policyKey, type Creatable } from "./shopFields";
 
-/** One option a refresh found that the previous answer did not have. */
 export interface Found {
   value: string;
   label: string;
@@ -31,13 +30,6 @@ const FIELDS: Creatable[] = [
   "return_policy",
 ];
 
-/**
- * The shop's live lists, asked for again whenever the window regains focus
- * (the seller may have created something in the Etsy tab) or on Retry.
- * One request at a time. Nothing here saves: an option a refresh found is
- * only offered (Admin plan, *Shop*). Etsy's lists are never cached on
- * disk server-side either (ADR-0033).
- */
 export function useShopLookups() {
   const [lookups, setLookups] = useState<ShopLookups | null>(null);
   const [pending, setPending] = useState(true);
@@ -99,7 +91,6 @@ export function useShopLookups() {
     pending,
     etsyAvailable,
     printifyAvailable,
-    /** The lookups answered, but at least one service could not. */
     failed: (lookups !== null && (!etsyAvailable || !printifyAvailable)) || failure !== null,
     problems: [failure, lookups?.etsy.problem, lookups?.printify.problem].filter((p): p is string =>
       Boolean(p),
@@ -111,8 +102,6 @@ export function useShopLookups() {
   };
 }
 
-/** The first choice per field that ``next`` offers and ``before`` did not,
- * for fields whose service answered both times. */
 function discoveredChoices(
   before: ShopLookups,
   next: ShopLookups,

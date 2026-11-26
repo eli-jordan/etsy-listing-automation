@@ -1,14 +1,3 @@
-/**
- * The opt-in to publish new and still-draft listings on Etsy rather than
- * leave them drafts. Off by default, and chosen when applying: the review is
- * planned without the publish step (`etsy_activate`), the fingerprint leaves
- * that step out, and the apply that opts in adds it. So turning it on or off
- * never plans again.
- *
- * It names what it would do -- each listing's `publishable`, which the plan
- * works out from what it already read -- so an older draft the seller is
- * holding back is never published unseen. Shown only when there is one.
- */
 export function PublishDraftsToggle({
   checked,
   disabled,
@@ -19,9 +8,7 @@ export function PublishDraftsToggle({
   checked: boolean;
   disabled: boolean;
   onChange: (publish: boolean) => void;
-  /** The listings an opt-in would make live, in review order. */
   goingLive: readonly string[];
-  /** One listing's own deploy, which needs no list of names. */
   single?: boolean;
 }) {
   return (

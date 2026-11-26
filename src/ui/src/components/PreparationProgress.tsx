@@ -13,7 +13,6 @@ const stepLabels: Record<string, string> = {
   publication: "Publishing maps",
 };
 function heading(job: PreparationJob, queuePosition: string): string {
-  // Held by a workspace backup's pause (plan decision P4).
   if (job.waiting_for_backup) return "Waiting for backup";
   if (job.phase === "queued") return `Waiting in queue${queuePosition}`;
   return stepLabels[job.step] ?? job.step.replaceAll("_", " ");

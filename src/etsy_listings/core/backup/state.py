@@ -1,20 +1,3 @@
-"""This machine's backup records in ``~/.etsy-listings`` (workspace-backup
-spec, *Status and warnings*).
-
-- ``backup-state.json``: the last prune and the last check of the local
-  repository, and each destination's last copy, last check, and the changed
-  and unexpected files found there.
-- ``backup-history.jsonl``: one JSON object per line, one line per run,
-  oldest first, appended when a run ends, failed runs included. JSON lines
-  because a run only ever adds an entry: an append needs no rewrite of the
-  history, and a line cut short by a crash loses only itself.
-
-Neither file says when the last successful backup was; ``restic snapshots``
-does. The state names the repository it describes, so pointing the app at
-another repository starts its state afresh instead of reusing a prune time
-that belongs elsewhere.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -106,7 +89,6 @@ class BackupStateStore:
         self.directory = user_directory(home)
 
     def load(self, repository: Path) -> BackupState:
-        """The state of ``repository``; empty when none is recorded for it."""
         fresh = BackupState(repository=str(repository))
         try:
             state = BackupState.model_validate_json(self._path(STATE_FILE).read_bytes())
@@ -129,7 +111,6 @@ class BackupStateStore:
             history.write(prefix + line + b"\n")
 
     def runs(self) -> list[RunRecord]:
-        """Every recorded run, oldest first. A damaged line is skipped."""
         return list(self._runs())
 
     def _runs(self) -> Iterator[RunRecord]:

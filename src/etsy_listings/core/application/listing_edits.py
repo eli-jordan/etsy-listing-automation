@@ -1,12 +1,3 @@
-"""Editing a saved listing: the editor's patch, merged into the document.
-
-Autosave makes concurrent edits ordinary. The editor saves each field as the
-seller moves between them, and an AI run writes in the background.
-``ListingDocuments.edit`` holds the listing's lock around the read, the merge
-and the write, so two edits cannot lose one another. This module owns what a
-patch means.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -28,18 +19,8 @@ def edit_listing(
     *,
     batches: BatchStore,
 ) -> InvalidListing | None:
-    """Merge ``patch`` into listing ``name`` and write it. Returns ``None``
-    once written.
-
-    Raises :class:`ListingMissingError` when there is no listing to edit, whether
-    before or after waiting for its lock. Returns :class:`InvalidListing`,
-    writing nothing, when the merged document does not validate
-    structurally. An incomplete one is written (ADR-0043).
-
-    Cancelling a pending delete, by clearing ``lifecycle: deleted``, means the
-    listing never went. The batch rows the delete marked therefore come back
-    (ADR-0036; batch spec, rename and delete hooks).
-    """
+    """Returns ``None`` once written, or :class:`InvalidListing`, writing
+    nothing."""
     before: Document = {}
 
     def merge(raw: Document) -> Document:
@@ -53,26 +34,30 @@ def edit_listing(
     except ValidationError as exc:
         return InvalidListing.of(exc)
     assert merged is not None
+    _restore_rows_if_undeleted(batches, name, before, merged)
+    return None
+
+
+def _restore_rows_if_undeleted(
+    batches: BatchStore, name: str, before: Document, merged: Document
+) -> None:
+    """Cancelling a pending delete means the listing never went, so the batch
+    rows the delete marked come back (ADR-0036)."""
     if before.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
         design = merged.get("design")
         default = design.get("default") if isinstance(design, dict) else None
         batches.restore_listing(name, default)
-    return None
+
+
+_KEYS_A_NULL_REMOVES = frozenset({"lifecycle", "template_positions"})
 
 
 def _merge(base: Document, patch: Mapping[str, Any]) -> Document:
-    """A shallow merge, except for ``etsy:``, which merges one level deep.
-    The editor's tabs each own a slice of it (title, tags, section, and so
-    on), and a shallow overwrite there would let one tab's autosave silently
-    erase whatever the last edit wrote to a sibling field. ``lifecycle:
-    null`` deletes the key (Un-retire, Cancel) rather than writing
-    ``active``. ``template_positions: null`` removes that optional key on Reset
-    as well (ADR-0058)."""
     merged = dict(base)
     for key, value in patch.items():
         if key == "etsy" and isinstance(value, dict) and isinstance(merged.get("etsy"), dict):
             merged["etsy"] = {**merged["etsy"], **value}
-        elif key in {"lifecycle", "template_positions"} and value is None:
+        elif key in _KEYS_A_NULL_REMOVES and value is None:
             merged.pop(key, None)
         else:
             merged[key] = value

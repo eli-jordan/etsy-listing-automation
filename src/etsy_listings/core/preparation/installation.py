@@ -10,11 +10,12 @@ import subprocess
 import tomllib
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, NoReturn, Protocol
 
 from PIL import Image
 
 from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
+    CHECKPOINT_REVISIONS,
     ROLES,
     Capabilities,
 )
@@ -27,15 +28,10 @@ VERIFIED_FILE = "verified.json"
 verification."""
 
 PYTHON_VERSION = "3.12.14"
-REVISIONS = (
-    "09cfdd258cb281fa006cf1afcd2284376d16687d",
-    "08c3930bb641abf786ba44ce92547507ebefbc16",
-    "9571e7123e258cf052b4e54241f17971c290e9a8",
-)
+REVISIONS = tuple(CHECKPOINT_REVISIONS.values())
 
 
-def _unverified(message: str) -> None:
-    """Integrity failure the caller's handler records (S01 TRY301)."""
+def _unverified(message: str) -> NoReturn:
     raise SetupError(message)
 
 
@@ -70,7 +66,6 @@ def worker_command(python: Path, weights: Path, cache_root: Path | None = None) 
 
 
 def _contained(root: Path, relatives: Iterable[str], message: str) -> list[Path]:
-    """``relatives`` under ``root``, refusing any that resolves outside it."""
     paths = []
     for relative in relatives:
         path = root / relative
@@ -212,7 +207,6 @@ class NativeInstaller:
             raise SetupError("Installed packages do not match the complete worker lock")
 
     def _stamps(self, target: Path, weights: Path) -> dict[str, list[int]]:
-        """Size and modification time of every file the installation depends on."""
         manifest_file = target / "installation.json"
         if manifest_file.stat().st_size > 1024 * 1024:
             raise SetupError("Runtime installation manifest exceeds size limit")

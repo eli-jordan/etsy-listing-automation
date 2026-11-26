@@ -1,37 +1,14 @@
-"""Template authoring endpoints: listing, kind assignment, config, and a live
-preview through the real renderer. Each change produces the actual composite,
-so the preview shows the same output as deployment.
-
-The calibration rules are
-:mod:`etsy_listings.core.application.mockup_templates`' (module-structure
-plan, PR 7); this module keeps what only serving a browser needs, and lets
-their refusals through to the app's one refusal table (``app.py``'s
-``REFUSAL_STATUS``):
-
-* A template, config or photo that is not there is a ``404``; a kind the
-  photos cannot be, colliding colour slugs or preview geometry for another
-  kind or a new label breaking its rules is a ``422``; assigning a kind to a
-  calibrated template is a ``409``.
-  A save against a calibration revision that has moved is a ``412``; a save
-  request ID reused for different content is a ``409``. An unusable name is
-  a ``400``.
-* Previews decode through the process's memo (:mod:`.imagecache`), which a
-  drag hits several times a second. Core finishes the picture
-  (:mod:`etsy_listings.core.application.scene_previews`) and
-  :mod:`.scene_responses` serves it.
-* Thumbnails and photos are HTTP media responses.
-"""
-
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import asdict, dataclass
 from email.utils import format_datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import Response
 
 from etsy_listings.core.application import mockup_templates as calibration
@@ -47,8 +24,6 @@ from etsy_listings.core.application.mockup_templates import (
     template_photo,
     template_swatch,
 )
-from etsy_listings.core.application.position_coverage import cover_recalibrated
-from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.scene_previews import (
     SceneDraft,
     SceneLayers,
@@ -96,10 +71,6 @@ router = APIRouter(prefix="/api/templates", tags=["templates"])
 
 @dataclass(frozen=True)
 class Target:
-    """A template that exists, and the workspace it lives in -- a 404 before
-    the handler runs for one that is not there. The operations check again
-    for callers that are not this router."""
-
     workspace: Workspace
     name: str
 
@@ -108,19 +79,6 @@ def target(request: Request, name: str) -> Target:
     workspace = app_state.workspace(request)
     require_template(workspace, name)
     return Target(workspace=workspace, name=name)
-
-
-@dataclass(frozen=True)
-class AfterSave:
-    """Preparation work a calibration save starts: the coordinator, and the
-    tasks run after the response."""
-
-    preparations: Preparations
-    background: BackgroundTasks
-
-
-def after_save(request: Request, background: BackgroundTasks) -> AfterSave:
-    return AfterSave(request.app.state.preparations, background)
 
 
 def _not_found(exc: Exception) -> HTTPException:
@@ -153,8 +111,7 @@ def list_templates(request: Request) -> list[TemplateSummary]:
         summary = _summary(overview)
         if overview.config is not None:
             summary.renderer = overview.config.renderer.type
-            # Catalog reads metadata only. The selected status endpoint validates
-            # maps; background client reads fill the other rows without blocking entry.
+            # Metadata only: the per-template status endpoint validates the maps.
             known = catalog_readiness(overview.config)
             if known is not None:
                 summary.maps = MapReadinessResponse(**asdict(known), can_render=known.can_render)
@@ -169,7 +126,7 @@ def rename_template(
     """Move a template, and everything naming it, to a new name
     (:mod:`~etsy_listings.core.application.template_rename`). A taken name, a
     running deploy or a preparing template is a ``409``; an unusable name is a
-    ``400``. POST for the reason a listing's rename is."""
+    ``400``."""
     deployments: Deployments = request.app.state.deployments
     done = rename(
         template.workspace,
@@ -211,12 +168,9 @@ def _photo(template: Target, colour: str | None) -> Path:
 
 @router.get("/{name}/thumbnail")
 def thumbnail(template: Annotated[Target, Depends(target)], colour: str | None = None) -> Response:
-    """The template's own photo, downscaled, for the rail -- not a render,
-    which once per row would make opening the calibrator cost as much as
-    calibrating. ``colour`` narrows it to one photo of a colour-matrix set,
-    for the listings editor's reel. Which photo is
-    :func:`~etsy_listings.core.application.mockup_templates.template_photo`'s
-    question; how it is downscaled is :mod:`.thumbnails`'."""
+    """The template's own photo, downscaled, for the rail -- not a render, so
+    opening the calibrator stays cheap. ``colour`` narrows it to one photo of
+    a colour-matrix set, for the listings editor's reel."""
     return thumbnail_response(_photo(template, colour))
 
 
@@ -230,16 +184,12 @@ def photo(template: Annotated[Target, Depends(target)], colour: str | None = Non
     )
 
 
-def _queue_preparation(name: str, after: AfterSave) -> None:
-    """The preparation work a save of ``name`` starts."""
+def _queue_preparation(name: str, after: app_state.AfterResponse) -> None:
     # Incomplete multiple geometry or missing evidence needs explicit Prepare.
     # The committed Save succeeds; read-only readiness explains that refusal.
     with suppress(UserFacingError, ValueError, OSError):
         after.preparations.reconcile_saved(name)
-    # A positioned template's new padded quad may leave its evidence: saving
-    # its geometry is the explicit request ADR-0058 names (option B), queued
-    # after the response because finding the worker can take seconds.
-    after.background.add_task(cover_recalibrated, after.preparations, name)
+    after.cover_recalibrated(name)
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)
@@ -257,7 +207,7 @@ def put_config(
     body: CalibrationSaveRequest,
     response: Response,
     if_match: Annotated[str, Header()],
-    after: Annotated[AfterSave, Depends(after_save)],
+    after: Annotated[app_state.AfterResponse, Depends(app_state.after_response)],
 ) -> AnyTemplate:
     try:
         saved = save_calibration(
@@ -281,9 +231,8 @@ def put_config(
 
 
 def _geometry(body: PreviewRequest) -> PreviewGeometry:
-    """The request's unsaved geometry, in the shape it was posted in. Which
-    shape a template takes is decided by the kind it already is, not by
-    sniffing the body (``unsaved_preview`` refuses another kind's)."""
+    """The request's unsaved geometry, as posted; ``unsaved_preview`` refuses
+    a shape other than the template's kind."""
     if isinstance(body, MultiplePreviewRequest):
         return PreviewGeometry(
             kind="multiple",
@@ -301,9 +250,6 @@ def _geometry(body: PreviewRequest) -> PreviewGeometry:
 
 
 def _draft(workspace: Workspace, body: PreviewRequest) -> SceneDraft:
-    """The wire body as core's draft. The document is the body less what only
-    a request carries; a colour-matrix body's ``colour`` picks a photo, where
-    a single template's is part of the template."""
     request_only = {"design", "calibration_revision", "mask_edits"}
     if isinstance(body, ColourMatrixPreviewRequest):
         request_only.add("colour")
@@ -332,6 +278,24 @@ def preview(
     return scene_response(picture)
 
 
+def _preview_design(
+    workspace: Workspace, design: str | None, test_design: str | None
+) -> Callable[[], Path]:
+    match design, test_design:
+        case str() as name, None:
+            return partial(_listing_design, workspace, name)
+        case None, str() as library_id:
+            return partial(resolve_design, workspace, library_id)
+    raise HTTPException(status_code=422, detail="give exactly one of design, test_design")
+
+
+def _listing_design(workspace: Workspace, name: str) -> Path:
+    path = workspace.design_file(name)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no design {name!r}")
+    return path
+
+
 @router.get("/{name}/design-preview")
 def design_preview(
     template: Annotated[Target, Depends(target)],
@@ -347,33 +311,17 @@ def design_preview(
     ``design`` is a name from ``GET /api/listing-designs``, resolved through
     ``Workspace.design_file``; ``test_design`` is the calibrator library's id
     instead, through :func:`resolve_design`, bundled grid by default. Exactly
-    one of the two -- they name files in different places, and guessing which
-    one a bare name meant is how a test target would end up judged as artwork.
+    one of the two: they name files in different places, and guessing would
+    judge a test target as artwork.
 
-    A *listing's* scenes are not previewed here: ``GET
-    /api/listings/{name}/scene-preview`` resolves each layer's file from the
-    saved listing (A35), so its editor cannot show one file while Printify
-    prints another.
+    A listing's scenes are previewed by ``GET /api/listings/{name}/scene-preview``.
     """
     workspace, colour, scale = template.workspace, query.colour, query.scale
-    if (design is None) == (test_design is None):
-        raise HTTPException(status_code=422, detail="give exactly one of design, test_design")
-
-    def design_path() -> Path:
-        if test_design is not None:
-            return resolve_design(workspace, test_design)
-        assert design is not None  # exactly one, checked above
-        path = workspace.design_file(design)
-        if not path.is_file():
-            raise HTTPException(status_code=404, detail=f"no design {design!r}")
-        return path
-
-    # Every layer shows the one file, resolved (and refused) once.
-    one_design = cache(design_path)
+    design_resolved_once = cache(_preview_design(workspace, design, test_design))
     picture = saved_scene(
         workspace,
         template.name,
-        SceneLayers(colour, lambda _colour: one_design()),
+        SceneLayers(colour, lambda _colour: design_resolved_once()),
         size=scale,
         images=PREVIEW_IMAGES,
     )

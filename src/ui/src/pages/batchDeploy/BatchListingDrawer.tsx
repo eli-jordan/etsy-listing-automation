@@ -114,7 +114,6 @@ const STEP_HEADINGS: Record<BatchDrawerMode, string> = {
   review: "What apply will do",
 };
 
-/** The listing's plan: its stages, then what changes and at what price. */
 function DrawerPlan({
   name,
   plan,
@@ -158,8 +157,6 @@ function DrawerPlan({
   );
 }
 
-/** A real modal drawer, kept independent from the eventual review page so PR4
- * can compose it without taking ownership of its focus or diff semantics. */
 export function BatchListingDrawer({
   open,
   listing,
@@ -198,7 +195,6 @@ export function BatchListingDrawer({
   const category = groupLabel(planGroup(plan, listing?.planFailure ?? null));
   const summaryText = drawerSummary(listing, comparison);
   const isPhone = useIsPhone();
-  // A phone may have scrolled the dialog sideways to show the focused Close.
   const resetSideways = useEffectEvent((dialog: HTMLDialogElement) => {
     if (isPhone) dialog.scrollLeft = 0;
   });
@@ -219,7 +215,7 @@ export function BatchListingDrawer({
       restoreFocusRef.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
       openNativeDialog(dialog);
-      // showModal() focuses the first control and scrolls the translated panel into view.
+      // Undo showModal()'s scroll to its focused control (sideways too, on a phone).
       dialog.scrollTop = 0;
       resetSideways(dialog);
       closeRef.current?.focus({ preventScroll: true });
@@ -276,8 +272,7 @@ export function BatchListingDrawer({
 
   function handleHandlePointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (event.button !== 0) return;
-    // On a phone a finger drags the whole sheet (useDrawerSwipe); a tap on
-    // the handle still toggles it.
+    // useDrawerSwipe owns a finger's drag on a phone.
     if (isPhone && event.pointerType === "touch") return;
     const panel = panelRef.current;
     if (panel === null) return;

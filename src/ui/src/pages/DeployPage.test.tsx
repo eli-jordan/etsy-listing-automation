@@ -596,6 +596,31 @@ describe("DeployPage: when the connection fails", () => {
     expect(open.mock.lastCall?.[1].lastEventId).toBe(7);
   });
 
+  it("does not reconnect a stream that drops after Back", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    vi.spyOn(runsApi, "createRun").mockResolvedValue({
+      kind: "created",
+      run: runSummary({ id: "run-1" }),
+    });
+    vi.spyOn(runsApi, "cancelRun").mockResolvedValue(true);
+    const getRun = vi.spyOn(runsApi, "getRun");
+    const errors: ((error: unknown) => void)[] = [];
+    const open = vi.spyOn(runStreamModule, "openRunStream").mockImplementation((_id, options) => {
+      if (options.onError) errors.push(options.onError);
+      return { close: vi.fn() };
+    });
+
+    renderPage();
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole("button", { name: /Back/ }));
+    expect(await screen.findByText("editor page")).toBeInTheDocument();
+    errors[0]?.(new Error("dropped"));
+
+    expect(getRun).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
   it("says so when the run cannot be looked up", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     vi.spyOn(runsApi, "currentRun").mockRejectedValue(new runsApi.RunsApiError("down"));

@@ -29,7 +29,7 @@ from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.engine.events import EngineRunEvent, EngineStageApplying, RunHooks
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.run import ListingOutcome, apply_listings, plan_listings
-from etsy_listings.core.engine.stage import StageApplyResult
+from etsy_listings.core.engine.stage import Stage, StageApplyResult
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
@@ -100,7 +100,7 @@ class _Applied(BaseModel):
 
 
 @dataclass
-class _Stage:
+class _Stage(Stage[Any, _Applied, Any]):
     """A stage that works, refuses, raises or idles on request: the subject is
     which outcomes physically remove a proposal, not what any real stage does."""
 

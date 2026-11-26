@@ -52,6 +52,10 @@ def test_stopped_when_cancel_batch_left_work_undrafted() -> None:
     assert _status(_row(1), _row(2, ai="cancelled")) == "stopped"
 
 
+def test_a_cancelled_batch_the_seller_reviewed_in_full_is_complete_not_stopped() -> None:
+    assert _status(_row(1, reviewed=True), _row(2, ai="cancelled", reviewed=True)) == "complete"
+
+
 # ------------------------------------------------------ the notes under it
 
 

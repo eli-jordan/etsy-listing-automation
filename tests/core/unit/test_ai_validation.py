@@ -324,3 +324,21 @@ def test_validation_error_message_joins_every_reason() -> None:
         validate_proposal(raw)
     for reason in exc_info.value.reasons:
         assert reason in str(exc_info.value)
+
+
+def test_normalization_keeps_the_line_breaks_in_observed_text() -> None:
+    proposal = validate_proposal(_valid_raw(observed_text="  TAKE A\nHIKE  "))
+
+    assert proposal.observed_text == "TAKE A\nHIKE"
+
+
+def test_affiliation_words_across_several_tags_are_one_reason() -> None:
+    raw = _valid_raw()
+    raw["tags"][0] = "official hiking tee"
+    raw["tags"][1] = "licensed trail shirt"
+
+    with pytest.raises(ProposalValidationError) as exc_info:
+        validate_proposal(raw)
+
+    tag_reasons = [r for r in exc_info.value.reasons if r.startswith("tags: claims affiliation")]
+    assert len(tag_reasons) == 1

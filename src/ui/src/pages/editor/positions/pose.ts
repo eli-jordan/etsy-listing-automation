@@ -1,15 +1,8 @@
+import type { components } from "../../../api/schema";
+
 /**
- * A listing's template position as the editor's handles edit it: the
- * template box under a uniform scale, a tilt and a move, applied in the box's
- * rectified frame (its unit square scaled by its mean side lengths, so a tilt
- * is rigid) and mapped to photo pixels through the template homography
- * (ADR-0058 and its 2026-11-02 amendment).
- *
- * A twin of `core/render/positions.py`, not an endpoint: the stage recomputes
- * the pose on every pointer move, and a request per frame would make the
- * handles lag the pointer. `pose.test.ts` runs the Python module's cases so
- * the two cannot drift. Offsets are fractions of W and H; positive rotation
- * is clockwise in image coordinates, about the box centre, before the offset.
+ * Offsets are fractions of W and H; positive rotation is clockwise in image
+ * coordinates, about the box centre, before the offset.
  */
 
 export interface Point {
@@ -17,8 +10,8 @@ export interface Point {
   y: number;
 }
 
-/** Top-left, top-right, bottom-right, bottom-left, as `template.yaml` orders them. */
-export type Quad = [Point, Point, Point, Point];
+/** As `template.yaml` orders them. */
+export type Quad = [topLeft: Point, topRight: Point, bottomRight: Point, bottomLeft: Point];
 
 export interface Pose {
   scale: number;
@@ -28,18 +21,16 @@ export interface Pose {
   rotation: number;
 }
 
-/** `settings.yaml`'s `template_positions` section, as the settings read serves it. */
-export interface Limits {
-  scale: { min: number; max: number };
-  offset: number;
-  rotation: number;
-}
+type Schemas = components["schemas"];
+
+export type Limits = Omit<Schemas["TemplatePositionLimits"], "scale"> & {
+  scale: Schemas["PositionScaleLimits"];
+};
 
 export interface PoseFit {
   pose: Pose;
-  /** The largest corner error in photo pixels -- above about 1, the box is not
-   * a plain move, resize or tilt of the template's (spec, *Validation* rule 1). */
-  residual: number;
+  /** The largest corner error. */
+  residualPixels: number;
 }
 
 export const IDENTITY: Pose = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 };
@@ -66,9 +57,7 @@ const quadMap = (quad: Quad, f: (point: Point, index: 0 | 1 | 2 | 3) => Point): 
   f(quad[3], 3),
 ];
 
-/** The homography taking the unit square onto `box`, in closed form
- * (Heckbert's square-to-quad). Python solves the same 8 x 8 system
- * numerically; the answer is the same matrix. */
+/** Heckbert's closed-form square-to-quad; Python solves the 8 x 8 system for the same matrix. */
 export function homography(box: Quad): Matrix {
   const [p0, p1, p2, p3] = box;
   const dx1 = p1.x - p2.x;
@@ -114,12 +103,10 @@ function invert(m: Matrix): Matrix {
   ];
 }
 
-/** The homography taking `quad` back onto the unit square. */
-export function unitFrame(quad: Quad): Matrix {
+export function quadToUnit(quad: Quad): Matrix {
   return invert(homography(quad));
 }
 
-/** One point through `m`, with its homogeneous weight. */
 function project({ x, y }: Point, m: Matrix): Point & { w: number } {
   const w = m[6] * x + m[7] * y + m[8];
   return { x: (m[0] * x + m[1] * y + m[2]) / w, y: (m[3] * x + m[4] * y + m[5]) / w, w };
@@ -142,21 +129,14 @@ function mapQuad(quad: Quad, m: Matrix): Quad {
   return quadMap(quad, (p) => mapPoint(p, m));
 }
 
-/** Photo pixels to the template box's unit frame -- where a pointer is, as a pose sees it. */
 export function toUnit(box: Quad, point: Point): Point {
   return mapPoint(point, invert(homography(box)));
 }
 
-/** A unit-frame point to photo pixels. */
 export function toPhoto(box: Quad, point: Point): Point {
   return mapPoint(point, homography(box));
 }
 
-/** `pose` applied to the unit square's corners. */
-/** `(W, H)`: the box's mean top/bottom and left/right side lengths in photo
- * pixels. Scaling the unit square by them gives the *rectified* frame, where
- * a box keeps its real proportions and a tilt is a rigid rotation (ADR-0058
- * amendment, 2026-11-02). */
 export function proportions(box: Quad): { w: number; h: number } {
   const [tl, tr, br, bl] = box;
   const length = (p: Point, q: Point) => Math.hypot(q.x - p.x, q.y - p.y);
@@ -168,7 +148,6 @@ export function proportions(box: Quad): { w: number; h: number } {
   return { w, h };
 }
 
-/** `pose` applied to the unit square's corners, through the rectified frame. */
 function posed(pose: Pose, size: { w: number; h: number }): Quad {
   const angle = (pose.rotation * Math.PI) / 180;
   const a = pose.scale * Math.cos(angle);
@@ -219,7 +198,7 @@ export function decompose(box: Quad, quad: Quad): PoseFit {
   const residual = Math.max(
     ...corners.map((i) => Math.hypot(back[i].x - quad[i].x, back[i].y - quad[i].y)),
   );
-  return { pose, residual };
+  return { pose, residualPixels: residual };
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -233,7 +212,6 @@ export function clampPose(pose: Pose, limits: Limits): Pose {
   };
 }
 
-/** Fit, then clamp: *Fit within limits* (interactions, *Position outside the limits*). */
 export function nearestAllowedPose(box: Quad, quad: Quad, limits: Limits): Pose {
   return clampPose(decompose(box, quad).pose, limits);
 }
@@ -249,7 +227,6 @@ export function withinLimits(pose: Pose, limits: Limits): boolean {
   );
 }
 
-/** The template's own box: written as no entry (interactions, *Saving*). */
 export function isIdentity(pose: Pose): boolean {
   return (
     Math.abs(pose.scale - 1) < 1e-9 &&

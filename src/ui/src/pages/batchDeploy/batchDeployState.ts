@@ -14,14 +14,10 @@ export interface BatchListingState extends ListingRunState {
 export interface BatchDeployState {
   phase: RunPhase;
   applyStarted: boolean;
-  /** Phase timestamps are copied verbatim from the event log, never generated
-   * while folding, so replay and live delivery produce the same state. */
   phaseTimes: Partial<Record<RunPhase, string>>;
   generatedAt: string | null;
   resultAt: string | null;
-  /** The event order the backend used for the reviewed apply set. A Record's
-   * property order is not enough here: integer-like listing names are sorted
-   * numerically by JavaScript, while the API validates the ordered set. */
+  /** Not `Object.keys(listings)`: JavaScript sorts integer-like names numerically. */
   reviewedListingOrder: string[];
   listings: Record<string, BatchListingState>;
   previewsRendered: Set<string>;
@@ -83,13 +79,10 @@ function project(
 ): BatchListingState {
   return {
     ...value,
-    ...applyListingRunEvent(value, event, source === "review" ? "review" : "runtime-only"),
+    ...applyListingRunEvent(value, event, source === "review" ? "review" : "keep-reviewed"),
   };
 }
 
-/** Fold one recorded event. `source` distinguishes the reviewed plan from the
- * apply overlay; apply re-planning is deliberately not allowed to replace a
- * reviewed plan unless it is the explicit fresh plan on a stale failure. */
 export function applyBatchRunEvent(
   state: BatchDeployState,
   event: RunEvent,

@@ -1,7 +1,4 @@
-/** Largest-remainder apportionment: whole, nonnegative shares totaling 100.
- * Ties follow metric order. Unlike rounding then correcting the last share,
- * this never takes a percentage from a small or zero final metric.
- */
+/** Largest-remainder apportionment to whole percentages; ties go to the earlier metric. */
 export function normalizeShares(values: number[]): number[] {
   const scale = Math.max(...values);
   const scaled = values.map((value) => value / scale);

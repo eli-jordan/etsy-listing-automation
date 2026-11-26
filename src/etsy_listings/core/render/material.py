@@ -1,10 +1,3 @@
-"""Prepared CPU sampling maps and scene composition. ADR-0054.
-
-Schema v1 stores photo pixel centres in row/column order. Material channels
-are U right, V down. 0/1 map to first/last artwork centres. Material sampling
-uses linear interpolation with a zero border. Visibility outside the quad is zero.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -84,7 +77,6 @@ Pixels = RGBA
 
 
 def patch_derivative(material: Float, labels: NDArray[np.int32], axis: int) -> Float:
-    """Centred differences inside a patch; one-sided at its boundary."""
     forward = np.roll(material, -1, axis=axis) - material
     backward = material - np.roll(material, 1, axis=axis)
     valid_forward = labels == np.roll(labels, -1, axis=axis)
@@ -134,8 +126,7 @@ def filtered_sample(
     result = np.zeros((*material.shape[:2], 4), np.float32)
     first = int(low.min())
     last = min(levels, int(np.ceil(lod.max())))
-    # Levels outside the observed footprint range have identically zero
-    # weights. Do not allocate their full-photo weight arrays or smaller mips.
+    # Levels below the footprint range weigh zero: halve the mip, allocate no weights.
     for level in range(last + 1):
         if level < first:
             packed = _half_size(packed)
@@ -150,7 +141,6 @@ def filtered_sample(
 
 
 def prepare_material_artwork(artwork: RGBA) -> FloatMap:
-    """Exact linear samples, reusable in a host's byte-bounded cache."""
     _validate_artwork(artwork)
     return material_math.premultiply(artwork)
 
@@ -177,11 +167,7 @@ class MaterialLayer:
 def render_marigold_scene(
     base: RGB, layers: Sequence[MaterialLayer], *, appearance: MarigoldAppearance | None = None
 ) -> Image.Image:
-    """Compose in caller's placement order, retaining one linear colour buffer.
-
-    Map acquisition validates the reference identity. This pure boundary also
-    refuses colour photos with different dimensions. Artwork never uses albedo.
-    """
+    """Layers in the caller's order over one linear colour buffer; artwork never uses albedo."""
     settings = appearance or MarigoldAppearance()
     if base.ndim != IMAGE_NDIM or base.shape[2] != RGB_CHANNELS or base.dtype != np.uint8:
         raise ValueError("Background must be uint8 RGB")
@@ -192,8 +178,7 @@ def render_marigold_scene(
         if regions is None:
             continue
         region, photo_region = regions
-        ink, alpha, visibility = _layer_ink(layer, region, settings)
-        canvas.add(photo_region, ink, alpha, visibility)
+        canvas.add(photo_region, _layer_ink(layer, region, settings))
     return canvas.image()
 
 
@@ -216,9 +201,8 @@ def _visible_regions(maps: MaterialMaps) -> tuple[Region, Region] | None:
     visible = maps.visibility > 0
     if not visible.any():
         return None
-    # Mip footprints use immediate neighbours, including invisible ones.
-    # Keep a one-pixel halo so every visible derivative matches the full
-    # frame exactly. All sampling/lighting inside the region is unchanged.
+    # Mip footprints read immediate neighbours, visible or not: a one-pixel halo keeps
+    # every visible derivative equal to the full frame's.
     x, y, width, height = cv2.boundingRect(visible.astype(np.uint8))
     region = (
         slice(max(0, y - 1), min(maps.visibility.shape[0], y + height + 1)),
@@ -231,11 +215,14 @@ def _visible_regions(maps: MaterialMaps) -> tuple[Region, Region] | None:
     return region, photo_region
 
 
-def _layer_ink(
-    layer: MaterialLayer, region: Region, settings: MarigoldAppearance
-) -> tuple[FloatMap, FloatMap, FloatMap]:
-    """The layer's lit linear ink over ``region``, its coverage, and the
-    maps' visibility there."""
+@dataclass(frozen=True)
+class _LayerInk:
+    lit_linear_ink: FloatMap
+    coverage: FloatMap
+    visibility: FloatMap
+
+
+def _layer_ink(layer: MaterialLayer, region: Region, settings: MarigoldAppearance) -> _LayerInk:
     maps = layer.maps
     material = maps.material[region]
     labels = maps.patch_ids[region] if maps.patch_ids is not None else None
@@ -260,7 +247,7 @@ def _layer_ink(
         * (1 + settings.fabric_texture * (maps.texture[region] - 1))[..., None]
         + sampled[..., 3, None] * settings.print_shine * maps.residual[region]
     )
-    return ink, alpha, visibility
+    return _LayerInk(lit_linear_ink=ink, coverage=alpha, visibility=visibility)
 
 
 class _Canvas:
@@ -273,17 +260,15 @@ class _Canvas:
         self._initialized = np.zeros(base.shape[:2], bool)
         self._changed = np.zeros(base.shape[:2], bool)
 
-    def add(
-        self, photo_region: Region, ink: FloatMap, alpha: FloatMap, visibility: FloatMap
-    ) -> None:
+    def add(self, photo_region: Region, layer: _LayerInk) -> None:
+        alpha = layer.coverage
         destination = self._result[photo_region]
         fresh = ~self._initialized[photo_region]
         if fresh.any():
             destination[fresh] = material_math.linear(self._base[photo_region][fresh])
             self._initialized[photo_region] = True
-        self._result[photo_region] = ink * visibility[..., None] + destination * (
-            1 - alpha[..., None]
-        )
+        visible_ink = layer.lit_linear_ink * layer.visibility[..., None]
+        self._result[photo_region] = visible_ink + destination * (1 - alpha[..., None])
         self._changed[photo_region] |= alpha > 0
 
     def image(self) -> Image.Image:

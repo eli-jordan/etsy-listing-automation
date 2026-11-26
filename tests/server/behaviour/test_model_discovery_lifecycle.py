@@ -18,8 +18,7 @@ def test_startup_serves_health_while_advisory_discovery_is_blocked(workspace_roo
     cli = ModelCli(during=lambda deadline, cancel: gate.hold())
     discovery = ModelDiscovery(host=cli.host)
     workspace = Workspace.discover(root_override=workspace_root)
-    app = create_app(workspace)
-    app.state.model_discovery = discovery
+    app = create_app(workspace, model_discovery=discovery)
     assert cli.calls == [], "construction must start no discovery"
     serving = threading.Event()
     health = []
@@ -56,8 +55,7 @@ def test_lifespan_shutdown_cancels_discovery_and_http_reads_keep_saved_preferenc
     workspace = Workspace.discover(root_override=workspace_root)
     source = b"ai:\n  providers: [{name: codex, model: saved-old-model}]\n"
     workspace.settings_file().write_bytes(source)
-    app = create_app(workspace)
-    app.state.model_discovery = ModelDiscovery(host=cli.host)
+    app = create_app(workspace, model_discovery=ModelDiscovery(host=cli.host))
     with TestClient(app) as client:
         assert entered.wait(GATE_TIMEOUT)
         initial = client.get("/api/admin/settings").json()

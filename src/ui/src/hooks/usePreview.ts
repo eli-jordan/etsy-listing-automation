@@ -1,28 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { renderPreview } from "../api/calibrator";
 
-/** How long the editor waits after the last edit before asking the server for
- * a new composite.
- *
- * Short, because an editor frame is now a downscaled render off a warm
- * in-process cache rather than a full-resolution one off disk. The debounce is
- * no longer what protects the server -- {@link usePreview}'s one-at-a-time
- * rule is -- it just avoids spending a request on the first pixel of a drag
- * that is about to travel two hundred more. */
+/** Skips a request for the first pixel of a drag that is about to travel two
+ * hundred more; {@link usePreview}'s one-at-a-time rule protects the server. */
 export const PREVIEW_DEBOUNCE_MS = 80;
 
 type PreviewBody = Parameters<typeof renderPreview>[1];
 
-/** A job's request in the shape `requestIdentity` names the newest one. */
-function jobIdentity(job: Job): string {
-  return JSON.stringify({
-    templateName: job.templateName,
-    body: JSON.parse(job.key) as PreviewBody,
-    design: job.design,
-  });
+function identityOf(templateName: string, key: string | null, design: string): string {
+  return JSON.stringify([templateName, key, design]);
 }
 
-/** A `setUrl` updater that shows `next` and revokes the blob it replaces. */
 function replacingUrl(next: string | null) {
   return (previous: string | null) => {
     if (previous) URL.revokeObjectURL(previous);
@@ -34,17 +22,12 @@ interface Job {
   templateName: string;
   key: string;
   design: string;
+  identity: string;
 }
 
 /**
- * The debounced preview loop, shared by all three editors.
- *
- * Each editor used to carry its own copy of this: the same `setTimeout`,
- * `renderPreview`, revoke-the-previous-URL and `clearTimeout` cleanup, written
- * out three times. All three had the same leak -- the cleanup cleared the
- * timer but never revoked the object URL still held in state, so every
- * template switch and every unmount stranded one blob in the document. There
- * is one implementation now, and it revokes on the way out.
+ * The editors' debounced preview loop; it revokes every object URL it no
+ * longer shows (docs/architecture.md, *Two sizes, one pipeline*).
  *
  * `body` is compared by value, not identity: an editor rebuilds it on every
  * render, and comparing by identity would restart the debounce on renders that
@@ -74,7 +57,8 @@ export function usePreview(
   const pendingListener = useRef(onPending);
   const [displayedTemplate, setDisplayedTemplate] = useState(templateName);
   const latest = useRef("");
-  const requestIdentity = JSON.stringify({ templateName, body, design });
+  const key = body === null ? null : JSON.stringify(body);
+  const requestIdentity = identityOf(templateName, key, design);
   const strictMode = useRef(strict);
   useLayoutEffect(() => {
     latest.current = requestIdentity;
@@ -83,29 +67,16 @@ export function usePreview(
   }, [requestIdentity, strict, onPending]);
   const [url, setUrl] = useState<string | null>(null);
 
-  // The URL currently on screen, for the unmount revoke below. A ref, because
-  // that cleanup must not re-run every time the URL changes -- it would revoke
-  // the image the editor is displaying.
+  // A ref, so the unmount revoke below never re-runs per URL.
   const current = useRef<string | null>(null);
   useEffect(() => {
     current.current = url;
   }, [url]);
 
-  // The job waiting to be sent (at most one -- a newer edit overwrites an
-  // unsent older one), and whether the loop is already running.
   const queued = useRef<Job | null>(null);
   const busy = useRef(false);
-  // Bumped when this hook stops caring about anything already in flight: an
-  // unmount, or a switch to a different template. Not bumped for an ordinary
-  // edit -- that response is still the newest frame there is, and showing it
-  // while the next one renders is what keeps the canvas from flickering back
-  // to a stale image.
   const generation = useRef(0);
 
-  // A loop rather than a call that restarts itself: the "render the newest
-  // thing that arrived while I was busy" step is the same step as the first
-  // one, and writing it as recursion only made the function reference itself
-  // before it existed.
   const pump = useCallback(async () => {
     async function renderJob(job: Job) {
       const sent = generation.current;
@@ -116,11 +87,9 @@ export function usePreview(
           job.design,
           "editor",
         );
-        // A response for a template the editor has already left: revoked
-        // here rather than stored, or it leaks exactly like the old cleanup
-        // let the displayed one leak.
         const current = sent === generation.current;
-        if (!current || (strictMode.current && latest.current !== jobIdentity(job))) {
+        const stale = !current || (strictMode.current && latest.current !== job.identity);
+        if (stale) {
           URL.revokeObjectURL(next);
           return;
         }
@@ -128,10 +97,8 @@ export function usePreview(
         setUrl(replacingUrl(next));
         pendingListener.current?.(false);
       } catch {
-        // A refused strict frame must not leave an old material composite
-        // under newly edited geometry. Its caller can show the local overlay.
         const current = sent === generation.current;
-        if (current && latest.current === jobIdentity(job)) pendingListener.current?.(false);
+        if (current && latest.current === job.identity) pendingListener.current?.(false);
         if (strictMode.current && current) setUrl(replacingUrl(null));
       }
     }
@@ -149,11 +116,8 @@ export function usePreview(
     }
   }, []);
 
-  // Anything still in flight belongs to the previous template, so its result
-  // must not land on this one's canvas.
   useEffect(() => {
-    // Capture this template's listener. A newer render can already have
-    // installed the next template's listener before this cleanup runs.
+    // The next template's render may install its listener before this cleanup runs.
     const notify = pendingListener.current;
     return () => {
       generation.current += 1;
@@ -170,8 +134,6 @@ export function usePreview(
     [],
   );
 
-  const key = body === null ? null : JSON.stringify(body);
-
   useEffect(() => {
     if (key === null) {
       pendingListener.current?.(false);
@@ -179,7 +141,12 @@ export function usePreview(
     }
     pendingListener.current?.(true);
     const timer = setTimeout(() => {
-      queued.current = { templateName, key, design };
+      queued.current = {
+        templateName,
+        key,
+        design,
+        identity: identityOf(templateName, key, design),
+      };
       void pump();
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);

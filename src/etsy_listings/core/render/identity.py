@@ -1,5 +1,3 @@
-"""Canonical CPU scene identities shared by previews and deployment."""
-
 import hashlib
 import json
 from collections.abc import Sequence
@@ -18,7 +16,6 @@ def _canonical(document: dict[str, Any]) -> str:
 
 
 def artwork_identity(artwork: RGBA) -> str:
-    """Canonical decoded RGBA bytes include their shape and channel convention."""
     if (
         artwork.ndim != IMAGE_NDIM
         or artwork.shape[2] != RGBA_CHANNELS
@@ -43,11 +40,7 @@ def prepared_scene_identity(
     photo_pixels: str,
     appearance: MarigoldAppearance,
 ) -> str:
-    """ADR-0054: accepted map content and intentional layer order determine pixels.
-
-    Each artwork digest comes from artwork_identity. Map content fixes target
-    dimensions. Storage, runtime availability and provenance are excluded.
-    """
+    """ADR-0054: map content and layer order fix pixels; storage and provenance stay out."""
     if len(placement_ids) != len(artwork_digests):
         raise ValueError("Artwork identity must cover every ordered placement")
     return _canonical(
@@ -74,12 +67,7 @@ one, as Marigold, because level six took two thirds of a cold preview
 def photo_warp_scene_identity(
     *, photo_pixels: str, layers: Sequence[tuple[RenderConfig, str]]
 ) -> str:
-    """A photo-warp scene's pixels: the photo's, then each painted layer's
-    settings and artwork (from artwork_identity) in paint order. The derived
-    height and luminance maps are functions of the photo's pixels alone.
-
-    Bump ``renderer`` when the warp, its maps or their fixed parameters change.
-    """
+    # Bump renderer when the warp, its maps or their fixed parameters change.
     return _canonical(
         {
             "renderer": "photo-warp-v1",

@@ -212,6 +212,27 @@ def test_a_consent_with_time_left_is_not_due_for_renewal(tmp_path: Path) -> None
     assert not credentials.summarise(None, now=T0).renewal_due
 
 
+def test_a_consent_that_expired_last_week_reports_zero_days_left_not_a_negative(
+    tmp_path: Path,
+) -> None:
+    store = _token_store(tmp_path)
+    store.record(ALL_SCOPES)
+
+    summary = credentials.summarise(store.load(), now=T0 + timedelta(days=97))
+
+    assert summary.refresh_days == 0
+    assert summary.renewal_due
+
+
+def test_part_of_a_day_left_rounds_down_to_whole_days(tmp_path: Path) -> None:
+    store = _token_store(tmp_path)
+    store.record(ALL_SCOPES)
+
+    summary = credentials.summarise(store.load(), now=T0 + timedelta(days=79, hours=1))
+
+    assert summary.refresh_days == 10
+
+
 # ------------------------------------------------------------- Etsy sign-in
 
 

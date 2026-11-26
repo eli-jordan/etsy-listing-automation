@@ -1,9 +1,3 @@
-"""Validated immutable map generations, independent of inference installation.
-
-ADR-0054: manifests describe numerical semantics. ZIP timestamps, generation
-names, paths and diagnostic provenance do not enter the content digest.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -33,6 +27,7 @@ from pydantic import (
 )
 
 from etsy_listings.core.bounded_cache import BoundedCache
+from etsy_listings.core.preparation.predictions import NPY_HEADER_READERS
 from etsy_listings.core.render.config import (
     AnyTemplate,
     BoundingBox,
@@ -56,7 +51,8 @@ SCHEMA: Literal[2] = 2
 MAX_PIXELS = 32 * 1024 * 1024
 MAX_DIMENSION = 8192
 MAX_POINTER_BYTES = 64 * 1024
-_EXTENTS_SCHEMA = 2  # the manifest schema that records placement extents
+_FULL_PHOTO_SCHEMA = 1
+_EXTENTS_SCHEMA = 2
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 SEMANTICS = {
     "array_axes": "row,column,channel",
@@ -92,29 +88,18 @@ ReadinessReason = Literal[
 
 
 class ArtifactError(ValueError):
-    """Prepare the template again instead of interpreting an invalid map.
-
-    ``reason`` is the readiness cause each refusal reports, so status is read
-    from the type raised and never from its message."""
-
     reason: ClassVar[ReadinessReason] = "invalid_artifact"
 
 
 class StalePreparationError(ArtifactError):
-    """Current geometry, masks or evidence changed before publication."""
-
     reason: ClassVar[ReadinessReason] = "placement_changed"
 
 
 class UnsupportedSchemaError(ArtifactError):
-    """A map pointer or manifest this version cannot read."""
-
     reason: ClassVar[ReadinessReason] = "unsupported_schema"
 
 
 class IncompatibleDimensionsError(ArtifactError):
-    """A target photo whose size differs from the prepared main photo."""
-
     reason: ClassVar[ReadinessReason] = "incompatible_dimensions"
 
 
@@ -138,9 +123,23 @@ class PhotoIdentity(Record):
         return self
 
 
+_Corner = tuple[float, float]
+_Quad = tuple[_Corner, _Corner, _Corner, _Corner]
+
+
+def _quad(box: BoundingBox) -> _Quad:
+    top_left, top_right, bottom_right, bottom_left = box
+    return (
+        (top_left.x, top_left.y),
+        (top_right.x, top_right.y),
+        (bottom_right.x, bottom_right.y),
+        (bottom_left.x, bottom_left.y),
+    )
+
+
 class PlacementInput(Record):
     id: PlacementId | None
-    quad: tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]]
+    quad: _Quad
     mask: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence: str = Field(pattern=r"^[0-9a-f]{64}$")
 
@@ -150,12 +149,7 @@ class PlacementInput(Record):
     ) -> PlacementInput:
         return cls(
             id=placement_id,
-            quad=(
-                (box[0].x, box[0].y),
-                (box[1].x, box[1].y),
-                (box[2].x, box[2].y),
-                (box[3].x, box[3].y),
-            ),
+            quad=_quad(box),
             mask=mask,
             evidence=evidence,
         )
@@ -214,19 +208,13 @@ MapSchema = Annotated[Literal[1, 2], BeforeValidator(_exact_schema)]
 
 
 class MapPointer(Record):
-    """``_renderer/maps/current.json``: the accepted generation and the
-    checksum its manifest must have."""
-
     schema_version: MapSchema
     generation_id: str
     manifest_checksum: str
 
 
 class Provenance(BaseModel):
-    """Who published a generation: diagnostics only, never numerical identity.
-
-    Unknown keys are ignored, so a diagnostic cannot invalidate a generation
-    whose numerical content is sound."""
+    """Diagnostics only; unknown keys are ignored so one cannot invalidate sound maps."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
     job_id: str | None = None
@@ -235,8 +223,6 @@ class Provenance(BaseModel):
 
     @model_serializer(mode="wrap")
     def _recorded(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
-        # Only the keys the publisher recorded, so a generation published
-        # without provenance still records ``{}``.
         dumped: dict[str, object] = handler(self)
         return {key: value for key, value in dumped.items() if key in self.model_fields_set}
 
@@ -255,8 +241,6 @@ _UNSUPPORTED = "Unsupported map schema; migrate or prepare the template again"
 
 
 def _unsupported(exc: ValidationError) -> bool:
-    """Whether ``exc`` refuses a record's schema version, which this version
-    cannot read, rather than the rest of its shape."""
     return any(error["loc"] == ("schema_version",) for error in exc.errors())
 
 
@@ -278,7 +262,7 @@ class Readiness:
         return self.state in ("ready", "not_required")
 
 
-_ZERO_DIGEST = "0" * 64  # the identity of an absent mask or evidence
+_ABSENT_DIGEST = "0" * 64
 
 
 def _bounding_box(config: AnyTemplate, placement_id: str | None) -> BoundingBox:
@@ -299,7 +283,6 @@ def _within(extent: tuple[int, int, int, int], size: tuple[int, int]) -> bool:
 
 
 def _layout(name: str, extent: tuple[int, int, int, int]) -> tuple[tuple[int, ...], np.dtype]:
-    """The shape and dtype array ``name`` must have over ``extent``."""
     left, top, right, bottom = extent
     width, height = right - left, bottom - top
     channels = BOUNDS[name][2]
@@ -417,7 +400,6 @@ def read_maps(
     *,
     known_maps: MaterialMaps | None = None,
 ) -> MaterialMaps:
-    """Check all NPY headers and uncompressed byte budgets before allocation."""
     if not _within(descriptor.extent, size):
         raise ArtifactError("Prepared map extent does not match main photo")
     if known_maps is not None and any(a.flags.writeable for a in arrays_of(known_maps).values()):
@@ -438,8 +420,7 @@ def _read_checked_maps(
     size: tuple[int, int],
     known_maps: MaterialMaps | None,
 ) -> MaterialMaps:
-    """``known_maps`` are the read-only arrays just written to ``path``; they
-    are kept, after their written bytes are proven, instead of loading a copy."""
+    # known_maps, once their written bytes are proven, stand in for a reload.
     if path.stat().st_size > MAX_ARCHIVE_BYTES or file_checksum(path) != descriptor.checksum:
         raise ArtifactError("Prepared archive size/checksum mismatch")
     names = set(descriptor.arrays)
@@ -481,12 +462,6 @@ def _check_archive(
         _check_member(archive, member, descriptor, verify_payload=verify_payload)
 
 
-_NPY_HEADER_READERS: Mapping[tuple[int, int], Callable[[Any], tuple[Any, bool, np.dtype]]] = {
-    (1, 0): np.lib.format.read_array_header_1_0,
-    (2, 0): np.lib.format.read_array_header_2_0,
-}
-
-
 def _check_member(
     archive: zipfile.ZipFile,
     member: zipfile.ZipInfo,
@@ -500,7 +475,7 @@ def _check_member(
     if expected.shape != shape or expected.dtype != str(dtype):
         raise ArtifactError("Unsafe prepared array descriptor")
     with archive.open(member) as stream:
-        read_header = _NPY_HEADER_READERS.get(np.lib.format.read_magic(stream))
+        read_header = NPY_HEADER_READERS.get(np.lib.format.read_magic(stream))
         if read_header is None:
             raise UnsupportedSchemaError("Unsupported prepared NPY format")
         actual_shape, fortran, actual_dtype = read_header(stream)
@@ -513,8 +488,6 @@ def _check_member(
     ):
         raise ArtifactError("Prepared array header has unsafe shape, dtype or byte length")
     if verify_payload:
-        # Verify written payload bytes and ZIP CRC only after header,
-        # shape, dtype and byte-budget checks have passed.
         _check_payload(archive, member, header_size, expected.checksum)
 
 
@@ -533,13 +506,16 @@ def _check_payload(
 _READERS: dict[tuple[str, str], int] = {}
 
 
+def _register_reader_locked(key: tuple[str, str]) -> None:
+    _READERS[key] = _READERS.get(key, 0) + 1
+
+
 def _maps_bytes(maps: Mapping[str | None, MaterialMaps]) -> int:
     return sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
 
 
-# Cache validation proofs, never arrays. A status poll must not decompress and
-# hash hundreds of MiB while holding the calibration lock. Immutable generation
-# files are revalidated after replacement, writes, removal or process restart.
+# Cache validation proofs, never arrays: a status poll must not decompress and hash
+# hundreds of MiB under the calibration lock.
 _VALIDATED: BoundedCache[tuple[Any, ...], bool] = BoundedCache(128)
 MAP_CACHE_BYTES = 512 * 1024 * 1024
 _MAPS: BoundedCache[tuple[Any, ...], Mapping[str | None, MaterialMaps]] = BoundedCache(
@@ -553,16 +529,16 @@ def _no_checkpoint(_step: str) -> None:
 
 @dataclass(frozen=True)
 class PublishOptions:
-    """How :meth:`Artifacts.publish` records and paces a generation.
-    ``provenance`` is stored in its manifest; ``checkpoint`` is told each
-    durable step and may raise to stop before the next. ``copy_maps=False``
-    transfers immutable array ownership to the bounded reader cache: the
-    coordinator uses it after freezing its private maps, and ordinary callers
-    keep the default independent input snapshot."""
+    """How :meth:`Artifacts.publish` records and paces a generation."""
 
     provenance: Provenance = field(default_factory=Provenance)
+    """Stored in the generation's manifest."""
     checkpoint: Callable[[str], None] = _no_checkpoint
+    """Told each durable step; may raise to stop before the next."""
     copy_maps: bool = True
+    """False transfers immutable array ownership to the bounded reader cache:
+    the coordinator does so after freezing its private maps. True keeps an
+    independent snapshot of the input."""
 
 
 @dataclass(frozen=True)
@@ -574,24 +550,13 @@ class _Publication:
 
 
 class Artifacts:
-    """One complete set in, one leased immutable set out.
-
-    Template locks serialize pointer changes and reader ownership in the
-    single-server workspace model. Cleanup keeps the current generation and
-    every one a publisher or reader has leased.
-    """
-
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self.calibration = CalibrationStore(workspace)
 
     def validate_inputs(self, inputs: PreparationInputs) -> None:
-        """Refuse known map limits before runtime inspection or numerical work.
-
-        Production baking includes optional patch labels. Every BOUNDS channel
-        is four bytes (float32 or int32); count the full retained generation,
-        not just one placement or compressed archive size.
-        """
+        # Counts the whole retained generation, patch labels included, at four bytes per
+        # BOUNDS channel (float32 or int32), not one placement or the compressed size.
         try:
             checked = PreparationInputs.model_validate(inputs.model_dump())
         except ValueError as exc:
@@ -612,14 +577,17 @@ class Artifacts:
         # and template lock cover publishers, readers and alias-aware cleanup.
         key = self._key(name, generation)
         with self.calibration.lock(name):
-            _READERS[key] = _READERS.get(key, 0) + 1
+            _register_reader_locked(key)
         try:
             yield
         finally:
-            with self.calibration.lock(name):
-                _READERS[key] -= 1
-                if not _READERS[key]:
-                    del _READERS[key]
+            self._release_reader(name, key)
+
+    def _release_reader(self, name: str, key: tuple[str, str]) -> None:
+        with self.calibration.lock(name):
+            _READERS[key] -= 1
+            if not _READERS[key]:
+                del _READERS[key]
 
     def _pointer(self, name: str) -> MapPointer:
         path = self.workspace.template_map_current(name)
@@ -628,7 +596,6 @@ class Artifacts:
         try:
             pointer = MapPointer.model_validate_json(path.read_bytes())
         except ValidationError as exc:
-            # A pointer missing or adding a key is damaged, whatever its schema.
             reshaped = any(e["type"] in ("missing", "extra_forbidden") for e in exc.errors())
             if _unsupported(exc) and not reshaped:
                 raise UnsupportedSchemaError(_UNSUPPORTED) from exc
@@ -637,7 +604,6 @@ class Artifacts:
         return pointer
 
     def _current(self, name: str) -> tuple[MapPointer, Manifest]:
-        """The current pointer and the validated manifest it names."""
         pointer = self._pointer(name)
         return pointer, self._read_manifest(name, pointer.generation_id, pointer.manifest_checksum)
 
@@ -678,12 +644,7 @@ class Artifacts:
     def inspect(
         self, name: str, inputs: PreparationInputs, *, target_size: tuple[int, int] | None = None
     ) -> Manifest:
-        """Inspect a validated immutable generation without retaining its arrays.
-
-        The template lock protects the pointer and files for the entire read.
-        Validation proofs are bounded and invalidated by every file's identity,
-        size and nanosecond write/change times. No model or prediction is read.
-        """
+        # The template lock covers the pointer and files for the whole read.
         try:
             with self.calibration.lock(name):
                 pointer, manifest = self._current(name)
@@ -764,7 +725,7 @@ class Artifacts:
     ) -> MaterialMaps:
         photo = manifest.preparation_inputs.photo
         size = (photo.width, photo.height)
-        if manifest.schema_version == 1 and placement.extent != (0, 0, *size):
+        if manifest.schema_version == _FULL_PHOTO_SCHEMA and placement.extent != (0, 0, *size):
             raise ArtifactError("Prepared map extent does not match main photo")
         return read_maps(
             self.workspace.template_map_file(
@@ -782,16 +743,6 @@ class Artifacts:
         evidence: Mapping[str | None, str] | None = None,
         reset_masks_for_photo: bool = False,
     ) -> PreparationInputs:
-        """Read current pixel-affecting inputs without cache or installed models.
-
-        Evidence is the accepted checkpoint/preprocessing/photo/crop identity,
-        not a cache path or runtime selection. Omission retains identity from
-        the durable manifest. Explicit preparation supplies a new complete set.
-        Appearance and placement order do not enter preparation identity.
-        Explicit photo reset captures a zero mask identity only for a saved
-        mask belonging to another photo. It never writes masks or bypasses
-        damaged/missing mask components; valid same-photo edits are retained.
-        """
         with self.calibration.lock(name):
             config = template_state(self.workspace, name).require()
             if not isinstance(config.renderer, MarigoldRenderer):
@@ -808,7 +759,7 @@ class Artifacts:
                     placement_id,
                     _bounding_box(config, placement_id),
                     mask=self._mask_checksum(name, placement_id, reset=reset_masks_for_photo),
-                    evidence=evidence.get(placement_id, _ZERO_DIGEST),
+                    evidence=evidence.get(placement_id, _ABSENT_DIGEST),
                 )
                 for placement_id in ids
             )
@@ -821,8 +772,6 @@ class Artifacts:
             )
 
     def _accepted_evidence(self, name: str) -> Mapping[str | None, str]:
-        """Each placement's evidence identity in the current generation; none
-        when there is no readable generation."""
         try:
             _, manifest = self._current(name)
         except (OSError, ValueError):
@@ -830,16 +779,14 @@ class Artifacts:
         return {p.id: p.evidence for p in manifest.preparation_inputs.placements}
 
     def _mask_checksum(self, name: str, placement_id: str | None, *, reset: bool) -> str:
-        """The saved mask's identity, or zero for none. A photo reset also
-        counts a mask belonging to another photo as none."""
         if not self._has_mask(name, placement_id, reset=reset):
-            return _ZERO_DIGEST
+            return _ABSENT_DIGEST
         try:
             return self.calibration.mask(name, placement_id).checksum
         except MaskPhotoMismatchError:
             if not reset:
                 raise
-            return _ZERO_DIGEST
+            return _ABSENT_DIGEST
 
     def _has_mask(self, name: str, placement_id: str | None, *, reset: bool) -> bool:
         if self.workspace.template_mask_file(name, placement_id).exists():
@@ -858,8 +805,6 @@ class Artifacts:
         current_inputs: Callable[[], PreparationInputs],
         options: PublishOptions = PublishOptions(),
     ) -> Manifest:
-        """Publish a complete validated generation of ``maps``, prepared from
-        ``inputs``; ``current_inputs`` re-reads them before the switch."""
         generation = uuid4().hex
         with self._lease(name, generation):
             return self._publish(
@@ -950,12 +895,6 @@ class Artifacts:
     def reusable(
         self, name: str, inputs: PreparationInputs
     ) -> Iterator[Mapping[str | None, MaterialMaps]]:
-        """Lease exact unchanged placements while a replacement is fitted.
-
-        Photo, inference and compatibility must all match. Each retained map
-        additionally needs the same placement ID, quad, mask and evidence.
-        Missing/damaged old maps provide no reuse and never authorize inference.
-        """
         with ExitStack() as lease:
             reused: dict[str | None, MaterialMaps] = {}
             try:
@@ -969,8 +908,7 @@ class Artifacts:
                         and accepted.compatibility == inputs.compatibility
                     ):
                         unchanged = {p.id for p in inputs.placements if p in accepted.placements}
-                # acquire registers its own generation lease before loading. Keep
-                # archive reads outside the template lock so previews can snapshot.
+                # Outside the lock, so previews can snapshot; acquire leases its own generation.
                 if unchanged:
                     acquired = lease.enter_context(self.acquire(name, accepted))
                     reused = {key: acquired.maps[key].cropped_to_visibility() for key in unchanged}
@@ -986,7 +924,7 @@ class Artifacts:
             with self.calibration.lock(name):
                 pointer, manifest = self._current(name)
                 key = self._key(name, pointer.generation_id)
-                _READERS[key] = _READERS.get(key, 0) + 1
+                _register_reader_locked(key)
         except (OSError, ValueError) as exc:
             if isinstance(exc, ArtifactError):
                 raise
@@ -1001,13 +939,10 @@ class Artifacts:
                 raise ArtifactError(
                     "Invalid prepared generation; prepare the template again"
                 ) from exc
-            # Exceptions from the renderer belong to the caller, not artifact loading.
-            yield acquired
+            else:
+                yield acquired
         finally:
-            with self.calibration.lock(name):
-                _READERS[key] -= 1
-                if not _READERS[key]:
-                    del _READERS[key]
+            self._release_reader(name, key)
 
     def readiness(
         self, name: str, inputs: PreparationInputs, *, target_size: tuple[int, int] | None = None
@@ -1025,7 +960,6 @@ class Artifacts:
     def _stale_reason(
         self, name: str, inputs: PreparationInputs, exc: StalePreparationError
     ) -> ReadinessReason:
-        """The first relevant change since the accepted, immutable inputs."""
         try:
             _, manifest = self._current(name)
         except (OSError, ValueError):
@@ -1040,7 +974,6 @@ class Artifacts:
         return exc.reason
 
     def cleanup(self, name: str) -> list[str]:
-        """Remove every generation that is neither current nor leased."""
         removed = []
         with self.calibration.lock(name):
             keep: set[str] = set()

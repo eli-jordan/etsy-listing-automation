@@ -1,30 +1,14 @@
-"""The Grok CLI adapter behind `AiProvider`.
+"""The Grok CLI adapter behind `AiProvider`: one non-interactive, read-only
+generation call. Grok 1.0.41's flags, as measured:
 
-Same job as `ai/claude.py` and `ai/codex.py`: one non-interactive, read-only
-generation call, no prompt of its own, and the raw response text handed back
-for the shared orchestrator to validate. Flags below were confirmed against
-`grok --help` and a live `--output-format json` run of Grok 1.0.41:
-
-- ``--prompt-file`` carries the prompt. A seller prompt plus schema is too
-  long for Windows' command-line limit, and ``-p`` wants the prompt on argv.
-- ``--json-schema`` constrains the answer and implies ``--output-format
-  json``. The schema-valid object is ``structuredOutput``. ``text`` is only
-  the model's rendering of it, so the adapter returns the structured object.
-- ``--tools read_file,grep,list_dir`` is the read-only set. Write, bash and
-  web tools are simply not offered. ``--permission-mode dontAsk`` denies
-  anything that still prompts. ``--no-subagents`` and
-  ``--disable-web-search`` keep the call on that one job.
-- ``--sandbox read-only`` is documented for Linux and macOS. This project's
-  development machine is Windows, where that sandbox is not the guarantee,
-  so the tool allowlist is what makes the process read-only.
-- There is no ``--no-session-persistence``. Each call omits ``--resume`` and
-  ``--session-id``, so it does not continue a previous conversation. Grok
-  still writes a new session under its own home directory; that is the CLI's
-  behaviour, not a session this adapter reads back.
-- ADR-0056: preferences use ``--model`` and ``--reasoning-effort``.
-  Account defaults omit those flags.
-- The design image has no attach flag. Its path is named in the prompt and
-  the model opens it with ``read_file``.
+- ``--prompt-file``: the prompt is too long for Windows' command line.
+- ``--json-schema`` implies JSON output; the schema-valid object is
+  ``structuredOutput`` (``text`` is only a rendering of it).
+- ``--sandbox read-only`` is documented for Linux and macOS only, so on
+  Windows the read-only ``--tools`` allowlist is the guarantee.
+- No ``--no-session-persistence`` exists: Grok writes a session under its
+  home directory even though no call resumes one.
+- No image-attach flag: the prompt names the design's path for ``read_file``.
 """
 
 from __future__ import annotations
@@ -70,15 +54,12 @@ how a read-only call wanders until its step deadline kills it."""
 
 
 def auth_file() -> Path:
-    """Where `grok login` stores the session. Readiness only checks that the
-    file exists and is non-empty -- it does not parse the credential."""
+    """Where `grok login` stores the session; readiness only checks it is non-empty."""
     return Path.home() / ".grok" / "auth.json"
 
 
 @dataclass
 class GrokProvider(cli_support.LocalCliProvider):
-    """The `AiProvider` adapter for the local Grok CLI."""
-
     binary: str = "grok"
     credentials: Path | None = None
     """The session file readiness checks; ``None`` is `auth_file`'s."""
@@ -103,7 +84,6 @@ class GrokProvider(cli_support.LocalCliProvider):
 
     @override
     def _check_capability(self) -> ProviderReadiness | None:
-        # A local help probe checks advertised flags without spending a generation call.
         return cli_support.check_capability(
             self.host, self.binary, ("--help",), _REQUIRED_HELP_FLAGS, "headless"
         )
@@ -153,13 +133,6 @@ class GrokProvider(cli_support.LocalCliProvider):
         )
 
     def _extract_result_text(self, stdout: str) -> str:
-        """The proposal JSON from ``--output-format json``.
-
-        ``--json-schema`` puts the schema-valid object in
-        ``structuredOutput``. ``text`` is only the model's own rendering of
-        that answer, and it is often prose or a fenced block rather than
-        JSON. The structured object is what gets validated.
-        """
         envelope = cli_support.json_object(PROVIDER_NAME, stdout)
         if envelope.get("is_error") or envelope.get("error"):
             reported = stdout

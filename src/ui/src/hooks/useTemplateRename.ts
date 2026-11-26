@@ -20,13 +20,7 @@ export interface TemplateRename {
   note: string | null;
 }
 
-/**
- * Renaming the open template. Pending edits are saved first: an autosave that
- * fires after the move would name a template that has gone, so a save that fails
- * refuses the rename and the draft stays open. `onRenamed` selects
- * the new name, which is what closes the name field. An unsaved renderer switch
- * is kept in memory by name and does not follow; the saved template does.
- */
+/** An unsaved renderer switch is kept in memory by name, so it does not follow a rename. */
 export function useTemplateRename(
   templateName: string | null,
   flush: () => Promise<Settled>,

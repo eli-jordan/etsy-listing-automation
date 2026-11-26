@@ -1,11 +1,3 @@
-"""Typer CLI. One module per command; this module wires them into one app.
-
-``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth``, ``unlock``, ``marigold`` and
-``backup`` (``init``, ``run``, ``check``, ``snapshots``, ``status``, ``restore``) are built,
-per strict phase order.
-``catalog refresh`` and ``status`` remain for Phase 6.
-"""
-
 from __future__ import annotations
 
 import os
@@ -13,7 +5,7 @@ import sys
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 
@@ -24,7 +16,7 @@ from etsy_listings.cli.auth import run_auth
 from etsy_listings.cli.backup import app as backup_app
 from etsy_listings.cli.marigold import app as marigold_app
 from etsy_listings.cli.new import run_new
-from etsy_listings.cli.options import open_workspace, root_option
+from etsy_listings.cli.options import RootOption, open_workspace
 from etsy_listings.cli.render import format_blocked, format_plan
 from etsy_listings.cli.setup import run_setup
 from etsy_listings.cli.ui import ui
@@ -88,17 +80,6 @@ def _root_callback() -> None:
     and patches the resulting Etsy listing's copy and media. Idempotent:
     re-running against unchanged inputs makes no remote changes.
     """
-    # A no-op callback keeps `plan` addressed as a subcommand (`etsy-listings
-    # plan...`) -- Typer otherwise collapses a single-command app so its
-    # command name is invisible, which would silently change the CLI surface
-    # the moment a second command is added.
-
-
-# How a client is built is `connections`', not this module's. Which credential
-# is resolved when, what a missing one means, and where the Etsy token file
-# lives were written out here *and* in `setup`, `auth` and the e2e layer --
-# four copies of one five-step sequence. What is left here is deciding *when*
-# to ask for a connection, which is genuinely the entry point's business.
 
 
 SWATCH_GLYPH = "██"
@@ -108,42 +89,19 @@ SWATCH_FALLBACK = "##"
 def _swatch_glyph() -> str | None:
     """The block to print per colour, or ``None`` when swatches are off.
 
-    A swatch carries its meaning entirely in its colour, so it is only worth
-    printing where it will actually be coloured. Three things can turn it off
-    or change it:
-
-    - ``NO_COLOR``, the cross-tool convention, suppresses it outright.
-    - A non-terminal stdout suppresses it: a redirected run would otherwise
-      collect a column of identical, meaningless blocks. ``FORCE_COLOR``
-      overrides that, which is not just symmetry -- a cygwin pty is a named
-      pipe, and native-Windows Python reports ``isatty()`` false inside one
-      even though the terminal on the other end renders colour perfectly.
-    - A stdout that cannot encode the block glyph (a redirected stdout on
-      Windows is cp1252, which cannot -- it used to abort ``apply`` with a
-      ``UnicodeEncodeError``) falls back to ASCII rather than losing the
-      colour, which is the part that carries the information.
+    ``FORCE_COLOR`` overrides a non-terminal stdout because a cygwin pty is a
+    named pipe: native-Windows Python reports ``isatty()`` false inside one
+    even though the terminal on the other end renders colour.
     """
     if os.environ.get("NO_COLOR"):
         return None
     if not (os.environ.get("FORCE_COLOR") or sys.stdout.isatty()):
         return None
-    try:
-        SWATCH_GLYPH.encode(sys.stdout.encoding or "utf-8")
-    except (UnicodeEncodeError, LookupError):
-        return SWATCH_FALLBACK
-    return SWATCH_GLYPH
+    return terminal.choose(SWATCH_GLYPH, SWATCH_FALLBACK)
 
 
 def _echo_event(event: Event) -> None:
-    """Progress line, prefixed with one colour block per garment the scene
-    shows. The colour is sampled from the mockup itself, so a run reads as the
-    colour set it produced instead of a column of slugs -- and a miscalibrated
-    bounding box is visible in the swatch without opening the PNG.
-
-    ``color=True`` where a swatch is printed: the decision that colour is
-    wanted has already been made above, so click must not second-guess it by
-    stripping the escapes back out.
-    """
+    """Progress line, prefixed with one colour block per garment the scene shows."""
     glyph = _swatch_glyph() if event.swatches else None
     if glyph is None:
         typer.echo(f"  {event.message}")
@@ -153,13 +111,7 @@ def _echo_event(event: Event) -> None:
 
 
 def _echo_blocked(plan: Plan) -> None:
-    """Say what this apply will *not* do, before it does the rest.
-
-    A blocked stage is not a failure -- the render stage still runs, and a
-    workspace that has not opted into Printify yet is not broken -- but it is
-    the half of the run the user cannot see happening, so it must be said out
-    loud rather than inferred from a product that never appears.
-    """
+    """Say what this apply will *not* do, before it does the rest."""
     for stage_plan in plan.stage_plans:
         if stage_plan.blocked:
             for line in format_blocked(stage_plan):
@@ -167,13 +119,6 @@ def _echo_blocked(plan: Plan) -> None:
 
 
 def _echo_failure(listing: str, error: UserFacingError) -> None:
-    """One listing's refusal, as a message rather than a stack.
-
-    Every refusal the user can act on -- a config error, a design too small, a
-    colour that does not exist, copy still carrying a sentinel -- reaches here
-    instead of ending the run: continue-on-error is why one bad listing cannot halt fifty
-    good ones. The engine decides that; this only says it out loud.
-    """
     typer.echo(f"{listing}: {error}", err=True)
     typer.echo("", err=True)
 
@@ -196,15 +141,7 @@ def _exit_for(report: RunReport) -> None:
 
 @contextmanager
 def _wizard() -> Iterator[None]:
-    """Run an interactive command, and leave quietly if the user does.
-
-    Ctrl-C out of a picker is an ordinary way to abandon a wizard, not a
-    crash, so it earns a line and a non-zero exit rather than a traceback.
-    Caught here because it is the same answer for both wizards, and because
-    every question inside them used to check for it individually -- fourteen
-    checks, and two `_cancelled()` helpers that disagreed about whether to
-    print anything.
-    """
+    """Run an interactive command, and leave quietly if the user does."""
     try:
         yield
     except prompts.Cancelled as exc:
@@ -246,7 +183,8 @@ def setup(
     Verifies the token against Printify before storing it, and reads the shop
     id back from the same call rather than asking you to find one.
 
-    Stops before Etsy sign-in, which arrives with `auth` in Phase 3.
+    With Etsy credentials stored (`auth etsy`), it also looks up the Etsy shop
+    and its return policy.
     """
 
     target = to_native_path(root) if root else Path.cwd()
@@ -271,15 +209,9 @@ CheckOption = Annotated[
 ]
 
 
-def _auth_root_option() -> Any:  # typer.Option is typed Any at this boundary
-    """``--root`` as `auth` needs it: no shop.yaml required.
-
-    `auth` and `setup` are the two commands that run *before* a workspace
-    exists, so neither can discover one by walking up for its marker file --
-    they take the directory they are given.
-    """
-    return typer.Option(
-        None,
+AuthRootOption = Annotated[
+    str | None,
+    typer.Option(
         "--root",
         help=(
             "Which workspace to store credentials in. Defaults to the current "
@@ -289,7 +221,8 @@ def _auth_root_option() -> Any:  # typer.Option is typed Any at this boundary
         envvar=layout.ROOT_ENV_VAR,
         show_envvar=True,
         metavar="PATH",
-    )
+    ),
+]
 
 
 def _run_auth(root: str | None, parts: Sequence[AuthPart], *, check: bool) -> None:
@@ -302,7 +235,7 @@ def _run_auth(root: str | None, parts: Sequence[AuthPart], *, check: bool) -> No
 @auth_app.callback(invoke_without_command=True)
 def auth(
     ctx: typer.Context,
-    root: str | None = _auth_root_option(),
+    root: AuthRootOption = None,
     *,
     check: CheckOption = False,
 ) -> None:
@@ -323,7 +256,7 @@ def auth(
 
 @auth_app.command("printify", epilog=EPILOG)
 def auth_printify(
-    root: str | None = _auth_root_option(),
+    root: AuthRootOption = None,
     *,
     check: CheckOption = False,
 ) -> None:
@@ -333,7 +266,7 @@ def auth_printify(
 
 @auth_app.command("etsy", epilog=EPILOG)
 def auth_etsy(
-    root: str | None = _auth_root_option(),
+    root: AuthRootOption = None,
     *,
     check: CheckOption = False,
 ) -> None:
@@ -343,11 +276,11 @@ def auth_etsy(
 
 @auth_app.command("anthropic", epilog=EPILOG)
 def auth_anthropic(
-    root: str | None = _auth_root_option(),
+    root: AuthRootOption = None,
     *,
     check: CheckOption = False,
 ) -> None:
-    """Capture just the Anthropic API key (used by `generate`, from Phase 4)."""
+    """Capture just the optional Anthropic API key, which no command reads."""
     _run_auth(root, ["anthropic"], check=check)
 
 
@@ -371,7 +304,7 @@ def plan(
         bool, typer.Option("--all", help="Plan every listing in the workspace")
     ] = False,
     publish: PublishOption = False,
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Three-way diff against live state; decides which stages need to run.
 
@@ -406,7 +339,7 @@ def apply(
         bool, typer.Option("--all", help="Apply every listing in the workspace")
     ] = False,
     publish: PublishOption = False,
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Execute every stage the plan identified: render, create or update the
     Printify product, publish it, and patch the resulting Etsy listing's
@@ -418,12 +351,6 @@ def apply(
     workspace = open_workspace(root)
 
     def announce(event: EngineRunEvent) -> None:
-        """The header and the refusals, before the work they frame.
-
-        ``on_planned`` fires between planning and executing, which is the only
-        point at which both are true: the plan is known, and none of its
-        progress events have been printed yet.
-        """
         if isinstance(event, EngineListingPlanned):
             typer.echo(f"applying {event.listing}")
             _echo_blocked(event.plan)
@@ -443,16 +370,14 @@ def apply(
 @app.command(epilog=EPILOG)
 def unlock(
     listing: str = typer.Argument(help="Listing name, e.g. take-a-hike"),
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Clear a Printify product stuck publishing (`is_locked: true`).
 
     `publish` polls for up to ~10 minutes before giving up; this calls
     Printify's own remedy (`publishing_failed.json`) for the product that
-    poll named. Its one job has never been exercised against a genuinely
-    stuck publish -- none has stuck in probing -- so it ships built and
-    unverified rather than withheld. Re-run `apply` afterwards; this command
-    only asks Printify to clear the lock, it does not touch the lockfile.
+    poll named. It only asks Printify to clear the lock and does not touch
+    the lockfile, so re-run `apply` afterwards.
     """
     unlock_listing(open_workspace(root), listing, connections.printify_client)
 
@@ -460,8 +385,6 @@ def unlock(
 def unlock_listing(
     workspace: Workspace, listing: str, printify_client: Callable[[Workspace], PrintifyClient]
 ) -> None:
-    """`unlock`'s body, with the Printify client it asks through as an
-    argument so a test hands it a fake."""
     lock = Lockfile.read(workspace.lock_file(listing))
     product_id = lock.remote.get(PRODUCT_ID_KEY) if lock is not None else None
     if not product_id:
@@ -489,7 +412,7 @@ def new(
     category: str = typer.Option(
         "tshirt", "--category", help="Blueprint category filter, matched against title/brand/model"
     ),
-    root: str | None = root_option(),
+    root: RootOption = None,
 ) -> None:
     """Interactive design/garment/provider picker; writes garment profile (if absent) + listing.
 
@@ -506,22 +429,14 @@ def new(
         raise typer.Exit(code=1) from exc
 
 
-# The HTTP launcher lives in `cli/ui.py`, the one CLI module that may import
-# the server (ADR-0052); registering it here loads no server code.
 app.command(epilog=EPILOG)(ui)
 
 
 def main() -> None:
-    # Before Typer, so every command's output is already on a stream that can
-    # print what `terminal` is about to ask it for. Here rather than in the
-    # Typer callback because it mutates process-global streams, which a test
-    # driving `app` through CliRunner should not have done to it.
     terminal.adopt_declared_encoding()
     try:
         app()
     except OSError as exc:
-        # `... | head` closing the pipe early is not a failure worth a
-        # traceback; exit 1 as Click does for its own broken-pipe case.
         if not terminal.stdout_reader_gone(exc):
             raise
         terminal.discard_stdout()

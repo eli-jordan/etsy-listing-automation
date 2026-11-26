@@ -80,6 +80,15 @@ def test_write_pricing_plan_sets_profile_from_the_chosen_garment_profile(
     assert "a note" in path.read_text(encoding="utf-8")
 
 
+def test_a_written_plan_guesses_no_per_colour_markup(workspace_root: Path) -> None:
+    workspace = Workspace.discover(root_override=workspace_root)
+    prices = {"S": Money.parse("100 NOK")}
+
+    path = write_pricing_plan(workspace, "Launch Low", "comfort-colors-1717", prices, [])
+
+    assert workspace.load_pricing_plan(path).price_overrides == {}
+
+
 HAND_TUNED = b"# tuned by hand\r\nprices: {S: 120 NOK}\r\n"
 
 

@@ -1,11 +1,5 @@
-"""TTL file cache wrapping any :class:`CatalogClient`.
-
-The catalog is fetched automatically with a TTL. The manual ``catalog refresh``
-command remains unbuilt; cache refresh does not require it. The payload is
-large and rarely changes, so each read populates
-``.cache/catalog/{blueprint}-{provider}.json`` (and sibling files for
-blueprints/providers) and reuses it until the TTL expires.
-"""
+"""TTL file cache wrapping any :class:`CatalogClient`, one file per
+read under ``.cache/catalog/``."""
 
 from __future__ import annotations
 
@@ -56,7 +50,7 @@ class CachedCatalogClient(CatalogClient):
         cache_dir: Path,
         *,
         ttl: timedelta = DEFAULT_TTL,
-        clock: Any = time.time,  # injected for deterministic tests
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self._inner = inner
         self._cache_dir = cache_dir
@@ -81,15 +75,7 @@ class CachedCatalogClient(CatalogClient):
         path.write_text(json.dumps(payload), encoding="utf-8")
 
     def _cached[T](self, name: str, adapter: TypeAdapter[T], fetch: Callable[[], T]) -> T:
-        """``fetch()``, unless ``name`` already holds a live answer.
-
-        The four methods below differed only in a filename and in how their
-        payload was decoded and encoded -- and two of them needed a
-        comprehension in each direction purely because they return a ``list``
-        of models rather than a model. A ``TypeAdapter`` does not care which:
-        it is the same tool ``render.config`` already uses to parse a union
-        the plain model API cannot express.
-        """
+        """``fetch()``, unless ``name`` already holds a live answer."""
         cached = self._read(name)
         if cached is not None:
             return adapter.validate_python(cached)
@@ -108,8 +94,6 @@ class CachedCatalogClient(CatalogClient):
         )
 
     def all_print_providers(self) -> list[PrintProvider]:
-        # Disk-cached like the rest of the catalog: ADR-0033's no-TTL rule is
-        # for the Etsy shop's own lists, and no seller creates a provider.
         return self._cached("providers.json", _PROVIDERS, self._inner.all_print_providers)
 
     def variants(self, blueprint_id: int, provider_id: int) -> VariantSet:

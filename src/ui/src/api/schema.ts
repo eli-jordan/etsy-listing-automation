@@ -56,7 +56,7 @@ export interface paths {
     put?: never;
     /**
      * Template Positions Impact
-     * @description A read for Settings' confirmation (template positions PR 5): who the
+     * @description A read for Settings' confirmation: who the
      *     candidate limits would block, and which Marigold templates would need
      *     model inference to cover them.
      */
@@ -581,17 +581,12 @@ export interface paths {
     };
     /**
      * List Common Copy
-     * @description The Description tab's common-copy selector (AI SEO implementation
-     *     plan, PR6): every reusable description body, with the title and summary
-     *     its front matter carries, so the picker can show something readable
-     *     rather than a bare filename.
+     * @description The Description tab's common-copy selector: every reusable description
+     *     body, with the title and summary its front matter carries.
      *
-     *     A file whose front matter will not parse is left out -- read-only, so
-     *     there is nowhere here to report the problem, and offering it would only
-     *     produce a pick that immediately fails to resolve. (A *stored* ref that
-     *     fails to resolve still surfaces as a details-tab issue -- see
-     *     `Workspace.resolve_description` -- this is only the list of things one
-     *     could newly pick.)
+     *     A file whose front matter will not parse is left out, since picking it
+     *     would fail to resolve. A stored ref that fails to resolve is still a
+     *     details-tab issue.
      */
     get: operations["list_common_copy_api_common_copy_get"];
     put?: never;
@@ -827,13 +822,7 @@ export interface paths {
      * @description The artwork itself, downscaled -- what the listings table, its hover
      *     card and the editor's design strip all show.
      *
-     *     Distinct from ``designs.py``'s calibrator library for the same reason
-     *     ``GET /api/listing-designs`` is: ``designs/`` holds artwork that ships,
-     *     ``test-designs/`` holds calibration targets, and a listing's design is
-     *     never one of the latter.
-     *
-     *     An unusable *name* needs nothing here: ``InvalidNameError`` out of
-     *     ``design_file`` becomes a 400 through the app-wide handler in ``app.py``.
+     *     Served from ``designs/``, never the calibrator's ``test-designs/``.
      */
     get: operations["listing_design_thumbnail_api_listing_designs__name__thumbnail_get"];
     put?: never;
@@ -855,27 +844,16 @@ export interface paths {
      * Listing Draft
      * @description The listing `+ New listing` opens the editor on, before it has a name.
      *
-     *     There is no separate create *form* -- the editor itself is the form, and a
-     *     listing is written the moment it is named and priced. What the editor needs
-     *     first is a document to render, and inventing one in the browser would put
-     *     the starting shape of a listing in two places, so the server hands over
-     *     `EMPTY_DRAFT`: nothing chosen, nothing invented, and a block issue for each
-     *     thing still to pick.
-     *
-     *     ``name`` comes back empty, which is exactly the state the editor refuses to
-     *     save in.
+     *     The server hands over `EMPTY_DRAFT`: nothing chosen, nothing invented, and
+     *     a block issue for each thing still to pick. ``name`` comes back empty,
+     *     which the editor refuses to save.
      */
     get: operations["listing_draft_api_listing_draft_get"];
     put?: never;
     /**
      * Describe Listing Draft
-     * @description The same, for a candidate the editor has since edited. Writes nothing.
-     *
-     *     The mount-time draft above answers once; this is what keeps the issues
-     *     banner true for every edit made before the listing has a name. Without it
-     *     the banner would still be saying "no colours enabled" about a listing whose
-     *     colours were picked a minute ago -- and the banner is the only way an
-     *     unsaved listing can be told what it is still missing.
+     * @description The same, for a candidate the editor has since edited, so its issues
+     *     stay current before the listing has a name. Writes nothing.
      */
     post: operations["describe_listing_draft_api_listing_draft_post"];
     delete?: never;
@@ -943,7 +921,7 @@ export interface paths {
     get: operations["get_listing_template_api_listing_templates__name__get"];
     /**
      * Put Listing Template
-     * @description template completeness: write the whole document only if it is complete. A malformed or
+     * @description Write the whole document only if it is complete. A malformed or
      *     incomplete one leaves ``template.yaml`` byte-for-byte as it was, so the
      *     server always holds the last complete version; the listing-template editor
      *     keeps the unsaved values on its side.
@@ -1166,7 +1144,7 @@ export interface paths {
      *     that will not validate writes nothing and answers 200 with
      *     ``field_errors`` beside the listing as it still is. Saved positions
      *     queue any Marigold coverage inference they need after the response, since
-     *     finding the installed worker can take seconds (option B).
+     *     finding the installed worker can take seconds (ADR-0058).
      */
     patch: operations["patch_listing_api_listings__name__patch"];
     trace?: never;
@@ -1342,10 +1320,6 @@ export interface paths {
      * Rename Listing
      * @description Move a listing, whole, to a new name -- with everything keyed by it
      *     (:func:`~etsy_listings.core.application.listing_identity.rename_listing`).
-     *
-     *     POST rather than PUT: the body is neither the listing nor its new
-     *     representation, and a second call 404s. `POST /api/templates/{name}/kind` is
-     *     the same shape.
      */
     post: operations["rename_listing_api_listings__name__rename_post"];
     delete?: never;
@@ -1388,11 +1362,10 @@ export interface paths {
     /**
      * Scene Preview
      * @description One of this listing's scenes, each layer printing the file its depicted
-     *     colour resolves to in the *saved* listing (A35) -- the Variants stage and
+     *     colour resolves to in the *saved* listing -- the Variants stage and
      *     every Listing Images picture, multi-colour scenes included (spec:
-     *     *Previews*). Resolved here rather than from a design name in the URL,
-     *     because the editor showing one file while Printify prints another is the
-     *     thing a single resolver exists to prevent.
+     *     *Previews*). Resolved here rather than from a design name in the URL, so
+     *     the editor shows the file Printify prints.
      *
      *     A layer that resolves to nothing is left bare rather than failing the
      *     picture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).
@@ -1563,9 +1536,8 @@ export interface paths {
     /**
      * List Runs
      * @description ``listing`` narrows to that listing's current run (active, or finished
-     *     and not yet superseded -- decision 7's retention); ``scope=batch&batch=``
-     *     to that listing batch's. Omitted, every run this process still
-     *     remembers, for a future workspace-wide view.
+     *     and not yet superseded); ``scope=batch&batch=`` to that listing batch's.
+     *     Omitted, every run this process still remembers.
      */
     get: operations["list_runs_api_runs_get"];
     put?: never;
@@ -1598,9 +1570,8 @@ export interface paths {
     post?: never;
     /**
      * Cancel Run
-     * @description Cancel a queued or running **plan**. An ``apply`` is refused
-     *     unconditionally (decision 8: Back leaves, it never cancels one), and so is
-     *     a run that has already finished.
+     * @description Cancel a queued or running **plan**. An ``apply`` is always refused
+     *     (leaving the page never cancels one), and so is a finished run.
      */
     delete: operations["cancel_run_api_runs__run_id__delete"];
     options?: never;
@@ -1658,10 +1629,7 @@ export interface paths {
     put?: never;
     /**
      * Create Staging
-     * @description Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
-     *     already spooled the parts to temporary files; each is handed on as a
-     *     stream, which staging reads a PNG or a ZIP's entries out of with a
-     *     running count.
+     * @description Stage one ZIP or loose PNGs (spec, *Accepted input*).
      */
     post: operations["create_staging_api_staging_post"];
     delete?: never;
@@ -1805,8 +1773,8 @@ export interface paths {
     };
     /**
      * Coverage
-     * @description Whether the editor may adjust this template yet. Apart from the status
-     *     above, which the catalog reads for every template.
+     * @description Whether the editor may adjust this template yet. Separate from the
+     *     preparation status, which the catalog reads for every template.
      */
     get: operations["coverage_api_templates__name__coverage_get"];
     put?: never;
@@ -1838,13 +1806,10 @@ export interface paths {
      *     ``design`` is a name from ``GET /api/listing-designs``, resolved through
      *     ``Workspace.design_file``; ``test_design`` is the calibrator library's id
      *     instead, through :func:`resolve_design`, bundled grid by default. Exactly
-     *     one of the two -- they name files in different places, and guessing which
-     *     one a bare name meant is how a test target would end up judged as artwork.
+     *     one of the two: they name files in different places, and guessing would
+     *     judge a test target as artwork.
      *
-     *     A *listing's* scenes are not previewed here: ``GET
-     *     /api/listings/{name}/scene-preview`` resolves each layer's file from the
-     *     saved listing (A35), so its editor cannot show one file while Printify
-     *     prints another.
+     *     A listing's scenes are previewed by ``GET /api/listings/{name}/scene-preview``.
      */
     get: operations["design_preview_api_templates__name__design_preview_get"];
     put?: never;
@@ -2039,7 +2004,7 @@ export interface paths {
      * @description Move a template, and everything naming it, to a new name
      *     (:mod:`~etsy_listings.core.application.template_rename`). A taken name, a
      *     running deploy or a preparing template is a ``409``; an unusable name is a
-     *     ``400``. POST for the reason a listing's rename is.
+     *     ``400``.
      */
     post: operations["rename_template_api_templates__name__rename_post"];
     delete?: never;
@@ -2079,12 +2044,9 @@ export interface paths {
     };
     /**
      * Thumbnail
-     * @description The template's own photo, downscaled, for the rail -- not a render,
-     *     which once per row would make opening the calibrator cost as much as
-     *     calibrating. ``colour`` narrows it to one photo of a colour-matrix set,
-     *     for the listings editor's reel. Which photo is
-     *     :func:`~etsy_listings.core.application.mockup_templates.template_photo`'s
-     *     question; how it is downscaled is :mod:`.thumbnails`'.
+     * @description The template's own photo, downscaled, for the rail -- not a render, so
+     *     opening the calibrator stays cheap. ``colour`` narrows it to one photo of
+     *     a colour-matrix set, for the listings editor's reel.
      */
     get: operations["thumbnail_api_templates__name__thumbnail_get"];
     put?: never;
@@ -2210,10 +2172,7 @@ export interface components {
     };
     /**
      * AiProviderSettings
-     * @description One provider's preferences for every task (ADR-0056).
-     *
-     *     Discovery is advisory, so model and effort are intentionally not enums.
-     *     A retired value stays usable until the seller replaces it.
+     * @description One provider's preferences for every task.
      */
     AiProviderSettings: {
       /** Effort */
@@ -3017,11 +2976,7 @@ export interface components {
       /** Request Id */
       request_id: string;
     };
-    /**
-     * ChangedFile
-     * @description A destination file that differs from the local one of its name. For
-     *     ``config``, or a change the sample check found, the sizes can match.
-     */
+    /** ChangedFile */
     ChangedFile: {
       /** Actual Size */
       actual_size: number;
@@ -3044,13 +2999,9 @@ export interface components {
     };
     /**
      * ColourMatrixPreviewRequest
-     * @description Disambiguated from the other two preview shapes by required fields
-     *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
-     *     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
-     *     than forbidden, since a natural client pattern is spreading a whole
-     *     ``GET.../config`` response (which includes ``kind``) into the body. All
-     *     three take ``labels`` because an editor preview names with them the labels
-     *     of its ``calibration_revision``. None draws them.
+     * @description A colour-matrix template's preview body. All three preview shapes take
+     *     ``labels``: an editor preview names the labels of its
+     *     ``calibration_revision`` with them. None draws them.
      */
     ColourMatrixPreviewRequest: {
       /** Bounding Box */
@@ -3088,10 +3039,7 @@ export interface components {
     };
     /**
      * ColourMatrixTemplate
-     * @description One photo per colour, same design position in all of them. Scene
-     *     images are ``{colour-slug}.png`` per colour -- there is no
-     *     ``colours:`` list in the YAML, since the filenames present in the
-     *     directory *are* the colour set.
+     * @description One photo per colour, named by colour slug, with the design in the same position.
      */
     ColourMatrixTemplate: {
       /** Bounding Box */
@@ -3133,9 +3081,8 @@ export interface components {
     /**
      * CommonCopySummary
      * @description One `common-copy/*.md` file, for the Description tab's body-source
-     *     selector (AI SEO implementation plan, PR6). A common-copy ref is
-     *     workspace-relative, like every other ref, so it is exactly what
-     *     `description.ref` stores, already usable as-is.
+     *     selector. ``ref`` is workspace-relative, exactly what `description.ref`
+     *     stores.
      */
     CommonCopySummary: {
       /** Ref */
@@ -3199,12 +3146,8 @@ export interface components {
     };
     /**
      * CreateListingRequest
-     * @description The whole document, not a handful of fields to build one from.
-     *
-     *     The editor is the create form, so by the time a name is typed the user may
-     *     have chosen a design, colours and images -- and the shape they edited is the
-     *     shape that should be written. A server-built stub here would be a second
-     *     opinion about what a new listing starts as.
+     * @description The whole document the editor built, written as edited -- not a
+     *     handful of fields to build one from.
      */
     CreateListingRequest: {
       /** Document */
@@ -3354,11 +3297,7 @@ export interface components {
        */
       unexpected: string[];
     };
-    /**
-     * DisplaceConfig
-     * @description Implemented but off by default -- over-strong displacement looks
-     *     melted, so it's tuned per template in the calibrator's live preview.
-     */
+    /** DisplaceConfig */
     DisplaceConfig: {
       /**
        * Enabled
@@ -3378,8 +3317,8 @@ export interface components {
      *
      *     ``dict`` rather than ``Listing``, deliberately: an incomplete candidate is
      *     the *normal* case on this endpoint, and rejecting it at the FastAPI boundary
-     *     would answer with a 422 the editor cannot render. The point is to get it as
-     *     far as ``Listing.draft`` and report what is missing.
+     *     would answer with a 422 the editor cannot render. The point is to describe
+     *     it as it stands and report what is missing.
      */
     DraftListingRequest: {
       /** Document */
@@ -3454,8 +3393,7 @@ export interface components {
     };
     /**
      * EtsyListingFacts
-     * @description One side of the review: the fields the mock shows unchanged
-     *     context for, named rather than left as an id.
+     * @description One side of the review, its section and shipping profile named rather than left as ids.
      */
     EtsyListingFacts: {
       /** Description */
@@ -3479,8 +3417,7 @@ export interface components {
     };
     /**
      * EtsyListingSnapshot
-     * @description Both sides, in full -- the ``Plan`` this stage also returns carries
-     *     only what changed.
+     * @description Both sides of the review, in full.
      */
     EtsyListingSnapshot: {
       desired: components["schemas"]["EtsyListingFacts"];
@@ -3898,11 +3835,10 @@ export interface components {
     /**
      * ListingFailedEvent
      * @description The engine's ``EngineListingFailed`` wire twin. ``message`` is the
-     *     :class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word
-     *     (decision 5) -- never the generic internal-error text, which belongs to a
-     *     :class:`PhaseEvent` naming the whole run ``failed`` instead, since a
-     *     defect is not about any one listing. ``stale_plan`` is set only when the
-     *     error was a :class:`~etsy_listings.core.engine.run.StalePlanError`.
+     *     :class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for
+     *     word, or the generic internal-error text for a defect, which also fails
+     *     the run. ``stale_plan`` is set only when the error was a
+     *     :class:`~etsy_listings.core.engine.run.StalePlanError`.
      */
     ListingFailedEvent: {
       /** Id */
@@ -3962,10 +3898,7 @@ export interface components {
     };
     /**
      * ListingProposal
-     * @description A listing's cached proposal as the editor and the batch summary read
-     *     it: the record, and whether it still describes the saved listing.
-     *     ``stale`` is computed from the saved listing on every read, never
-     *     stored.
+     * @description A listing's cached proposal, with ``stale`` computed on every read.
      */
     ListingProposal: {
       /**
@@ -4304,10 +4237,7 @@ export interface components {
     };
     /**
      * MarketSnapshot
-     * @description One research, as the panel reads it back: the result's fields, when
-     *     the search ran, and the exact block the proposal was given. Holds each
-     *     listing's lead, never its full description (features/market-seo-20260924/spec.md, *What the
-     *     proposal sees*).
+     * @description One listing's latest market research, as the top listings panel reads it back.
      */
     MarketSnapshot: {
       /** Block */
@@ -4449,12 +4379,7 @@ export interface components {
       renderer:
         components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
-    /**
-     * MultipleTemplate
-     * @description Several garments in one photo. ``displace``/``shade`` are scene-level
-     *     only -- one photo, one lighting pass; a placement needing different
-     *     rendering treatment belongs in its own template instead.
-     */
+    /** MultipleTemplate */
     MultipleTemplate: {
       /**
        * Colour Coverage
@@ -4482,7 +4407,7 @@ export interface components {
      * PhaseEvent
      * @description The run (or one of the two run kinds) moved to a new phase. Always the
      *     first event of a run and always its last, whichever phase that turns out
-     *     to be (ADR-0041, decision 7).
+     *     to be.
      */
     PhaseEvent: {
       /** Id */
@@ -4544,8 +4469,7 @@ export interface components {
     };
     /**
      * PhraseScore
-     * @description One tag used by the scored listings: how many use it, and the sum of
-     *     their scores normalised so the best phrase is 1.
+     * @description One tag the scored listings use, with its normalised score.
      */
     PhraseScore: {
       /** Listings */
@@ -4959,8 +4883,7 @@ export interface components {
     };
     /**
      * ProposalChoices
-     * @description What the seller chooses from: the validated `ai/models.py.SeoProposal`,
-     *     field for field, as JSON can carry it.
+     * @description The validated proposal the seller chooses from.
      */
     ProposalChoices: {
       /** Description Leads */
@@ -4978,9 +4901,7 @@ export interface components {
     };
     /**
      * ProposalResolution
-     * @description Each section's state (spec, *Durable AI proposals*): a section the
-     *     seller accepted or dismissed stays resolved after a reload, so its drawer
-     *     does not present itself as new again. ``pending`` is still open.
+     * @description Each section's state: an accepted or dismissed section stays resolved after a reload.
      */
     ProposalResolution: {
       /**
@@ -5377,11 +5298,7 @@ export interface components {
     };
     /**
      * ScoredListing
-     * @description One of the (at most) twenty listings scored, with everything the top
-     *     listings panel shows (features/market-seo-20260924/interactions.md, *Where the data
-     *     comes from*) -- and deliberately not the full description, which neither
-     *     the panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal
-     *     sees*).
+     * @description One scored comparable listing, as the top listings panel shows it.
      */
     ScoredListing: {
       /** Favourites Per Day */
@@ -5423,10 +5340,8 @@ export interface components {
     };
     /**
      * SeoProposalSnapshot
-     * @description The generation inputs, frozen before the provider starts: everything
-     *     `ai/models.py.SeoRequest` sent except the design image itself, plus the
-     *     design's identity and content hash. :func:`proposal_staleness` compares
-     *     one of these against the same inputs read from the listing now.
+     * @description The generation inputs, frozen before the provider starts: the
+     *     request's fields but the image, plus the design's name and content hash.
      */
     SeoProposalSnapshot: {
       /** Brief */
@@ -5454,8 +5369,7 @@ export interface components {
     };
     /**
      * SeoRationaleEntry
-     * @description One of the proposal's seven priority-phrase rationales -- the wire
-     *     shape of `ai/models.py.PhraseRationale`.
+     * @description One of the proposal's seven priority-phrase rationales.
      */
     SeoRationaleEntry: {
       /**
@@ -5495,7 +5409,7 @@ export interface components {
     };
     /**
      * SeoWarningEntry
-     * @description The wire shape of `ai/models.py.ProposalWarning`.
+     * @description One disclosure attached to a proposal: a general note or a trademark warning.
      */
     SeoWarningEntry: {
       /**
@@ -5524,12 +5438,7 @@ export interface components {
     /**
      * ShadeConfig
      * @description Blends the base mockup photo's own greyscale lighting over the printed
-     *     design, so a flat design picks up the garment's real fold shadows and
-     *     light falloff instead of looking pasted on as a flat rectangle -- this is
-     *     why a plain flat-lay PNG is enough to mock up, with no purchased
-     *     Photoshop lighting map needed. On by default: almost every mockup needs
-     *     it. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a
-     *     mid-grey pivot is used for those instead.
+     *     design. On by default: almost every mockup needs it.
      */
     ShadeConfig: {
       /**
@@ -5675,8 +5584,7 @@ export interface components {
     };
     /**
      * SingleTemplate
-     * @description One photo, one garment -- a lifestyle shot, a folded product photo,
-     *     anything that isn't part of a colour set.
+     * @description One photo, one garment.
      */
     SingleTemplate: {
       /** Bounding Box */
@@ -5920,7 +5828,6 @@ export interface components {
     /**
      * TemplateEtsyConfig
      * @description `EtsyListingConfig` without the copy an instance writes for itself.
-     *     The four settings keep the meanings `EtsyListingConfig` documents.
      */
     TemplateEtsyConfig: {
       /** @default {} */
@@ -5957,9 +5864,7 @@ export interface components {
      *     ``Workspace.scene_photo`` -- the same rule the renderer uses, including the
      *     trailing-segment fallback for a vendor pack delivered as
      *     ``{template}-{colour}.png``. The listings editor shows it under its preview
-     *     so the user knows which file to go and edit, and it used to *derive* that
-     *     caption from ADR-0004's convention in TypeScript, which named a file that was
-     *     not there for exactly the pack the fallback exists for.
+     *     so the user knows which file to go and edit.
      *
      *     ``colour`` is ``None`` for a ``multiple``/``single`` template's fixed
      *     ``scene.png``: there is no per-colour name to derive one from.

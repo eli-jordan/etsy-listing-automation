@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 
-/** Keep relative timestamps current without waiting for another save or search. */
+const RELATIVE_TIME_TICK_MS = 15_000;
+
 export function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 15_000);
+    const id = setInterval(() => setNow(Date.now()), RELATIVE_TIME_TICK_MS);
     return () => clearInterval(id);
   }, []);
   return now;

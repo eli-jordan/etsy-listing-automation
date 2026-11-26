@@ -13,84 +13,33 @@ import type {
 } from "../../../types";
 
 /**
- * The editor's side of an AI run (features/market-seo-20260924/spec.md, *AI runs*): the brief,
- * market research and the proposal as one server-side run per listing,
- * started here, followed through its event stream, and reattached to after a
- * reload or a return to the editor.
- *
- * Everything the UI shows about a run is a function of its events, so this
- * hook rebuilds its view from them and nothing else: `steps` is the latest
- * `step` event for each node, `queries` and `market` the latest of theirs.
- * That is what makes a reload show the same state again -- the stream
- * replays every event from the start (`openAiRunStream`), and the same
- * reduction lands in the same place.
- *
- * A written brief is handed over only for a live attachment: a finished
- * run's brief is already in the saved listing. Proposal events are forwarded
- * with attachment context; useProposalReview owns their identity and
- * precedence against durable cache reads and resolutions.
- *
- * ## The auto chain
- *
- * {@link AiRun.arm} is called when the design strip changes the listing's
- * representative artwork while the brief is empty. The chain then fires
- * **once**, on the first successful save after that which has a name, a
- * representative artwork and a garment profile -- the first moment the
- * server can run it -- asking for a brief only if the field is
- * still empty then. That start raises {@link AiRun.autoNotice}; pressing
- * AI Mode does not. A new pick re-arms it; leaving the editor disarms it.
- * A run that fails is reported and left alone: an automatic retry against a
- * metered CLI is the failure mode "once" exists to rule out.
- *
- * ## Waiting for backup
- *
- * While a workspace backup pauses background jobs, a run the editor starts
- * is answered `queued` (workspace-backup plan, decision P4). It is busy and
- * cancellable like a running one, and its first `step` event is the sign it
- * has started: no phase event announces that.
+ * Everything the UI shows about a run is a function of its events: `steps` is
+ * the latest `step` event for each node, `queries` and `market` the latest of
+ * theirs. The stream replays every event from the start (`openAiRunStream`),
+ * so a reload lands the same reduction in the same place.
  */
 
 export type AiRunViewPhase = "idle" | "starting" | AiRunPhase;
 
 export interface AiRun {
-  /** `"idle"` until this editor starts or finds a run; `"starting"` while
-   * the `POST` is in flight; then the run's own phase. */
   phase: AiRunViewPhase;
-  /** Starting, queued or running: what disables the AI Mode button and
-   * shows *Generating for…* (or *Waiting for backup*) and Cancel. */
   busy: boolean;
-  /** The three nodes, brief → market → seo, each as its latest `step`
-   * event left it. Empty until there is a run. */
   steps: WorkflowStep[];
-  /** The three Etsy searches, once extraction has chosen them. */
   queries: string[] | null;
-  /** The run's market snapshot, once research has finished. */
   market: MarketSnapshot | null;
-  /** Why the run failed, or was refused. */
   message: string | null;
-  /** When the run began working (ms since the epoch), from the server:
-   * `null` while a backup holds it, so the wait is not generating time. */
   startedAt: number | null;
-  /** Who started the run: this editor, or the batch queue. `null`
-   * until there is a run. */
   origin: AiRunSummary["origin"] | null;
   start: (options: { draftBrief: boolean; automatic?: boolean }) => void;
   cancel: () => void;
-  /** Attaches to the listing's run if one is running that this editor is
-   * not following yet -- a batch run whose turn came while the editor was
-   * open. */
   follow: () => void;
-  /** Arms the auto chain; see the module docstring. */
   arm: () => void;
-  /** The auto chain started the run now on screen. A press of AI Mode does not set this. */
   autoNotice: boolean;
   dismissAutoNotice: () => void;
 }
 
 export interface AiRunHandlers {
-  /** The server wrote a drafted brief into the listing. */
   onBrief?: (text: string) => void;
-  /** Raw event and attachment context; proposal review owns replay precedence. */
   onProposal?: (event: Extract<AiRunEvent, { type: "proposal" }>, source: AiRunSummary) => void;
 }
 
@@ -130,8 +79,7 @@ function viewOf(run: AiRunSummary): View {
   };
 }
 
-/** Not finished: a run the server is still holding or running. */
-function active(phase: AiRunViewPhase): boolean {
+function isActivePhase(phase: AiRunViewPhase): boolean {
   return phase === "queued" || phase === "running";
 }
 
@@ -167,11 +115,8 @@ export function useAiRun(
   const [view, setView] = useState<View>(IDLE);
   const [autoNotice, setAutoNotice] = useState(false);
   const stream = useRef<EventStreamHandle | null>(null);
-  /** Bumped by every start and attach: an answer or an event that arrives for
-   * an older one is ignored. */
+  /** Answers and events for an older start or attach are dropped. */
   const generation = useRef(0);
-  /** While armed: the last save state the trigger judged (at first, the one
-   * showing when the design was picked). */
   const armed = useRef<{ baseline: SaveState | undefined } | null>(null);
   const latest = useRef({ detail, save, handlers, runId: view.runId });
   useEffect(() => {
@@ -181,11 +126,7 @@ export function useAiRun(
   const attach = useCallback((run: AiRunSummary) => {
     stream.current?.close();
     const mine = ++generation.current;
-    // A finished run's brief is already in the file the editor loaded -- or
-    // the seller has changed it since -- and its proposal is cached with the
-    // seller's resolutions. Brief adoption is live-only; proposal review
-    // receives the attachment context to decide which events remain current.
-    const live = active(run.phase);
+    const live = isActivePhase(run.phase);
     setView(viewOf(run));
     stream.current = openAiRunStream(run.id, {
       onEvent: (event) => {
@@ -201,7 +142,9 @@ export function useAiRun(
       onError: () => {
         if (mine !== generation.current) return;
         setView((current) =>
-          active(current.phase) ? { ...current, phase: "failed", message: LOST_STREAM } : current,
+          isActivePhase(current.phase)
+            ? { ...current, phase: "failed", message: LOST_STREAM }
+            : current,
         );
       },
     });
@@ -235,13 +178,9 @@ export function useAiRun(
   );
 
   const runId = view.runId;
-  const running = active(view.phase);
+  const running = isActivePhase(view.phase);
   const cancel = useCallback(() => {
     if (runId === null || !running) return;
-    // The run stays busy until its own `cancelled` phase arrives, moments
-    // later, once the provider's process tree is gone. Showing it idle
-    // sooner would let a click on AI Mode land while the run still holds the
-    // listing, and reattach to the run being cancelled.
     cancelAiRun(runId).catch(() => {});
   }, [runId, running]);
 
@@ -262,11 +201,6 @@ export function useAiRun(
     armed.current = { baseline: latest.current.save };
   }, []);
 
-  // Reattach: the listing's current or latest run, replayed from its first
-  // event. Only for a saved listing with a representative artwork -- the one
-  // image a run is sent, so nothing else can have had a run (spec,
-  // *Representative artwork*) -- and never over a run this editor has
-  // started since.
   const name = detail.name;
   const hasDesign = representative(detail.design) !== null;
   useEffect(() => {
@@ -283,10 +217,6 @@ export function useAiRun(
     };
   }, [name, hasDesign, attach]);
 
-  // The auto chain's trigger. Each save is judged once, in the render it
-  // arrives in, where the editor still shows what that save wrote: an edit
-  // made afterwards (choosing a garment profile) changes the editor at once
-  // but not the file, and the chain must wait for the save that carries it.
   const brief = detail.brief;
   const garmentProfile = detail.garment_profile;
   useEffect(() => {
@@ -303,7 +233,7 @@ export function useAiRun(
 
   return {
     phase: view.phase,
-    busy: view.phase === "starting" || active(view.phase),
+    busy: view.phase === "starting" || isActivePhase(view.phase),
     steps: view.steps,
     queries: view.queries,
     market: view.market,

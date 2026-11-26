@@ -1,5 +1,3 @@
-"""Explicit global model installation commands; no server or workspace queue."""
-
 from __future__ import annotations
 
 import json

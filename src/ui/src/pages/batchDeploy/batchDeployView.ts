@@ -1,7 +1,5 @@
 import type { BatchResult } from "./batchDeployPresentation";
 
-/** Where the all-listings page is: still planning, applying, showing an
- * apply's result, or holding a plan up for review. */
 export type BatchStage = "planning" | "applying" | "applied" | "review";
 
 export function batchStage(flags: {
@@ -21,9 +19,6 @@ export const BATCH_STAGE_TITLES: Record<BatchStage, string> = {
   review: "Review all changes",
 };
 
-/** The words that differ between a deploy of every listing and one of a
- * listing batch's reviewed rows (ADR-0059); everything else on the page is
- * the same. */
 export interface ScopeCopy {
   scope: "workspace" | "batch";
   noun: string;
@@ -56,8 +51,6 @@ const SCOPE_COPY: Record<ScopeCopy["scope"], ScopeCopy> = {
   },
 };
 
-/** The page's words for a run of listing batch `batchId`, or of the whole
- * workspace when `null`. */
 export function scopeCopy(batchId: string | null): ScopeCopy {
   return SCOPE_COPY[batchId === null ? "workspace" : "batch"];
 }
@@ -73,7 +66,6 @@ export function batchStageTitle(stage: BatchStage, copy: ScopeCopy): string {
   return (copy.scope === "batch" ? BATCH_SCOPE_TITLES : BATCH_STAGE_TITLES)[stage];
 }
 
-/** An apply result someone has to act on: partial, failed or stale. */
 export function resultNeedsAttention(result: BatchResult): boolean {
   return result.partial || result.failed.length > 0 || result.stale.length > 0;
 }
@@ -93,7 +85,6 @@ export function resultHeadline(result: BatchResult): string {
 export interface FooterFacts {
   stage: BatchStage;
   result: BatchResult;
-  /** The plan is ready and has work an apply would run. */
   canApply: boolean;
   previewsReady: boolean;
   readyPreviews: number;
@@ -103,7 +94,6 @@ export interface FooterFacts {
 
 const APPLY_RUNS_THE_PLAN = "Apply runs exactly this plan, one listing at a time.";
 
-/** The footer's line beside its one action. */
 export function batchFooterMessage(facts: FooterFacts): string {
   if (facts.stage === "applying") return APPLY_RUNS_THE_PLAN;
   if (facts.stage === "applied") {

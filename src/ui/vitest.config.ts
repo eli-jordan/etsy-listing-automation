@@ -23,6 +23,7 @@ import react from "@vitejs/plugin-react";
 //             frames import production components, and exercising those from
 //             a prototype is not production coverage.
 const NODE_TESTS = [
+  "src/api/client.test.ts",
   "src/dates.test.ts",
   "src/hooks/listingAutosave.test.ts",
   "src/hooks/writeLoop.test.ts",

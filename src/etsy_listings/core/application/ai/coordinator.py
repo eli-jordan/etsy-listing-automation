@@ -1,28 +1,3 @@
-"""The AI coordinator: one per application runtime (ADR-0048, ADR-0050).
-
-What a host needs to run AI work -- start a manual run, say whether one may
-start, hand listings to a deploy -- behind one object whose lifetime the host
-controls, as ``deploy/deployments.py`` is for deployment runs. Constructing it
-starts nothing: :meth:`AiCoordinator.start` starts the batch dispatcher after
-returning interrupted rows to the queue, and :meth:`AiCoordinator.stop` stops
-the dispatcher *before* cancelling the active runs, so a run ending on the
-way out frees no slot for the next row. The UI server's lifespan makes both
-calls, around the deployment coordinator's; a test makes them directly.
-
-Its parts stay in their modules and two are shared beyond it: the
-``registry`` -- who holds a listing, which renaming and deleting a listing
-consult -- and the batch ``queue``, which the seller's batch controls steer.
-Each run gets its own thread (``runner``), never the deployment worker; the
-queue is process-local and guards no second server on the workspace.
-
-**A backup's pause** (workspace-backup spec, *Pausing jobs*) is the one time
-a manual run waits: while the shared :class:`JobGate` is paused a new run is
-accepted ``queued`` and held here, and resume starts the held runs in the
-order they were asked for (plan decision P4) -- the gate keeps that line.
-Each run that starts owns a gate ticket until it finishes, which is what a
-backup's wait for quiet counts.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
@@ -57,8 +32,6 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 class AiCoordinator:
-    """Manual and batch AI runs for one workspace."""
-
     def __init__(  # noqa: PLR0913 -- the gate joins the host seams; each has a default but the stores
         self,
         workspace: Workspace,
@@ -89,45 +62,25 @@ class AiCoordinator:
 
     @property
     def registry(self) -> AiRunRegistry:
-        """Every run, by id and by listing: what a reader reattaches to, and
-        what renaming or deleting a listing stops and forgets."""
         return self._registry
 
     @property
     def queue(self) -> BatchQueue:
-        """The batch AI queue, as the batch controls steer and read it."""
         return self._queue
 
-    # ------------------------------------------------------------ lifecycle
-
     def start(self) -> None:
-        """Return rows a previous process left ``running`` to the queue, then
-        start dispatching (ADR-0048)."""
         self._queue.start()
 
     def stop(self) -> None:
-        """Start nothing more, then cancel every active run -- which kills
-        its provider's process tree -- and wait (bounded) for its thread. A
-        batch run stopped this way leaves its row ``running``, for the next
-        :meth:`start` to rerun. Manual runs a backup's pause holds end
-        ``cancelled`` without starting. Safe to call more than once."""
         self._queue.stop()
         self._runner.shutdown()
 
-    # ---------------------------------------------------------- manual runs
-
     def start_run(self, listing: str, *, draft_brief: bool) -> AiRun | Conflict:
-        """Start a manual run for saved ``listing`` on its own thread, or
-        answer the active run already holding it, to reattach to.
-
-        Refusals, with nothing started: :class:`ListingMissingError`, then
-        :class:`ListingDeployingError` (ADR-0050 wins over everything below),
-        :class:`ListingDraftingInBatchError`, and -- after the active-run check --
-        :class:`AiNotReadyError` with the readiness rule that failed.
-
-        While a backup's pause is on, the run is answered ``queued`` and
-        starts when the pause ends.
-        """
+        """Start a manual run for saved ``listing``, or answer the active run
+        holding it. Refuses, in this order and starting nothing:
+        :class:`ListingMissingError`, :class:`ListingDeployingError`
+        (ADR-0050), :class:`ListingDraftingInBatchError`, then, after the
+        active-run check, :class:`AiNotReadyError`."""
         if not ListingDocuments(self._workspace).exists(listing):
             raise ListingMissingError(listing)
         refused = self._claimed(listing)
@@ -144,11 +97,9 @@ class AiCoordinator:
     def _create(self, listing: str, *, draft_brief: bool) -> AiRun | Conflict:
         """Create the run and start it, or hold it while a backup's pause is
         on. Admitted before the run exists, so a backup waiting for quiet
-        counts it from the moment anyone can see it; the run owns the
-        ticket from then on."""
-        ticket = self._gate.admit(_job(listing))
-        # The registry refuses a held listing again here, which is what
-        # closes the race with a deploy taking it since the check above.
+        counts it as soon as anyone can see it."""
+        ticket = self._gate.admit(_backup_wait_label(listing))
+        # The registry re-checks deploy holds: a deploy may have taken it since.
         run = self._registry.create(
             listing, draft_brief=draft_brief, queued=ticket is None, ticket=ticket
         )
@@ -157,22 +108,21 @@ class AiCoordinator:
         if isinstance(run, Conflict):
             return run
         if ticket is None:
-            self._gate.hold(_job(listing), lambda admitted: self._begin(run, admitted))
+            self._gate.hold(
+                _backup_wait_label(listing), lambda admitted: self._begin(run, admitted)
+            )
         else:
             self._runner.start(run)
         return run
 
     def _begin(self, run: AiRun, ticket: Ticket) -> None:
-        """Resume reached a held run: start it, unless it was stopped while
-        held."""
         if run.begin(ticket):
             self._runner.start(run)
 
     def blocked(self, listing: str) -> AiRunRefusedError | None:
-        """What :meth:`start_run` would refuse saved ``listing`` with for
-        the **AI Mode** button's run -- one that drafts an empty brief -- or
-        ``None`` when it would start. An active run is not a refusal: the
-        button reattaches to it."""
+        """What :meth:`start_run` would refuse the **AI Mode** button's run
+        with (one that drafts an empty brief), or ``None``. An active run is
+        not a refusal: the button reattaches to it."""
         refused = self._claimed(listing)
         if refused is not None:
             return refused
@@ -199,22 +149,13 @@ class AiCoordinator:
         )
 
     def waiting_for_backup(self, run: AiRun) -> bool:
-        """Whether ``run`` is held by a backup's pause (plan decision P4).
-        Never stored, only read."""
         return self._gate.holds(queued=run.phase == "queued")
-
-    # -------------------------------------------------------------- deploys
 
     @contextmanager
     def yield_to_deploy(self, listings: Sequence[str]) -> Iterator[None]:
-        """ADR-0050: take ``listings`` from AI work for as long as the
-        ``with`` lasts. Their queued rows become ``cancelled_by_deploy``,
-        every run on them is stopped and awaited, and no new run may start;
-        on exit they are free again and the queue looks again."""
         with self._queue.yield_to_deploy(listings):
             yield
 
 
-def _job(listing: str) -> str:
-    """What a backup waiting for this run names."""
+def _backup_wait_label(listing: str) -> str:
     return f"AI run for {listing}"

@@ -1,5 +1,3 @@
-"""Validated read-only evidence selection and reconstruction."""
-
 from __future__ import annotations
 
 import hashlib
@@ -14,6 +12,11 @@ from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.preparation.artifacts import PreparationInputs
+from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
+    CHECKPOINT_REVISIONS,
+    PROCESSING_RESOLUTION,
+    SEED,
+)
 from etsy_listings.core.preparation.numerics import (
     Crop,
     Evidence,
@@ -72,8 +75,6 @@ def placement_key(value: str | None) -> str:
 
 
 class _JobEvidence(Protocol):
-    """What :meth:`EvidenceReader.candidates` reads of a preparation job."""
-
     @property
     def template(self) -> str: ...
 
@@ -81,14 +82,7 @@ class _JobEvidence(Protocol):
     def evidence(self) -> tuple[CropEvidence, ...]: ...
 
 
-# Checkpoint and preprocessing semantics are immutable for this supported fitter.
-# Installation IDs intentionally do not change compatible evidence identity.
-
-CHECKPOINTS = (
-    "09cfdd258cb281fa006cf1afcd2284376d16687d/"
-    "08c3930bb641abf786ba44ce92547507ebefbc16/"
-    "9571e7123e258cf052b4e54241f17971c290e9a8"
-)
+CHECKPOINTS = "/".join(CHECKPOINT_REVISIONS.values())
 
 
 def required_identity(inputs: PreparationInputs) -> EvidenceIdentity:
@@ -96,7 +90,7 @@ def required_identity(inputs: PreparationInputs) -> EvidenceIdentity:
         hashlib.sha256(json_bytes(inputs.photo.model_dump(mode="json"))).hexdigest(),
         CHECKPOINTS,
         hashlib.sha256(json_bytes(inputs.inference.model_dump(mode="json"))).hexdigest(),
-        "rgb-original-crop-resolution768-seed2026-v1",
+        f"rgb-original-crop-resolution{PROCESSING_RESOLUTION}-seed{SEED}-v1",
     )
 
 
@@ -168,8 +162,6 @@ class EvidenceReader:
         return selected
 
     def pointer(self, template: str) -> PredictionPointer | None:
-        """The template's current prediction set; None when it has none or
-        its pointer is unreadable."""
         path = self.workspace.preparation_prediction_current(template)
         try:
             pointer = PredictionPointer.model_validate_json(path.read_bytes())

@@ -87,6 +87,15 @@ def test_writing_a_value_creates_the_env_file_and_returns_its_path(tmp_path: Pat
     assert path.read_text(encoding="utf-8") == "ETSY_KEYSTRING=abc123\n"
 
 
+def test_the_env_file_keeps_lf_line_endings_on_every_platform(tmp_path: Path) -> None:
+    scaffold.write_env_value(tmp_path, "ETSY_KEYSTRING", "abc123")
+    scaffold.write_env_value(tmp_path, "ETSY_SHARED_SECRET", "s3cret")
+
+    assert (tmp_path / layout.ENV_FILE).read_bytes() == (
+        b"ETSY_KEYSTRING=abc123\nETSY_SHARED_SECRET=s3cret\n"
+    )
+
+
 def test_writing_a_second_value_keeps_the_first(tmp_path: Path) -> None:
     scaffold.write_env_value(tmp_path, "ETSY_KEYSTRING", "abc123")
     scaffold.write_env_value(tmp_path, "ETSY_SHARED_SECRET", "s3cret")

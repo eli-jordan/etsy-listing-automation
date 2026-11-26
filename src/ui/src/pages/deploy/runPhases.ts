@@ -17,3 +17,10 @@ export const TERMINAL_PHASES: ReadonlySet<RunPhase> = new Set([
  * Back click; the grace lets that exit land first, so the page they return to
  * can still offer View result. Exported so tests advance exactly this far. */
 export const MARK_SEEN_GRACE_MS = 750;
+
+/** A plan run still checking or previewing: the one kind of run Back cancels. */
+export function isPlanInProgress(phase: RunPhase): boolean {
+  return (
+    phase === "queued" || phase === "planning" || phase === "planned" || phase === "previewing"
+  );
+}

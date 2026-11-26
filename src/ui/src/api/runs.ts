@@ -1,22 +1,8 @@
-import { api } from "./client";
+import { api, withTuples } from "./client";
 import type { CreateRunRequest, RunDetail, RunSummary } from "../types";
-
-/**
- * The runs resource's REST surface (ADR-0041; docs/features/deploy-20260917/spec.md decision 7),
- * mirrored from `api/listings.ts`'s own shape: typed wrapper functions over
- * `openapi-fetch`, the only thing pages/components import. The sixth
- * endpoint, `GET /api/runs/{id}/events`, has no wrapper here -- it is
- * `text/event-stream`, not JSON, and `pages/deploy/runStream.ts` reads it
- * itself through `fetch` (not `EventSource`, which cannot set `Last-Event-ID`
- * on its first connection -- reattach needs one), so it wants a bare URL
- * rather than a typed client call.
- */
 
 export class RunsApiError extends Error {}
 
-/** `202` with the new run's summary, or `409` naming the run already holding
- * one of these listings -- the caller reattaches to that one instead of
- * retrying into the same refusal (`server/api/runs.py`'s own docstring). */
 export type CreateRunResult =
   { kind: "created"; run: RunSummary } | { kind: "conflict"; activeRun: string };
 
@@ -30,18 +16,12 @@ export async function createRun(body: CreateRunRequest): Promise<CreateRunResult
   return { kind: "created", run: data };
 }
 
-/** The current run holding `listing` -- active, or finished and not yet
- * superseded (decision 7's retention). Empty for a listing with no run this
- * server process remembers. */
 export async function currentRun(listing: string): Promise<RunSummary | null> {
   const { data, error } = await api.GET("/api/runs", { params: { query: { listing } } });
   if (error || !data) throw new RunsApiError(`could not check runs for ${listing}`);
   return data[0] ?? null;
 }
 
-/** The current workspace-scoped batch run, if the server remembers one. The
- * workspace holder is intentionally queried by scope rather than rebuilt from
- * the Listings table: ADR-0042 makes the server the authority for batch scope. */
 export async function currentWorkspaceRun(): Promise<RunSummary | null> {
   const { data, error } = await api.GET("/api/runs", {
     params: { query: { scope: "workspace" } },
@@ -50,8 +30,6 @@ export async function currentWorkspaceRun(): Promise<RunSummary | null> {
   return data[0] ?? null;
 }
 
-/** The current run deploying listing batch `batchId` (ADR-0059), if the
- * server remembers one: active, or finished and not yet superseded. */
 export async function currentBatchRun(batchId: string): Promise<RunSummary | null> {
   const { data, error } = await api.GET("/api/runs", {
     params: { query: { scope: "batch", batch: batchId } },
@@ -60,8 +38,6 @@ export async function currentBatchRun(batchId: string): Promise<RunSummary | nul
   return data[0] ?? null;
 }
 
-/** Whether a run is one the shared review page follows: every listing of the
- * workspace, or one listing batch's reviewed rows. */
 export function isReviewedScope(run: Pick<RunSummary, "scope">): boolean {
   return run.scope === "workspace" || run.scope === "batch";
 }
@@ -69,11 +45,7 @@ export function isReviewedScope(run: Pick<RunSummary, "scope">): boolean {
 export async function getRun(id: string): Promise<RunDetail> {
   const { data, error } = await api.GET("/api/runs/{run_id}", { params: { path: { run_id: id } } });
   if (error || !data) throw new RunsApiError(`could not load run ${id}`);
-  // `as unknown as RunDetail`: `events`' `ProgressEvent.swatches` tuple
-  // (`[number, number, number]`) widens to `number[]` through openapi-fetch's
-  // generic response extraction -- the same known gap `api/calibrator.ts`
-  // already works around for `BoundingBox`, one level deeper here.
-  return data as unknown as RunDetail;
+  return withTuples<RunDetail>(data);
 }
 
 /** Cancels a queued or planning/previewing run. Refuses (`409`) for an
@@ -94,8 +66,6 @@ export async function markRunSeen(id: string): Promise<void> {
   if (error) throw new RunsApiError(`could not mark run ${id} seen`);
 }
 
-/** The SSE route's own URL -- not fetched through `openapi-fetch`, which has
- * no streaming mode; `runStream.ts` reads it itself through `fetch`. */
 export function runEventsUrl(id: string): string {
   return `/api/runs/${encodeURIComponent(id)}/events`;
 }

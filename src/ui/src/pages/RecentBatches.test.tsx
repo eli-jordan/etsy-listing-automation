@@ -143,4 +143,13 @@ describe("RecentBatches", () => {
     await vi.waitFor(() => expect(load).toHaveBeenCalled());
     expect(screen.queryByRole("heading", { name: "Recent batches" })).toBeNull();
   });
+
+  it("leaves the page as it is, with no error, when the batch index will not load", async () => {
+    const load = vi.spyOn(batchesApi, "listBatches").mockRejectedValue(new Error("500"));
+    const { container } = renderIt();
+
+    await vi.waitFor(() => expect(load).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(container.querySelector("section")).toBeNull();
+  });
 });

@@ -111,7 +111,7 @@ describe("NewBatchPage", () => {
               refused: {
                 message: "26 designs is more than one batch takes.",
                 remedy: "Split them into two batches of at most 25.",
-                files: ["a.png", "b.png"],
+                fileNames: ["a.png", "b.png"],
               },
             },
           },

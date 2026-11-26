@@ -8,10 +8,7 @@ function runUrl(id: string): string {
   return `/listings/deploy/${encodeURIComponent(id)}`;
 }
 
-/** Deploy reviewed on a batch's summary (ADR-0059): plans this batch's
- * reviewed rows that have changes to deploy, on the same review page a
- * deploy of every listing uses. While this batch's deploy runs, or its
- * outcome is unseen, it offers the way back to that run instead. */
+/** ADR-0059. */
 export function BatchDeployReviewedButton({
   batchId,
   deployable,

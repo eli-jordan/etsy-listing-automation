@@ -31,70 +31,15 @@ import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelect
 import { PrintsCard } from "./PrintsCard";
 import { useIsPhone } from "../../phone/usePhone";
 
-/**
- * Garment dropdown, sizes, colour list, and a preview of the colour under the
- * cursor (phase 5).
- *
- * A swatch dot next to each name is the listing's *real* garment colour, not
- * an invented hex value -- sampled off the garment profile's
- * `preview_template` (`render/swatch.py`'s `sample_swatch`, via
- * `GET.../swatch`). It answers "roughly what colour is this" for scanning
- * the whole list; "does this colour suit the design" is still the big
- * preview stage beside it, which renders the colour with the file it
- * resolves to in the saved listing (`GET .../scene-preview`, A35) rather
- * than a bare photo -- and is rendered large, because that judgement is about
- * the ink on the cloth and a postage stamp cannot carry it. The preview
- * template is a colour-matrix on the garment, not a `media:` entry, so a new
- * listing can judge colours before it has picked listing images (A13). The
- * card under it says which file that is and why (`PrintsCard`). A listing
- * template has no artwork, so it previews through the design its editor
- * picked to preview with (`artwork`), and has no file to explain.
- *
- * Two different states, deliberately distinguished, because conflating them
- * painted every enabled row in the selected-row highlight:
- *
- * * **enabled** -- the colour is in `colors:` and will be sold. The switch.
- * * **previewed** -- the colour on the stage right now. Exactly one, and
- * `.color-row--selected` means *this*, not "enabled".
- *
- * A disabled colour is dimmed (`--off`) rather than hidden, so turning one
- * back on does not require remembering it existed.
- *
- * Which colour is previewed is the shell's state, not this tab's: the design
- * strip's "Also printing their own design" names preview a colour too.
- *
- * Each enabled row carries a chip of the file it prints, on its own cloth,
- * which opens that colour's picker (interactions Part 1 §6, Part 2 §5). A
- * pick is the colour's own design -- `design.<colour>` -- written through
- * `onUpdate` rather than the strip's design change, because a colour's own
- * design is print treatment and never arms AI (spec: *Representative
- * artwork*).
- *
- * Every change to which colours are sold goes through `selectColours`, never
- * through a bare `{ colors }` patch -- see that module for the three fields
- * keyed by colour that have to move with it.
- */
-
 interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
-  /** The colour the seller last asked to preview; `null` until they do. */
   previewed: string | null;
   onPreview: (colour: string) => void;
-  /** Opens a base slot's Recent designs panel in the strip above the tabs --
-   * the card under the stage's fix for a colour whose slot is empty. */
   onChooseSlot?: (tone: Tone) => void;
-  /** What the preview composites, when it is not the listing's own design:
-   * the listing-template editor's preview design (UI doc §3). A listing
-   * template has no artwork, so with this set nothing per-colour is offered. */
   artwork?: Artwork | null;
 }
 
-/** The garment profile's colour-matrix, used to judge colours before the
- * listing has picked its Etsy images. Not a `media:` default. The
- * templates list is only consulted to refuse a name we *know* is not
- * colour-matrix -- a new listing must not wait on GET /api/templates
- * (or on a colour-matrix entry in `media:`) before the stage can render. */
 function previewTemplate(
   profile: GarmentProfileSummary | undefined,
   templates: TemplateSummary[],
@@ -117,9 +62,11 @@ export function VariantsTab({
   const [profiles, setProfiles] = useState<GarmentProfileSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [library, setLibrary] = useState<ListingDesignSummary[]>([]);
-  const [swatches, setSwatches] = useState<Record<string, string>>({});
+  const [fetchedSwatches, setFetchedSwatches] = useState<{
+    template: string;
+    hexes: Record<string, string>;
+  } | null>(null);
   const [status, setStatus] = useState("");
-  /** The colour whose own-design picker is open. */
   const [picking, setPicking] = useState<string | null>(null);
   const phone = useIsPhone();
 
@@ -136,9 +83,6 @@ export function VariantsTab({
   }, []);
 
   const profile = profiles.find((p) => p.name === detail.garment_profile);
-  // Every colour the profile classifies, plus any the listing already enables
-  // that the profile doesn't (so toggling one off never makes it vanish from
-  // the list before the edit is saved).
   const colourNames = useMemo(
     () =>
       Array.from(
@@ -147,9 +91,6 @@ export function VariantsTab({
     [profile, detail.colors],
   );
 
-  // Falls back rather than holding state the listing may have moved past: a
-  // colour switched off, or renamed, should not leave the stage pointing at
-  // something this listing no longer sells.
   const shown =
     previewed !== null && colourNames.includes(previewed)
       ? previewed
@@ -160,50 +101,38 @@ export function VariantsTab({
   const scene = ownArtwork ? sceneSource(detail.name, detail.design_content_hash) : artwork;
   const tones: Record<string, Tone> = profile?.colors ?? {};
 
-  // Every colour's stage picture, fetched into the browser cache in list
-  // order while the seller looks at the first: each is a full-size render
-  // the first time, and judging which colours suit a design means clicking
-  // through most of them.
   usePreloadedPictures(
     template === null ? [] : colourNames.map((colour) => templatePicture(template, colour, scene)),
   );
 
-  // One request per colour, fired once the preview template and colour list
-  // are known -- not per row-render, so scrolling or re-toggling a switch
-  // never refetches a dot this effect has already resolved. Routed through
-  // `Promise.all` even for "no template" so `setSwatches` is always called
-  // from a `.then()`, never synchronously in the effect body.
   useEffect(() => {
+    if (template === null) return;
     let current = true;
-    const fetches =
-      template === null
-        ? []
-        : colourNames.map((colour) =>
-            getTemplateSwatch(template, colour)
-              .then((hex) => [colour, hex] as const)
-              .catch(() => null),
-          );
-    Promise.all(fetches).then((results) => {
+    const fetches = colourNames.map((colour) =>
+      getTemplateSwatch(template, colour)
+        .then((hex) => [colour, hex] as const)
+        .catch(() => null),
+    );
+    void Promise.all(fetches).then((results) => {
       if (!current) return;
-      setSwatches(Object.fromEntries(results.filter((r) => r !== null)));
+      setFetchedSwatches({
+        template,
+        hexes: Object.fromEntries(results.filter((r) => r !== null)),
+      });
     });
     return () => {
       current = false;
     };
   }, [template, colourNames]);
+  const swatches = fetchedSwatches?.template === template ? fetchedSwatches.hexes : NO_SWATCHES;
 
-  /** The one write path for `colors:`. Reports what else the edit took with
-   * it, since a bulk switch can drop a reel somebody spent a while building
-   * and the reel is on a different tab. */
+  /** Reports what else the edit took with it: a bulk switch can drop a reel
+   * somebody spent a while building, on a different tab. */
   function setColours(next: string[]) {
-    const lost = mediaLostBy(detail, next);
+    setStatus(lostMediaStatus(mediaLostBy(detail, next)));
     onUpdate(selectColours(detail, next));
-    const mediaKind = lost === 1 ? "image" : "images";
-    setStatus(lost === 0 ? "" : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`);
   }
 
-  /** A colour's own design: written straight into `design`, then previewed,
-   * so the seller sees it on the stage (interactions Part 1 §6). */
   function pickOwn(colour: string, ref: string) {
     onUpdate({ design: pickForColour(detail.design, colour, ref) });
     setPicking(null);
@@ -214,32 +143,19 @@ export function VariantsTab({
     setColours(enabled ? [...detail.colors, colour] : detail.colors.filter((c) => c !== colour));
   }
 
-  /** Every colour the newly chosen profile classifies, replacing whatever
-   * was selected -- a new listing has none yet, and a switch between
-   * garments would otherwise keep colours the new one does not sell. */
   function pickProfile(name: string) {
     const chosen = profiles.find((p) => p.name === name);
     const colours = chosen === undefined ? [] : Object.keys(chosen.colors).sort();
-    const lost = mediaLostBy(detail, colours);
+    setStatus(lostMediaStatus(mediaLostBy(detail, colours)));
     onUpdate(selectGarmentProfile(detail, name, colours));
-    const mediaKind = lost === 1 ? "image" : "images";
-    setStatus(lost === 0 ? "" : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`);
   }
 
-  /** Every colour the garment profile classifies as ``shade``, and nothing
-   * else -- the two bulk buttons are exact opposites, so "Dark" turning the
-   * light ones *off* is the half that makes them worth having. Driven by the
-   * profile, so a colour it does not classify is left out of both. */
   function onlyShade(shade: "dark" | "light") {
     if (!profile) return;
     setColours(colourNames.filter((colour) => profile.colors[colour] === shade));
   }
 
-  // Offered only when there is something for them to act on: a garment
-  // profile that classifies no colours (`colors: {}`) would give two buttons
-  // that clear the list and call it a shade.
   const hasShades = profile !== undefined && Object.keys(profile.colors).length > 0;
-  // A colour key needs a base key beside it; an empty draft picks that first.
   const ownable = ownArtwork && canHaveOwnDesign(detail.design);
 
   return (
@@ -254,9 +170,6 @@ export function VariantsTab({
             value={detail.garment_profile}
             onChange={(event) => pickProfile(event.target.value)}
           >
-            {/* A new listing starts with none chosen, so the unselected case
-                needs words rather than the blank, unlabelled option an empty
-                value would otherwise render. */}
             {!profile && (
               <option value={detail.garment_profile}>
                 {detail.garment_profile || "Select a garment profile…"}
@@ -291,10 +204,6 @@ export function VariantsTab({
             </span>
           </div>
 
-          {/* Above the swatches, because they act on all of them: a design
-              drawn for dark garments sells on the dark half of the profile
-              and nothing else, and setting that one switch at a time is the
-              most tedious thing this tab asks for. */}
           {hasShades && (
             <div className="shade-picker">
               <button type="button" className="btn-like btn-sm" onClick={() => onlyShade("dark")}>
@@ -339,8 +248,6 @@ export function VariantsTab({
                     <span className="tag tag-accent-2 color-row__own">own design</span>
                   )}
                 </button>
-                {/* Only rows that are sold print anything, so only they
-                    have a file to show or to change. */}
                 {enabled && ownable && profile !== undefined && (
                   <button
                     type="button"
@@ -366,9 +273,6 @@ export function VariantsTab({
                     {file !== null && <img src={listingDesignThumbnailUrl(refName(file))} alt="" />}
                   </button>
                 )}
-                {/* Beside the switch, not beside the name: the shade is what
-                    the two bulk buttons above act on, so it reads as a
-                    property of the decision rather than of the label. */}
                 {classification ? (
                   <span
                     className={classification === "dark" ? "tag tag-neutral" : "tag tag-accent"}
@@ -376,8 +280,6 @@ export function VariantsTab({
                     {classification}
                   </span>
                 ) : (
-                  // Shared garment data the listing cannot supply: which base
-                  // design it prints depends on it (spec, *Artwork resolution*).
                   profile !== undefined && <span className="tag tag-dirty">no tone</span>
                 )}
                 <button
@@ -406,8 +308,6 @@ export function VariantsTab({
             </div>
           )}
         </div>
-        {/* Once the profile has loaded: before then every colour of a
-            light/dark listing would read as having no tone. */}
         {ownArtwork && shown !== null && profile !== undefined && (
           <PrintsCard
             colour={shown}
@@ -418,7 +318,7 @@ export function VariantsTab({
             swatch={swatches[shown]}
             onChooseSlot={onChooseSlot}
             onPickColour={() => setPicking(shown)}
-            onAutomatic={() => onUpdate({ design: automatic(detail.design, shown) })}
+            onUseAutomatic={() => onUpdate({ design: automatic(detail.design, shown) })}
           />
         )}
         <p className="variants-preview__hint">
@@ -435,7 +335,7 @@ export function VariantsTab({
         <ArtworkPicker
           title={`Design for ${cap(picking)}`}
           hint={ownDesignHint(detail.design, picking, detail.colors, tones)}
-          tile={clothFor(picking, swatches[picking], detail.design, tones)}
+          cloth={clothFor(picking, swatches[picking], detail.design, tones)}
           current={resolvedFile(detail.design, picking, tones)}
           library={library}
           onPick={(ref) => pickOwn(picking, ref)}
@@ -446,7 +346,6 @@ export function VariantsTab({
   );
 }
 
-/** The file a colour prints, or `null` when it resolves to nothing. */
 function resolvedFile(
   design: DesignMap,
   colour: string,
@@ -456,11 +355,6 @@ function resolvedFile(
   return resolution.kind === "resolved" ? resolution.ref : null;
 }
 
-/** "Only Moss changes. Black and Navy keep the design for dark shirts." --
- * who else prints what this colour prints now, so a colour's own design is
- * not mistaken for a change to every dark shirt (interactions Part 1 §6).
- * The siblings are the other automatic colours sold that share its source:
- * every one while linked, those of its tone while unlinked. */
 function ownDesignHint(
   design: DesignMap,
   colour: string,
@@ -478,3 +372,10 @@ function ownDesignHint(
   const what = linked ? "the design for all shirts" : toneDesign;
   return `${only} ${listNames(siblings)} keep${siblings.length === 1 ? "s" : ""} ${what}.`;
 }
+
+function lostMediaStatus(lost: number): string {
+  if (lost === 0) return "";
+  return `Removed ${lost} listing ${lost === 1 ? "image" : "images"} for colours no longer sold.`;
+}
+
+const NO_SWATCHES: Record<string, string> = {};

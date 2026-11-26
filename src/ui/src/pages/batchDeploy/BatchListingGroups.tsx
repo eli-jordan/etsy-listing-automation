@@ -34,7 +34,6 @@ function rowStatus(listing: BatchListingState, plan: PlanDTO | null): string {
   return runnableStatus(listing, plan, runnable);
 }
 
-/** How far a listing with work to run has got through its runnable stages. */
 function runnableStatus(
   listing: BatchListingState,
   plan: PlanDTO,
@@ -89,8 +88,6 @@ function ListingRow({
   );
 }
 
-/** The authoritative plans stay in their four review groups. This component
- * only decides how to present each already-computed state. */
 export function BatchListingGroups({
   listings,
   onOpenListing,

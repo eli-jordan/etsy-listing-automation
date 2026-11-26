@@ -248,6 +248,22 @@ def test_a_listing_paused_after_being_made_visible_is_hidden_again(root, catalog
     assert printify.visible_at_publish[-1] is False
 
 
+def test_a_listing_activated_between_plan_and_apply_publishes_visible(
+    root, catalog, printify
+) -> None:
+    etsy = FakeEtsyListingClient()
+    ctx = a_context(root, catalog=catalog, printify=printify, etsy=etsy)
+    lock = _apply(ctx, a_lock())
+    etsy.seed_listing(ETSY_LISTING_ID, state="draft")
+    edit_listing(root, prices=RAISED_PRICES)
+    planned = _plan(ctx, lock)
+
+    etsy.seed_listing(ETSY_LISTING_ID, state="active")
+    execute(ctx, planned, lock)
+
+    assert printify.visible_at_publish[-1] is True
+
+
 # --------------------------------------------------------------------- timeout
 
 

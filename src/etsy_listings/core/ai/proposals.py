@@ -1,22 +1,3 @@
-"""The latest AI SEO proposal per listing, kept in server cache (ADR-0049; spec,
-*Durable AI proposals*; ADR-0003, ADR-0044 as amended by ADR-0047).
-
-``.cache/proposals/<listing>.json`` holds one record per listing:
-the ranked choices, the inputs frozen when they were generated, when, which
-run origin wrote it, and which of its three sections the seller has accepted
-or dismissed. Regeneration replaces it; there is no history and no expiry.
-It goes when the listing is deleted or fully applied, or ``.cache`` is
-cleared, and moves when the listing is renamed.
-
-It lives here rather than beside the UI so the engine can reach it (ADR-0050's
-cleanup after a full apply) without importing ``ui``.
-
-:func:`proposal_staleness` is the one answer to "does this proposal still
-describe its listing?". It was the browser's (``aiSeoStorage.isStale``),
-which meant the batch summary could not ask it; on the server the editor and
-the summary read the same reasons.
-"""
-
 from __future__ import annotations
 
 import json
@@ -27,40 +8,33 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from etsy_listings.core.ai.models import SeoProposal
+from etsy_listings.core.ai.models import RationaleField, RationaleIntent, SeoProposal, WarningKind
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_json_atomic
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 SCHEMA = 1
 
-SeoRationaleIntent = Literal["core_product", "bottom_of_funnel", "style"]
-SeoRationaleField = Literal["title", "tags", "description_lead"]
-SeoWarningKind = Literal["general", "trademark"]
-
 
 class SeoRationaleEntry(BaseModel):
-    """One of the proposal's seven priority-phrase rationales -- the wire
-    shape of `ai/models.py.PhraseRationale`."""
+    """One of the proposal's seven priority-phrase rationales."""
 
     phrase: str
-    intent: SeoRationaleIntent
+    intent: RationaleIntent
     reason: str
-    used_in: list[SeoRationaleField]
+    used_in: list[RationaleField]
 
 
 class SeoWarningEntry(BaseModel):
-    """The wire shape of `ai/models.py.ProposalWarning`."""
+    """One disclosure attached to a proposal: a general note or a trademark warning."""
 
     message: str
-    kind: SeoWarningKind = "general"
+    kind: WarningKind = "general"
 
 
 class SeoProposalSnapshot(BaseModel):
-    """The generation inputs, frozen before the provider starts: everything
-    `ai/models.py.SeoRequest` sent except the design image itself, plus the
-    design's identity and content hash. :func:`proposal_staleness` compares
-    one of these against the same inputs read from the listing now."""
+    """The generation inputs, frozen before the provider starts: the
+    request's fields but the image, plus the design's name and content hash."""
 
     brief: str
     product_type: str
@@ -75,8 +49,7 @@ class SeoProposalSnapshot(BaseModel):
 
 
 class ProposalChoices(BaseModel):
-    """What the seller chooses from: the validated `ai/models.py.SeoProposal`,
-    field for field, as JSON can carry it."""
+    """The validated proposal the seller chooses from."""
 
     titles: list[str]
     tags: list[str]
@@ -113,9 +86,7 @@ ProposalOrigin = Literal["manual", "batch"]
 
 
 class ProposalResolution(BaseModel):
-    """Each section's state (spec, *Durable AI proposals*): a section the
-    seller accepted or dismissed stays resolved after a reload, so its drawer
-    does not present itself as new again. ``pending`` is still open."""
+    """Each section's state: an accepted or dismissed section stays resolved after a reload."""
 
     title: Resolution = "pending"
     tags: Resolution = "pending"
@@ -123,8 +94,6 @@ class ProposalResolution(BaseModel):
 
 
 class ProposalRecord(BaseModel):
-    """``.cache/proposals/<listing>.json``."""
-
     model_config = ConfigDict(populate_by_name=True)
 
     schema_version: int = Field(SCHEMA, alias="schema")
@@ -138,26 +107,21 @@ class ProposalRecord(BaseModel):
     resolution: ProposalResolution = Field(default_factory=ProposalResolution)
 
 
-class ProposalReplacedError(Exception):
-    """A resolution named a proposal that has since been regenerated."""
+class ProposalReplacedError(Exception): ...
 
 
 class ProposalStore:
     """The one reader and writer of proposal records. Every mutation is a
-    read-modify-write under the listing's lock (``ListingDocuments.lock``).
-    That lock is process-wide, shared by every store over one workspace and
-    by every other writer to the listing. So when the engine removes a fully
-    applied listing's proposal through a store of its own while the UI's
-    store is resolving the same record, the remove waits instead of landing
-    inside that read-modify-write. A store is cheap to make."""
+    read-modify-write under the process-wide listing lock, so stores are
+    cheap to make and never interleave with each other's writes."""
 
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
         self._lock = ListingDocuments(workspace).lock
 
     def load(self, listing: str) -> ProposalRecord | None:
-        """``listing``'s proposal, or ``None`` for none -- and for a record
-        this code cannot read, or one another listing's name wrote."""
+        """``listing``'s proposal, or ``None`` for none, an unreadable one, or
+        one another spelling of the name wrote."""
         try:
             path = self._workspace.proposal_file(listing)
             raw = json.loads(read_bytes_retrying(path).decode("utf-8"))
@@ -186,7 +150,6 @@ class ProposalStore:
         generated_at: datetime,
         origin: ProposalOrigin,
     ) -> ProposalRecord:
-        """Replace ``listing``'s proposal with a new one, every section open."""
         record = ProposalRecord(
             listing=listing,
             proposal=choices,
@@ -227,19 +190,15 @@ class ProposalStore:
             return record
 
     def move(self, old: str, new: str) -> None:
-        """Rename's half of rename and delete hooks: the record follows the listing."""
         with self._lock(old, new):
             record = self.load(old)
             if record is None:
                 return
-            # Unlink first: on a case-insensitive filesystem a case-only
-            # rename's two paths are one file, which a later unlink would
-            # delete straight after writing it.
+            # Unlink first: a case-only rename's paths can be one file.
             self._workspace.proposal_file(old).unlink(missing_ok=True)
             self._save(record.model_copy(update={"listing": new}))
 
     def remove(self, listing: str) -> None:
-        """Delete's half of rename and delete hooks, and ADR-0050's cleanup after a full apply."""
         with self._lock(listing):
             if self.load(listing) is not None:
                 self._workspace.proposal_file(listing).unlink(missing_ok=True)
@@ -253,10 +212,7 @@ class ProposalStaleness(BaseModel):
 
 
 class ListingProposal(BaseModel):
-    """A listing's cached proposal as the editor and the batch summary read
-    it: the record, and whether it still describes the saved listing.
-    ``stale`` is computed from the saved listing on every read, never
-    stored."""
+    """A listing's cached proposal, with ``stale`` computed on every read."""
 
     proposal: ProposalChoices
     snapshot: SeoProposalSnapshot
@@ -266,28 +222,19 @@ class ListingProposal(BaseModel):
     stale: ProposalStaleness
 
 
-def _same_set(frozen: Sequence[str], now: Sequence[str]) -> bool:
-    """Order carries no meaning -- ``VariantsTab`` appends a re-enabled colour
-    at the end -- but a repeat does, so a multiset, not a set."""
+def _same_multiset(frozen: Sequence[str], now: Sequence[str]) -> bool:
     return Counter(frozen) == Counter(now)
 
 
 def proposal_staleness(frozen: SeoProposalSnapshot, now: SeoProposalSnapshot) -> ProposalStaleness:
-    """Which generation inputs changed between ``frozen`` and ``now``.
-
-    Ported field by field from the frontend's ``isStale``. Two echoes are
-    folded into the change that caused them, so the heading names what the
-    seller did: a different garment profile brings its own product type,
-    materials, brand and model, and a different design its own file hash.
-    Those facts are reported alone only when they moved under an unchanged
-    name -- the profile file or the artwork was edited in place.
-    """
+    """Which generation inputs changed between ``frozen`` and ``now``. A new
+    garment profile or design is one reason, not the fields it brings."""
     reasons: list[str] = []
     if frozen.brief != now.brief:
         reasons.append("brief edited since")
     if frozen.etsy_category != now.etsy_category:
         reasons.append("shop section changed since")
-    if not _same_set(frozen.colors, now.colors):
+    if not _same_multiset(frozen.colors, now.colors):
         reasons.append("colours changed since")
     if frozen.garment_profile != now.garment_profile:
         reasons.append("garment profile changed since")
@@ -301,9 +248,8 @@ def proposal_staleness(frozen: SeoProposalSnapshot, now: SeoProposalSnapshot) ->
 
 
 def _profile_edits(frozen: SeoProposalSnapshot, now: SeoProposalSnapshot) -> list[str]:
-    """The profile's own facts that moved under an unchanged profile name."""
     reasons: list[str] = []
-    if not _same_set(frozen.materials, now.materials):
+    if not _same_multiset(frozen.materials, now.materials):
         reasons.append("materials changed since")
     if frozen.product_type != now.product_type:
         reasons.append("product type changed since")

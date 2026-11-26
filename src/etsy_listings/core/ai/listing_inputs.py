@@ -1,10 +1,4 @@
-"""Saved-listing facts shared by AI generation and proposal judgment.
-
-A prepared request carries the comparison snapshot derived from exactly
-those same facts. HTTP adapters choose status codes; invalid workspace refs
-remain actionable errors on a background run. Reading again between run
-steps is deliberate, not one frozen snapshot for the whole run.
-"""
+"""Saved-listing facts shared by AI generation and proposal judgment."""
 
 from __future__ import annotations
 
@@ -70,14 +64,9 @@ class ListingAiInputs:
         if not self._has_profile:
             raise UserFacingError("the listing has no usable garment profile")
         snapshot = self.snapshot
-        # The one image a provider sees is the representative artwork
-        # (ADR-0053): default, then on-light, then on-dark -- never a colour's
-        # own file, which is print treatment rather than the listing's concept.
         ref = representative(snapshot.design)
         if ref is None:
             raise UserFacingError("the listing has no selected design")
-        # Flattened when transparent: the provider CLIs show transparency as
-        # black, which hides dark artwork entirely (`ai/viewable.py`).
         design: Path = viewable_design(
             self._workspace.resolve_ref(ref, listing_dir=self._workspace.listing_dir(self._name)),
             self._workspace.ai_image_cache_dir(),

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionLink } from "../../components/ActionLink";
 import { PHONE_QUERY } from "../../phone/usePhone";
@@ -208,6 +209,30 @@ describe("the phone head's overflow", () => {
     fireEvent.click(within(sheet).getByRole("button", { name: "Retire" }));
     expect(retire).toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps a picked action mounted, so a confirmation it asks survives the sheet closing", () => {
+    function AsksFirst() {
+      const [asking, setAsking] = useState(false);
+      return (
+        <>
+          <ActionLink icon={null} onClick={() => setAsking(true)}>
+            Mark for deletion
+          </ActionLink>
+          {asking && <p>Delete take-a-hike?</p>}
+        </>
+      );
+    }
+    render(
+      <HeadMore title="take-a-hike">
+        <AsksFirst />
+      </HeadMore>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark for deletion" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Delete take-a-hike?")).toBeInTheDocument();
   });
 
   it("closes on Done", () => {

@@ -29,29 +29,6 @@ import { useIsPhone } from "../phone/usePhone";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 import { BatchDeployReviewedButton } from "./batchDeploy/BatchDeployReviewedButton";
 
-/**
- * The batch summary (UI doc §7; the `batch-summary` frame): the batch's one
- * review surface. A progress bar and a count strip sit above one row per
- * listing, with its brief drafting and any later SEO proposal, and the queue's
- * controls -- Cancel batch, Resume, Retry N failed.
- *
- * Running and failed rows mount the editor's own step indicator, so a batch
- * row and an open editor read the same way; a finished row says *done*
- * instead, as the editor hides the indicator once a run completes. The
- * queue runs on the server whether this tab is open or not, so the page
- * only polls while a row is queued or running.
- *
- * Review (batch plan PR 5; spec *Review workflow*): the Reviewed column is
- * the seller's own judgement, offered only where the server says the row
- * is reviewable. The label renames by double-click, and Delete batch record
- * removes only the batch's own history (spec, *Cancellation and deletion*).
- * A deleted listing's row stays, struck through. A row whose AI work a
- * deploy cancelled says so and keeps its own Retry (ADR-0050; UI doc §8). A
- * created listing's name is its link to the editor -- there is no separate
- * Open -- and carries `?batch=`, which is what shows the editor's Back to
- * batch (UI doc §8).
- */
-
 export const POLL_MS = 2000;
 
 const ORDINAL = ["", "next", "2nd", "3rd"];
@@ -69,6 +46,9 @@ function createdAt(iso: string): string {
 
 type Kind =
   "drafted" | "drafting" | "queued" | "retry" | "stopped" | "deployed" | "deleted" | "none";
+
+/** A row a deploy cancelled offers its own Retry, though Resume skips it (ADR-0050). */
+const isRetryable = (kind: Kind | undefined) => kind === "retry" || kind === "deployed";
 
 function kindOf(row: BatchRow): Kind {
   if (row.deleted) return "deleted";
@@ -93,7 +73,6 @@ function kindOf(row: BatchRow): Kind {
   }
 }
 
-/** Retry reruns only what failed: a row that has its brief keeps it. */
 function failure(row: BatchRow): string {
   const message = (row.ai_error ?? "The AI run failed").replace(/\.?$/, ".");
   const brief = row.ai_steps.find((step) => step.id === "brief");
@@ -149,7 +128,6 @@ function AiCell({ row }: { row: BatchRow }) {
       return (
         <span className="bc-status bc-status--info">
           <ClockIcon className="bc-icon" />
-          {/* A workspace backup holds the queue (plan decision P4). */}
           {row.waiting_for_backup
             ? "Queued, waiting for backup"
             : `Queued, ${place(row.queue_position ?? 1)} in line`}
@@ -173,8 +151,6 @@ function AiCell({ row }: { row: BatchRow }) {
         </span>
       );
     case "cancelled_by_deploy":
-      // ADR-0050: a deploy of the listing cancelled its AI work, and Resume
-      // leaves it so no proposal lands on the deployed listing.
       return (
         <span className="bc-status bc-status--info">
           <MinusCircleIcon className="bc-icon" />
@@ -231,9 +207,6 @@ function ReviewedCell({ row, onReview }: { row: BatchRow; onReview: (next: boole
   );
 }
 
-/** The phone card's Reviewed: a labelled switch, since the desktop's
- * "✓ Reviewed" reads as a status and only a hover title says a click
- * clears it. */
 function ReviewedSwitch({ row, onReview }: { row: BatchRow; onReview: (next: boolean) => void }) {
   return (
     <button
@@ -251,12 +224,6 @@ function ReviewedSwitch({ row, onReview }: { row: BatchRow; onReview: (next: boo
   );
 }
 
-/** Where a row's listing opens: the editor, told which batch it came from. */
-/** The Listings table's summary of each of the batch's listings, for the
- * name's hover card (the same one the Listings page shows). Asked once per
- * set of names, not on every poll: a row's name changes only when it is
- * created, renamed or deleted, and the card is extra -- if the summaries
- * will not load, the names are plain links. */
 function useListingSummaries(names: string[]): Map<string, ListingSummary> {
   const [summaries, setSummaries] = useState<Map<string, ListingSummary>>(new Map());
   const key = [...names].sort().join("\n");
@@ -279,9 +246,6 @@ function editorUrl(batch: string, row: BatchRow): string {
   return `/listings/${encodeURIComponent(row.name)}?batch=${encodeURIComponent(batch)}`;
 }
 
-/** One batch row as a phone card: the listing (its whole head a tap target
- * into the editor once it exists), then its AI drafting and SEO proposal
- * as labelled lines, then Reviewed and Retry where a thumb reaches them. */
 function PhoneRowCard({
   batch,
   row,
@@ -362,8 +326,6 @@ export function BatchSummaryPage() {
   const reviewed = listings.filter((row) => row.reviewed).length;
   const summaries = useListingSummaries(listings.map((row) => row.name));
 
-  // The first load, then one every POLL_MS for as long as a row is queued
-  // or running.
   useEffect(() => {
     let current = true;
     const load = () =>
@@ -414,8 +376,6 @@ export function BatchSummaryPage() {
   ];
   const needRetry = count("retry");
   const concurrency = batch?.concurrency ?? 1;
-  // How drafting runs is news only while it runs: once nothing is queued or
-  // running, the line says where the batch got to instead (UI doc §7).
   const draftingPace =
     concurrency === 1
       ? "Drafting one listing at a time."
@@ -557,7 +517,7 @@ export function BatchSummaryPage() {
                   key={row.id}
                   batch={id}
                   row={row}
-                  retryable={kinds[index] === "retry" || kinds[index] === "deployed"}
+                  retryable={isRetryable(kinds[index])}
                   onReview={(next) => act(setReviewed(id, row.id, next))}
                   onRetry={() => act(retryBatchRow(id, row.id))}
                 />
@@ -577,9 +537,7 @@ export function BatchSummaryPage() {
               <tbody>
                 {rows.map((row, index) => {
                   const open = row.creation === "created" && !row.deleted;
-                  // A deploy's cancelled row has only its own Retry: Resume
-                  // skips it, and it is not a failure for Retry N failed (ADR-0050).
-                  const retryable = kinds[index] === "retry" || kinds[index] === "deployed";
+                  const retryable = isRetryable(kinds[index]);
                   return (
                     <tr key={row.id} className={open ? undefined : "bc-tr--muted"}>
                       <td>

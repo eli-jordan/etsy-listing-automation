@@ -22,20 +22,14 @@ import { PublishDraftsToggle } from "./deploy/PublishDraftsToggle";
 import { DeployHead } from "./deploy/DeployHead";
 import {
   applyRunEvent,
+  applyStarted,
   controlPhase,
   deployState,
   initialDeployState,
   type DeployState,
 } from "./deploy/deployState";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
-import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
-
-/**
- * The deploy route: `/listings/:name/deploy` (docs/features/deploy-20260917/spec.md
- * decision 9). Reattaches to whatever run this listing already has, or
- * starts one -- the composing piece over the pure `deployState` reducer and
- * `comparison` builder, and the presentation modules that draw them.
- */
+import { isPlanInProgress, MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
 
 function stepStripHeading(phase: ReturnType<typeof controlPhase>): string {
   if (phase === "queued" || phase === "planning" || phase === "previewing")
@@ -60,15 +54,9 @@ export function DeployPage() {
 
   const [detail, setDetail] = useState<ListingDetail | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
-  /** The server held this run queued for a backup (workspace-backup plan,
-   * decision P4) when the page last read it; the run's first phase event
-   * after that says it has started. */
   const [waitingForBackup, setWaitingForBackup] = useState(false);
   const [state, setState] = useState<DeployState>(initialDeployState);
   const [applyRequested, setApplyRequested] = useState(false);
-  /** Publish this listing on Etsy if it is new or still a draft (opt-in),
-   * chosen at apply: the review is planned without the step, so changing it
-   * plans nothing. A run attached later brings its own choice. */
   const [publish, setPublish] = useState(false);
   const [deletedAfterApply, setDeletedAfterApply] = useState(false);
   const [openDrift, setOpenDrift] = useState<string | null>(null);
@@ -77,8 +65,6 @@ export function DeployPage() {
   const leavingRef = useRef(false);
   const applyStartRef = useRef<Promise<void> | null>(null);
   const [status, setStatus] = useState("");
-  /** The run this page is following, so a reconnect answering after Back
-   * opens nothing. */
   const activeRunRef = useRef<string | null>(null);
   const reconnectRef = useRef<(id: string) => void>(() => {});
 
@@ -88,7 +74,6 @@ export function DeployPage() {
     streamRef.current = openRunStream(id, {
       ...(lastEventId === undefined ? {} : { lastEventId }),
       onEvent: (event) => setState((s) => applyRunEvent(s, event)),
-      // `openEventStream` does not retry, so this is what keeps the page live.
       onError: () => {
         if (activeRunRef.current !== id) return;
         setStatus("Connection lost. Reconnecting…");
@@ -128,7 +113,6 @@ export function DeployPage() {
     setApplyRequested(false);
     setStatus("");
     try {
-      // Without the publish step: the apply adds it when chosen.
       const result = await createRun({
         kind: "plan",
         scope: "listings",
@@ -136,7 +120,6 @@ export function DeployPage() {
         publish: false,
       });
       if (result.kind === "conflict") {
-        // A workspace or batch deploy holding this listing has its own page.
         const active = await getRun(result.activeRun);
         if (isReviewedScope(active)) {
           navigate(`/listings/deploy/${encodeURIComponent(active.id)}`, { replace: true });
@@ -154,7 +137,6 @@ export function DeployPage() {
     }
   }, [name, navigate, openStream, reattachRun]);
 
-  // Reattach or start (decision 9).
   useEffect(() => {
     let current = true;
     getListing(name)
@@ -202,10 +184,6 @@ export function DeployPage() {
   const phase = controlPhase(state, publish);
   const heldForBackup = phase === "queued" && waitingForBackup;
 
-  // Mark a terminal run seen once it is showing -- "the deploy view marks a
-  // finished run seen when it renders that run's result" (decision 9), true
-  // whether it just finished while this page was watching or was already
-  // finished on arrival.
   useEffect(() => {
     if (runId === null || seenRef.current === runId) return;
     if (!TERMINAL_PHASES.has(state.phase)) return;
@@ -216,11 +194,6 @@ export function DeployPage() {
       void markRunSeen(runId);
     };
 
-    // A very small apply can finish between the user's Apply and immediate
-    // Back clicks. Give that exit intent a short window to land so the
-    // editor can still offer View result; a result the user stays on is
-    // marked seen normally. Plan reviews and other terminal outcomes keep
-    // their existing immediate behaviour.
     if (state.phase !== "applied") {
       markSeen();
       return;
@@ -229,9 +202,6 @@ export function DeployPage() {
     return () => window.clearTimeout(timer);
   }, [runId, state.phase]);
 
-  // Status after apply is re-derived from the server, never assumed
-  // (decision 10) -- a first deploy reads Deployed, not Live, and a partial
-  // apply reads Dirty (ADR-0037).
   useEffect(() => {
     if (state.phase !== "applied") return;
     let current = true;
@@ -254,17 +224,7 @@ export function DeployPage() {
     await applyStartRef.current;
     activeRunRef.current = null;
     streamRef.current?.close();
-    // Only a plan run still under review (queued/planning/planned/previewing)
-    // is worth asking the registry to cancel. An `apply` in progress is
-    // never asked at all (decision 8: Back leaves, it never cancels one),
-    // and a run already at a terminal phase -- "ready" included, a plan
-    // run's own natural rest state, per `TERMINAL_PHASES` -- always answers
-    // 409 from `registry.cancel`, since it refuses anything already
-    // terminal. That case needs no cancel call at all: the "mark a terminal
-    // run seen" effect above already marked it the moment its result
-    // rendered, which is what keeps the editor's page head from dangling on
-    // a stale *View progress* link.
-    if (runId !== null && state.phase !== "applying" && !TERMINAL_PHASES.has(state.phase)) {
+    if (runId !== null && isPlanInProgress(state.phase)) {
       await cancelRun(runId).catch(() => false);
     }
     navigate(deletedAfterApply ? "/listings" : `/listings/${encodeURIComponent(name)}`);
@@ -284,13 +244,7 @@ export function DeployPage() {
         await reattachRun(result.activeRun);
         return;
       }
-      // Keep the reviewed plan on screen while the apply run performs its
-      // required re-plan. The fresh listing_planned event will replace it.
-      setState((current) => ({
-        ...initialDeployState,
-        plan: current.plan,
-        fingerprint: current.fingerprint,
-      }));
+      setState(applyStarted);
       setRunId(result.run.id);
       openStream(result.run.id);
     } catch {
@@ -309,8 +263,6 @@ export function DeployPage() {
   }
 
   const showPlanAgain = !["queued", "planning", "applying", "applied"].includes(phase);
-  // Only for a listing an opt-in would make live (new or still a draft, with
-  // nothing blocked). Not once Apply is pressed: the apply has taken the choice.
   const showPublishToggle =
     state.plan?.publishable === true &&
     !applyRequested &&
@@ -336,7 +288,7 @@ export function DeployPage() {
         status={detail?.status ?? null}
         phase={phase}
         waitingForBackup={heldForBackup}
-        backToListings={deletedAfterApply}
+        listingDeleted={deletedAfterApply}
         showPlanAgain={showPlanAgain}
         onBack={() => void handleBack()}
         onPlanAgain={() => void startFreshPlan()}

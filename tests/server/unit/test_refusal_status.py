@@ -1,4 +1,4 @@
-"""The app's one refusal table (``app.py``'s ``REFUSAL_STATUS``): each refusal
+"""The app's one refusal table (``refusal_status.py``'s ``REFUSAL_STATUS``): each refusal
 category, and a real refusal of each, answers with its status and its own
 message as the detail. Routes only let refusals through, so this is where the
 mapping itself is proven; the route tests prove the wiring."""
@@ -29,7 +29,8 @@ from etsy_listings.core.workspace.calibration import (
     CalibrationRequestReusedError,
 )
 from etsy_listings.core.workspace.workspace import InvalidNameError
-from etsy_listings.server.api.app import REFUSAL_STATUS, register_refusals
+from etsy_listings.server.api.app import register_refusals
+from etsy_listings.server.api.refusal_status import REFUSAL_STATUS
 
 CATEGORIES = [
     (InvalidNameError("a:b"), 400),

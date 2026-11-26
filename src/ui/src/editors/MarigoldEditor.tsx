@@ -20,7 +20,7 @@ import { maskDraft } from "../components/maskDraft";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
 import { ViewTabs, type View } from "../components/ViewTabs";
-import type { BoundingBox, Renderer, TemplateConfigState, Placement } from "../types";
+import type { BoundingBox, PhotoSpace, Renderer, TemplateConfigState, Placement } from "../types";
 import "../components/marigold.css";
 import {
   canUndoMask,
@@ -28,14 +28,16 @@ import {
   editorPreviewRequest,
   marigoldMapInputs,
   previewBlocker,
+  pickOrFirst,
   previewJobs,
+  IMPLICIT_PLACEMENT_ID,
   undoBases,
 } from "./marigoldEditorModel";
 
 interface Props {
   templateName: string;
   config: TemplateConfigState & { renderer: Extract<Renderer, { type: "marigold" }> };
-  space: [number, number] | null;
+  space: PhotoSpace | null;
   colours: string[];
   knownColours: string[];
   design: string;
@@ -80,9 +82,7 @@ function PreviewBar({
     <div className="app__preview-bar">
       <ViewTabs value={tab} onChange={onTabChange} />
       <TestDesignPicker compact value={design} onChange={onDesignChange} />
-      {calibrating && colours.length > 1 && (
-        <ColourPicker colour={colour} colours={colours} onChange={onColourChange} />
-      )}
+      {calibrating && <ColourPicker colour={colour} colours={colours} onChange={onColourChange} />}
       {calibrating && (
         <div className="app__outline-toggle">
           <BoxToggle checked={showBox} onChange={onShowBoxChange} />
@@ -92,8 +92,6 @@ function PreviewBar({
   );
 }
 
-/** Each placement's artwork and mask, with the brush on the one being
- * edited. */
 function PlacementOverlays({
   placements,
   multiple,
@@ -119,7 +117,7 @@ function PlacementOverlays({
   revision: string;
   histories: { revision: string; values: Record<string, MaskHistory> };
   maskEdits: MaskEdit[];
-  space: [number, number];
+  space: PhotoSpace;
   editingIndex: number | null;
   mode: "mask" | "unmask";
   diameter: number;
@@ -182,8 +180,7 @@ export function MarigoldEditor({
   const [tab, setTab] = useState<View>("calibrate");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedColour, setSelectedColour] = useState<string | null>(null);
-  const colour =
-    selectedColour && colours.includes(selectedColour) ? selectedColour : (colours[0] ?? "");
+  const colour = pickOrFirst(selectedColour, colours);
 
   const [editing, setEditing] = useState(false);
   useEffect(() => {
@@ -292,9 +289,7 @@ export function MarigoldEditor({
       },
     };
   }
-  /** The calibrate view's canvas: the photo (or its live preview) with
-   * every placement's box, artwork and mask. */
-  function calibrationCanvas(space: [number, number]) {
+  function calibrationCanvas(space: PhotoSpace) {
     return (
       <QuadEditor
         imageUrl={
@@ -353,7 +348,10 @@ export function MarigoldEditor({
     let active = true;
     const ids: (string | null)[] = JSON.parse(placementKey) as (string | null)[];
     void Promise.all(
-      ids.map(async (id) => [id ?? "implicit", await getMaskHistory(templateName, id)] as const),
+      ids.map(
+        async (id) =>
+          [id ?? IMPLICIT_PLACEMENT_ID, await getMaskHistory(templateName, id)] as const,
+      ),
     )
       .then((rows) => {
         if (active) setHistories({ revision, values: Object.fromEntries(rows) });

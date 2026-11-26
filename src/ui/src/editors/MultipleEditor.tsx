@@ -1,31 +1,25 @@
 import { PreparationNotice } from "./PreparationNotice";
 import type { ReactNode } from "react";
-import type { PhotoWarpTemplate } from "../types";
+import type { PhotoSpace, PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo, useState } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { usePreview } from "../hooks/usePreview";
 import type { BoundingBox, MultipleTemplate, Placement } from "../types";
+import { previewJobs } from "./marigoldEditorModel";
 import { EditorShell } from "./EditorShell";
 
 interface Props {
   rendererControls?: ReactNode;
   templateName: string;
   config: PhotoWarpTemplate<MultipleTemplate>;
-  /** The scene photo's true pixel size -- the space every placement's box is
-   * in. See `QuadEditor`'s `space`. */
-  space: [number, number] | null;
+  space: PhotoSpace | null;
   onChange: (config: MultipleTemplate) => void;
   design: string;
   onDesignChange: (design: string) => void;
-  /** Colours already used across the workspace, offered as suggestions when
-   * assigning one to a box. Suggestions only: a chart's colours are whatever
-   * the listing sells, which the calibrator does not know. */
   knownColours: string[];
 }
 
-/** Where the very first box lands when the photo has none. Middle-ish and
- * comfortably grabbable; it is meant to be dragged, not to be right. */
 const CENTRED_BOX: BoundingBox = [
   { x: 200, y: 150 },
   { x: 400, y: 150 },
@@ -33,8 +27,7 @@ const CENTRED_BOX: BoundingBox = [
   { x: 200, y: 350 },
 ];
 
-/** The same rule the server uses for `TemplateSummary.status_reason`, so the
- * canvas and the rail can never disagree about whether this is finished. */
+/** Mirrors the server's `TemplateSummary.status_reason`, so canvas and rail agree. */
 function uncolouredWarning(placements: Placement[]): string | null {
   const count = placements.filter((p) => !p.colour.trim()).length;
   if (count === 0) return null;
@@ -46,17 +39,6 @@ function uncolouredWarning(placements: Placement[]): string | null {
  * The one output *is* the live composite of every placement, so there's no
  * separate gallery need here (unlike colour-matrix kind) -- the main preview
  * already shows everything at once.
- *
- * There is no bounding-box list panel any more. Everything it offered was
- * already reachable on the photo -- select, add, duplicate, reorder, delete,
- * drag -- except assigning a colour, and a colour is now a caption on the box
- * itself. A panel that duplicates the canvas is a second place to look and a
- * second place to be wrong about which box is which.
- *
- * `colour_coverage` has no home in wireframe 2a and is, for now, editable only
- * by hand in template.yaml. Recorded as a debt in
- * docs/history/implementation-plan.md -- it belongs in the Advanced disclosure when it
- * comes back.
  */
 function PhotoWarpMultipleEditor(props: Props) {
   const { templateName, config, onChange, design, knownColours } = props;
@@ -74,21 +56,9 @@ function PhotoWarpMultipleEditor(props: Props) {
     design,
   );
 
-  // A chart composites every placement into one photo, so its preview is a
-  // single full-size render -- what changes versus the canvas is the pixels,
-  // not the composition.
   const jobs: PreviewJob[] = useMemo(
-    () => [
-      {
-        id: templateName,
-        label: templateName,
-        body: {
-          placements: config.placements,
-          renderer: config.renderer,
-        },
-      },
-    ],
-    [templateName, config.placements, config.renderer],
+    () => previewJobs(config, [], templateName),
+    [config, templateName],
   );
 
   const handleBoxChange = useCallback(
@@ -114,9 +84,6 @@ function PhotoWarpMultipleEditor(props: Props) {
   const clampedIndex = Math.min(selectedIndex, Math.max(config.placements.length - 1, 0));
   const warning = uncolouredWarning(config.placements);
 
-  /** The box-editing operations, reached from the canvas -- one
-   * implementation, whether you used the right-click menu, the Delete key or
-   * the button. */
   const mutate = useCallback(
     (fn: (placements: Placement[]) => { placements: Placement[]; select: number }) => {
       const result = fn(config.placements);
@@ -130,9 +97,6 @@ function PhotoWarpMultipleEditor(props: Props) {
     () =>
       mutate((placements) => {
         const source = placements[clampedIndex] ?? placements[placements.length - 1];
-        // 2a: lands centred and selected -- no drawing mode, and every corner
-        // stays draggable afterwards. Offset from the last box when there is
-        // one, so a new box is never hidden exactly under its source.
         const bounding_box = source
           ? (source.bounding_box.map((p) => ({
               x:

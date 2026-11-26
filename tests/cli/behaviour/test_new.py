@@ -138,24 +138,22 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
     """
     from etsy_listings.cli.new import run_new
 
+    workspace = Workspace.discover(root_override=workspace_root)
+    typed = replies(
+        [
+            "1",  # Garment -- the fake catalog offers exactly one
+            "1",  # Print provider -- likewise
+            _ordinal(workspace.template_names(), "flat-lay-01"),
+            "1",  # Pricing plan -- none on disk, so row 1 is "create a new"
+            "launch-low",  # ...and its name
+        ]
+    )
     # This machine, minus fzf and prompt_toolkit: `new` never passes a host.
-    plain = prompts.PromptHost(commands=ScriptedCliHost(), prompt_toolkit=lambda: False)
+    plain = prompts.PromptHost(
+        commands=ScriptedCliHost(), prompt_toolkit=lambda: False, read_line=typed
+    )
     monkeypatch.setattr(prompts, "LOCAL_PROMPT_HOST", plain)
     _no_network_pricing_plan_generation(monkeypatch)
-
-    workspace = Workspace.discover(root_override=workspace_root)
-    monkeypatch.setattr(
-        "builtins.input",
-        replies(
-            [
-                "1",  # Garment -- the fake catalog offers exactly one
-                "1",  # Print provider -- likewise
-                _ordinal(workspace.template_names(), "flat-lay-01"),
-                "1",  # Pricing plan -- none on disk, so row 1 is "create a new"
-                "launch-low",  # ...and its name
-            ]
-        ),
-    )
 
     run_new(workspace, _one_garment_catalog(), "brand-new-design", "tshirt")
 

@@ -312,6 +312,10 @@ Not obvious from the designs:
   summary.** Opening the same listing from the Listings page shows the normal
   editor without it. Create listing template is on every saved listing.
 - **Mark reviewed** here and on the summary set the same flag.
+- **On a phone, Mark reviewed is a button beside Deploy**, not a row of the
+  head's "⋯" sheet: reviewing is what a batch's listing is opened for, so it
+  and Deploy are the head's next steps. Pressed, it reads Reviewed; a second
+  press marks the listing as needing review again.
 - **An out-of-date suggestion can be used directly.** The drawer heading reads
   *Out of date: brief edited since. Still usable*, and the choices stay
   clickable. There is no confirmation dialog: the heading is the warning.
@@ -320,6 +324,15 @@ Not obvious from the designs:
   queued or running batch work cancels that work first, and the work never
   resumes onto the deployed listing. After a fully successful deploy, the
   listing's cached proposal is removed.
+
+## On a phone
+
+The batch summary's rows become cards, and a card's Reviewed is a labelled
+switch. The desktop's **✓ Reviewed** reads as a status, and only its hover title
+says a click clears it; a phone has no hover to tell it.
+
+The staging page's head carries one way back, to New batch, the page it came
+from. The desktop's Listing templates crumb before it is left out.
 
 ## Departures from the spec
 

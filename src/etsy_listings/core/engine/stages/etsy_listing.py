@@ -1,25 +1,3 @@
-"""The ``etsy_listing`` stage: one ``PATCH updateListing`` carrying copy,
-tags, materials, section, shipping profile, return policy, the `who_made`
-trio, production partners and renewal (features/etsy-listing-20260910/spec.md, decision 1).
-
-Everything a name resolves to comes from :class:`EtsyShopCatalog`,
-built fresh each call to ``desired`` -- cheap, since the catalog itself
-fetches each of its four lists at most once and this stage asks for at most
-three of them. Every :class:`~etsy_listings.core.clients.etsy.shopcatalog.ShopCatalogError`
-becomes a :class:`~etsy_listings.core.engine.stage.Blocked`: a name that will not
-resolve is exactly the kind of refusal `desired()` exists to report, listing
-every candidate the shop actually has rather than sending Etsy a PATCH that
-would answer `400` and fail the whole thing (a stale `shop_section_id` fails
-the entire request, measured).
-
-``state`` is omitted on a ``draft`` -- Etsy's update enum is
-`active | inactive`, a draft cannot be re-drafted, and first publish stays
-Shop Manager. Pause and resume of something a human already
-published is the exception: ``lifecycle: retired`` sends ``inactive``;
-Un-retire (last applied was retired, now omitted) and ``renew`` send
-``active``. A remote pause with the field omitted does not.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -87,10 +65,6 @@ class ReturnPolicyApplied(BaseModel):
 
 
 class AppliedEtsyListing(BaseModel):
-    """The verbatim last-applied document. Names sit beside their ids
-    (decision 2): the id is what was sent, the name is what a human reading
-    the plan or the lockfile can actually check."""
-
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     title: str
@@ -147,11 +121,6 @@ class EtsyListingDesired:
         return AppliedEtsyListing(**{k: v for k, v in self.__dict__.items() if k != "catalog"})
 
     def patch_body(self) -> dict[str, object]:
-        """The PATCH body -- every field this stage owns, always sent in
-        full. `updateListing` honours a partial body, but there is no benefit
-        to sending less: every field here is this stage's own, never shared
-        with another writer, so there is nothing a partial PATCH would
-        protect."""
         body: dict[str, object] = {
             "title": self.title,
             "description": self.description,
@@ -174,8 +143,7 @@ class EtsyListingDesired:
 
 
 class EtsyListingFacts(BaseModel):
-    """One side of the review: the fields the mock shows unchanged
-    context for, named rather than left as an id."""
+    """One side of the review, its section and shipping profile named rather than left as ids."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -188,8 +156,7 @@ class EtsyListingFacts(BaseModel):
 
 
 class EtsyListingSnapshot(BaseModel):
-    """Both sides, in full -- the ``Plan`` this stage also returns carries
-    only what changed."""
+    """Both sides of the review, in full."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -324,13 +291,10 @@ class EtsyListingStage(Stage[EtsyListingDesired, AppliedEtsyListing, EtsyListing
             )
         return Verdict.no_work(drift=drift_found)
 
+    @override
     def snapshot(
         self, desired: EtsyListingDesired, live: EtsyListing | None
     ) -> EtsyListingSnapshot:
-        """Both sides, named. The desired side already has names for
-        its section and shipping profile -- resolving them is what
-        ``desired()`` does -- so only the live side needs the catalog's
-        reverse lookup, and only when this run built one."""
         desired_facts = EtsyListingFacts(
             title=desired.title,
             description=desired.description,
@@ -467,7 +431,7 @@ def _drift(
 
 
 def _field_drifts(was: AppliedEtsyListing, live: EtsyListing) -> list[Drift | None]:
-    fields = [
+    return [
         drift(path, ours, theirs)
         for path, ours, theirs in (
             ("title", was.title, live.title),
@@ -475,12 +439,9 @@ def _field_drifts(was: AppliedEtsyListing, live: EtsyListing) -> list[Drift | No
             ("when_made", was.when_made, live.when_made),
             ("is_supply", was.is_supply, live.is_supply),
             ("should_auto_renew", was.should_auto_renew, live.should_auto_renew),
+            ("description", was.description, live.description),
         )
     ]
-    # `description` kept out of the list above only because it is long
-    # enough that a label would be redundant with the value itself -- unlike
-    # the three ids, whose live side is otherwise a bare id.
-    return [*fields, drift("description", was.description, live.description)]
 
 
 def _id_drifts(
@@ -522,10 +483,7 @@ def _id_drifts(
 def _partner_drift(was: AppliedEtsyListing, live: EtsyListing) -> Drift | None:
     live_partner_ids = {p.production_partner_id for p in live.production_partners}
     if set(was.production_partner_ids) == live_partner_ids or not live.production_partners:
-        # An empty `production_partners` on a draft this tool has already
-        # patched reads as "not returned by this call" rather than "cleared"
-        # -- Etsy gives no way to tell the two apart, so only a live set that
-        # actually names something is trusted to disagree.
+        # Etsy returns no partners for "not returned" and "cleared" alike.
         return None
     live_names = sorted(
         partner.partner_name or str(partner.production_partner_id)

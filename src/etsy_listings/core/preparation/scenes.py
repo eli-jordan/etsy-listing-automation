@@ -1,11 +1,3 @@
-"""Compose a prepared scene: the one path from accepted maps to pixels (ADR-0054).
-
-The render stage's plan and apply, and every authoring or listing preview,
-lease a scene here. Reading the saved inputs, acquiring the generation for the
-target photo and naming the result's identity happen in one place, so the
-identity a plan records is the identity apply and a preview compute.
-"""
-
 import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
@@ -73,8 +65,6 @@ def _premultiplied(artwork: RGBA, digest: str) -> FloatMap:
 
 @dataclass(frozen=True)
 class PreparedLayer:
-    """One painted placement, in paint order."""
-
     artwork: RGBA
     placement_id: str | None = None
     digest: str | None = None
@@ -118,8 +108,6 @@ class PreparedScene:
             )
 
     def encoded(self, cache: SceneCache) -> bytes:
-        """The scene's PNG: ``cache``'s entry for :attr:`identity`, or a
-        fresh composition, stored there before it is returned."""
         return cache.get_or_compose(
             self.identity,
             lambda: encode_png(self.render(), compression=MARIGOLD_PNG_COMPRESSION),
@@ -128,9 +116,6 @@ class PreparedScene:
 
 @dataclass(frozen=True)
 class Composition:
-    """What a scene composites: artwork ``layers`` on the ``base`` photo, in
-    ``appearance``."""
-
     base: RGB
     layers: Sequence[PreparedLayer]
     appearance: MarigoldAppearance
@@ -149,18 +134,9 @@ def lease_scene(
     *,
     expected: PreparationInputs | None = None,
 ) -> Iterator[PreparedScene]:
-    """Lease ``template``'s accepted generation to composite ``composition``.
-
-    The saved inputs are read and the generation acquired under one short
-    template lock, then the lock is released while the lease keeps the
-    generation alive for composition. ``expected`` is inputs read earlier (a
-    plan, or a preview before it decoded its images); saved inputs that have
-    since changed refuse with :class:`StalePreparationError`. Every refusal is an
-    :class:`~etsy_listings.core.preparation.artifacts.ArtifactError`.
-
-    A layer ``composition.boxes`` positions is drawn with its position fit,
-    fitted first -- or awaited, when another caller is fitting it -- and never
-    with the template's maps (spec *Rendering -> Marigold (option B)*).
+    """Reads saved inputs and acquires the generation under one short template lock;
+    the lease, not the lock, then keeps it alive. Inputs changed since ``expected``
+    refuse with :class:`StalePreparationError`; every refusal is an ``ArtifactError``.
     """
     base, layers, appearance = composition.base, composition.layers, composition.appearance
     artifacts = Artifacts(workspace)

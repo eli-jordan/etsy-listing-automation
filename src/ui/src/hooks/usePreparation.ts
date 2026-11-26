@@ -6,17 +6,17 @@ import {
   type PreparationEvent,
 } from "../api/preparation";
 
-/** Where a reconnect resumes after `event`: nowhere in particular after a
- * resync, which asks for a fresh read. */
-function eventCursor(event: PreparationEvent): number | undefined {
+/** CPU checkpoints arrive in bursts; reading masks and map readiness for each
+ * one would compete with interactive composition. */
+const EVENT_READ_THROTTLE_MS = 250;
+const STREAM_RETRY_MS = 1000;
+const READ_RETRY_MS = 3000;
+
+function resumeCursorAfter(event: PreparationEvent): number | undefined {
   if ("resync" in event) return undefined;
   return "sequence" in event ? event.sequence : event.last_event_sequence;
 }
 
-/** Reattach to server work, including CPU rebuilds after save. Reconnection reads
- * status and resumes events; it never submits another preparation job. Automatic
- * reads pause while the editor composite is pending, then resume with a fresh
- * snapshot so progress validation does not compete with the visible edit. */
 export function usePreparation(name: string | null, version: number, previewPending = false) {
   const [entry, setEntry] = useState<{ name: string; value: Preparation } | null>(null);
   const [error, setError] = useState("");
@@ -32,29 +32,25 @@ export function usePreparation(name: string | null, version: number, previewPend
     let cursor: number | undefined;
     let followedId: string | undefined;
     let reading = false;
-    /** Streams the active job's events, resuming where the last stream for
-     * the same job stopped, and reads again when the stream says so. */
     function follow(id: string) {
       if (followedId !== id) cursor = undefined;
       followedId = id;
       stream = followPreparation(id, {
         ...(cursor === undefined ? {} : { lastEventId: cursor }),
         onEvent: (event) => {
-          cursor = eventCursor(event);
-          // CPU checkpoints arrive in bursts. Reading all masks and map
-          // readiness per event competes with interactive composition.
+          cursor = resumeCursorAfter(event);
           if (!eventTimer)
             eventTimer = setTimeout(() => {
               eventTimer = undefined;
               void read();
-            }, 250);
+            }, EVENT_READ_THROTTLE_MS);
         },
         onDone: () => {
-          timer = setTimeout(() => void read(), 250);
+          timer = setTimeout(() => void read(), EVENT_READ_THROTTLE_MS);
         },
         onError: () => {
           cursor = undefined;
-          timer = setTimeout(() => void read(), 1000);
+          timer = setTimeout(() => void read(), STREAM_RETRY_MS);
         },
       });
     }
@@ -71,7 +67,7 @@ export function usePreparation(name: string | null, version: number, previewPend
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Could not read map status");
-          timer = setTimeout(() => void read(), 3000);
+          timer = setTimeout(() => void read(), READ_RETRY_MS);
         }
       } finally {
         reading = false;

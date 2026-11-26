@@ -17,6 +17,7 @@ from etsy_listings.core.config.artwork import (
     SlotEmpty,
     Tone,
     Unclassified,
+    is_light_dark,
     representative,
     resolve,
     slot_users,
@@ -112,6 +113,11 @@ def test_a_colourless_scene_cannot_resolve_in_light_dark_mode() -> None:
     """The tool does not guess which base file a photograph shows."""
     assert resolve({"on-light": DARK_INK, "on-dark": LIGHT_INK}, None, TONES) == NeedsColour()
     assert resolve({"on-light": None, "on-dark": None}, None, TONES) == NeedsColour()
+
+
+def test_a_tone_key_holding_nothing_still_means_light_dark_mode() -> None:
+    assert is_light_dark({"on-light": None})
+    assert not is_light_dark({"default": None})
 
 
 def test_slot_users_counts_only_automatic_enabled_colours() -> None:

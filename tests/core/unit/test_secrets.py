@@ -125,6 +125,17 @@ def test_the_backup_password_is_read_from_the_workspace_env(
     assert secrets.backup_password == "correct horse battery"
 
 
+def test_a_backup_password_holding_a_dollar_brace_is_read_literally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(BACKUP_PASSWORD_VAR, raising=False)
+    monkeypatch.setenv("HOME", "/somewhere")
+
+    secrets = _env(tmp_path, f"{BACKUP_PASSWORD_VAR}=pa${{HOME}}ss\n")
+
+    assert secrets.backup_password == "pa${HOME}ss"
+
+
 def test_a_missing_backup_password_names_the_variable_and_the_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

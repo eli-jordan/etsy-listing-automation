@@ -80,6 +80,16 @@ describe("usePhoneModal on a phone", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("leaves focus where the sheet handed it on, rather than pulling it back to the opener", () => {
+    render(<Page />);
+    openSheet();
+    const elsewhere = screen.getByRole("button", { name: "Behind" });
+    elsewhere.focus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("closes on Back without leaving the page, and drops its entry when closed otherwise", async () => {
     render(<Page />);
     openSheet();

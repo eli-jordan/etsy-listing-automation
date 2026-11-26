@@ -229,9 +229,11 @@ be deleted before restoring there again.
 ## What the production implementation must finish
 
 - **One status source.** A backup status endpoint feeds the shell (banner, dot),
-  the nav icon and all three panels, so they agree. The shell polls it, at a
-  slower rate when nothing is running. The UI has no app-wide status poll
-  today.
+  the nav icon and all three panels, so they agree. The shell polls it every
+  2 seconds while a backup, repair or restore runs, so the running line moves,
+  and every 30 seconds otherwise, so a warning appears or clears within half a
+  minute. While a backup or a repair runs, Back up now and Try again wait for it;
+  while a restore runs, every Restore… does.
 - **A URL for Backup.** Admin sections are page state, not routes, so Open
   Backup has nothing to link to. Give Admin a section in the URL, such as
   `/admin?section=backup`, and keep the existing sections working.

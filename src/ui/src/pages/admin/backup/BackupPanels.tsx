@@ -1,6 +1,3 @@
-// The Backup section's panels, from the approved `workspace-backup` mockup
-// (`design/scenes/workspace-backup/_parts.tsx` and `_prototype.tsx`), fed by
-// `GET /api/backup` and its history instead of fixtures.
 import { BackupDialog } from "./BackupDialog";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
@@ -116,7 +113,6 @@ export function NotSetUp({ onStart }: { onStart: () => void }) {
   );
 }
 
-/** The one-line health summary at the top of the section. */
 export function StatusPanel({
   tone,
   headline,
@@ -130,14 +126,10 @@ export function StatusPanel({
   tone: "ok" | "warn";
   headline: string;
   detail: string;
-  /** A backup or repair runs, so Back up now waits. */
   running: boolean;
-  /** What it is doing, under the detail. */
   runningLine: string | undefined;
-  /** Restore…: disabled while a restore runs or with no backup to restore. */
   restore: { disabled: boolean; onClick: () => void };
   onBackup: () => void;
-  /** A restore in progress or its note. */
   children?: ReactNode;
 }) {
   return (
@@ -194,11 +186,6 @@ function copyState({ destination, toCheck: found }: Copy): { ok: boolean; text: 
   return { ok: true, text: "Up to date" };
 }
 
-/**
- * Where the data lives, as the three places it passes through: the app
- * backs up the workspace into the backup storage folder, then copies new
- * files one way into each destination, and the sync client takes it there.
- */
 export function StoragePipeline({
   view,
   now,
@@ -298,7 +285,6 @@ const RESULT: Record<RowResult, { label: string; tone: "ok" | "warn" | "bad"; ic
 
 const KEPT = { recent: "Recent", weekly: "Weekly", monthly: "Monthly" } as const;
 
-/** Every run, newest first, failures included. */
 export function History({
   entries,
   retention,
@@ -392,7 +378,6 @@ export function History({
   );
 }
 
-/** What the copy found in a destination, with the one way to fix it. */
 export function ChangedFilesBanner({
   destination,
   onRepair,

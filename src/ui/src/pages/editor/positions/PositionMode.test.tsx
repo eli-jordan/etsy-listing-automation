@@ -283,6 +283,22 @@ describe("a Marigold template not ready for positions", () => {
     expect(await screen.findByText(/could not start/)).toBeInTheDocument();
   });
 
+  it("lets the switch work when the template's status cannot be read", async () => {
+    const read = vi
+      .spyOn(preparationApi, "getPositionReadiness")
+      .mockRejectedValue(new Error("offline"));
+    mount();
+    await selectTile("glossy");
+    const control = await adjustSwitch();
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    await act(async () => undefined);
+
+    fireEvent.click(control);
+
+    expect(control).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByText(note)).toBeNull();
+  });
+
   it("works again, with the note gone, once the template is ready", async () => {
     const read = vi.spyOn(preparationApi, "getPositionReadiness").mockResolvedValue(preparing);
     const control = await refusedSwitch();
@@ -698,6 +714,16 @@ describe("on a phone held upright", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     // Back to the gallery as it was, the tile still selected.
     expect(within(bar()).getByRole("button", { name: "Adjust" })).toBeInTheDocument();
+  });
+
+  it("keeps the tab swipe off the stage, whose drags move the design", async () => {
+    mount();
+    await selectTile("folded · black");
+    fireEvent.click(await within(bar()).findByRole("button", { name: "Adjust" }));
+
+    const sheet = await screen.findByRole("dialog", { name: "folded · black" });
+    await within(sheet).findByRole("button", { name: /position — drag to move/ });
+    expect(must(sheet.querySelector(".tp-stage"))).toHaveAttribute("data-swipe-ignore");
   });
 
   it("closes on Escape too, keeping the tile selected", async () => {

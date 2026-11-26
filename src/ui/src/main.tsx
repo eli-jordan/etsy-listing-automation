@@ -6,7 +6,7 @@ import {
   Route,
   RouterProvider,
 } from "react-router-dom";
-import { App } from "./App";
+import { CalibratorPage } from "./App";
 import "./index.css";
 import { AppShell } from "./shell/AppShell";
 import { AdminPage } from "./pages/admin/AdminPage";
@@ -21,7 +21,6 @@ import { ListingsPage } from "./pages/ListingsPage";
 import { NewBatchPage } from "./pages/NewBatchPage";
 import { StagingPage } from "./pages/StagingPage";
 import { purgeLegacyProposals } from "./pages/editor/aiSeo/legacyProposals";
-// Last, so the phone layout's rules come after every desktop rule they adjust.
 import "./phone/index.css";
 
 // ADR-0049: proposals live on the server now; the old browser-local copies go.
@@ -32,39 +31,24 @@ if (!container) {
   throw new Error("missing #root element");
 }
 
-// A data router rather than `<BrowserRouter>`: the listing-template editor
-// warns before navigating away from values the server has not written (UI
-// doc §3), and React Router's blocker exists only on a data router.
+// A data router: React Router's blocker, which useUnsavedWarning needs, exists only there.
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route element={<AppShell />}>
       <Route path="/" element={<DashboardPage />} />
       <Route path="/listings" element={<ListingsPage />} />
       <Route path="/listings/deploy/:runId" element={<BatchDeployPage />} />
-      {/* Both routes, one component: /listings/new is the editor opened on
-          an empty draft, and naming it is what creates it. React Router
-          ranks the static segment above the dynamic one. */}
       <Route path="/listings/new" element={<ListingEditorPage />} />
       <Route path="/listings/:name" element={<ListingEditorPage />} />
-      {/* Its own route, not a mode of `ListingEditorPage` kept mounted
-          behind it (docs/features/deploy-20260917/spec.md decision 9) -- Back returns to
-          `/listings/:name`, which re-fetches `ListingDetail` fresh rather
-          than reusing state a deploy run may have changed server-side. */}
       <Route path="/listings/:name/deploy" element={<DeployPage />} />
-      {/* ADR-0047: listing templates. The same two-routes-one-component shape
-          as a listing: /new is the unsaved *name it* state (UI doc §1). */}
       <Route path="/listing-templates" element={<ListingTemplatesPage />} />
       <Route path="/listing-templates/new" element={<ListingTemplateEditorPage />} />
       <Route path="/listing-templates/:name" element={<ListingTemplateEditorPage />} />
-      {/* Batch creation (batch plan PR 2): choose and drop, review the
-          staged designs, then the batch the confirm made. */}
       <Route path="/batches/new" element={<NewBatchPage />} />
       <Route path="/batches/staging/:id" element={<StagingPage />} />
       <Route path="/batches/:id" element={<BatchSummaryPage />} />
-      {/* Admin plan, PR 3: shop.yaml's Shop tab; the section is page state. */}
       <Route path="/admin" element={<AdminPage />} />
-      {/* The calibrator, unmounted -- mounted here unchanged. */}
-      <Route path="/templates" element={<App />} />
+      <Route path="/templates" element={<CalibratorPage />} />
     </Route>,
   ),
 );

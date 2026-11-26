@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { CalibratorPage } from "./App";
 import * as calibrator from "./api/calibrator";
 import * as prep from "./api/preparation";
 import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/writeLoop";
@@ -101,7 +101,7 @@ describe("the Labels bar", () => {
     vi.mocked(calibrator.getTemplateConfig).mockResolvedValue(null);
     vi.spyOn(calibrator, "getColourReport").mockResolvedValue([]);
 
-    render(<App />);
+    render(<CalibratorPage />);
 
     await screen.findByText("What kind of template is this?");
     expect(screen.queryByRole("group", { name: "Labels" })).not.toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("the Labels bar", () => {
       new calibrator.CalibratorApiError("needs repair: the last save did not finish"),
     );
 
-    render(<App />);
+    render(<CalibratorPage />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "needs repair: the last save did not finish",
@@ -122,7 +122,7 @@ describe("the Labels bar", () => {
 
   it("stays on show on both Calibrate and Preview", async () => {
     opening({ ...SINGLE, labels: ["cosy"] });
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByRole("group", { name: "Labels" });
 
     fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
@@ -135,7 +135,7 @@ describe("the Labels bar", () => {
       summary(),
       summary({ name: "other", labels: ["theme:christmas"] }),
     ]);
-    render(<App />);
+    render(<CalibratorPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Add label" }));
 
@@ -144,7 +144,7 @@ describe("the Labels bar", () => {
 
   it("shows a chip only once the save lands, and refreshes the rail", async () => {
     const clock = controlledClock();
-    render(<App />);
+    render(<CalibratorPage />);
     await addLabel("cosy");
     vi.mocked(calibrator.listTemplates).mockResolvedValue([summary({ labels: ["cosy"] })]);
 
@@ -169,7 +169,7 @@ describe("the Labels bar", () => {
   it("removes a chip only once the save lands", async () => {
     opening({ ...SINGLE, labels: ["cosy"] });
     const clock = controlledClock();
-    render(<App />);
+    render(<CalibratorPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Remove cosy" }));
     expect(bar().getByText("cosy")).toBeInTheDocument();
@@ -183,7 +183,7 @@ describe("the Labels bar", () => {
       .mocked(calibrator.saveTemplateConfig)
       .mockRejectedValue(new calibrator.CalibratorApiError("could not save template.yaml"));
     const clock = controlledClock();
-    render(<App />);
+    render(<CalibratorPage />);
     await addLabel("cosy");
 
     await clock.advance(AUTOSAVE_DEBOUNCE_MS);
@@ -207,7 +207,7 @@ describe("the Labels bar", () => {
       new calibrator.TemplateConflictError(),
     );
     const clock = controlledClock();
-    render(<App />);
+    render(<CalibratorPage />);
     await addLabel("cosy");
 
     await clock.advance(AUTOSAVE_DEBOUNCE_MS);
@@ -226,7 +226,7 @@ describe("the Labels bar", () => {
       new calibrator.CalibratorApiError("could not save template.yaml"),
     );
     const clock = controlledClock();
-    render(<App />);
+    render(<CalibratorPage />);
     const texture = await screen.findByLabelText("Fabric texture");
     await clock.advance(PREVIEW_DEBOUNCE_MS);
 
@@ -244,7 +244,7 @@ describe("the Labels bar", () => {
 describe("a label save and the calibrator's preview", () => {
   it("sends the labels of the revision a preview names", async () => {
     opening({ ...SINGLE, labels: ["cosy"] });
-    render(<App />);
+    render(<CalibratorPage />);
 
     await waitFor(() => expect(previews("editor")).toHaveLength(1));
 
@@ -256,7 +256,7 @@ describe("a label save and the calibrator's preview", () => {
 
   it("neither re-fetches nor blocks either view", async () => {
     const clock = controlledClock();
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByRole("group", { name: "Labels" });
     await clock.advance(PREVIEW_DEBOUNCE_MS);
     fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
@@ -288,7 +288,7 @@ describe("a label save and the calibrator's preview", () => {
     const frame = deferred<string>();
     vi.mocked(calibrator.renderPreview).mockReturnValue(frame.promise);
     const clock = controlledClock();
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByRole("group", { name: "Labels" });
     await clock.advance(PREVIEW_DEBOUNCE_MS);
     expect(previews("editor")).toHaveLength(1);
@@ -310,7 +310,7 @@ describe("a label save and the calibrator's preview", () => {
     const frame = deferred<string>();
     vi.mocked(calibrator.renderPreview).mockReturnValue(frame.promise);
     const clock = controlledClock();
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByRole("group", { name: "Labels" });
     await clock.advance(PREVIEW_DEBOUNCE_MS);
 

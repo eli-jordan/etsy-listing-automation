@@ -3,13 +3,6 @@ import { useIsPhone } from "../../phone/usePhone";
 import type { ListingStatus } from "../../types";
 import type { ControlPhase } from "./deployState";
 
-/**
- * The deploy route's page head: the way back, the title, the listing's
- * status, what the run is doing, and Plan again when a fresh plan is worth
- * offering. On a phone the way back is one back link (phone/base.css draws
- * the chevron) instead of a button and two crumbs.
- */
-
 function metaText(phase: ControlPhase, waitingForBackup: boolean): string {
   switch (phase) {
     case "queued":
@@ -74,7 +67,7 @@ export function DeployHead({
   status,
   phase,
   waitingForBackup,
-  backToListings,
+  listingDeleted,
   showPlanAgain,
   onBack,
   onPlanAgain,
@@ -83,15 +76,14 @@ export function DeployHead({
   status: ListingStatus | null;
   phase: ControlPhase;
   waitingForBackup: boolean;
-  /** The apply deleted the listing, so Back goes to the listings list. */
-  backToListings: boolean;
+  listingDeleted: boolean;
   showPlanAgain: boolean;
   onBack: () => void;
   onPlanAgain: () => void;
 }) {
   return (
     <div className="page-head">
-      <BackLinks name={name} backToListings={backToListings} onBack={onBack} />
+      <BackLinks name={name} backToListings={listingDeleted} onBack={onBack} />
       <h1 className="page-head__title">Deploy</h1>
       {status !== null && <StatusTag status={status} />}
       <span className="page-head__meta">{metaText(phase, waitingForBackup)}</span>

@@ -11,36 +11,16 @@ import {
   type Tone,
 } from "./artwork";
 
-/**
- * "What this colour prints", under the Variants stage (interactions Part 1
- * §8, Part 2 §6).
- *
- * The stage shows the file; this says in words where it came from, because
- * resolution has three sources and depends on shared garment data, and a
- * seller who cannot see why a colour prints a file cannot fix it when it is
- * wrong. Its actions follow the state (Part 2 §6): a colour's own design
- * offers **Change** and **Use automatic design**, having already said what
- * automatic would print, so going back needs no confirmation; an empty slot
- * offers to fill the slot first, because that fixes every colour that needs
- * it at once; anything else offers the colour its own design. A colour with
- * no tone offers nothing -- tone is shared garment data, and an own design
- * does not stand in for it (spec: *Artwork resolution*).
- */
-
 interface Props {
   colour: string;
   enabled: boolean;
   design: DesignMap;
   profile: string;
   tones: Readonly<Record<string, Tone>>;
-  /** The colour's real garment shade, when the swatch has been sampled. */
   swatch: string | undefined;
-  /** Opens that slot's Recent designs panel in the strip above the tabs. */
   onChooseSlot: (tone: Tone) => void;
-  /** Opens the colour's own design picker. */
   onPickColour: () => void;
-  /** Removes the colour's own design. */
-  onAutomatic: () => void;
+  onUseAutomatic: () => void;
 }
 
 type Resolution = ReturnType<typeof resolve>;
@@ -53,7 +33,6 @@ interface Explained {
   tones: Readonly<Record<string, Tone>>;
 }
 
-/** The card's title and why-line for how the colour's design resolved. */
 function explain(resolution: Resolution, facts: Explained): { title: string; why: string } {
   const { name, colour, profile } = facts;
   switch (resolution.kind) {
@@ -92,23 +71,20 @@ function resolvedWhy(
   return `Automatic: the design for ${toneLabel(slot)}, because ${profile} marks ${colour} ${slot}.`;
 }
 
-/** What the card offers: a colour's own design can change or go back to
- * automatic; an empty slot is filled first; anything else can take a
- * design of its own. */
 function PrintsActions({
   own,
   emptySlot,
   name,
   onChooseSlot,
   onPickColour,
-  onAutomatic,
+  onUseAutomatic,
 }: {
   own: boolean;
   emptySlot: Tone | null;
   name: string;
   onChooseSlot: (tone: Tone) => void;
   onPickColour: () => void;
-  onAutomatic: () => void;
+  onUseAutomatic: () => void;
 }) {
   if (own) {
     return (
@@ -119,7 +95,7 @@ function PrintsActions({
         <button
           type="button"
           className="btn-like btn-like--ghost btn-sm color-prints__btn"
-          onClick={onAutomatic}
+          onClick={onUseAutomatic}
         >
           Use automatic design
         </button>
@@ -166,7 +142,7 @@ export function PrintsCard({
   swatch,
   onChooseSlot,
   onPickColour,
-  onAutomatic,
+  onUseAutomatic,
 }: Props) {
   const name = cap(colour);
   if (!enabled) {
@@ -213,7 +189,7 @@ export function PrintsCard({
             name={name}
             onChooseSlot={onChooseSlot}
             onPickColour={onPickColour}
-            onAutomatic={onAutomatic}
+            onUseAutomatic={onUseAutomatic}
           />
         </div>
       )}
@@ -221,8 +197,6 @@ export function PrintsCard({
   );
 }
 
-/** " Back on automatic it would print …" -- nothing when automatic prints
- * nothing, since there is then no file to name. */
 function automaticWouldPrint(fallback: ReturnType<typeof resolve>): string {
   if (fallback.kind !== "resolved") return "";
   const slot =

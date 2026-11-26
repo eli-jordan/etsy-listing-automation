@@ -1,18 +1,3 @@
-"""The two cache records batch creation keeps, and the stores over them.
-
-A **staging session** is ``.cache/staging/<id>/session.json``: the frozen
-listing template, one row per unique upload, and the names the seller typed.
-A **batch** is ``.cache/batches/<id>.json``: the same frozen template and one
-row per listing it creates, with each row's allocated name and creation state.
-Both are schema-versioned JSON written atomically, and a record whose
-``schema`` this code does not know -- or that will not parse -- is treated as
-absent: this is cache, and a record nobody can read is one nobody lost.
-
-A batch keeps its staging session's id. Confirming twice therefore finds the
-batch the first confirm wrote instead of making a second, and the id is
-as opaque as a fresh one would be.
-"""
-
 from __future__ import annotations
 
 import json
@@ -51,9 +36,6 @@ class _Record(BaseModel):
 
 
 class StagingRow(BaseModel):
-    """One unique design: every upload with these bytes, the name its row
-    has, and the design check's refusal if it will not print."""
-
     id: str
     sha256: str
     sources: list[str]
@@ -118,10 +100,6 @@ before the queue is asked (module-structure plan, PR 7)."""
 
 
 class AiStep(BaseModel):
-    """One node of the row's last run as it ended -- the editor's
-    ``WorkflowStep``, kept here so a failed row still shows where it failed
-    after the server that ran it has gone."""
-
     id: str
     state: str
     detail: str | None = None
@@ -168,20 +146,14 @@ DRAFTING: frozenset[AiState | None] = frozenset({"queued", "running"})
 
 
 def has_listing(row: BatchRow) -> bool:
-    """Does the row have a listing the seller can open? Created, and not
-    deleted since."""
     return row.creation == "created" and not row.deleted
 
 
 def reviewable(row: BatchRow) -> bool:
-    """May the seller mark this row reviewed, or back? Only a listing they
-    can look at: not one still queued or drafting, deleted, or never created
-    (UI doc §7)."""
     return has_listing(row) and row.ai not in DRAFTING
 
 
-class NotReviewableError(ValueError):
-    """Mark reviewed on a row :func:`reviewable` refuses."""
+class NotReviewableError(ValueError): ...
 
 
 class Batch(_Record):
@@ -194,9 +166,6 @@ _LOCKS: dict[str, threading.Lock] = {}
 
 
 class _Store[R: _Record]:
-    """Load and save one kind of record, with a lock per record for the
-    read-modify-write every mutation is."""
-
     def __init__(
         self,
         workspace: Workspace,
@@ -211,16 +180,12 @@ class _Store[R: _Record]:
 
     @property
     def workspace(self) -> Workspace:
-        """The workspace these records live in, and the only one they know."""
         return self._workspace
 
     @contextmanager
     def lock(self, record: str) -> Iterator[None]:
-        """The record's lock, shared by every store over the same file: the
-        UI server's own store and the one an apply makes to mark its listing
-        deployed (:meth:`BatchStore.mark_deployed`) must not interleave a
-        read-modify-write. Like ``core/workspace/locks.py``'s, it does not
-        reach a second process."""
+        # Shared by every store over this file (the UI server's, an apply's
+        # mark_deployed); like core/workspace/locks.py's, it does not reach a second process.
         key = str(self._file(record).absolute()).casefold()
         with _GUARD:
             lock = _LOCKS.setdefault(key, threading.Lock())
@@ -284,10 +249,6 @@ class StagingStore(_Store[StagingSession]):
             remove_tree(directory)
 
     def sweep(self, *, now: datetime) -> None:
-        """staging expiry: drop every session seven days past its last edit. A directory
-        with no readable record is judged by its own age instead -- it is a
-        staging still being written, or one a crash or a schema change left
-        behind."""
         for session in self._workspace.staging_ids():
             record = self.load(session)
             if record is not None:
@@ -308,18 +269,12 @@ class BatchStore(_Store[Batch]):
         return [batch for id_ in self._workspace.batch_ids() if (batch := self.load(id_))]
 
     def remove(self, batch: str) -> None:
-        """Delete batch record (spec, *Cancellation and deletion*): the
-        record and the directory beside it -- the frozen template and any
-        kept upload. Nothing outside ``.cache/batches/`` is touched."""
         self._file(batch).unlink(missing_ok=True)
         directory = self._workspace.batch_dir(batch)
         if directory.is_dir():
             remove_tree(directory)
 
     def review(self, batch_id: str, row_id: str, *, reviewed: bool) -> Batch:
-        """Mark reviewed / Mark needs review (spec, *Review workflow*).
-        :class:`KeyError` for a batch or row nobody holds,
-        :class:`NotReviewableError` for a row with no listing to look at yet."""
         with self.lock(batch_id):
             batch = self.load(batch_id)
             rows = batch.rows if batch is not None else []
@@ -332,66 +287,39 @@ class BatchStore(_Store[Batch]):
             self.save(batch)
             return batch
 
-    # a row names its listing by its current name, exactly as a
-    # proposal record does -- two listings differing only in case can
-    # coexist on a case-sensitive filesystem, and one's rename or delete
-    # must not reach the other's row. A deleted row is not followed: a new
-    # listing given its old name is not its listing.
-
     def rename_listing(self, old: str, new: str) -> None:
-        """Rename's half of rename and delete hooks: every batch's row for ``old`` now names
-        ``new``. Its design target is the design's file, which stays."""
         with self.following_rename(old, new):
             pass
 
     @contextmanager
     def following_rename(self, old: str, new: str) -> Iterator[None]:
-        """:meth:`rename_listing` around the move itself: every batch's lock
-        is held while the body moves the listing, and the rows follow only
-        if it returns. The listings API takes these **before** its listing
-        write locks, the order creating a row takes them in (a batch's lock,
-        then its row's name), so a rename and a Retry creating a row of the
-        same name cannot each wait on the other. No row names ``old`` while
-        the move is half done, so the queue cannot start one in between."""
+        # Lock order: every batch's lock, then the listing write locks, as creating a row
+        # takes them; the rows follow only if the body (the move) returns.
         ids = sorted(self._workspace.batch_ids())
         with ExitStack() as held:
             for batch_id in ids:
                 held.enter_context(self.lock(batch_id))
             yield
             for batch_id in ids:
-                self._change_rows(
+                self._change_rows_locked(
                     batch_id,
                     lambda row: row.name == old and not row.deleted,
                     lambda _: {"name": new},
                 )
 
     def mark_deployed(self, listing: str) -> None:
-        """A full apply of ``listing`` (spec, *Deployment interaction*): its
-        row is marked reviewed, as Mark reviewed would mark it. A row Mark
-        reviewed would refuse -- still drafting, as a CLI apply beside the
-        UI server's queue can leave one -- stays as it is."""
         self._each_row(
             lambda row: row.name == listing and reviewable(row) and not row.reviewed,
             lambda _: {"reviewed": True},
         )
 
     def mark_deleted(self, listing: str) -> None:
-        """Delete's half of rename and delete hooks: the row stays, marked deleted, and leaves
-        the queue. A row still queued is cancelled here; a running one is
-        the delete's to stop, and its run's end records ``cancelled``."""
         self._each_row(
             lambda row: row.name == listing and has_listing(row),
             lambda row: {"deleted": True} | ({"ai": "cancelled"} if row.ai == "queued" else {}),
         )
 
     def restore_listing(self, listing: str, design: str | None) -> None:
-        """A pending delete cancelled (ADR-0036's Cancel clears ``lifecycle:
-        deleted`` before apply): the listing never went, so its rows are no
-        longer deleted. Only a row whose design target is the listing's
-        design (``design``, its ``design.default`` ref) comes back -- a row
-        for an earlier listing wiped under the same name is not this one's.
-        The AI state stays as the delete left it; Resume queues a
-        ``cancelled`` row again."""
         self._each_row(
             lambda row: (
                 row.deleted
@@ -408,15 +336,14 @@ class BatchStore(_Store[Batch]):
     ) -> None:
         for batch_id in self._workspace.batch_ids():
             with self.lock(batch_id):
-                self._change_rows(batch_id, which, change)
+                self._change_rows_locked(batch_id, which, change)
 
-    def _change_rows(
+    def _change_rows_locked(
         self,
         batch_id: str,
         which: Callable[[BatchRow], bool],
         change: Callable[[BatchRow], dict[str, object]],
     ) -> None:
-        """Under ``batch_id``'s lock, which the caller holds."""
         batch = self.load(batch_id)
         if batch is None or not any(which(row) for row in batch.rows):
             return
@@ -428,12 +355,6 @@ class BatchStore(_Store[Batch]):
 
 @dataclass(frozen=True)
 class BatchRecords:
-    """The two records a batch moves through: its staging session, then the batch.
-
-    Confirming and retrying read both, and a listing or mockup template's
-    rename rewrites both, so the stores travel together.
-    """
-
     staging: StagingStore
     batches: BatchStore
 

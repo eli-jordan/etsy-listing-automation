@@ -1,27 +1,3 @@
-"""Confirming a staging session: the batch record, then one listing per row
-(spec *Confirming a batch*; name allocation, idempotent row creation, staging expiry).
-
-The record is written first, with every row's allocated name and
-``creation: pending``, and before any file. Each row then:
-
-1. writes ``designs/<design>.png``, or reuses the file already there when its
-   bytes are the row's;
-2. copies the frozen listing template's owned files into ``listings/<name>/``;
-3. writes ``listing.yaml`` atomically;
-4. records ``creation: created``.
-
-Every step can be repeated, so Retry, a second confirm, or a confirm after a
-crash re-enters at whatever the disk and the record say is done. A directory
-already at the row's name is the row's own when its ``listing.yaml`` names the
-row's design, or when it has none and the record says the row claimed it;
-anything else there belongs to somebody else, and the row takes a fresh
-suffix instead. A failure is recorded on its row with the sentence and
-the next row carries on.
-
-The staging session goes once every row is materialised -- created, or failed
-with its upload copied beside the batch for Retry.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -48,11 +24,10 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 class ConfirmRefusedError(ConflictError, ValueError):
-    """The session cannot become a batch yet, and nothing was written."""
+    pass
 
 
 def _revalidate(frozen: FrozenListingTemplate, name: str) -> None:
-    """Current shared refs may have changed since staging began."""
     issues = frozen.issues(facts=WorkspaceFacts.gather(frozen.workspace))
     blocking = [issue.message for issue in issues if issue.severity == "block"]
     if blocking:
@@ -69,10 +44,6 @@ def confirm(
     *,
     now: datetime | None = None,
 ) -> Batch:
-    """Create the batch for ``session_id`` and its listings, or finish the
-    one a previous confirm began. Raises :class:`KeyError` for a session that
-    does not exist and :class:`ConfirmRefusedError` for one that cannot be
-    confirmed yet."""
     with staging.lock(session_id), batches.lock(session_id):
         batch = batches.load(session_id)
         if batch is None:
@@ -105,15 +76,12 @@ def _start(
         session.template_saved_at,
     )
     _revalidate(frozen, session.listing_template)
-    # Kept for Retry after the staging session has gone.
     frozen.copy_to(workspace.batch_template_dir(session_id))
     by_id = {row.id: row for row in session.rows}
     others = {row.name.casefold() for row in reviewed.creatable}
     allocated: set[str] = set()
     rows: list[BatchRow] = []
     for row in reviewed.creatable:
-        # the preview may be stale; the name is checked again under the
-        # listing's lock and recorded before any file is written.
         with ListingDocuments(workspace).lock(row.name):
             taken = taken_for(workspace_names(workspace), row.reuse)
             name = allocate(row.name, taken | allocated | (others - {row.name.casefold()}))
@@ -126,8 +94,6 @@ def _start(
                 sources=staged.sources,
                 base=row.name,
                 name=name,
-                # Spec, *Content deduplication*: identical bytes already in
-                # designs/ are named, not written again.
                 design=row.reuse or name,
             )
         )
@@ -151,8 +117,6 @@ def retry_row(
     batch_id: str,
     row_id: str,
 ) -> Batch:
-    """Retry creating one row (UI doc §7). A created row is left alone.
-    Raises :class:`KeyError` for a batch or row that does not exist."""
     batch = batches.load(batch_id)
     if batch is None or all(row.id != row_id for row in batch.rows):
         raise KeyError(row_id)
@@ -167,10 +131,6 @@ def create_rows(
     *,
     only: set[str] | None = None,
 ) -> Batch:
-    """Create every row still to create, recording each outcome as it
-    lands, then drop the staging session if nothing needs it any more.
-    Every row is created against the shop.yaml read at the start, so an
-    Admin save mid-batch cannot fail the rows still to come."""
     workspace = workspace.snapshot()
     with batches.lock(batch_id):
         batch = batches.load(batch_id)
@@ -209,12 +169,6 @@ def _failure(row: BatchRow, exc: Exception) -> str:
 
 
 def row_upload(workspace: Workspace, batch: Batch, row_id: str) -> Path:
-    """The upload a row was made from, wherever it is kept now: beside the
-    batch once its creation failed, else still in staging. What a row
-    that was never created shows as its thumbnail on the summary, since it
-    has no listing design to show. :class:`KeyError` for a row the batch
-    does not have; the path may not exist once the staging session has
-    gone."""
     row = next((r for r in batch.rows if r.id == row_id), None)
     if row is None:
         raise KeyError(row_id)
@@ -227,9 +181,6 @@ def _input(workspace: Workspace, batch: Batch, row: BatchRow) -> Path:
 
 
 def _keep_input(workspace: Workspace, batch: Batch, row: BatchRow) -> None:
-    """A failed row's upload moves beside the batch, so Retry still has it
-    once the staging session is gone. If even that fails, the staging
-    session stays."""
     source = workspace.staging_upload_file(batch.id, row.sha256)
     target = workspace.batch_upload_file(batch.id, row.sha256)
     if source.is_file() and not target.is_file():
@@ -250,8 +201,7 @@ def _holds(workspace: Workspace, design: str, sha256: str) -> bool:
     return path.is_file() and _sha256(path) == sha256
 
 
-def _is_ours(workspace: Workspace, row: BatchRow) -> bool:
-    """May this row write at its recorded name?"""
+def _may_write_at_name(workspace: Workspace, row: BatchRow) -> bool:
     design = workspace.design_file(row.design)
     if design.is_file() and _sha256(design) != row.sha256:
         return False
@@ -276,14 +226,13 @@ def _create(
     row = batch.rows[index]
     while True:
         with ListingDocuments(workspace).lock(row.name):
-            if _is_ours(workspace, row):
+            if _may_write_at_name(workspace, row):
                 if not row.claimed:
                     row = row.model_copy(update={"claimed": True})
                     batch.rows[index] = row
                     batches.save(batch)
                 _write(workspace, batch, row, frozen)
-                # Created is queued (spec, *Confirming a batch*), in the same
-                # save, so a crash cannot leave a listing the queue never sees.
+                # Queued in the same save as created: a crash then leaves no unqueued listing.
                 return row.model_copy(update={"creation": "created", "error": None, "ai": "queued"})
         row = _renamed(workspace, batch, index, row)
         batch.rows[index] = row
@@ -291,11 +240,7 @@ def _create(
 
 
 def _renamed(workspace: Workspace, batch: Batch, index: int, row: BatchRow) -> BatchRow:
-    """``row`` under the next name free of the workspace and the batch's other
-    rows, unclaimed."""
     others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
-    # A design that already holds the row's bytes -- one it reuses, or
-    # one it wrote itself before its name was taken -- is kept.
     design = row.design if _holds(workspace, row.design, row.sha256) else None
     taken = taken_for(workspace_names(workspace), design)
     name = allocate(row.base, taken | others)
@@ -303,8 +248,6 @@ def _renamed(workspace: Workspace, batch: Batch, index: int, row: BatchRow) -> B
 
 
 def _put(workspace: Workspace, target: Path, write: Callable[[], object]) -> None:
-    """One atomic write, whose failure names the file the seller would look
-    for -- ``designs/x.png`` -- rather than the temporary beside it."""
     try:
         write()
     except OSError as exc:
@@ -341,10 +284,6 @@ def _write(
 def _listing_document(
     workspace: Workspace, template: ListingTemplate, design: str
 ) -> dict[str, Any]:
-    """The frozen template as an ordinary listing (spec, *Confirming a
-    batch*): the single-file design ref, an empty brief, and blank title,
-    tags and lead for the seller to accept suggestions into. ``./`` refs are
-    kept as they are; the files they name were just copied beside it."""
     body = template.model_dump(mode="json", exclude_defaults=True)
     etsy = body.pop("etsy", {})
     description = etsy.pop("description", {})

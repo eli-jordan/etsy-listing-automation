@@ -84,6 +84,15 @@ a single safe path segment and is its workspace identity. Creating or cloning a
 template proposes a name but requires the seller to choose a unique one. It
 never overwrites or silently suffixes an existing listing template.
 
+A `template.yaml` that names a design-specific field (`design`, `artwork`,
+`brief`, `lifecycle`, `etsy.title`, `etsy.tags` or `etsy.description.lead`) is
+refused rather than read without it, so a hand edit is told so instead of
+losing the field at the next save. A template and a listing share one set of
+structural rules (prices in the workspace's currency, a gallery Etsy can show,
+no override or media entry for a colour that is not on sale), stated once for
+both: every listing made from a template must load, and two copies of a rule
+would drift into templates that save but make listings that do not.
+
 Listing templates are ordinary workspace data, not cache data. Listing-local
 media copied into a template becomes template-owned data beneath that
 template's directory.
@@ -120,7 +129,10 @@ It deliberately excludes or resets these fields:
 
 A bare media ref rooted in the workspace remains a shared workspace ref. For
 each `./` listing-local image or video, **Create listing template** copies the
-file into template-owned assets and rewrites the ref. Instantiation copies that
+file into template-owned assets and rewrites the ref under `./assets/`, keeping
+its path: `./shots/back.png` becomes `./assets/shots/back.png`, so two files
+that share a name in different directories stay apart. A local pricing plan
+travels the same way. Instantiation copies that
 asset into the new listing so the resulting `./` ref remains listing-local. A
 missing or unreadable source asset prevents the listing template from being
 saved. Inline `etsy.description.text` is copied deliberately because the seller
@@ -311,6 +323,15 @@ All creatable listings appear before AI processing begins. An unexpected
 filesystem failure is recorded against its row and does not roll back or block
 other rows. Retry resumes the idempotent row creation from its recorded state.
 Only rows whose listing was created enter the AI queue.
+
+Every step can be repeated, so Retry, a second confirm, or a confirm after a
+crash re-enters at whatever the disk and the record say is done. A directory
+already at a row's name is the row's own when its `listing.yaml` names the
+row's design, or when it has none and the record says the row claimed the
+name. Anything else there belongs to somebody else, and the row takes a fresh
+suffix instead, keeping a design that already holds its bytes. A failed row's
+upload is copied beside the batch, so Retry still has it; the staging session
+goes once every row is created or has its upload kept that way.
 
 ## Batch AI queue
 

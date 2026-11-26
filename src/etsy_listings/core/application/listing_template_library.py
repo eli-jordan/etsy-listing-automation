@@ -1,22 +1,7 @@
-"""The Listing templates page and editor: the index, the *name it* draft,
-create (Save as listing template, Clone), read, the valid-only edit, rename
-and delete (ADR-0047, template completeness; spec *Listing templates*;
-module-structure plan, PR 7).
-
-The conversion and completeness rules are ``listing_templates``'
-(``from_listing``, ``from_template``, ``save``, ``template_issues``); this
-module coordinates them with the template's write lock and with the records
-that name a template. Every write takes the template's write lock and
-re-checks the template once it holds it, so a create and a rename to one
-name cannot both win, and an edit waiting behind a rename finds the template
-gone rather than recreating it under the old name.
-
-Two kinds of "no", as for a listing (``refusals``): a *name* or a *source*
-the operation cannot take is raised, with nothing written; a *document* it
-will not write -- malformed, or complete but for a blocking issue -- is
-answered as a :class:`TemplateSave` with ``saved`` false, leaving
-``template.yaml`` byte-for-byte as it was so the server always holds the
-last complete version.
+"""Every write takes the listing template's write lock and re-checks the
+template once it holds it, so a create and a rename to one name cannot both
+win, and an edit waiting behind a rename finds the template gone rather than
+recreating it under the old name.
 """
 
 from __future__ import annotations
@@ -64,22 +49,12 @@ RESERVED_NAME = "draft"
 
 @dataclass(frozen=True)
 class TemplateSource:
-    """What a draft is made from: Save as listing template, or Clone."""
-
     kind: Literal["listing", "listing-template"]
     name: str
 
 
 @dataclass(frozen=True)
 class ListingTemplateView:
-    """A listing template as its pages read it, saved or not -- the document,
-    its issues, and what the listing editor's tabs compute for a listing by
-    the listing's own rules, since the template editor mounts those tabs
-    unchanged (UI doc §3).
-
-    A draft has ``name`` ``""``, no ``modified_at``, and says where it came
-    from in ``source`` and the files it will copy in ``assets``."""
-
     name: str
     template: ListingTemplate
     issues: list[Issue]
@@ -102,8 +77,6 @@ class ListingTemplateView:
 
 @dataclass(frozen=True)
 class ListingTemplateCard:
-    """One card on the Listing templates page (UI doc §2)."""
-
     name: str
     template: ListingTemplate
     garment: str
@@ -128,9 +101,6 @@ class TemplateSave:
     issues: list[Issue]
     field_errors: dict[str, str] = field(default_factory=dict)
     template: ListingTemplateView | None = None
-
-
-# -------------------------------------------------------------------- reads
 
 
 def list_listing_templates(
@@ -161,8 +131,6 @@ def list_listing_templates(
 
 
 def read_listing_template(workspace: Workspace, name: str) -> ListingTemplateView:
-    """Listing template ``name``, with the issues it has now -- its shared
-    refs can have changed under it since it was saved complete."""
     _require(workspace, name)
     return _saved_view(workspace, WorkspaceFacts.gather(workspace), name)
 
@@ -177,8 +145,6 @@ class DraftOrigin:
 
 
 def draft_listing_template(workspace: Workspace, origin: DraftOrigin) -> ListingTemplateView:
-    """The template Save as listing template or Clone would write, written
-    nowhere -- what the *name it* page shows before a name is committed."""
     source, draft = _draft(workspace, origin)
     facts = WorkspaceFacts.gather(workspace)
     return _view(
@@ -198,9 +164,6 @@ def draft_listing_template(workspace: Workspace, origin: DraftOrigin) -> Listing
     )
 
 
-# ------------------------------------------------------------------- writes
-
-
 def create_listing_template(
     workspace: Workspace,
     name: str,
@@ -208,18 +171,6 @@ def create_listing_template(
     *,
     document: Mapping[str, Any] | None = None,
 ) -> TemplateSave:
-    """Naming the draft is what writes it (UI doc §1).
-
-    The name is checked first, so an unusable one (``InvalidNameError``) or
-    ``draft`` (:class:`ReservedListingTemplateNameError`) is refused before any
-    source is read. Then the source: exactly one, existing
-    (:class:`ListingMissingError`, :class:`ListingTemplateMissingError`), and able to
-    become a template (:class:`ListingTemplateSourceRefusedError`). ``document``
-    is the seller's edit made before naming: it replaces the source's, and
-    only the files it still names are copied. Under the name's write lock, a
-    name already taken -- the *directory*, even half-written -- raises
-    ``ListingTemplateExistsError`` and is never suffixed.
-    """
     _check_name(workspace, name)
     _, draft = _draft(workspace, origin)
     if document is not None:
@@ -238,9 +189,6 @@ def create_listing_template(
 def edit_listing_template(
     workspace: Workspace, name: str, document: Mapping[str, Any]
 ) -> TemplateSave:
-    """Write the whole ``document`` as listing template ``name``, only if it
-    is complete (template completeness). :class:`ListingTemplateMissingError`
-    when there is none, before or after waiting for its lock."""
     facts = WorkspaceFacts.gather(workspace)
     with locks.hold(workspace, "listing-template", name):
         _require(workspace, name)
@@ -264,18 +212,6 @@ def rename_listing_template(
     *,
     records: BatchRecords,
 ) -> None:
-    """Move a listing template, whole, to ``new``. Its name is its
-    directory, so its ``./`` refs need no rewrite.
-
-    Staging sessions and batch records made from it follow it by *name* --
-    the card's *Used by N batches*, the staging page's *Using X* -- while the
-    frozen copy each keeps is untouched. They are rewritten after the move,
-    each under its own lock; a crash between leaves records naming a
-    template that is gone, which is what a delete leaves too. Renaming to
-    the same name changes nothing. Refusals: ``InvalidNameError``,
-    :class:`ReservedListingTemplateNameError`, :class:`ListingTemplateMissingError`,
-    ``ListingTemplateExistsError``.
-    """
     destination = workspace.listing_template_dir(new)
     if new == RESERVED_NAME:
         raise ReservedListingTemplateNameError(new)
@@ -286,19 +222,14 @@ def rename_listing_template(
         if destination.exists():
             raise ListingTemplateExistsError(new)
         workspace.listing_template_dir(old).rename(destination)
+        # Not atomic with the move: a crash between leaves records naming a gone template.
         records.rename_listing_template(old, new)
 
 
 def delete_listing_template(workspace: Workspace, name: str) -> None:
-    """Allowed whatever was made from it: batches keep their own frozen
-    copy, and a listing never had a link to it (spec, *Completeness and
-    editing*)."""
     with locks.hold(workspace, "listing-template", name):
         _require(workspace, name)
         workspace.remove_listing_template(name)
-
-
-# ------------------------------------------------------------------ helpers
 
 
 def _require(workspace: Workspace, name: str) -> Path:
@@ -325,8 +256,6 @@ def _garment(profile: GarmentProfile | None) -> str | None:
 
 
 def _plan_name(template: ListingTemplate) -> str | None:
-    """The plan ref's stem, read off the ref: a name to show, which needs no
-    plan to load."""
     return PurePosixPath(template.pricing_plan).stem if template.pricing_plan else None
 
 
@@ -353,10 +282,6 @@ def _draft(
 def _edited(
     draft: ListingTemplateDraft, document: Mapping[str, Any], *, currency: str
 ) -> ListingTemplateDraft:
-    """``draft`` with the seller's edited document in place of the source's.
-    Only the files the edit still names are copied, and a ``./`` ref it does
-    not plan to copy is refused: the draft has no directory yet, so such a
-    ref could only name a file that will never be there."""
     template = ListingTemplate.model_validate(dict(document), context={"currency": currency})
     planned = {asset.ref for asset in draft.assets}
     unplanned = [ref for ref in conversion.owned_refs(template) if ref not in planned]
@@ -388,10 +313,6 @@ def _saved_view(workspace: Workspace, facts: WorkspaceFacts, name: str) -> Listi
 
 @dataclass(frozen=True)
 class _TemplateContext:
-    """What the caller of :func:`_view` knows that the template does not say.
-    ``resolve`` finds a ``./`` ref wherever the template's files are: its own
-    directory once saved, the files it will copy while a draft."""
-
     name: str
     resolve: Callable[[str], Path]
     modified_at: datetime | None = None

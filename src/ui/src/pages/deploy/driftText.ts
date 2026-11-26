@@ -1,11 +1,5 @@
 import { sequenceDiff, wordDiff, type WordDiffToken } from "./wordDiff";
 
-/**
- * Pure text comparison for a drifted field: which characters differ and which
- * paragraphs can fold away. Presentation only, as in `wordDiff.ts`: the engine
- * already decided the field drifted.
- */
-
 export interface DiffSegment {
   kind: "same" | "del" | "ins";
   text: string;
@@ -22,8 +16,6 @@ function sharedEnds(a: string, b: string): { start: number; end: number } {
   return { start, end };
 }
 
-/** One word swapped for another, marked only where the two differ, so a
- * single changed character is findable in a long description. */
 function narrowed(del: string, ins: string): DiffSegment[] {
   const { start, end } = sharedEnds(del, ins);
   const parts: DiffSegment[] = [
@@ -61,7 +53,6 @@ function allSegments(live: string, after: string): DiffSegment[] {
   return segments;
 }
 
-/** One side of the comparison: unchanged text, plus what only that side has. */
 export function diffSegments(live: string, after: string, side: DiffSide): DiffSegment[] {
   const own = side === "live" ? "del" : "ins";
   return allSegments(live, after).filter(({ kind }) => kind === "same" || kind === own);
@@ -85,8 +76,6 @@ function addToken(groups: DraftGroup[], token: WordDiffToken): void {
   (token.type === "del" ? diff.live : diff.after).push(token.text);
 }
 
-/** Paragraphs in order: matching runs that can fold, and the changed ones. An
- * added or removed paragraph leaves everything around it matched. */
 export function paragraphGroups(live: string, after: string): ParagraphGroup[] {
   const groups: DraftGroup[] = [];
   for (const token of sequenceDiff(live.split("\n\n"), after.split("\n\n"))) {
@@ -101,7 +90,6 @@ export function paragraphGroups(live: string, after: string): ParagraphGroup[] {
 
 const withoutSpace = (text: string) => text.replace(/\s+/g, "");
 
-/** The comparison's one-sentence answer to "what really differs?". */
 export function driftVerdict(
   live: string,
   after: string,

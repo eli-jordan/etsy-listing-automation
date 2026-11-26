@@ -30,6 +30,34 @@ def test_status_reports_reference_and_unavailable_masks_without_submitting(
     assert client.get("/api/templates/flat-lay-01/placements/arbitrary/mask").status_code == 409
 
 
+def test_a_refused_submission_is_a_409_carrying_a_reason_beside_the_sentence(
+    workspace_root: Path,
+) -> None:
+    from etsy_listings.core.render import load_template_config
+
+    from tests.support.marigold import PreparationRuntime
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    config = template_state(workspace, "flat-lay-01").require().model_dump(mode="json")
+    config["renderer"] = {"type": "marigold", "config": {}}
+    CalibrationStore(workspace).write_config("flat-lay-01", load_template_config(config))
+    client = TestClient(create_app(workspace, preparation_runtime=PreparationRuntime()))
+    state = client.get("/api/templates/flat-lay-01/preparation").json()
+    body = {
+        "template": "flat-lay-01",
+        "config_revision": state["config_revision"],
+        "request_id": "prepare-once",
+        "action": "prepare",
+    }
+    assert client.post("/api/preparation/jobs", json=body).status_code == 202
+
+    refused = client.post("/api/preparation/jobs", json={**body, "action": "prepare_again"})
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["reason"] == "preparation_refused"
+    assert refused.json()["detail"]["message"]
+
+
 def test_explicit_submission_reconnect_and_cancel_keep_one_durable_job(
     workspace_root: Path,
 ) -> None:

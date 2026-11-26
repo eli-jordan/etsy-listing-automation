@@ -1,5 +1,5 @@
 import type { components } from "./schema";
-import { api } from "./client";
+import { api, withTuples } from "./client";
 import { openEventStream, type EventStreamOptions } from "./sse";
 export type Preparation = components["schemas"]["PreparationResponse"];
 export type PreparationJob = components["schemas"]["PreparationJobResponse"];
@@ -45,7 +45,6 @@ export async function prepareTemplate(
   }
   return data;
 }
-/** Whether the editor may adjust `name` yet. */
 export async function getPositionReadiness(name: string): Promise<PositionReadiness> {
   const { data, error } = await api.GET("/api/templates/{name}/coverage", {
     cache: "no-store",
@@ -54,8 +53,6 @@ export async function getPositionReadiness(name: string): Promise<PositionReadin
   if (error || !data) throw new Error("Could not read whether this template is ready.");
   return data;
 }
-/** Queue `name`'s coverage: a seller asked to adjust it and it falls short.
- * `null` when it needs none, or no worker is installed to run it. */
 export async function queueCoverage(name: string): Promise<PreparationJob | null> {
   const { data, error } = await api.POST("/api/templates/{name}/coverage", {
     params: { path: { name } },
@@ -103,6 +100,5 @@ export async function getMaskHistory(
         });
   if (result.error || !result.data)
     throw new Error("Could not read brush history. Saved masks remain available.");
-  // openapi-fetch widens nested coordinate tuples. The response contract validates pairs.
-  return result.data as unknown as MaskHistory;
+  return withTuples<MaskHistory>(result.data);
 }

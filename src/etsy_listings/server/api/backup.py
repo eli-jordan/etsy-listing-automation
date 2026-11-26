@@ -1,10 +1,9 @@
 """The backup status, history, Back up now, set-up, repair, restore, and the
-missing-repository actions (workspace-backup plan, PRs 5, 7 and 8).
+missing-repository actions.
 
-``GET /api/backup`` is the one status source for the Backup page, the
-banner on every other page and both nav icons (interactions, *What the
-production implementation must finish*). Setup's edits are not here: they
-save through ``PATCH /api/admin/settings`` and its revision check.
+``GET /api/backup`` is the one status source for the Backup page, the banner
+on every other page and both nav icons. Setup's edits are not here: they save
+through ``PATCH /api/admin/settings`` and its revision check.
 """
 
 from __future__ import annotations
@@ -25,6 +24,7 @@ from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.server.api import app_state
+from etsy_listings.server.api.refusal_status import refusal_status
 from etsy_listings.server.api.schemas import (
     BackupConnected,
     BackupConnectRequest,
@@ -175,15 +175,8 @@ def _answer(
 ) -> BackupOverview | JSONResponse:
     try:
         action()
-    except StaleError as exc:
-        return _refusal(412, "stale", exc)
-    except DestinationHoldsRepositoryError as exc:
-        return _refusal(409, "conflict", exc, connect_from=str(exc.destination))
-    except ConflictError as exc:
-        return _refusal(409, "conflict", exc)
-    except RefusedError as exc:
-        fields = exc.field_errors if isinstance(exc, InvalidSettingsEditError) else {}
-        return _refusal(422, "invalid", exc, fields)
+    except (StaleError, ConflictError, RefusedError) as exc:
+        return _refusal(exc)
     return backups.overview()
 
 
@@ -200,16 +193,21 @@ def repair(request: Request, body: BackupRepairRequest) -> BackupRepairResponse:
     )
 
 
-def _refusal(
-    status: int,
-    kind: Literal["stale", "conflict", "invalid"],
-    exc: Exception,
-    field_errors: dict[str, str] | None = None,
-    *,
-    connect_from: str | None = None,
-) -> JSONResponse:
-    """Set-up answers as a settings save does, with the field it refuses."""
+_REFUSAL_KINDS: dict[type[Exception], Literal["stale", "conflict", "invalid"]] = {
+    StaleError: "stale",
+    ConflictError: "conflict",
+    RefusedError: "invalid",
+}
+
+
+def _refusal(exc: StaleError | ConflictError | RefusedError) -> JSONResponse:
+    kind = next(kind for category, kind in _REFUSAL_KINDS.items() if isinstance(exc, category))
     refusal = BackupRefusal(
-        kind=kind, message=str(exc), field_errors=field_errors or {}, connect_from=connect_from
+        kind=kind,
+        message=str(exc),
+        field_errors=exc.field_errors if isinstance(exc, InvalidSettingsEditError) else {},
+        connect_from=(
+            str(exc.destination) if isinstance(exc, DestinationHoldsRepositoryError) else None
+        ),
     )
-    return JSONResponse(status_code=status, content=refusal.model_dump())
+    return JSONResponse(status_code=refusal_status(exc), content=refusal.model_dump())

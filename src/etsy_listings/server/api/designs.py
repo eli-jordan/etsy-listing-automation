@@ -1,12 +1,8 @@
 """The calibrator's test-design library over HTTP.
 
-Calibration is judged by eye. The bundled grid target answers "is the warp
-right?" precisely and says nothing about how a real ink weight sits on a real
-garment, so the set of things you can preview against has to be open: three
-bundled targets (static files this package ships) plus whatever the user
-uploads. What an upload may be called, whether it is an image and where it
-lands are ``core/application/calibration_designs.py``'s; this module decodes
-the request, and the app's refusal table answers what it refuses.
+Three bundled targets plus the user's uploads (docs/architecture.md, *The
+calibrator*). ``core/application/calibration_designs.py`` owns names and
+validation; the app's refusal table answers what it refuses.
 """
 
 from __future__ import annotations
@@ -45,13 +41,7 @@ from a menu while looking at a photograph."""
 
 
 def resolve_design(workspace: Workspace, design: str) -> Path:
-    """Turn an id from the library into a file on disk.
-
-    A stale id is :class:`CalibrationDesignMissingError`, a 404 like every
-    other missing thing, rather than a ``KeyError`` escaping as a 500: the
-    client picked it from a list this API handed out, so an id that no longer
-    exists means the list moved on, not that the server broke.
-    """
+    """Turn an id from the library into a file on disk."""
     bundled = BUNDLED_DESIGNS.get(design)
     if bundled is not None:
         return bundled

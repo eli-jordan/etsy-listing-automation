@@ -9,34 +9,17 @@ import { ownedTile } from "../media";
 import { useIsPhone } from "../phone/usePhone";
 import type { ListingTemplateSummary } from "../types";
 
-/**
- * New batch (UI doc §4; the `new-batch` and `staging-refused` frames): pick
- * one listing template, then drop designs. A drop is posted straight to
- * staging and lands on the staging review; a refused one stays here with the
- * reason and the remedy, and nothing was kept. `?template=` preselects, as
- * Start batch on a card does.
- *
- * One ZIP or loose PNGs (spec, *Accepted input*). What may be dropped
- * together is the server's to judge: two ZIPs, a ZIP with loose files and
- * an unsafe archive come back as refusals, shown like any other.
- *
- * A drop on a listing-template card that the server refuses lands here too,
- * the refusal in the navigation's state (UI doc §2, closed question 2), so
- * a card has no refusal state of its own.
- */
-
-/** A refusal, and the names of the files it was about. Names rather than
- * the files: it may arrive in history state from a card drop. */
 export interface Refused extends StagingRefusal {
-  files: string[];
+  fileNames: string[];
 }
 
-function refusedHeading(files: string[]): string {
-  const [only] = files;
-  return files.length === 1 && only ? `${only} was not staged.` : "These files were not staged.";
+function refusedHeading(fileNames: string[]): string {
+  const [only] = fileNames;
+  return fileNames.length === 1 && only
+    ? `${only} was not staged.`
+    : "These files were not staged.";
 }
 
-/** A phone has no files to drag, so there the zone asks you to pick them. */
 function dropTitle(busy: boolean, refused: boolean, phone = false): string {
   if (busy) return "Staging…";
   if (phone) return refused ? "Choose a different ZIP or PNGs" : "Choose a ZIP or PNGs";
@@ -78,7 +61,7 @@ export function NewBatchPage() {
       .catch((exc: unknown) => {
         setBusy(false);
         if (exc instanceof StagingRefused) {
-          setRefused({ ...exc.refusal, files: files.map((file) => file.name) });
+          setRefused({ ...exc.refusal, fileNames: files.map((file) => file.name) });
         } else setError(exc instanceof Error ? exc.message : "The designs could not be staged.");
       });
   }
@@ -160,7 +143,7 @@ export function NewBatchPage() {
             >
               <WarningCircleIcon className="dv-callout__icon" />
               <div>
-                <strong>{refusedHeading(refused.files)}</strong>
+                <strong>{refusedHeading(refused.fileNames)}</strong>
                 <div>{refused.message}</div>
                 <div className="dv-callout__remedy">{refused.remedy}</div>
               </div>

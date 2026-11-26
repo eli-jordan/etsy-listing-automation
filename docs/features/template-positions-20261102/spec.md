@@ -93,8 +93,9 @@ checks are.
 Listing boxes are absolute, so recalibrating a template box does not move them.
 The next `plan` re-checks them against the new box and refuses any that now
 fall outside the limits. Saving a template in the calibrator lists the listings
-holding positions for it, so the user sees which ones a change may break. The
-calibrator never edits listings.
+holding positions for it, so the user sees which ones a change may break. On a
+phone the note shows only the count, with the names a tap away, since the full
+list pushed the photo a screen down. The calibrator never edits listings.
 
 ## Settings
 

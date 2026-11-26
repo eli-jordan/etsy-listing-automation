@@ -109,6 +109,13 @@ def test_the_first_plan_says_it_will_create_a_product(root, catalog, printify) -
     assert "create" in (stage_plan.reason or "").lower()
 
 
+def test_a_first_plan_needs_no_printify_client(root, catalog) -> None:
+    stage_plan = _stage_plan(a_context(root, catalog=catalog), a_lock())
+
+    assert stage_plan.blocked is None
+    assert stage_plan.will_run
+
+
 @pytest.mark.parametrize("already_created", [False, True])
 def test_a_catalog_brand_rename_keeps_the_same_garment_and_product_plan(
     root: Path,

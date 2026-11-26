@@ -36,7 +36,6 @@ export function PhoneSheet({
   title: string;
   onClose: () => void;
   done?: boolean;
-  /** Extra class on the sheet box, for an area's own look. */
   className?: string;
   children: ReactNode;
 }) {
@@ -53,8 +52,6 @@ export function PhoneSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Closed, it keeps the same element tree, so nothing inside remounts, but
-  // without the dialog's role and classes: a hidden sheet is not a dialog.
   return createPortal(
     <div
       className={open ? "modal-root phone-sheet" : "phone-sheet"}

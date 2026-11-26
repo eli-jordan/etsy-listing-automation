@@ -1,9 +1,3 @@
-"""Actionable config-loading errors.
-
-Every error here names the offending file and field, under the validation rules: failures must be
-actionable, never a bare stack trace.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -40,10 +34,6 @@ def load_model[Model: BaseModel](
 
 
 def parse_yaml(path: Path, text: str) -> Any:
-    """``text`` (read from ``path``) parsed as YAML. A file YAML cannot parse
-    is a :class:`ConfigLoadError` naming it, like one that fails validation:
-    a hand edit makes either, and callers that skip an unloadable file must
-    not see a bare parser error instead."""
     try:
         return yaml.safe_load(text)
     except yaml.YAMLError as exc:

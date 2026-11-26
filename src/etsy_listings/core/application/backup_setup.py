@@ -1,17 +1,3 @@
-"""Setting backups up from the app (workspace-backup interactions, *Set up
-and Setup*; plan, PR 5). Which destination folders a save may create, and
-when they are made, is ``settings_save``'s.
-
-**Set-up connects when a destination is already a backup.** A new machine
-whose iCloud Drive already holds the backups names that folder as a
-destination; set-up then connects the copy there, as Connect does, instead
-of creating a repository beside it (``backup_provisioning.source_for``).
-:func:`prepare_set_up` refuses what set-up alone refuses and says which it
-will do, so the coordinator holds the right slot for a copy that can take
-many minutes; ``backup_provisioning`` refuses the rest before it writes,
-then provisions the storage folder and saves the whole ``backup:`` block.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -44,8 +30,6 @@ PASSWORD_FIELD = "password"
 
 @dataclass(frozen=True)
 class BackupSetUp:
-    """The set-up form's answers."""
-
     repository: Path
     destinations: tuple[Path, ...]
     interval_hours: int
@@ -54,8 +38,6 @@ class BackupSetUp:
 
 
 class ExistingBackupPasswordError(InvalidSettingsEditError):
-    """A destination holds a backup the set-up password does not open."""
-
     def __init__(self, source: Path) -> None:
         message = (
             f"{source} already holds a backup, and this password does not open it. Enter "
@@ -67,8 +49,6 @@ class ExistingBackupPasswordError(InvalidSettingsEditError):
 
 @dataclass(frozen=True)
 class PreparedSetUp:
-    """Set-up checked and not yet written: :func:`prepare_set_up`'s."""
-
     workspace: Workspace
     answers: BackupSetUp
     source: Source
@@ -77,8 +57,6 @@ class PreparedSetUp:
 
     @property
     def copies(self) -> tuple[Path, ...]:
-        """The destinations holding the repository set-up connects, in their
-        order; empty when it creates one."""
         return self.source.copies if isinstance(self.source, DestinationCopy) else ()
 
     @property
@@ -89,9 +67,7 @@ class PreparedSetUp:
         self, *, expected_revision: str, trying: Callable[[Path], None] | None = None
     ) -> Connected | None:
         """Provision the storage folder and save the ``backup:`` block and
-        the password; the settings save makes the destination folders. What
-        was connected, or None for a new repository. ``trying`` is told each
-        copy a connect tries, before it copies."""
+        the password. What was connected, or None for a new repository."""
         answers = self.answers
         asked = Provisioning(
             storage=answers.repository,
@@ -109,7 +85,6 @@ class PreparedSetUp:
                 trying=None if trying is None else _copies_only(trying),
             )
         except ConnectPasswordError as exc:
-            # The seller named a destination, not a backup: say which one.
             raise ExistingBackupPasswordError(exc.source) from None
         return done.connected
 
@@ -129,10 +104,6 @@ def prepare_set_up(
     binaries: ResticBinaries,
     restic: OpenRepository | None = None,
 ) -> PreparedSetUp:
-    """Whether set-up connects a destination's copy or creates, refused
-    while backups are set up. The storage folder, the password, the
-    destinations and the interval are refused by ``backup_provisioning`` and
-    the settings save it ends with, before anything is written."""
     if workspace_settings.read_settings(workspace).settings.backup is not None:
         raise BackupsSetUpError
     source = source_for(answers.destinations)
