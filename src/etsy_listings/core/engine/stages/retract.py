@@ -59,11 +59,8 @@ class RetractStage(Stage[RetractDesired, AppliedRetract, RetractLive]):
         now: Callable[[], float] | None = None,
         poll_ceiling: float = POLL_CEILING_SECONDS,
     ) -> None:
-        # Resolved here, not as a default-parameter value: `walk()` builds a
-        # fresh instance on every call rather than holding a module-level
-        # singleton, so a test that monkeypatches `time.sleep` before that
-        # call needs this to be a live lookup, not a reference to whatever
-        # `time.sleep` was when this module was first imported.
+        # Looked up per instance, not as a default, so a test's monkeypatched
+        # `time.sleep` is the one used.
         self._sleep = sleep or time.sleep
         self._now = now or time.monotonic
         self._poll_ceiling = poll_ceiling

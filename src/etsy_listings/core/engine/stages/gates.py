@@ -78,14 +78,8 @@ def check_listing_yaml_present(*, present: bool) -> Blocked | None:
 
 
 def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> Blocked | None:
-    """Nothing says what a variant costs.
-
-    This gate is what the price-source rule became when it stopped blocking
-    the write. `Listing.resolved_price` raises `KeyError` when nothing
-    resolves, and a `KeyError` is not a `UserFacingError` -- it would end a
-    whole ``--all`` batch on one unpriced listing, which is precisely the
-    shape of failure this vocabulary exists to replace.
-    """
+    """`Listing.resolved_price` raises `KeyError` when nothing resolves,
+    which would end a whole ``--all`` batch on one unpriced listing."""
     return _refuse(rules.check_price_source(pricing_plan=pricing_plan, priced_sizes=priced_sizes))
 
 

@@ -91,16 +91,11 @@ class ManifestEntry:
     content_hash: str
     """A real ``sha256:...`` hash, or :data:`PENDING`."""
     file: str
-    """``source``, workspace-relative and forward-slashed -- what the
-    snapshot's ``desired`` side names, computed here rather than in
-    ``snapshot()`` because that method is handed no ``ctx`` (a stage's
-    ``snapshot`` is pure, like its ``plan``) and so has no workspace root to
-    make ``source`` relative to."""
+    """``source``, workspace-relative and forward-slashed: the pure
+    ``snapshot()`` has no workspace root to make it relative."""
     alt_text: str = ""
     colour: str | None = None
-    """The colour this entry depicts, when it comes from a `colour-matrix`
-    entry in the `variation_images:` template -- the one fact a swatch needs
-    that a render addressing key does not carry."""
+    """Set for a `colour-matrix` entry of the `variation_images:` template."""
 
 
 @dataclass(frozen=True)
@@ -108,9 +103,7 @@ class EtsyMediaDesired:
     manifest: tuple[ManifestEntry, ...]
     variation_images_template: str | None
     colours: tuple[str, ...]
-    """The listing's own ``colors:``, carried through from ``desired()``
-    rather than re-loaded in ``apply()`` -- the ``Stage`` protocol hands
-    ``apply()`` no listing name, only what ``desired()`` already resolved."""
+    """Carried from ``desired()``: ``apply()`` is handed no listing name."""
 
     def applied(self) -> AppliedEtsyMedia:
         return AppliedEtsyMedia(
@@ -129,17 +122,10 @@ class LiveImage:
     rank: int | None
     image_id: int
     url: str | None
-    """Etsy's ``url_570xN`` -- the "On Etsy now" column's source for a draft,
-    or for an image uploaded by hand in Shop Manager, either of which has no
-    local render to fall back on. ``None`` when Etsy has not generated one
-    yet, which the frontend falls back from rather than this stage guessing
-    at."""
+    """Etsy's ``url_570xN``; ``None`` until Etsy has generated one."""
     ref: str | None = None
-    """This id projected back to a manifest ref, through ``lock.remote``'s
-    ref -> id map -- the same reversal ADR-0030 already does for variation-image
-    links. ``None`` for an image this tool never uploaded (a hand-added one
-    in Shop Manager), which is not a fact ``snapshot()`` can derive on its
-    own: it is handed no ``lock``, only what ``read_live`` already resolved."""
+    """Projected back through ``lock.remote`` (ADR-0030); ``None`` for an
+    image this tool never uploaded."""
 
 
 @dataclass(frozen=True)
@@ -147,14 +133,10 @@ class EtsyMediaLive:
     live_image_ids: frozenset[int]
     dangling_refs: tuple[str, ...]
     """Refs `lock.remote` says were uploaded, whose id is no longer among the
-    listing's images -- a replacement or an outside deletion, either way not
-    visible any other way (measured)."""
+    listing's images: a replacement or an outside deletion shows no other
+    way (measured)."""
     images: tuple[LiveImage, ...] = ()
-    """Every image the listing actually carries right now, in Etsy's own
-    rank order -- what the snapshot's ``live`` side is built from.
-    Defaulted rather than always populated by every caller, since a stage
-    under test through `execute` alone often builds one by hand without a
-    real `read_live`."""
+    """In Etsy's rank order."""
 
 
 def _manifest_entry(
@@ -251,10 +233,8 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedEtsyMedia | None
     ) -> EtsyMediaLive | None:
-        """`getListing?includes=Images`, the only working route -- the
-        dedicated images endpoint 404s for every id, valid or invented
-        (measured). ``None`` without a request when there is no listing id
-        yet."""
+        """`getListing?includes=Images`, the only working route: the dedicated
+        images endpoint 404s for every id, valid or invented (measured)."""
         del applied
         listing_id = etsy_listing_id(lock)
         if listing_id is None:
@@ -385,9 +365,8 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
 
 
 class MediaNotRenderedError(RuntimeError):
-    """A manifest entry's file does not exist when ``apply`` tried to upload
-    it. `render` runs earlier in the pipeline and should have produced it in
-    this same run; reaching here is a wiring defect."""
+    """A wiring defect: `render` runs earlier and should have produced the
+    file this run."""
 
     def __init__(self, ref: str) -> None:
         super().__init__(f"cannot upload {ref!r}: its render output does not exist on disk yet.")

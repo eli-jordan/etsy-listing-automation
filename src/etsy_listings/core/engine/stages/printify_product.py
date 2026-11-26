@@ -136,8 +136,7 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedProduct | None
     ) -> PrintifyProductDesired | Blocked:
-        """The garment check runs as soon as the blueprint and provider ids it
-        compares are known, before the variant matrix and pricing plan."""
+        """The garment check runs before the variant matrix and pricing plan."""
         workspace = ctx.workspace
         if workspace.defaults.printify.shop_id is None:
             return NO_SHOP_BLOCKED
