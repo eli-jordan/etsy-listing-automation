@@ -499,6 +499,10 @@ depicts, so a ``multiple`` scene can print a different file per placement
 (A35)."""
 
 
+def _drawn_or_saved_renderer(geometry: PreviewGeometry, config: AnyTemplate) -> AnyRenderer:
+    return geometry.renderer or config.renderer
+
+
 def unsaved_preview(
     workspace: Workspace, name: str, geometry: PreviewGeometry, *, design: Callable[[], Path]
 ) -> PreviewScene:
@@ -511,10 +515,7 @@ def unsaved_preview(
     Refusals: :class:`TemplateMissingError`, the template state's own,
     :class:`TemplatePhotoMissingError`."""
     config = _load_config(workspace, name)
-    # Authoring previews use the explicit draft renderer before autosave.
-    # An omitted renderer still follows the saved template, so a Marigold
-    # template cannot accidentally fall through to the Photo warp pipeline.
-    if not isinstance(geometry.renderer or config.renderer, PhotoWarpRenderer):
+    if not isinstance(_drawn_or_saved_renderer(geometry, config), PhotoWarpRenderer):
         raise PreparationRequiredError("Prepare the template first: Marigold maps are required")
     kind = config.kind
     if geometry.kind != kind:
@@ -565,9 +566,6 @@ def _scene(
     layers: tuple[RenderConfig, ...],
     designs: tuple[Path | None, ...],
 ) -> PreviewScene:
-    # The designs are resolved by the caller before the photo is looked for:
-    # an unknown design was refused ahead of a missing photo before this moved
-    # out of the route.
     photo = workspace.scene_photo(name, colour)
     if not photo.path.is_file():
         missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
