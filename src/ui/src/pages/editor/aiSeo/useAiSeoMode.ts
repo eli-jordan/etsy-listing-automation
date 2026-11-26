@@ -36,8 +36,22 @@ export interface AiSeoMode {
   closeTags: () => void;
 }
 
-/** How often the editor looks again while batch work owns the listing. */
-export const BATCH_POLL_MS = 3000;
+/** How often the editor looks again while batch work or a deploy owns the listing. */
+export const READINESS_POLL_MS = 3000;
+
+interface RemoteReadiness {
+  ready: boolean;
+  reason: string | null;
+  batchPending: boolean;
+  deploying: boolean;
+}
+
+const NOT_READY: RemoteReadiness = {
+  ready: false,
+  reason: null,
+  batchPending: false,
+  deploying: false,
+};
 
 export function useAiSeoMode(
   detail: ListingDetail,
@@ -48,18 +62,11 @@ export function useAiSeoMode(
    * it again (`useAutosave`'s `adopt`). The drafted brief arrives this way. */
   onAdopt?: (patch: Record<string, unknown>) => void,
 ): AiSeoMode {
-  // Only what the readiness *endpoint* answered -- whether the control is
-  // enabled also requires the client-observable prerequisites below,
-  // computed straight from `detail` rather than mirrored into more state, so
-  // an edit the server has not seen yet disables the control immediately
-  // without waiting on another round trip (or a synchronous `setState`
-  // inside the effect below, which `react-hooks/set-state-in-effect` flags
-  // for good reason: nothing here needs the extra render that resetting
-  // this to `false` would cost).
-  const [remoteReady, setRemoteReady] = useState(false);
-  const [remoteReason, setRemoteReason] = useState<string | null>(null);
-  const [batchPending, setBatchPending] = useState(false);
-  const [deploying, setDeploying] = useState(false);
+  // Only what the endpoint answered. The prerequisites below come straight
+  // from `detail`, so an edit the server has not seen yet disables the
+  // control at once.
+  const [remote, setRemote] = useState<RemoteReadiness>(NOT_READY);
+  const { batchPending, deploying } = remote;
   const [poll, setPoll] = useState(0);
   const review = useProposalReview(detail, onUpdate, onFlush, save);
   const latestDetail = useRef(detail);
@@ -82,12 +89,8 @@ export function useAiSeoMode(
   const hasDesign = representative(detail.design) !== null;
   const hasBrief = detail.brief.trim() !== "";
   const name = detail.name;
-  // The client-observable prerequisites, checked before any network call.
-  // An empty brief is not one of them: the button drafts it. A listing with
-  // no name or no design still never asks the network -- it cannot have had
-  // a run, so it has no proposal either -- which is what keeps an ordinary
-  // editor test whose fixture has neither from firing a `fetch` it never
-  // mocked.
+  // Checked before any network call. An empty brief is not one: the button
+  // drafts it. A listing with no name or no design cannot have had a run.
   const prerequisitesMet = name !== "" && hasDesign;
   const saved = save === undefined || save.kind === "saved";
   const canCheck = prerequisitesMet && saved;
@@ -101,19 +104,16 @@ export function useAiSeoMode(
     getSeoReadiness(name)
       .then((response) => {
         if (current) {
-          setRemoteReady(response.ready);
-          setRemoteReason(response.reason ?? null);
-          setBatchPending(response.batch_pending);
-          setDeploying(response.deploying);
+          setRemote({
+            ready: response.ready,
+            reason: response.reason ?? null,
+            batchPending: response.batch_pending,
+            deploying: response.deploying,
+          });
         }
       })
       .catch(() => {
-        if (current) {
-          setRemoteReady(false);
-          setRemoteReason("Could not check AI setup.");
-          setBatchPending(false);
-          setDeploying(false);
-        }
+        if (current) setRemote({ ...NOT_READY, reason: "Could not check AI setup." });
       });
     return () => {
       current = false;
@@ -128,12 +128,12 @@ export function useAiSeoMode(
       if (batchPending) follow();
       setPoll((n) => n + 1);
       refreshProposal();
-    }, BATCH_POLL_MS);
+    }, READINESS_POLL_MS);
     return () => clearInterval(timer);
   }, [batchPending, deploying, follow, refreshProposal]);
 
-  const ready = canCheck && remoteReady;
-  const reason = canCheck && !ready ? (remoteReason ?? "Checking AI setup...") : null;
+  const ready = canCheck && remote.ready;
+  const reason = canCheck && !ready ? (remote.reason ?? "Checking AI setup...") : null;
   const requirements = [
     { label: "Saved listing", ready: name !== "" && saved },
     { label: "Design selected", ready: hasDesign },

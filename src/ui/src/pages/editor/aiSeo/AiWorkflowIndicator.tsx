@@ -51,7 +51,7 @@ function summary(steps: WorkflowStep[]): { text: string; tone: Tone } | null {
   if (failed) return { text: `${STEPS[failed.id].name} failed`, tone: "failed" };
   const active = steps.find((s) => s.state === "active");
   if (active) return { text: STEPS[active.id].activeLabel, tone: "busy" };
-  if (steps.length > 0 && steps.every((s) => movedPast(s.state))) {
+  if (steps.length > 0 && steps.every((s) => connectorSolid(s.state))) {
     const briefOnly = steps.find((s) => s.id === "seo")?.state === "skipped";
     return { text: briefOnly ? "Brief ready" : "Suggestions ready", tone: "done" };
   }
@@ -68,8 +68,7 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-/** The chain went on past this node: the connector out of it is solid. */
-function movedPast(state: StepState): boolean {
+function connectorSolid(state: StepState): boolean {
   return state === "done" || state === "skipped" || state === "warning";
 }
 
@@ -149,7 +148,7 @@ export function AiWorkflowIndicator({
               {prev !== undefined && (
                 <span
                   className={
-                    movedPast(prev.state) ? "aiflow__link aiflow__link--done" : "aiflow__link"
+                    connectorSolid(prev.state) ? "aiflow__link aiflow__link--done" : "aiflow__link"
                   }
                   aria-hidden="true"
                 />

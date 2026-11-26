@@ -13,7 +13,7 @@ import {
 } from "../../../test/aiRuns";
 import { deferred } from "../../../test/helpers";
 import type { ListingDetail, ListingProposal, SeoReadinessResponse } from "../../../types";
-import { BATCH_POLL_MS, useAiSeoMode } from "./useAiSeoMode";
+import { READINESS_POLL_MS, useAiSeoMode } from "./useAiSeoMode";
 import { listingDetail, listingEtsy } from "../../../test/listings";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
@@ -277,7 +277,7 @@ describe("useAiSeoMode while a batch owns the listing", () => {
     // The row's turn comes while the editor is open.
     runs.find.mockResolvedValue(aiRunSummary({ id: "batch-run", origin: "batch" }));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(BATCH_POLL_MS);
+      await vi.advanceTimersByTimeAsync(READINESS_POLL_MS);
     });
     await waitFor(() => expect(runs.streams).toHaveLength(1));
     expect(runs.stream().runId).toBe("batch-run");
@@ -287,7 +287,7 @@ describe("useAiSeoMode while a batch owns the listing", () => {
     expect(result.current.proposal).not.toBeNull();
     readiness.mockResolvedValue({ ready: true, batch_pending: false, deploying: false });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(BATCH_POLL_MS);
+      await vi.advanceTimersByTimeAsync(READINESS_POLL_MS);
     });
 
     await waitFor(() => expect(result.current.available).toBe(true));
@@ -314,7 +314,7 @@ describe("useAiSeoMode while a deploy holds the listing", () => {
 
     readiness.mockResolvedValue({ ready: true, batch_pending: false, deploying: false });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(BATCH_POLL_MS);
+      await vi.advanceTimersByTimeAsync(READINESS_POLL_MS);
     });
 
     await waitFor(() => expect(result.current.available).toBe(true));

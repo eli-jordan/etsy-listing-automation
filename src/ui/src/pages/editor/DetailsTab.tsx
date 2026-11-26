@@ -276,7 +276,7 @@ export function DetailsTab(props: Props) {
               {aiSeo.proposal?.resolution.lead === "pending" && (
                 <AiChoiceDrawer
                   enter={drawerMotion}
-                  field="description lead"
+                  field="description_lead"
                   options={aiSeo.proposal.proposal.description_leads}
                   staleReason={aiSeo.staleReason}
                   rationale={aiSeo.proposal.proposal.rationale}

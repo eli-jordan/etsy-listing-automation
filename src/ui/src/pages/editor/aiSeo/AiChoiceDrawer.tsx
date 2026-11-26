@@ -1,12 +1,11 @@
 import type { SeoRationaleEntry, SeoWarningEntry } from "../../../types";
 
-type Field = "title" | "description lead";
+type Field = "title" | "description_lead";
 
-/** `SeoRationaleEntry.used_in` uses the wire's field keys; this drawer is
- * labelled with the prose field name a seller reads. */
-function usedInKey(field: Field): "title" | "description_lead" {
-  return field === "title" ? "title" : "description_lead";
-}
+const FIELD_LABEL: Record<Field, string> = {
+  title: "title",
+  description_lead: "description lead",
+};
 
 export function AiChoiceDrawer({
   field,
@@ -30,7 +29,7 @@ export function AiChoiceDrawer({
   /** Play the draw-out only when generation finishes while this page is open. */
   enter?: boolean;
 }) {
-  const relevantRationale = rationale.filter((entry) => entry.used_in.includes(usedInKey(field)));
+  const relevantRationale = rationale.filter((entry) => entry.used_in.includes(field));
 
   return (
     <div
@@ -39,7 +38,7 @@ export function AiChoiceDrawer({
       <aside
         className={staleReason ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
         role="region"
-        aria-label={`${field} AI suggestions`}
+        aria-label={`${FIELD_LABEL[field]} AI suggestions`}
       >
         <div className="seo-suggestion__topline">
           <div className="seo-suggestion__identity">
@@ -98,11 +97,8 @@ export function AiModeMark() {
   );
 }
 
-/** Warnings, rationale, and observed OCR text as one collapsed disclosure
- * per drawer (implementation plan, PR7 item 2; the settled "Validation"
- * decision that trademark findings are warnings, never a hard refusal).
- * Rendered by every AI Mode drawer, so it lives here rather than being
- * duplicated in `AiTagsDrawer`. */
+/** Warnings, rationale, and observed OCR text as one collapsed disclosure per
+ * drawer. Trademark findings are warnings, never a hard refusal. */
 export function AiSeoDisclosure({
   rationale,
   warnings,

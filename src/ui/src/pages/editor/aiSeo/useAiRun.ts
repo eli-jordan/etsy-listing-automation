@@ -89,8 +89,7 @@ function viewOf(run: AiRunSummary): View {
   };
 }
 
-/** Not finished: a run the server is still holding or running. */
-function active(phase: AiRunViewPhase): boolean {
+function isActivePhase(phase: AiRunViewPhase): boolean {
   return phase === "queued" || phase === "running";
 }
 
@@ -140,7 +139,7 @@ export function useAiRun(
   const attach = useCallback((run: AiRunSummary) => {
     stream.current?.close();
     const mine = ++generation.current;
-    const live = active(run.phase);
+    const live = isActivePhase(run.phase);
     setView(viewOf(run));
     stream.current = openAiRunStream(run.id, {
       onEvent: (event) => {
@@ -156,7 +155,9 @@ export function useAiRun(
       onError: () => {
         if (mine !== generation.current) return;
         setView((current) =>
-          active(current.phase) ? { ...current, phase: "failed", message: LOST_STREAM } : current,
+          isActivePhase(current.phase)
+            ? { ...current, phase: "failed", message: LOST_STREAM }
+            : current,
         );
       },
     });
@@ -190,7 +191,7 @@ export function useAiRun(
   );
 
   const runId = view.runId;
-  const running = active(view.phase);
+  const running = isActivePhase(view.phase);
   const cancel = useCallback(() => {
     if (runId === null || !running) return;
     // The run stays busy until its own `cancelled` phase arrives, moments
@@ -253,7 +254,7 @@ export function useAiRun(
 
   return {
     phase: view.phase,
-    busy: view.phase === "starting" || active(view.phase),
+    busy: view.phase === "starting" || isActivePhase(view.phase),
     steps: view.steps,
     queries: view.queries,
     market: view.market,
