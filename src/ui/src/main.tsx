@@ -20,11 +20,7 @@ import { ListingTemplatesPage } from "./pages/ListingTemplatesPage";
 import { ListingsPage } from "./pages/ListingsPage";
 import { NewBatchPage } from "./pages/NewBatchPage";
 import { StagingPage } from "./pages/StagingPage";
-import { purgeLegacyProposals } from "./pages/editor/aiSeo/legacyProposals";
 import "./phone/index.css";
-
-// ADR-0049: proposals live on the server now; the old browser-local copies go.
-purgeLegacyProposals(localStorage);
 
 const container = document.getElementById("root");
 if (!container) {
