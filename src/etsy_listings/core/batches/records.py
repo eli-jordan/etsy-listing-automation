@@ -29,8 +29,8 @@ class _Record(BaseModel):
     id: str
     listing_template: str
     template: dict[str, Any]
-    """The listing template's document as it was when staging began (spec,
-    *Frozen staging*). Its owned files are frozen beside the record."""
+    """The listing template's document as it was when staging began; its owned files are frozen
+    beside the record."""
     template_saved_at: datetime
     label: str
 
@@ -52,8 +52,8 @@ class StagingSession(_Record):
     updated_at: datetime
     rows: list[StagingRow]
     ignored: list[str] = Field(default_factory=list)
-    """A ZIP's files that are not PNGs, by their path in it: counted and
-    listed on the staging page, never rows (spec, *Accepted input*)."""
+    """A ZIP's files that are not PNGs, by their path in it: listed on the staging page, never
+    rows."""
 
     @property
     def expires_at(self) -> datetime:
@@ -112,28 +112,21 @@ class BatchRow(BaseModel):
     than ``-2-2``."""
     name: str
     design: str
-    """The design's stem under ``designs/``, the row's *design target*.
-    The listing's name, except where the row's bytes were already in
-    ``designs/`` and the listing reuses that file (spec, *Content
-    deduplication*)."""
+    """The design's stem under ``designs/``: the listing's name, unless the row's bytes were
+    already in ``designs/`` and the listing reuses that file."""
     creation: Creation = "pending"
     claimed: bool = False
-    """recorded step: set before ``listings/<name>/`` is made, so a
-    directory found there on resume -- with no ``listing.yaml`` yet -- is
-    known to be this row's own."""
+    """Set before ``listings/<name>/`` is made, so a directory found there on resume with no
+    ``listing.yaml`` is this row's own."""
     error: str | None = None
     ai: AiState | None = None
-    """``None`` until the listing exists; creating it queues it (spec,
-    *Confirming a batch*: only created rows enter the AI queue)."""
+    """``None`` until the listing exists; only created rows enter the AI queue."""
     ai_error: str | None = None
     ai_steps: list[AiStep] = Field(default_factory=list)
     reviewed: bool = False
-    """The seller's judgement (spec, *Review workflow*): set and cleared by
-    Mark reviewed / Mark needs review, and set by a full apply of the
-    listing, since deploying it is that judgement made
-    (:meth:`BatchStore.mark_deployed`). Never set by an edit or a proposal,
-    never cleared by anything but Mark needs review, and never read by
-    ``plan`` or ``apply``."""
+    """The seller's judgement: set and cleared by Mark reviewed / Mark needs review, and set by a
+    full apply (:meth:`BatchStore.mark_deployed`). No edit or proposal sets it, only Mark
+    needs review clears it, and ``plan`` and ``apply`` never read it."""
     deleted: bool = False
     """The listing was deleted. The row stays, struck through, so the
     batch still says what it made; nothing follows or queues it again."""
@@ -206,13 +199,9 @@ class _Store[R: _Record]:
         write_json_atomic(self._file(record.id), record.model_dump(mode="json", by_alias=True))
 
     def rename_listing_template(self, old: str, new: str) -> None:
-        """A listing template renamed: every record made from ``old`` now
-        says ``new``, each under its own lock. Only the name moves -- the
-        frozen ``template`` document and its files are the record's own
-        snapshot and stay as they were (spec, *Frozen staging*), and the
-        label is the seller's. The name is what the Listing templates card
-        counts batches by and the staging page shows, so without this a
-        rename silently cut a template off from its batches."""
+        """Every record made from ``old`` now says ``new``, each under its own lock. Only the
+        name moves: the frozen ``template`` and its files are the record's snapshot, and the
+        label is the seller's."""
         for record_id in self._ids():
             with self.lock(record_id):
                 record = self.load(record_id)

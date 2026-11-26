@@ -167,7 +167,6 @@ def _age_days(listing: MarketCandidate, now: float) -> float | None:
 
 
 def _per_day(count: int, listing: MarketCandidate, now: float) -> float | None:
-    """A count over the listing's age in days, at least one day."""
     age = _age_days(listing, now)
     return None if age is None else count / max(age, 1.0)
 
