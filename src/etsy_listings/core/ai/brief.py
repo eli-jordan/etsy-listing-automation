@@ -1,23 +1,6 @@
 """Drafting a listing `brief` from its design image: the request
 shape, the packaged default `prompts/brief.md`, the response schema, and the
 hard validation a draft passes before it can reach an editor field.
-
-The whole feature is one module because it is one small contract, and
-splitting it the way SEO is split (`models` / `prompt` / `validation`) would
-put four files' worth of headers around about eighty lines of rule. What it
-deliberately does *not* own is anything already owned elsewhere: the
-delimited-context wrapper is `ai/prompt.py.build_task_prompt`, the provider
-chain, repair and deadline are `ai/orchestrator.py`'s, and the CLI
-invocation is each adapter's. A brief request is an ordinary
-`ai/models.py.ProviderTask`, which is the entire point of that type.
-
-Why a brief is validated at all, given it is one free-text field a seller can
-edit: the same reason a proposal is. It is written into `listing.yaml`
-without anyone reading it first, so the shapes that must never get there --
-an empty string, a wall of text, a JSON object with no `brief` key at all
-because the CLI ignored the schema -- are refused here rather than
-discovered as a confusing autosave later. Everything beyond that (is it a
-*good* brief?) is the seller's call, in an ordinary editable field.
 """
 
 from __future__ import annotations
@@ -78,8 +61,7 @@ def default_brief_prompt_text() -> str:
 
 def build_brief_task(seller_prompt: str, request: BriefRequest) -> ProviderTask:
     return ProviderTask(
-        # No context block: the image is the whole input (see `BriefRequest`).
-        prompt_text=build_task_prompt(seller_prompt, None, BRIEF_RESPONSE_SCHEMA),
+        prompt_text=build_task_prompt(seller_prompt, context=None, schema=BRIEF_RESPONSE_SCHEMA),
         response_schema=BRIEF_RESPONSE_SCHEMA,
         design_image=request.design_image,
     )

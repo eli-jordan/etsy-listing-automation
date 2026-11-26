@@ -11,6 +11,13 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO, cast
 
+# Darwin's <sys/wait.h> values, for the libc waitid fallback.
+_DARWIN_P_PID = 1
+_DARWIN_WEXITED = 0x4
+_DARWIN_WNOHANG = 0x1
+_DARWIN_WNOWAIT = 0x20
+_SIGINFO_INTS = 32
+
 
 class PosixProcess:
     def __init__(self, argv: Sequence[str], cwd: Path) -> None:
@@ -41,12 +48,13 @@ class PosixProcess:
             )
         # Python 3.12 lacks os.waitid on macOS although libc supports it.
         # siginfo_t starts with si_signo on Darwin; a zeroed buffer stays zero
-        # when WNOHANG finds no exit. WNOWAIT leaves the leader unreaped.
+        # when WNOHANG finds no exit.
         if sys.platform != "darwin":
             raise OSError("managed process ownership requires waitid with WNOWAIT")
         libc = ctypes.CDLL(None, use_errno=True)
-        info = (ctypes.c_int * 32)()
-        if libc.waitid(1, self.proc.pid, ctypes.byref(info), 0x4 | 0x1 | 0x20) != 0:
+        info = (ctypes.c_int * _SIGINFO_INTS)()
+        options = _DARWIN_WEXITED | _DARWIN_WNOHANG | _DARWIN_WNOWAIT
+        if libc.waitid(_DARWIN_P_PID, self.proc.pid, ctypes.byref(info), options) != 0:
             raise OSError(ctypes.get_errno(), "waitid failed")
         return info[0] != 0
 
