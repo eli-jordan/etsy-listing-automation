@@ -168,7 +168,9 @@ class ListingTemplateSourceRefusedError(RefusedError):
 
 class StagingMissingError(MissingError):
     """No staging session by this id: never staged, cancelled, confirmed and
-    materialised, or swept seven days after its last edit."""
+    materialised, or swept
+    :data:`~etsy_listings.core.batches.records.STAGING_LIFETIME` after its
+    last edit."""
 
     def __init__(self, session_id: str) -> None:
         super().__init__(f"no staging session {session_id!r}")

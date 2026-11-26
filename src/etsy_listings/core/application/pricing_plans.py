@@ -2,11 +2,8 @@
 starting plan generated from live costs.
 
 Shared by both ways a listing is created: the listings editor's plan picker
-(``GET /api/pricing-plans``) and the ``new`` wizard's. Both used to read this
-from the wizard package, which took the server through its terminal prompts;
-here, one interpretation serves both and each adapter renders the rows its
-own way (module-structure plan, PR 6). The ``new`` wizard's "create a new
-plan" is :func:`create_starting_pricing_plan` (PR 10).
+(``GET /api/pricing-plans``) and the ``new`` wizard, each rendering the rows
+its own way.
 """
 
 from __future__ import annotations
