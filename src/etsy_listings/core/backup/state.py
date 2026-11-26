@@ -33,7 +33,6 @@ class CheckResult(_Record):
 
 class DestinationState(_Record):
     last_copy: datetime | None = None
-    """The last copy that finished."""
     problem: str | None = None
     """Why the latest copy did not finish; None once one does."""
     last_check: CheckResult | None = None
@@ -63,8 +62,6 @@ class CopyRecord(_Record):
 
 
 class RunRecord(_Record):
-    """One run's outcome, as the history keeps it."""
-
     repository: str
     started_at: datetime
     finished_at: datetime

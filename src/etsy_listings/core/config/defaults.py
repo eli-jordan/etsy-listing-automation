@@ -75,8 +75,7 @@ class EtsyListingDefaults(BaseModel):
     the whole `updateListing` PATCH."""
     return_policy: EtsyReturnPolicyDefaults | None = None
     production_partner: str | None = None
-    """By name; omit when the shop has exactly one (decision 3's resolution
-    ladder) -- most shops never need to set this."""
+    """By name; omit when the shop has exactly one, as most shops can."""
 
 
 class EtsyDefaults(BaseModel):
@@ -103,10 +102,8 @@ class EtsyDefaults(BaseModel):
     different failure modes: a wrong `shop_id` means nothing works, while a
     wrong default means every listing is quietly slightly wrong.
 
-    No shop-wide section, unlike Phase 2's `shop_section_id`: which part of
-    the shop a listing belongs in is a fact about that listing, not the shop
-    (`listing.yaml`'s `etsy.section`), and a shop-wide default would be right
-    for the first listing and wrong from the second onwards.
+    No shop-wide section: which part of the shop a listing belongs in is
+    ``listing.yaml``'s ``etsy.section``.
     """
 
     def require_shop_id(self) -> int:

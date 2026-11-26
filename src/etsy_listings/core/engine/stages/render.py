@@ -111,8 +111,8 @@ class ResolvedLayer:
     bounding_box: BoundingBox
     """The template's own box for this layer, whichever renderer draws it:
     where every scene samples its swatch. A listing's position never moves
-    it -- the swatch reads the garment's colour, not the print (template
-    positions plan PR 3) -- so Photo warp's homography target is the
+    it -- the swatch reads the garment's colour, not the print -- so Photo
+    warp's homography target is the
     :class:`RenderConfig`'s box instead, which does follow the listing."""
     placement_id: str | None = None
 

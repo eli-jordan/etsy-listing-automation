@@ -48,7 +48,7 @@ export async function getListingTemplateDraft(
  * would not write -- `saved: false` with its issues, nothing on disk -- and
  * rejects with {@link ListingTemplateNameRefused} for a name it will not
  * take, which is never suffixed. `document` is the seller's edits made
- * before naming it (UI doc §1: the *name it* state is the editor). */
+ * before naming it. */
 export async function createListingTemplate(
   name: string,
   source: ListingTemplateSource,

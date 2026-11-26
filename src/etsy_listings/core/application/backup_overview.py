@@ -41,8 +41,6 @@ class BackupWarning(_Model):
 
 
 class RunningBackup(_Model):
-    """The operation in progress, for the running line."""
-
     operation: Literal["backup", "repair", "connect"]
     started_at: datetime
     step: str

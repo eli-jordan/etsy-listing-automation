@@ -31,7 +31,7 @@ export async function getListing(name: string): Promise<ListingDetail> {
 
 /** The same, but `null` on a 404 rather than a thrown error -- what the
  * deploy view uses to tell "this listing no longer exists" (a retract just
- * applied, decision 11) apart from a genuine failure it should surface. */
+ * applied) apart from a genuine failure it should surface. */
 export async function tryGetListing(name: string): Promise<ListingDetail | null> {
   const { data, error, response } = await api.GET("/api/listings/{name}", {
     params: { path: { name } },
@@ -190,12 +190,11 @@ export function commonMediaFileUrl(name: string): string {
   return `/api/common-media/${escapedEachSegment(name)}/file`;
 }
 
-/** The Description tab's common-copy selector (AI SEO implementation plan,
- * PR6): every reusable description body, each with a ref ready to write
- * straight into `description.ref`. Empty (never an error) for a workspace
- * with no `common-copy/` yet, the same convention `listEtsySections` follows
- * for an unconfigured shop -- an editor with nothing to pick from is an
- * ordinary state, not a failure. */
+/** The Description tab's common-copy selector: every reusable description
+ * body, each with a ref ready to write straight into `description.ref`. Empty
+ * (never an error) for a workspace with no `common-copy/` yet, the same
+ * convention `listEtsySections` follows for an unconfigured shop -- an editor
+ * with nothing to pick from is an ordinary state, not a failure. */
 export async function listCommonCopy(): Promise<CommonCopySummary[]> {
   try {
     const { data, error } = await api.GET("/api/common-copy");

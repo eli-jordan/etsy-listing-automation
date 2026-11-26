@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# Top level
 SHOP_FILE = "shop.yaml"
 EXCEPTIONS_FILE = "exceptions.yaml"
 SETTINGS_FILE = "settings.yaml"
@@ -20,8 +19,7 @@ SEO_PROMPT_FILE = "seo.md"
 """Inside :data:`PROMPTS_DIR`. Plain seller-editable instruction text the AI
 SEO feature appends its delimited JSON context and response schema to
 (``ai/prompt.py``) -- `setup` seeds a packaged default only when this file is
-absent, and never overwrites seller content (AI SEO implementation plan,
-PR3)."""
+absent, and never overwrites seller content."""
 BRIEF_PROMPT_FILE = "brief.md"
 """Inside :data:`PROMPTS_DIR`, and everything said about
 :data:`SEO_PROMPT_FILE` applies unchanged. This is the prompt that drafts a
@@ -43,8 +41,8 @@ directory that is meant to hold only products."""
 MOCKUP_TEMPLATES_DIR = "mockup-templates"
 COMMON_MEDIA_DIR = "common-media"
 COMMON_COPY_DIR = "common-copy"
-"""Reusable `description` bodies, one Markdown file per shared paragraph
-(AI SEO implementation plan). Sibling to `COMMON_MEDIA_DIR` -- both hold
+"""Reusable `description` bodies, one Markdown file per shared paragraph.
+Sibling to `COMMON_MEDIA_DIR` -- both hold
 content shared across listings -- but never confused with it: this directory
 holds text a `description.ref` resolves to, not pictures a listing's `media:`
 uploads."""

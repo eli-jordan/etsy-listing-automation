@@ -80,16 +80,9 @@ NO_SHOP_BLOCKED = Blocked(
     "shop is configured for this workspace.\n"
     "Run `etsy-listings setup` to point it at one."
 )
-"""A workspace that has not opted into Phase 2.
-
-Reported as a blocked stage rather than an error, because the alternative is
-that adding this stage to the pipeline breaks every Phase 1 workflow: a
-listing with no title or description filled in yet is perfectly valid for
-rendering mockups, and `plan` refusing to run at all would be a regression
-dressed as a validation. The gates below fire only once ``setup`` has pointed
-the workspace at a shop -- which is exactly when a product becomes a thing
-that could exist.
-"""
+"""A workspace no ``setup`` has pointed at a Printify shop, which still renders
+mockups: reported as a blocked stage, not an error, and the gates below fire
+only once a shop is set."""
 
 
 @dataclass(frozen=True)

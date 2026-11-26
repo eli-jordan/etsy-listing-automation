@@ -186,7 +186,6 @@ function pageMeta(batchId: string | null, batchLabel: string | null, planTimesta
   return [label, planTimestamp].filter((part) => part !== "").join(" · ");
 }
 
-/** ADR-0042, ADR-0059. */
 export function BatchDeployPage() {
   const { runId = "" } = useParams<{ runId: string }>();
   const navigate = useNavigate();

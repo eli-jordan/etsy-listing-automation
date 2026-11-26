@@ -253,7 +253,7 @@ class Settings(BaseModel):
     backup: BackupSettings | None = None
     """Off when absent, and also when written empty (``backup:``): unlike the
     sections above it gets no ``_absent_is_empty``, because there is no
-    default repository to turn an empty block into (plan, P5)."""
+    default repository to turn an empty block into."""
 
     _market_seo_absent = field_validator("market_seo", mode="before")(_absent_is_empty)
     _batch_ai_absent = field_validator("batch_ai", mode="before")(_absent_is_empty)

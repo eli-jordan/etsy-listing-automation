@@ -108,7 +108,6 @@ class VariantResolution:
     fatal -- missing variant cells."""
 
     def ids(self, *, colours: Collection[str] | None = None) -> tuple[int, ...]:
-        """Variant ids, optionally narrowed to some colour slugs."""
         return tuple(v.id for v in self.variants if colours is None or v.colour_slug in colours)
 
 

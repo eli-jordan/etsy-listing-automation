@@ -87,7 +87,7 @@ class ListingTemplateCard:
     """Batches made from it, while their records last."""
     design_minimum: tuple[int, int] | None
     """The smallest design the garment's print area takes, ``(width,
-    height)`` -- New batch's size hint (UI doc §4)."""
+    height)``."""
 
 
 @dataclass(frozen=True)

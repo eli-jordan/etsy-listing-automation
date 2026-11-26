@@ -47,7 +47,7 @@ export function mediaKind(entry: MediaEntry): "image" | "video" {
 export interface SceneSource {
   listing: string;
   version: string;
-  /** Each template's saved-position signature (ADR-0058). */
+  /** Each template's saved-position signature. */
   positions?: Readonly<Record<string, string>>;
 }
 
@@ -103,7 +103,7 @@ export function pictureFor(
 
 /** What a render composites onto a template's photo: a saved listing, each
  * layer printing the file its colour resolves to ({@link SceneSource}); or,
- * in the listing-template editor where there is no artwork (UI doc §3), one
+ * in the listing-template editor where there is no artwork, one
  * design picked only to preview with -- a workspace design by name, or a
  * calibrator test design by its library id. An object for the test design so
  * the two names cannot be mistaken for each other: they name files in

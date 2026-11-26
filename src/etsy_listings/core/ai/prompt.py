@@ -74,11 +74,10 @@ RESPONSE_SCHEMA: Final[dict[str, Any]] = {
         "observed_text": {"type": "string"},
     },
 }
-"""The JSON Schema a provider adapter (PR4) hands to its CLI's structured-
-output option, and the shape `ai/validation.py` hard-validates independently
-of whatever the CLI itself enforced -- a schema a provider ignores or only
-partially honours must never reach the UI unchecked (implementation plan,
-"Validation")."""
+"""The JSON Schema a provider adapter hands to its CLI's structured-output
+option, and the shape `ai/validation.py` hard-validates independently of
+whatever the CLI itself enforced: a schema a provider ignores or only
+partially honours must never reach the UI unchecked."""
 
 
 def default_seo_prompt_text() -> str:

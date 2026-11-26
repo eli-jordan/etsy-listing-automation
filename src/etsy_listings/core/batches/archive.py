@@ -52,7 +52,7 @@ class Archive:
     _zip: zipfile.ZipFile
     _pngs: dict[str, zipfile.ZipInfo]
     ignored: list[str]
-    """Every file that is not a PNG, by its path in the ZIP (UI doc §5)."""
+    """Every file that is not a PNG, by its path in the ZIP."""
 
     @property
     def pngs(self) -> list[str]:

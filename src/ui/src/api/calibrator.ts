@@ -161,8 +161,8 @@ export function templateDesignPreviewUrl(
   design: string | { testDesign: string },
   colour?: string | null,
 ): string {
-  // A listing's design by name, or -- the listing-template editor's preview
-  // (UI doc §3) -- a calibrator test design by its library id.
+  // A listing's design by name, or -- the listing-template editor's preview --
+  // a calibrator test design by its library id.
   const params = new URLSearchParams(
     typeof design === "string" ? { design } : { test_design: design.testDesign },
   );

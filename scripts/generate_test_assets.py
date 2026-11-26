@@ -281,7 +281,7 @@ def _write_video_clips(video_dir: Path, grid: Image.Image) -> None:
     for name, spec in clips.items():
         _write_clip(video_dir / name, **spec)  # type: ignore[arg-type]
         print(f"wrote {video_dir / name}")
-    # Not a video at all: Etsy answers a bare 500 for one (decision 9).
+    # Not a video at all: Etsy answers a bare 500 for one.
     grid.save(video_dir / "png-renamed.mp4", format="PNG", optimize=False, compress_level=6)
     print(f"wrote {video_dir / 'png-renamed.mp4'}")
 

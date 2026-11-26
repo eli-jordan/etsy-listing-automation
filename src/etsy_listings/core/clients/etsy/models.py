@@ -190,9 +190,6 @@ class Listing(BaseModel):
         return () if value is None else value
 
 
-# ------------------------------------------------------------------ market
-
-
 def _drop_nulls(value: object) -> object:
     """Etsy sends ``null`` and omits a key interchangeably; dropping nulls
     lets the field defaults answer both."""

@@ -115,7 +115,7 @@ def canonical_document(document: Mapping[str, Any]) -> dict[str, Any]:
     Every writer of ``listing.yaml`` goes through this -- the editor's
     PATCH, create, the AI run's brief write, and ``new`` -- so a bare string
     or ``null`` written by hand converges on the one written form the next
-    time anything saves (plan, *Settled decisions*). Nothing else is touched:
+    time anything saves. Nothing else is touched:
     the server writes the document it was given, not a re-serialised model.
     """
     result = dict(document)

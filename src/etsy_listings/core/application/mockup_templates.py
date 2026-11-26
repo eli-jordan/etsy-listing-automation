@@ -433,8 +433,7 @@ LayerDesign = Callable[[str | None], Path | None]
 """``depicted colour -> design file`` for one layer of a saved scene, or
 ``None`` to leave the layer bare. The colour is the one
 :func:`~etsy_listings.core.render.config.scene_layers` says the layer
-depicts, so a ``multiple`` scene can print a different file per placement
-(A35)."""
+depicts, so a ``multiple`` scene can print a different file per placement."""
 
 
 def _drawn_or_saved_renderer(geometry: PreviewGeometry, config: AnyTemplate) -> AnyRenderer:

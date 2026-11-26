@@ -59,8 +59,6 @@ class OAuthError(RuntimeError):
 
 @dataclass(frozen=True)
 class Pkce:
-    """A verifier and the challenge derived from it."""
-
     verifier: str
     challenge: str
 

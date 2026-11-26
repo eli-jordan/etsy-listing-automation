@@ -14,8 +14,6 @@ QUERY_COUNT: Final = 3
 
 @dataclass(frozen=True)
 class MarketQueriesRequest:
-    """The inputs one extraction is built from."""
-
     brief: str
     garment_title: str
     design_image: Path

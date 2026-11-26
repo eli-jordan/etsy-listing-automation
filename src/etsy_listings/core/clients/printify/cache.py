@@ -75,7 +75,6 @@ class CachedCatalogClient(CatalogClient):
         path.write_text(json.dumps(payload), encoding="utf-8")
 
     def _cached[T](self, name: str, adapter: TypeAdapter[T], fetch: Callable[[], T]) -> T:
-        """``fetch()``, unless ``name`` already holds a live answer."""
         cached = self._read(name)
         if cached is not None:
             return adapter.validate_python(cached)

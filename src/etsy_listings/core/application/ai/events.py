@@ -28,8 +28,8 @@ class WorkflowStep(BaseModel):
 
 TerminalPhase = Literal["done", "failed", "cancelled"]
 AiRunPhase = Literal["queued", "running", "done", "failed", "cancelled"]
-"""``queued`` only while a backup's pause holds a manual run (workspace-backup
-plan, decision P4); every other run starts ``running``."""
+"""``queued`` only while a backup's pause holds a manual run; every other run
+starts ``running``."""
 
 STEP_IDS: tuple[StepId, ...] = ("brief", "market", "seo")
 

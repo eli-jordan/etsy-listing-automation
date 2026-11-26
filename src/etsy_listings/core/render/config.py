@@ -174,8 +174,6 @@ def _reject_template_artwork(value: Any) -> Any:
 
 
 class Placement(BaseModel):
-    """One garment within a ``multiple``-kind scene."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: PlacementId
@@ -213,8 +211,6 @@ class MultipleTemplate(BaseModel):
 
 
 class SingleTemplate(BaseModel):
-    """One photo, one garment."""
-
     model_config = ConfigDict(frozen=True, extra="forbid", use_attribute_docstrings=True)
 
     kind: Literal["single"] = "single"

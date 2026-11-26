@@ -156,8 +156,6 @@ class EtsyListingFacts(BaseModel):
 
 
 class EtsyListingSnapshot(BaseModel):
-    """Both sides of the review, in full."""
-
     model_config = ConfigDict(frozen=True, use_attribute_docstrings=True)
 
     desired: EtsyListingFacts
@@ -403,8 +401,7 @@ def _drift(
     was: AppliedEtsyListing | None, live: EtsyListing | None, catalog: EtsyShopCatalog | None
 ) -> tuple[Drift, ...]:
     """What changed on Etsy since the last apply -- includes Printify
-    re-attaching its own shipping profile after a republish (risk 13,
-    decision 7).
+    re-attaching its own shipping profile after a republish.
 
     ``catalog`` names a drifted id's *live* side: the *last-applied*
     side already has a name on ``was`` (``shop_section``, ``shipping_profile``,

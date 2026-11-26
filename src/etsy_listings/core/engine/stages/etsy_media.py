@@ -23,7 +23,7 @@ from etsy_listings.core.engine.stages.variation_links import manifest_ref, set_v
 
 IMAGE_IDS_KEY = "etsy_image_ids"
 """This stage's key in ``lock.remote`` -- keyed by manifest ref, so a
-reorder does not churn the ids (decision 5)."""
+reorder does not churn the ids."""
 
 PENDING = "pending"
 """Stands in for a design's content hash when its render has not happened
@@ -100,7 +100,7 @@ class ManifestEntry:
     colour: str | None = None
     """The colour this entry depicts, when it comes from a `colour-matrix`
     entry in the `variation_images:` template -- the one fact a swatch needs
-    that a render addressing key does not carry (decision 6's "deferred")."""
+    that a render addressing key does not carry."""
 
 
 @dataclass(frozen=True)
@@ -148,7 +148,7 @@ class EtsyMediaLive:
     dangling_refs: tuple[str, ...]
     """Refs `lock.remote` says were uploaded, whose id is no longer among the
     listing's images -- a replacement or an outside deletion, either way not
-    visible any other way (decision 6, measured)."""
+    visible any other way (measured)."""
     images: tuple[LiveImage, ...] = ()
     """Every image the listing actually carries right now, in Etsy's own
     rank order -- what the snapshot's ``live`` side is built from.

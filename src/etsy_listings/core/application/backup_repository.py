@@ -111,7 +111,6 @@ def refuse_full_storage(folder: Path) -> None:
 @dataclass(frozen=True)
 class ConfiguredBackup:
     workspace: Path
-    """The live workspace's root."""
     settings: BackupSettings
     """Its ``repository`` is the storage folder this operation uses."""
     binary: Path | None
