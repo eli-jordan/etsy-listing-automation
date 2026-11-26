@@ -167,8 +167,6 @@ def _ask(
 
     answers: list[str] = []
     for ask, already in zip(prompt.asks, existing, strict=True):
-        # A half-present pair keeps the half it has and asks only for the
-        # rest, which is what makes re-running after one bad paste cheap.
         answers.append(already or prompts.ask_text(ask, allow_blank=allow_blank))
     return tuple(answer.strip() for answer in answers)
 
@@ -198,10 +196,6 @@ def _default_reuse_message(prompt: CredentialPrompt) -> str:
 
 
 def nothing_to_prove(values: Sequence[str]) -> tuple[None, str]:
-    """A verification for a credential no endpoint can cheaply confirm.
-
-    Anthropic has no free call that proves a key without spending on one, so
-    the honest answer is to store it unverified rather than to invent a check.
-    """
+    """Store unverified: Anthropic has no free call that proves a key."""
     del values
     return None, "stored unverified."

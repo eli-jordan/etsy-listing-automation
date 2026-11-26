@@ -114,7 +114,6 @@ def _printify_token(root: Path, back: Backends) -> None:
 
 
 def _etsy_app_key(root: Path, back: Backends) -> EtsyAppKey:
-
     def verify(values: tuple[str, ...]) -> tuple[EtsyAppKey, str]:
         app_key = EtsyAppKey(values[0], values[1])
         application_id = core_credentials.verify_etsy_app_key(
@@ -133,13 +132,7 @@ def _etsy_app_key(root: Path, back: Backends) -> EtsyAppKey:
 
 
 def _etsy_sign_in(app_key: EtsyAppKey, store: TokenStore, back: Backends) -> None:
-    """The browser round trip, or a reason not to make it.
-
-    An existing consent is left alone by default. Re-authorising is harmless
-    but not free -- it costs a browser, an Etsy password and a consent screen
-    -- and a wizard that spends those on a re-run teaches people not to re-run
-    it.
-    """
+    """The browser round trip, or a reason not to make it."""
     summary = core_credentials.summarise(store.load(), now=back.now())
     if summary.present:
         typer.echo("")
