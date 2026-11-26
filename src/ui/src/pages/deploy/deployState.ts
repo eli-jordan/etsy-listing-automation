@@ -72,11 +72,6 @@ export function controlPhase(state: DeployState, publish = false): ControlPhase 
     if (stagePlans.some((stage) => stageBlocked(stage) !== null)) return "ready-blocked";
     return "ready-clean";
   }
-  // "planned" is the momentary hinge between the planning walk finishing and
-  // the run either entering "previewing" or jumping straight to "ready" --
-  // Apply is not unlockable yet either way, so it reads exactly like
-  // "planning" rather than earning a fifth row the control-state table does
-  // not have.
   if (state.phase === "planned") return "planning";
   return state.phase;
 }
