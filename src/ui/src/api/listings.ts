@@ -199,6 +199,32 @@ export function listingScenePreviewUrl(
   return `/api/listings/${encodeURIComponent(listing)}/scene-preview?${params.toString()}`;
 }
 
+/**
+ * Whether the scene a `listingScenePreviewUrl` showed was the wrong one.
+ *
+ * After a restart the server finds a full-size scene under pixel digests it
+ * remembered rather than recomputed, which answers in milliseconds instead of
+ * seconds. This asks it to compute them and say whether the picture changed;
+ * it corrects the remembered digests either way. Any other URL, and any
+ * failure, is "unchanged": the picture already on screen stays.
+ */
+export async function scenePreviewChanged(url: string): Promise<boolean> {
+  const match = /^\/api\/listings\/([^/?]+)\/scene-preview\?(.*)$/.exec(url);
+  const [, name, query] = match ?? [];
+  if (name === undefined || query === undefined) return false;
+  const params = new URLSearchParams(query);
+  const template = params.get("template");
+  if (template === null) return false;
+  const colour = params.get("colour");
+  const { data, error } = await api.GET("/api/listings/{name}/scene-preview/check", {
+    params: {
+      path: { name: decodeURIComponent(name) },
+      query: colour === null ? { template } : { template, colour },
+    },
+  });
+  return !error && data?.changed === true;
+}
+
 /** The file one layer of a listing's scene prints, with its transparency and
  * small enough to draw live. `version` is a cache-buster, as above. */
 export function listingSceneArtworkUrl(

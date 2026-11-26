@@ -93,6 +93,10 @@ SCENES_DIR = "scenes"
 """Composed Marigold scenes, one PNG per scene identity, shared by every
 listing and template (``core/preparation/scene_cache.py``). Least recently
 read go first past a byte budget, so nothing here follows a listing."""
+PIXEL_DIGESTS_DIR = "pixel-digests"
+"""Pixel digests of photos and designs, kept across restarts for the Listing
+Images preview (``core/preparation/scene_cache.py``, ``RememberedDigests``).
+One small JSON file per file and kind; safe to wipe."""
 MARKET_DIR = "market"
 """Market-informed SEO's caches (features/market-seo-20260924/spec.md, *Cache*), each a directory
 inside it: :data:`MARKET_SEARCH_DIR` and :data:`MARKET_STATS_DIR` hold the
