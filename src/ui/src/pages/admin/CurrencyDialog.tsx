@@ -6,14 +6,13 @@ import { AlarmDialog } from "./AlarmDialog";
 export function CurrencyDialog({
   current,
   currencies,
-  shopCurrency,
+  etsyShopCurrency,
   onCancel,
   onConfirm,
 }: {
   current: string;
   currencies: ShopSettings["supported_currencies"];
-  /** What the live Etsy shop sells in, when a lookup read it. */
-  shopCurrency: string | null;
+  etsyShopCurrency: string | null;
   onCancel: () => void;
   /** The refusal to show, or null once saved. */
   onConfirm: (code: string) => Promise<string | null>;
@@ -57,10 +56,10 @@ export function CurrencyDialog({
             <strong>Existing listings stay as they are.</strong> Listings already on Etsy keep their
             prices, and Etsy's own shop currency does not change.
           </li>
-          {shopCurrency !== null && next !== shopCurrency && (
+          {etsyShopCurrency !== null && next !== etsyShopCurrency && (
             <li>
-              <strong>Your Etsy shop sells in {shopCurrency}.</strong> A different currency here no
-              longer matches it.
+              <strong>Your Etsy shop sells in {etsyShopCurrency}.</strong> A different currency here
+              no longer matches it.
             </li>
           )}
         </ul>

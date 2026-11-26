@@ -246,15 +246,15 @@ export function bytesProgress(done: number, total: number): string {
 
 export const joined = (...parts: string[]) => parts.filter(Boolean).join(" · ");
 
-/** Without trailing separators; a loop, as a regex here would backtrack. */
-function trimmed(path: string): string {
+function withoutTrailingSeparators(path: string): string {
   let end = path.length;
   while (end > 0 && "/\\".includes(path.charAt(end - 1))) end -= 1;
   return path.slice(0, end);
 }
 
 export function samePath(a: string, b: string): boolean {
-  const normal = (path: string) => trimmed(path.trim()).replaceAll("\\", "/").toLowerCase();
+  const normal = (path: string) =>
+    withoutTrailingSeparators(path.trim()).replaceAll("\\", "/").toLowerCase();
   return normal(a) === normal(b);
 }
 

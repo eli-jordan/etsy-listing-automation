@@ -1,12 +1,7 @@
 import type { ReturnPolicyTerms, ShopChanges, ShopSettings } from "../../api/shop";
 
-/**
- * The Shop tab's vocabulary: Etsy's enumerations as the page labels them,
- * the Print on demand derivation, and every info card's copy. Etsy's
- * `who_made` and `when_made` values come from `updateListing` in the Open
- * API reference (checked 2026-10-30); a saved value outside them is still
- * shown, never replaced.
- */
+/* `who_made` and `when_made` are `updateListing`'s enums in Etsy's Open API
+   reference (checked 2026-10-30). */
 
 export interface Option {
   value: string;
@@ -106,10 +101,7 @@ export function describeTerms(terms: ReturnPolicyTerms): string {
 export type Creatable =
   "production_partner" | "preferred_print_provider" | "shipping_profile" | "return_policy";
 
-/** Where Create/Browse sends the seller. The list re-reads when this tab
- * regains focus; nothing here can create the item itself.
- *
- * Each Etsy URL is the one Etsy's own help article links to, checked
+/** Each Etsy URL is the one Etsy's own help article links to, checked
  * 2026-10-30: shipping profiles in "How to Set Up Shipping Information"
  * (help.etsy.com/hc/articles/115014115187), return policies under Policy
  * settings in "How do I Set Return Policies on My Listings"
