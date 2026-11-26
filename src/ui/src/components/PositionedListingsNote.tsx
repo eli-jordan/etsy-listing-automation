@@ -2,14 +2,8 @@ import { useEffect, useState } from "react";
 import { getPositionedListings, type PositionedListing } from "../api/calibrator";
 import { useIsPhone } from "../phone/usePhone";
 
-/** The listings holding their own position on the open template (spec,
- * *Recalibration*), so the seller sees what a box change may break before the
- * autosave writes it and again once it has. Positions are absolute: the
- * calibrator never moves or edits them, and the next plan re-checks them.
- *
- * `savedAt` re-reads the list after each save, since listings may have
- * changed meanwhile. A failed read shows nothing: the note is advice, and the
- * plan still refuses an out-of-limits position. */
+/** A failed read shows nothing: the note is advice, and the plan still
+ * refuses an out-of-limits position. */
 export function PositionedListingsNote({
   templateName,
   savedAt,
@@ -36,7 +30,6 @@ export function PositionedListingsNote({
     };
   }, [templateName, savedAt]);
 
-  // A list read for the previous template must not show under this one.
   if (!held || held.template !== templateName || held.listings.length === 0) return null;
   const count = held.listings.length;
   const names = held.listings
@@ -60,8 +53,6 @@ export function PositionedListingsNote({
     );
   }
   return (
-    // Exactly the markup from before the phone layout: the text's node
-    // boundaries decide its kerning, and the desktop note stays pixel-equal.
     <p className="app__warn app__positions-note" role="note">
       {count === 1 ? "1 listing holds its" : `${count} listings hold their`} own position on this
       template: {names}. Changing the box does not move {them}; the next plan re-checks {them}{" "}

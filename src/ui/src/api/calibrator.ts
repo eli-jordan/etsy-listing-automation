@@ -1,5 +1,6 @@
 import type { MaskEdit } from "./preparation";
-import { api } from "./client";
+import { api, detailMessage, formBody, withTuples } from "./client";
+import type { components } from "./schema";
 import type {
   BoundingBox,
   ColourReportRow,
@@ -10,11 +11,6 @@ import type {
   TemplateKind,
   TemplateSummary,
 } from "../types";
-
-/**
- * The calibrator's whole HTTP surface. Everything above this file works in
- * domain types and never touches fetch, URLs or the generated schema.
- */
 
 export class CalibratorApiError extends Error {}
 
@@ -36,9 +32,6 @@ export interface TemplateConfigDocument {
   revision: string;
 }
 
-/** A save the server refused because the file moved on since `revision`
- * was read (409 or 412): another tab, an external edit, or a preparation
- * that rewrote it. Only a reload resolves it. */
 export class TemplateConflictError extends CalibratorApiError {
   constructor() {
     super("Template changed elsewhere. Reload before saving.");
@@ -49,32 +42,24 @@ function revisionOf(response: Response | undefined): string {
   return (response?.headers.get("ETag") ?? "").replace(/^"|"$/g, "");
 }
 
-/**
- * Returns null when the template has no template.yaml yet -- a folder of
- * photos that has not been given a kind.
- *
- * The cast is because openapi-fetch widens `bounding_box`'s 4-tuple to a
- * plain array when inferring the response type of a 3-way discriminated
- * union -- the server still enforces exactly 4 points either way.
- */
+/** Null when the template has no template.yaml yet -- a folder of photos
+ * that has not been given a kind. */
 export async function getTemplateConfig(name: string): Promise<TemplateConfigDocument | null> {
   const { data, error, response } = await api.GET("/api/templates/{name}/config", {
-    // Bypass configs cached before the server added its no-store policy too.
     cache: "no-store",
     params: { path: { name } },
   });
   if (error) {
-    // Only a 404 means no template.yaml yet. A template that needs repair or
-    // will not parse has one, and must not be offered a kind.
     if (response.status === 404) return null;
-    const detail: unknown = error.detail;
-    const refused = response.status === 409 && typeof detail === "string";
-    throw new CalibratorApiError(refused ? detail : `could not read the config for ${name}`);
+    const fallback = `could not read the config for ${name}`;
+    throw new CalibratorApiError(
+      response.status === 409 ? detailMessage(error, fallback) : fallback,
+    );
   }
   const modifiedAt = response.headers.get("Last-Modified");
   if (modifiedAt === null) throw new CalibratorApiError("template config has no modification time");
   return {
-    config: data as unknown as TemplateConfigState,
+    config: withTuples<TemplateConfigState>(data),
     modifiedAt,
     revision: revisionOf(response),
   };
@@ -85,10 +70,6 @@ export interface SavedTemplateConfig {
   revision: string;
 }
 
-/** Writes the whole template.yaml, plus any mask edits, over `revision`.
- * Stateless: the caller holds the revision it read and the one this returns
- * (`useTemplateSession` does), and decides which mask operations still need
- * sending. */
 export async function saveTemplateConfig(
   name: string,
   config: TemplateConfigState,
@@ -101,35 +82,23 @@ export async function saveTemplateConfig(
   });
   if (error) {
     if (response?.status === 409 || response?.status === 412) throw new TemplateConflictError();
-    // A refusal names its rule. A validation error's detail is a list, and a
-    // server fault's is not for the seller.
-    const detail: unknown = error.detail;
-    const refused = response?.status === 422 && typeof detail === "string";
-    throw new CalibratorApiError(refused ? detail : "could not save template.yaml");
+    const fallback = "could not save template.yaml";
+    throw new CalibratorApiError(
+      response?.status === 422 ? detailMessage(error, fallback) : fallback,
+    );
   }
-  return { config: data as unknown as TemplateConfigState, revision: revisionOf(response) };
+  return { config: withTuples<TemplateConfigState>(data), revision: revisionOf(response) };
 }
 
-/** What each photo will be taken as if this becomes a colour-matrix set.
- * Reporting only -- ADR-0004 makes the filename the source of truth. */
-/** What followed a rename, as workspace-relative files. `unresolved` could not
- * be read or written, and may still name the old template. */
-export interface TemplateRenameResult {
-  name: string;
-  updated: string[];
-  unresolved: string[];
-}
+export type TemplateRenameResult = components["schemas"]["TemplateRenameResponse"];
 
-/** Rejects with the server's sentence: a taken name, an unusable one, or a
- * deploy or preparation that has to finish first. */
 export async function renameTemplate(name: string, newName: string): Promise<TemplateRenameResult> {
   const { data, error } = await api.POST("/api/templates/{name}/rename", {
     params: { path: { name } },
     body: { new_name: newName },
   });
   if (data) return data;
-  const detail: unknown = error?.detail;
-  throw new CalibratorApiError(typeof detail === "string" ? detail : `could not rename ${name}`);
+  throw new CalibratorApiError(detailMessage(error, `could not rename ${name}`));
 }
 
 export async function getColourReport(name: string): Promise<ColourReportRow[]> {
@@ -140,36 +109,27 @@ export async function getColourReport(name: string): Promise<ColourReportRow[]> 
   return data;
 }
 
-/** The first calibration step. Writes the starting template.yaml for that
- * shape; refused if one already exists, since kind decides the whole file
- * shape (ADR-0014) and changing it would discard the old shape's calibration. */
 export async function assignKind(name: string, kind: TemplateKind): Promise<TemplateConfigState> {
   const { data, error } = await api.POST("/api/templates/{name}/kind", {
     params: { path: { name } },
     body: { kind },
   });
   if (error) throw new CalibratorApiError(`could not set the kind for ${name}`);
-  return data as unknown as TemplateConfigState;
+  return withTuples<TemplateConfigState>(data);
 }
 
-/** The calibrator's test-design library: three bundled targets plus whatever
- * the user has uploaded into the workspace. */
 export async function listDesigns(): Promise<DesignSummary[]> {
   const { data, error } = await api.GET("/api/designs");
   if (error || !data) throw new CalibratorApiError("failed to list test designs");
   return data;
 }
 
-/** Adds a PNG to the library. Hand-rolled multipart -- the generated client
- * cannot describe one. */
 export async function uploadDesign(file: File): Promise<DesignSummary> {
-  const body = new FormData();
-  body.append("file", file);
-  const response = await fetch("/api/designs", { method: "POST", body });
-  if (!response.ok) {
-    throw new CalibratorApiError("failed to upload test design");
-  }
-  return (await response.json()) as DesignSummary;
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.POST("/api/designs", { body: formBody(form) });
+  if (!data) throw new CalibratorApiError("failed to upload test design");
+  return data;
 }
 
 /**
@@ -187,32 +147,15 @@ export function templateThumbnailUrl(name: string, colour?: string | null): stri
   return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
 }
 
-/**
- * The same bare, inkless photo as {@link templateThumbnailUrl}, at its own
- * resolution rather than downscaled to list size. For the large preview
- * stages (the listing editor's Variants and Listing Images tabs) when there
- * is no design yet to composite -- {@link templateThumbnailUrl}'s 160px cap
- * is sized for a row of tiles, not a hero image.
- */
 export function templatePhotoUrl(name: string, colour?: string | null): string {
   const base = `/api/templates/${encodeURIComponent(name)}/photo`;
   return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
 }
 
-/** A test design, small -- the listing-template editor's preview row. */
 export function designThumbnailUrl(id: string): string {
   return `/api/designs/${encodeURIComponent(id)}/thumbnail`;
 }
 
-/**
- * One design on every layer of this template's *saved* geometry -- the
- * listing-template editor's preview (UI doc §3). A listing's own scenes use
- * `listingScenePreviewUrl` instead, which resolves each layer's file (A35).
- * Unlike {@link templateThumbnailUrl}/{@link templatePhotoUrl}, which are
- * a bare, inkless photo, or {@link renderPreview}, which composites a
- * calibrator test design against *unsaved* geometry. A plain URL for the
- * same reason those are: the browser owns loading and caching it.
- */
 export function templateDesignPreviewUrl(
   name: string,
   design: string | { testDesign: string },
@@ -227,8 +170,6 @@ export function templateDesignPreviewUrl(
   return `/api/templates/${encodeURIComponent(name)}/design-preview?${params.toString()}`;
 }
 
-/** A colour-matrix colour's real garment shade, sampled off its own scene
- * photo -- for a quick-glance swatch dot next to the colour's name. */
 export async function getTemplateSwatch(name: string, colour: string): Promise<string> {
   const { data, error } = await api.GET("/api/templates/{name}/swatch", {
     params: { path: { name }, query: { colour } },
@@ -237,16 +178,8 @@ export async function getTemplateSwatch(name: string, colour: string): Promise<s
   return data.hex;
 }
 
-/** A listing holding its own position for a template (ADR-0058).
- * `placements` names the placement IDs of a `multiple` chart it positions;
- * empty for one box. */
-export interface PositionedListing {
-  listing: string;
-  placements: string[];
-}
+export type PositionedListing = components["schemas"]["PositionedListingResponse"];
 
-/** The listings a recalibration of `name` may put outside the position limits
- * (spec, *Recalibration*). The calibrator only names them; it never edits one. */
 export async function getPositionedListings(name: string): Promise<PositionedListing[]> {
   const { data, error } = await api.GET("/api/templates/{name}/positioned-listings", {
     params: { path: { name } },
@@ -266,25 +199,9 @@ type PreviewBody = {
   | { bounding_box: BoundingBox; renderer: Renderer }
 );
 
-/** Which of the server's two preview sizes to ask for.
- *
- * `editor` is the downscale the canvas drags against -- capped at a fixed
- * longest edge the server owns, and encoded as WebP, because a frame produced
- * five times a second is looked at once and thrown away. `full` is the photo's
- * own resolution as a PNG: the thing you approve.
- *
- * Boxes are in the template's true pixel space either way. A scaled preview
- * does not change the coordinates -- only how many pixels the server spends
- * drawing them.
- */
 export type PreviewScale = "editor" | "full";
 
-/**
- * Renders a preview through the real server-side pipeline. The body shape
- * must match the target template's actual kind -- the endpoint rejects a
- * mismatch rather than guessing. Returns an object URL the caller owns and
- * must revoke.
- */
+/** Returns an object URL the caller must revoke. */
 export async function renderPreview(
   name: string,
   body: PreviewBody,

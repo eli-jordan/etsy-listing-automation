@@ -1,6 +1,6 @@
 import { PreparationNotice } from "./PreparationNotice";
 import type { ReactNode } from "react";
-import type { PhotoWarpTemplate } from "../types";
+import type { PhotoSpace, PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
 import { usePreview } from "../hooks/usePreview";
@@ -11,15 +11,12 @@ interface Props {
   rendererControls?: ReactNode;
   templateName: string;
   config: PhotoWarpTemplate<SingleTemplate>;
-  /** The photo's true pixel size -- the space the box is in. See
-   * `QuadEditor`'s `space`. */
-  space: [number, number] | null;
+  space: PhotoSpace | null;
   onChange: (config: SingleTemplate) => void;
   design: string;
   onDesignChange: (design: string) => void;
 }
 
-/** One placement over one photo, with the shared preview and realism controls. */
 function PhotoWarpSingleEditor(props: Props) {
   const { templateName, config, onChange, design } = props;
   const body = useMemo(
@@ -32,9 +29,6 @@ function PhotoWarpSingleEditor(props: Props) {
 
   const previewUrl = usePreview(templateName, body, design);
 
-  // One output, so one job -- but the same on-demand full-size render a
-  // colour set gets, because the reason for it (the canvas draws a downscale)
-  // has nothing to do with how many photos a kind has.
   const jobs: PreviewJob[] = useMemo(
     () => [{ id: templateName, label: config.colour ?? templateName, body }],
     [templateName, config.colour, body],

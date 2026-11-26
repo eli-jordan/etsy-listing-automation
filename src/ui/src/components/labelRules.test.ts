@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import rules from "../../../../tests/fixtures/label_rules.json";
-import { LABEL_CAP_MESSAGE, labelRefusal, tidiedLabel } from "./labelRules";
+import { holdsLabels, LABEL_CAP_MESSAGE, labelRefusal, tidiedLabel } from "./labelRules";
 
 // The server's words (core/config/template_labels.py): the field explains what
 // a save would be refused for, so the two must read the same.
@@ -50,5 +50,12 @@ describe("labelRefusal", () => {
 
   it("checks length before characters, as the server does", () => {
     expect(labelRefusal("!".repeat(31))).toBe(LENGTH);
+  });
+});
+
+describe("holdsLabels", () => {
+  it("counts a hand-edited label in any case as the pill", () => {
+    expect(holdsLabels(["Theme:Christmas", "cosy"], ["theme:christmas"])).toBe(true);
+    expect(holdsLabels(["cosy"], ["theme:christmas"])).toBe(false);
   });
 });

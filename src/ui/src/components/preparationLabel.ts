@@ -3,7 +3,6 @@ export function marigoldMapsReady(maps: Preparation["maps"] | null | undefined):
   return maps?.state === "ready" && maps.can_render;
 }
 function activeJobLabel(job: NonNullable<Preparation["active_job"]>): string {
-  // Held by a workspace backup's pause (plan decision P4).
   if (job.waiting_for_backup) return "Waiting for backup";
   if (job.kind === "rebuild") return "Rebuilding maps";
   return job.phase === "queued" ? "Queued" : "Preparing";

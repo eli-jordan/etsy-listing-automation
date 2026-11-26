@@ -101,7 +101,6 @@ export function PrintRealismPanel({ displace, shade, onDisplaceChange, onShadeCh
     <section className="realism" aria-label="Print realism">
       <div className="realism__head">
         <h3 className="realism__heading">Print realism</h3>
-        {/* Keep the accessible name specific to the controls it restores. */}
         <button
           type="button"
           className="btn btn-ghost"

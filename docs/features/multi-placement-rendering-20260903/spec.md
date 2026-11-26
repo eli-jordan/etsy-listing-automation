@@ -96,6 +96,12 @@ exactly — right when a chart is meant to represent one specific listing.
 shop-wide chart reused across listings that each sell a different subset of
 the garment's colour range.
 
+The calibrator's colour field for a placement or a `single` template is free
+text, suggesting every colour already in use across the workspace's templates.
+A closed list would need to know which colours a listing sells, and nothing in
+the calibrator does; wiring in the Printify catalog to learn them would be a much
+larger dependency than a typo it could prevent.
+
 ### `kind: single` — one photo, one garment
 
 ```yaml

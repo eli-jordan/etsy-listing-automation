@@ -3,16 +3,20 @@ import type { maskDraft } from "../components/maskDraft";
 import type { PreviewJob } from "../components/PreviewPanel";
 import type { Placement, TemplateConfigState } from "../types";
 
-/** The boxes the Marigold editor draws: a multiple template's own
- * placements, or one implicit placement for a single box. */
+/** The id of the one placement a single-box template is drawn as. */
+export const IMPLICIT_PLACEMENT_ID = "implicit";
+
+/** `selected` while it is still one of `options`, else the first option. */
+export function pickOrFirst(selected: string | null, options: readonly string[]): string {
+  return selected !== null && options.includes(selected) ? selected : (options[0] ?? "");
+}
+
 export function editorPlacements(config: TemplateConfigState, colours: string[]): Placement[] {
   if (config.kind === "multiple") return config.placements;
   const colour = config.kind === "single" ? (config.colour ?? "") : (colours[0] ?? "");
-  return [{ id: "implicit", colour, bounding_box: config.bounding_box }];
+  return [{ id: IMPLICIT_PLACEMENT_ID, colour, bounding_box: config.bounding_box }];
 }
 
-/** What the preview tab renders: one image per colour for a colour matrix,
- * else one image of the whole template. */
 export function previewJobs(
   config: TemplateConfigState,
   colours: string[],
@@ -32,10 +36,6 @@ export function previewJobs(
   return [{ id: templateName, label: templateName, body }];
 }
 
-/** The editor canvas's own preview: the job for the chosen colour (the only
- * job, for other kinds) at the calibration revision and that revision's
- * labels, with the unsaved mask strokes. `null` until there is a revision and
- * a job to show. */
 export function editorPreviewRequest(
   kind: TemplateConfigState["kind"],
   jobs: PreviewJob[],
@@ -51,8 +51,6 @@ export function editorPreviewRequest(
   return { ...body, calibration_revision: revision, labels, mask_edits: maskEdits };
 }
 
-/** The parts of a template that Marigold's prepared maps depend on, as a
- * comparable string; `null` for anything not rendered by Marigold. */
 export function marigoldMapInputs(value: TemplateConfigState | null): string | null {
   if (value?.renderer.type !== "marigold") return null;
   return JSON.stringify({
@@ -65,26 +63,20 @@ export function marigoldMapInputs(value: TemplateConfigState | null): string | n
   });
 }
 
-/** The masks a placement's saved strokes started from, oldest first -- none
- * when the histories were read at another revision. */
 export function undoBases(
   histories: { revision: string; values: Record<string, MaskHistory> },
   revision: string,
   id: string | null,
 ): string[] {
   if (histories.revision !== revision) return [];
-  return histories.values[id ?? "implicit"]?.strokes.map((s) => s.before) ?? [];
+  return histories.values[id ?? IMPLICIT_PLACEMENT_ID]?.strokes.map((s) => s.before) ?? [];
 }
 
-/** Whether Undo has anything to take back: a stroke drawn since the save,
- * or a saved one (`undoCount`) the draft has not already undone -- none once
- * the draft resets to the automatic mask. */
 export function canUndoMask(draft: ReturnType<typeof maskDraft>, undoCount: number): boolean {
   if (draft.strokes.length > 0) return true;
   return !draft.automatic && undoCount > draft.undoSaved;
 }
 
-/** Why the preview tab cannot render yet, or `null` when it can. */
 export function previewBlocker(facts: {
   mapsReady: boolean;
   unsavedMaps: boolean;

@@ -1,14 +1,8 @@
 import { api } from "./client";
 import type { MarketSnapshot } from "../types";
 
-/**
- * A listing's latest market research (features/market-seo-20260924/spec.md, *Cache*), which the top
- * listings panel reads on mount so a reload shows the last search again.
- */
-
 export class MarketApiError extends Error {}
 
-/** The snapshot, or `null` before the listing's first search. */
 export async function getMarketSnapshot(listing: string): Promise<MarketSnapshot | null> {
   const { data, error, response } = await api.GET("/api/listings/{name}/market", {
     params: { path: { name: listing } },

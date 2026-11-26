@@ -4,21 +4,7 @@ import type { SwipeDirection } from "./swipe";
 import { resist } from "./usePager";
 import { useSwipe } from "./useSwipe";
 
-/**
- * A pager laid out like a native photo viewer, for the Lightbox's pictures on
- * a phone. The neighbours sit either side of the shown item inside `track`,
- * so a finger drags the whole strip and a part-swipe shows both. Released past
- * a swipe, the strip carries on until the neighbour is centred, and only then
- * does the index move to it; short of one, it springs back. Past the first and
- * the last it resists (no wrap-around), as `usePager`'s pagers do.
- *
- * Its own hook rather than `usePager`, whose pages slide one out and the next
- * in, because only here are the neighbours on screen at once. The caller lays
- * the slides out: the previous one a track's width plus `--lightbox-gap` to
- * the left, the next one as far to the right.
- *
- * With `prefers-reduced-motion`, a swipe steps at once and nothing slides.
- */
+/** The Lightbox's phone pager (src/ui/AGENTS.md, *Phone layout*). */
 
 export interface CarouselOptions {
   count: number;
@@ -27,10 +13,8 @@ export interface CarouselOptions {
   onIndexChange: (index: number) => void;
 }
 
-/** How long a released swipe takes to bring the neighbour to the centre. */
 const SETTLE_MS = 220;
 
-/** Where the strip ends up when the neighbour on that side is centred. */
 function centring(direction: SwipeDirection): string {
   return direction === "left"
     ? "translateX(calc(-100% - var(--lightbox-gap)))"
@@ -43,19 +27,15 @@ export function useCarousel(
 ): RefObject<HTMLDivElement | null> {
   const { count, index, enabled, onIndexChange } = options;
   const track = useRef<HTMLDivElement>(null);
-  /** Set while a released swipe settles; the strip takes no drag meanwhile. */
-  const timer = useRef<number | undefined>(undefined);
+  const settleTimer = useRef<number | undefined>(undefined);
   const previous = index > 0 ? index - 1 : null;
   const next = index < count - 1 ? index + 1 : null;
 
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => () => window.clearTimeout(settleTimer.current), []);
 
-  // When the index moves, the new current slide is where the neighbour was,
-  // so the strip goes back to rest without a transition and nothing on
-  // screen moves.
   useLayoutEffect(() => {
-    window.clearTimeout(timer.current);
-    timer.current = undefined;
+    window.clearTimeout(settleTimer.current);
+    settleTimer.current = undefined;
     if (track.current !== null) pose(track.current, "", "");
   }, [index]);
 
@@ -70,13 +50,13 @@ export function useCarousel(
     enabled,
     onDrag: (offset) => {
       const element = track.current;
-      if (element === null || timer.current !== undefined) return;
+      if (element === null || settleTimer.current !== undefined) return;
       const towards = offset < 0 ? next : previous;
       pose(element, `translateX(${towards === null ? resist(offset) : offset}px)`, "none");
     },
     onEnd: (direction) => {
       const element = track.current;
-      if (element === null || timer.current !== undefined) return;
+      if (element === null || settleTimer.current !== undefined) return;
       const target = targetOf(direction);
       if (target === null || direction === null) {
         springBack(element);
@@ -88,8 +68,8 @@ export function useCarousel(
         return;
       }
       pose(element, centring(direction), `transform ${SETTLE_MS}ms ease-out`);
-      timer.current = window.setTimeout(() => {
-        timer.current = undefined;
+      settleTimer.current = window.setTimeout(() => {
+        settleTimer.current = undefined;
         onIndexChange(target);
       }, SETTLE_MS);
     },

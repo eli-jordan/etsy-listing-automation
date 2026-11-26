@@ -230,7 +230,7 @@ describe("useTemplateSession", () => {
     expect(result.current.dirty).toBe(false);
     expect(result.current.saved).toEqual(edited(PHOTO_WARP, 2));
     expect(result.current.calibrationRevision).toBe("tee-w1");
-    expect(onCatalogChanged).toHaveBeenCalledWith("tee");
+    expect(onCatalogChanged).toHaveBeenCalledWith();
   });
 
   it("keeps one save in flight and sends the next over the revision it returned", async () => {
@@ -348,8 +348,40 @@ describe("useTemplateSession", () => {
     );
     expect(result.current.calibrationRevision).toBe("s1");
     expect(result.current.dirty).toBe(false);
-    // The rail refreshes, but is not pulled back to the template just left.
-    expect(onCatalogChanged).toHaveBeenCalledWith(undefined);
+    expect(onCatalogChanged).toHaveBeenCalledWith();
+  });
+
+  it("never renders the previous template's document under the new name", async () => {
+    server.disk.set("shirt", { config: edited(PHOTO_WARP, 5), revision: "s1" });
+    const renders: { name: string; config: TemplateConfigState | null }[] = [];
+    const { result, rerender } = renderHook(
+      ({ name }) => {
+        const session = useTemplateSession(name);
+        renders.push({ name, config: session.config });
+        return session;
+      },
+      { initialProps: { name: "tee" } },
+    );
+    await waitFor(() => expect(result.current.load).toBe("ready"));
+
+    rerender({ name: "shirt" });
+    await waitFor(() => expect(result.current.load).toBe("ready"));
+
+    const underShirt = renders.filter((render) => render.name === "shirt");
+    expect(underShirt[0]?.config).toBeNull();
+    for (const render of underShirt)
+      expect([null, edited(PHOTO_WARP, 5)]).toContainEqual(render.config);
+  });
+
+  it("flushes a pending edit on a switch even while a preview would hold it", async () => {
+    server.disk.set("tee", { config: SINGLE, revision: "r1" });
+    const { result, rerender } = await opened();
+
+    act(() => result.current.setPreviewPending(true));
+    act(() => result.current.update(edited(SINGLE, 8)));
+    rerender({ name: "shirt" });
+
+    await waitFor(() => expect(server.disk.get("tee")?.config).toEqual(edited(SINGLE, 8)));
   });
 
   it("flushes a pending edit on unmount", async () => {
@@ -556,7 +588,7 @@ describe("useTemplateSession", () => {
       await clock.advance(AUTOSAVE_DEBOUNCE_MS);
       await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy", "warm"]));
       expect(server.puts).toHaveLength(1);
-      expect(onCatalogChanged).toHaveBeenCalledWith("tee");
+      expect(onCatalogChanged).toHaveBeenCalledWith();
     });
 
     it("leaves what a preview names alone, and reads no preparation", async () => {

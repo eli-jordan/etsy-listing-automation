@@ -1,7 +1,7 @@
 import type { PhotoWarpTemplate } from "./types";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { CalibratorPage } from "./App";
 import * as calibrator from "./api/calibrator";
 import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/writeLoop";
 import { controlledClock } from "./test/clock";
@@ -91,7 +91,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
-    render(<App />);
+    render(<CalibratorPage />);
 
     await waitFor(() => expect(screen.getByText("Loading preview…")).toBeInTheDocument());
   });
@@ -101,7 +101,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
-    render(<App />);
+    render(<CalibratorPage />);
     await waitFor(() => expect(header().getByText("flat-lay-01")).toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "Mockup Templates" })).toBeInTheDocument();
   });
@@ -113,7 +113,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(MULTIPLE));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
-    render(<App />);
+    render(<CalibratorPage />);
     await waitFor(() => expect(header().getByText("calibrated")).toBeInTheDocument());
     expect(header().getByText("Multiple · 0 placements")).toBeInTheDocument();
   });
@@ -123,7 +123,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
-    render(<App />);
+    render(<CalibratorPage />);
 
     await waitFor(() => expect(screen.getByText(/^Saved /)).toBeInTheDocument());
     expect(document.querySelector(".page-head__saved .page-head__dot")).toBeInTheDocument();
@@ -142,7 +142,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(MULTIPLE));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
-    render(<App />);
+    render(<CalibratorPage />);
     await waitFor(() => expect(header().getByText("no boxes")).toBeInTheDocument());
   });
 
@@ -156,7 +156,7 @@ describe("App", () => {
     );
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByText("Loading preview…");
 
     selectTemplate("colour-chart-01");
@@ -182,7 +182,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(null);
     vi.spyOn(calibrator, "getColourReport").mockResolvedValue([]);
 
-    render(<App />);
+    render(<CalibratorPage />);
     await waitFor(() =>
       expect(screen.getByText("What kind of template is this?")).toBeInTheDocument(),
     );
@@ -194,7 +194,7 @@ describe("App", () => {
     // The calibrator no longer creates them: a template is a folder in the
     // workspace, so the empty state points at the workspace.
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
-    render(<App />);
+    render(<CalibratorPage />);
     await waitFor(() =>
       expect(screen.getByText(/add a folder of photos under mockup-templates/)).toBeInTheDocument(),
     );
@@ -202,7 +202,7 @@ describe("App", () => {
 
   it("reports a status message when the template list fails to load", async () => {
     vi.spyOn(calibrator, "listTemplates").mockRejectedValue(new Error("network"));
-    render(<App />);
+    render(<CalibratorPage />);
     await waitFor(() => expect(screen.getByText("failed to load templates")).toBeInTheDocument());
   });
 
@@ -214,7 +214,7 @@ describe("App", () => {
     const saveSpy = vi.spyOn(calibrator, "saveTemplateConfig").mockReturnValue(write.promise);
     const clock = controlledClock();
 
-    render(<App />);
+    render(<CalibratorPage />);
     const strength = await screen.findByLabelText("Wrinkle strength");
     fireEvent.change(strength, { target: { value: "75" } });
 
@@ -249,7 +249,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "saveTemplateConfig").mockReturnValue(write.promise);
     const clock = controlledClock();
 
-    render(<App />);
+    render(<CalibratorPage />);
     const note = await screen.findByRole("note");
     expect(held).toHaveBeenCalledWith("flat-lay-01");
     expect(note).toHaveTextContent(
@@ -276,7 +276,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
     const held = vi.spyOn(calibrator, "getPositionedListings").mockResolvedValue([]);
 
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByLabelText("Wrinkle strength");
     await waitFor(() => expect(held).toHaveBeenCalledWith("flat-lay-01"));
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
@@ -293,7 +293,7 @@ describe("App", () => {
       .mockRejectedValue(new calibrator.CalibratorApiError("could not save template.yaml"));
     const clock = controlledClock();
 
-    render(<App />);
+    render(<CalibratorPage />);
     const strength = await screen.findByLabelText("Wrinkle strength");
     fireEvent.change(strength, { target: { value: "75" } });
     await clock.advance(AUTOSAVE_DEBOUNCE_MS);
@@ -340,7 +340,7 @@ describe("App", () => {
 
       const clock = controlledClock();
 
-      render(<App />);
+      render(<CalibratorPage />);
       const strength = await screen.findByLabelText("Wrinkle strength");
       fireEvent.change(strength, { target: { value: "25" } });
       await clock.advance(AUTOSAVE_DEBOUNCE_MS); // refresh #2 -- hangs
@@ -365,7 +365,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByLabelText("Wrinkle strength");
     expect(header().queryByRole("button", { name: "Reset" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reset print realism" })).toBeInTheDocument();
@@ -378,7 +378,7 @@ it("waits for the initial catalog before claiming the workspace is empty", async
     finish = resolve;
   });
   vi.spyOn(calibrator, "listTemplates").mockReturnValue(pending);
-  render(<App />);
+  render(<CalibratorPage />);
   expect(screen.getByText("Loading templates...")).toBeInTheDocument();
   expect(screen.queryByText(/No templates yet/)).not.toBeInTheDocument();
   await act(async () => finish([]));
@@ -397,7 +397,7 @@ it("keeps a newer template selection when an autosave catalog refresh arrives la
   vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
   vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
   vi.spyOn(calibrator, "saveTemplateConfig").mockReturnValue(write.promise);
-  render(<App />);
+  render(<CalibratorPage />);
   fireEvent.change(await screen.findByLabelText("Wrinkle strength"), { target: { value: "25" } });
 
   await clock.advance(AUTOSAVE_DEBOUNCE_MS);
@@ -430,7 +430,7 @@ describe("renaming the open template", () => {
     const rename = vi
       .spyOn(calibrator, "renameTemplate")
       .mockResolvedValue({ name: "tee", updated: ["listings/a/listing.yaml"], unresolved: [] });
-    render(<App />);
+    render(<CalibratorPage />);
     await typeName("tee");
     vi.mocked(calibrator.listTemplates).mockResolvedValue([summary({ name: "tee" })]);
 
@@ -446,7 +446,7 @@ describe("renaming the open template", () => {
       updated: [],
       unresolved: [],
     });
-    render(<App />);
+    render(<CalibratorPage />);
     await screen.findByTitle("Double-click to rename");
     vi.mocked(calibrator.listTemplates).mockReturnValue(new Promise(() => {}));
     await typeName("tee");
@@ -462,7 +462,7 @@ describe("renaming the open template", () => {
       updated: [],
       unresolved: ["listings/a/listing.yaml"],
     });
-    render(<App />);
+    render(<CalibratorPage />);
     await typeName("tee");
     vi.mocked(calibrator.listTemplates).mockResolvedValue([summary({ name: "tee" })]);
 
@@ -476,7 +476,7 @@ describe("renaming the open template", () => {
     vi.spyOn(calibrator, "renameTemplate").mockRejectedValue(
       new calibrator.CalibratorApiError("a template already exists named 'tee'"),
     );
-    render(<App />);
+    render(<CalibratorPage />);
     await typeName("tee");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("already exists");

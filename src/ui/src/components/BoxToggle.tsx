@@ -1,8 +1,5 @@
 import { BoundingBoxIcon } from "@phosphor-icons/react/dist/csr/BoundingBox";
 
-/** The one control for showing and hiding the design box, whichever renderer
- * the template uses. `label` names what it hides: one box, or every box on a
- * multiple-garment photo. */
 export function BoxToggle({
   checked,
   onChange,

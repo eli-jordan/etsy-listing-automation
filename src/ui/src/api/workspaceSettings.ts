@@ -40,8 +40,6 @@ export async function saveSettings(
 export type TemplatePositionLimits = WorkspaceSettings["template_positions"];
 export type TemplatePositionImpact = components["schemas"]["TemplatePositionImpactResponse"];
 
-/** Who candidate limits would block, and which Marigold templates a save
- * would refit (template positions PR 5). Writes nothing. */
 export async function getTemplatePositionImpact(
   limits: TemplatePositionLimits,
 ): Promise<TemplatePositionImpact> {

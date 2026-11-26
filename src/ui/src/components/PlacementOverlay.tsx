@@ -5,9 +5,7 @@ import type { BoundingBox } from "../types";
 import { artworkTransform } from "./artworkTransform";
 
 export type Stroke = Extract<MaskOperation, { type: "stroke" }>;
-/** Mask pixels and strokes use original photo coordinates. The separate SVG
- * input layer captures a complete gesture so moving a placement cannot move
- * a saved exclusion and Undo never removes only part of a stroke. */
+/** Mask pixels and strokes are in original photo coordinates. */
 export function PlacementOverlay({
   box,
   designUrl,
@@ -65,31 +63,22 @@ export function PlacementOverlay({
       Math.max(0, Math.min(space[1] - 1, result.y)),
     ];
   }
-  // The finger (or mouse) painting the stroke. Only its moves extend the
-  // stroke, and only its release or cancel ends it.
-  const owner = useRef<number | null>(null);
+  const strokePointerId = useRef<number | null>(null);
   function finish() {
     const next = current.current;
     current.current = null;
-    owner.current = null;
+    strokePointerId.current = null;
     setStroke(null);
     if (next) onStroke(next);
   }
-  /** The stroke's own pointer ended; any other pointer's end is ignored. */
   function finishFrom(event: React.PointerEvent<SVGRectElement>) {
-    if (owner.current !== null && event.pointerId !== owner.current) return;
+    if (strokePointerId.current !== null && event.pointerId !== strokePointerId.current) return;
     finish();
   }
-  /** A second finger landing means a pinch, not paint: the stroke so far is
-   * dropped, not committed, and nothing paints until every finger lifts and
-   * a new one lands. Painting both fingers' moves into one stroke drew a
-   * line between them. */
   function drop() {
     current.current = null;
     setStroke(null);
   }
-  // Leaving mask mode commits an active gesture once, including Escape while
-  // the pointer is still held. The effect event uses the latest draft callback.
   const finishGesture = useEffectEvent(finish);
   useEffect(() => {
     if (editing) return () => finishGesture();
@@ -189,21 +178,21 @@ export function PlacementOverlay({
             onPointerDown={(event) => {
               if (event.button !== 0) return;
               event.stopPropagation();
-              if (owner.current !== null) {
-                if (event.pointerId !== owner.current) drop();
+              if (strokePointerId.current !== null) {
+                if (event.pointerId !== strokePointerId.current) drop();
                 return;
               }
               const p = point(event);
               if (!p) return;
               event.currentTarget.setPointerCapture(event.pointerId);
-              owner.current = event.pointerId;
+              strokePointerId.current = event.pointerId;
               const next: Stroke = { type: "stroke", mode, diameter_px: diameter, points: [p] };
               current.current = next;
               setStroke(next);
             }}
             onPointerMove={(event) => {
               const p = point(event);
-              if (!current.current || event.pointerId !== owner.current) return;
+              if (!current.current || event.pointerId !== strokePointerId.current) return;
               event.stopPropagation();
               if (p) {
                 const next = { ...current.current, points: [...current.current.points, p] };
@@ -228,8 +217,7 @@ export function PlacementOverlay({
             pointerEvents="none"
             fill="none"
           >
-            {/* SVG photo units match the stroke, including resize and DPR.
-                  Non-scaling outlines stay legible on light and dark photos. */}
+            {/* Photo units, so the cursor matches the stroke at any size and DPR. */}
             <circle
               cx={0}
               cy={0}

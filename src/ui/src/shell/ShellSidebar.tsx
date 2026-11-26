@@ -5,9 +5,8 @@ import type { ReactNode } from "react";
  * navigation; design fixtures can supply inert navigation without mounting a
  * router or touching the workspace API.
  *
- * `footer` is the bottom entry: the app passes its Admin link (Admin plan,
- * PR 3). Without one, the placeholder Setup entry the design frames were
- * drawn around stays, so those frames render unchanged.
+ * `footer` is the bottom entry: the app passes its Admin link. Without one,
+ * the placeholder Setup entry the design frames were drawn around stays.
  */
 export function ShellSidebar({
   shopName,

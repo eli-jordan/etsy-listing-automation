@@ -7,6 +7,7 @@ export function ColourPicker({
   colours: string[];
   onChange: (colour: string) => void;
 }) {
+  if (colours.length < 2) return null;
   return (
     <label className="app__bar-field">
       <span>Colour</span>

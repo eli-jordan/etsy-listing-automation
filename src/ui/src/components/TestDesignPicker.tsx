@@ -2,18 +2,8 @@ import { useEffect, useState } from "react";
 import { listDesigns, uploadDesign } from "../api/calibrator";
 import type { DesignSummary } from "../types";
 
-/**
- * Which artwork the live preview is rendered with.
- *
- * Not part of `template.yaml` -- it is a way of looking at the template, not a
- * property of it, which is why it lives in component state and only ever
- * reaches the server as the preview request's `design` field.
- *
- * A native `<select>` with `<optgroup>`s rather than the wireframe's custom
- * radio menu: it is a single-choice list of short labels, which is exactly
- * what a select is for, and it comes with keyboard handling and a scroll
- * behaviour that a hand-rolled menu would have to reimplement.
- */
+/** Which artwork the live preview is rendered with: a way of looking at the
+ * template, sent only as the preview request's `design`. */
 
 interface Props {
   compact?: boolean;
@@ -53,8 +43,6 @@ export function TestDesignPicker({ value, onChange, compact = false }: Props) {
 
   return (
     <section className={compact ? "design-picker design-picker--compact" : "design-picker"}>
-      {/* The heading names the control, so the select carries the accessible
-          name rather than a second visible label repeating it. */}
       <h3 className="design-picker__heading">{compact ? "Design" : "Test design"}</h3>
 
       <select

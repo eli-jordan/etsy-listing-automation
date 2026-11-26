@@ -7,24 +7,26 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
+const RUNNING_JOB: api.PreparationJob = {
+  id: "job",
+  template: "tee",
+  kind: "prepare",
+  phase: "running",
+  step: "normals",
+  elapsed: 3,
+  placements_completed: 0,
+  config_revision: "sha256:revision",
+  placements_total: 1,
+  error: null,
+  last_event_sequence: 3,
+  queue_position: null,
+  waiting_for_backup: false,
+  engine_version: "engine",
+};
+
 describe("usePreparation", () => {
   it("reattaches to existing work and reconnects without submitting a job", async () => {
-    const job: api.PreparationJob = {
-      id: "job",
-      template: "tee",
-      kind: "prepare",
-      phase: "running",
-      step: "normals",
-      elapsed: 3,
-      placements_completed: 0,
-      config_revision: "sha256:revision",
-      placements_total: 1,
-      error: null,
-      last_event_sequence: 3,
-      queue_position: null,
-      waiting_for_backup: false,
-      engine_version: "engine",
-    };
+    const job = RUNNING_JOB;
     const get = vi.spyOn(api, "getPreparation").mockResolvedValue({ ...READY, active_job: job });
     const submit = vi.spyOn(api, "prepareTemplate");
     let options: Parameters<typeof api.followPreparation>[1] | undefined;
@@ -69,6 +71,25 @@ describe("usePreparation", () => {
     unmount();
     expect(close).toHaveBeenCalled();
   });
+  it("reconnects after a resync from the start, naming no event", async () => {
+    const job = RUNNING_JOB;
+    vi.spyOn(api, "getPreparation").mockResolvedValue({ ...READY, active_job: job });
+    let options: Parameters<typeof api.followPreparation>[1] | undefined;
+    const follow = vi.spyOn(api, "followPreparation").mockImplementation((_id, value) => {
+      options = value;
+      return { close: vi.fn() };
+    });
+    const { result } = renderHook(() => usePreparation("tee", 0));
+    await waitFor(() => expect(result.current.preparation?.active_job?.id).toBe("job"));
+    vi.useFakeTimers();
+    act(() => options?.onEvent({ ...job, job_id: job.id, sequence: 4 }));
+    act(() => options?.onEvent({ resync: true }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    expect(follow.mock.lastCall?.[1]).not.toHaveProperty("lastEventId");
+  });
+
   it("discards a late status response after switching template", async () => {
     let finish!: (v: api.Preparation) => void;
     vi.spyOn(api, "getPreparation").mockImplementation((name) =>

@@ -59,6 +59,14 @@ describe("AppShell", () => {
     expect(screen.queryByText(/shop/i)).not.toBeInTheDocument();
   });
 
+  it("says nothing, and shows no error, when the shop's name cannot be read", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockRejectedValue(new Error("offline"));
+    renderAt("/");
+    await waitFor(() => expect(screen.getByText("dashboard content")).toBeInTheDocument());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText(/offline|shop/i)).not.toBeInTheDocument();
+  });
+
   it("renders the nav items", () => {
     renderAt("/");
     expect(screen.getByRole("link", { name: /Dashboard/ })).toBeInTheDocument();

@@ -5,12 +5,9 @@ import { LABEL_CAP_MESSAGE, MAX_LABELS, labelRefusal, tidiedLabel } from "./labe
 
 const MAX_SUGGESTIONS = 6;
 
-/** Labels on other templates as this one would save them. A hand-edited label
- * that breaks the rules stays on its own template but is not offered here,
- * since saving it on another would be refused. */
-function suggestable(known: string[], held: string[]): string[] {
+function suggestable(catalogLabels: string[], held: string[]): string[] {
   const holds = new Set(held.map(tidiedLabel));
-  const tidied = new Set(known.map(tidiedLabel));
+  const tidied = new Set(catalogLabels.map(tidiedLabel));
   return [...tidied].filter((label) => !holds.has(label) && labelRefusal(label) === null).sort();
 }
 
@@ -62,9 +59,6 @@ function AddLabel({
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
-          // Both presses are ours: the mask editor also leaves on Escape, and
-          // an Enter left to run on would click the Add label button that focus
-          // returns to, opening the field again.
           if (event.key !== "Enter" && event.key !== "Escape") return;
           event.preventDefault();
           if (event.key === "Enter") onEnter();
@@ -92,25 +86,16 @@ function AddLabel({
   );
 }
 
-/**
- * The open template's labels, above its photo.
- *
- * Chips show `saved`, so one appears or goes only when the save lands (spec
- * *Saving*); until then the app's save status reports progress. Every edit
- * builds on `draft`, so quick edits land together and a failed one rides the
- * next save.
- */
 export function LabelsBar({
   saved,
   draft,
-  known,
+  catalogLabels,
   failure,
   onChange,
 }: {
   saved: string[];
   draft: string[];
-  /** Every label in the catalog, this template's included. */
-  known: string[];
+  catalogLabels: string[];
   failure: string | null;
   onChange: (labels: string[]) => void;
 }) {
@@ -119,8 +104,6 @@ export function LabelsBar({
   const closing = useRef(false);
   const full = draft.length >= MAX_LABELS;
 
-  // The field held focus, and leaving with it would drop the seller at the top
-  // of the page. The button only exists once the field has gone.
   useEffect(() => {
     if (adding || !closing.current) return;
     closing.current = false;
@@ -150,7 +133,7 @@ export function LabelsBar({
       ))}
       {adding ? (
         <AddLabel
-          suggestions={suggestable(known, draft)}
+          suggestions={suggestable(catalogLabels, draft)}
           held={draft}
           onAdd={(label) => {
             onChange([...draft, label]);

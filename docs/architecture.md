@@ -1226,7 +1226,9 @@ later. Each traces to a decision.
 
 Every editor that autosaves a document writes through one module,
 `src/ui/src/hooks/writeLoop.ts`. It owns the 800ms debounce from the last edit,
-one write at a time, collapsing edits into the next write, holding an edit until
+long enough that a run of keystrokes collapses into one request and short enough
+that "Saved a moment ago" reads as true; a blur, a tab switch and an unmount cut it
+short, so no save waits on the timer alone. It also owns one write at a time, collapsing edits into the next write, holding an edit until
 it is written, and what a flush reports. A failed or refused edit stays held and
 goes with the next edit or flush; it never retries on its own. The loop has no
 React, no payload and no clock of its own: an owner gives it `send`, `merge` and
@@ -1236,7 +1238,12 @@ transport and a manual clock.
 Two owners sit on it. `ListingAutosave` (`hooks/listingAutosave.ts`, bound by
 `useAutosave`) adds the listing editor's three states, unnamed, named but not on
 disk and on disk, chosen when a write goes, so an edit made during a create or
-rename is sent under the name it settled on. A listing template uses the same
+rename is sent under the name it settled on. A value the server has already
+written, such as an AI run's drafted brief, is adopted: shown without being sent
+back, since sending it would write it twice and race the seller's next edit to
+that field. A save sent before the adopt answers with the file as it was, so the
+adopted values are laid over every response until a save sent after them answers,
+and the seller's own unsent edits win over both. A listing template uses the same
 class through its own `AutosaveTransport` (`listingTemplateDocument.ts`): a
 valid-only `PUT` of the whole document, naming the draft as a create from its
 source that carries the edits made before it, and the rename. It has no
@@ -1249,17 +1256,51 @@ and whether it must go even with nothing changed, an approval; the draft is read
 when the write goes. Payload shape stays with the owners, and so does the
 preview hold, which answers the loop's `due` hook instead of flushing. A template
 switch or reload makes the next read wait for the old opening's writes.
+
+The template session's saves carry three further rules. Approving from the
+Preview tab writes template.yaml even when nothing changed, because calibration
+status is derived from that file: the write is the approval. A save refused
+because template.yaml moved on (409 or 412) is a conflict, which only a reload
+clears; retrying would send the same stale `If-Match`. A completed preparation
+this session queued rewrites template.yaml's revision without changing what it
+saved, so the session adopts that revision as its `If-Match` baseline, but only
+while the disk holds exactly the saved document at exactly the prepared revision;
+anyone else's completion, or an edit made since, still surfaces as a conflict.
+Label-only saves move the revision without invalidating the preparation, so the
+session lists those revisions and a preparation at one of them is up to date.
 `pages/admin/useSaveQueue.ts` is a different model, acknowledging per key, and
 does not use the loop.
 
-A flush resolves once no write is out and answers `Settled`: `written`, or not
-with a message. It never rejects, because the debounce, a blur and an unmount
+A flush resolves once no write is out and answers `Settled`: `written`, meaning
+the disk holds every edit made before the flush, or not, with a message in the
+seller's terms. It never rejects, because the debounce, a blur and an unmount
 have nowhere to send a rejection. Callers about to act on the file read the
 answer. Deploy, Create listing template, Back to batch and Clone stay on the page
 when an edit was not written, since each goes on to read a file without it, and
 the page head already says why. A template rename and a preparation refuse with
 the message. Delete waits for the flush and goes on regardless: an edit that
 would not save goes with the listing.
+
+## Phone sheets and Back
+
+On a phone, Back closes the open sheet the way it closes a native one, rather
+than leaving the page under it. `src/ui/src/phone/sheetHistory.ts` does it, used
+through `usePhoneModal`. Opening a sheet pushes one history entry: the same URL,
+React Router's own state copied so the router reads it as the page it is on, and
+a `phoneSheet` token carrying a per-page-load id, since a reload leaves an earlier
+load's tokens in history. Back pops the entry; a capture listener on the window,
+registered before the router's, sees the `popstate` first, keeps the router from
+hearing it, and closes the sheet. The page never navigates.
+
+A sheet closed any other way (Done, a swipe, an action) drops its entry with
+`history.back()`, again unheard by the router. It waits a tick first, because an
+action may navigate as it closes: React Router pushes the new page a microtask
+later, and going back then would undo the navigation. When something else is on
+top by then, the entry stays, an orphan: Back from the new page lands on it and
+the router shows the old page, and the next Back skips the orphan's duplicate of
+that page, so one Back still goes one page back. `test_phone_listings_browser.py`
+covers Back on a sheet, on a sheet that hands over to a confirm, and after a
+sheet closed by Cancel.
 
 ## Frontend build and asset distribution
 
@@ -1269,7 +1310,9 @@ configuration. `npm run build` writes `src/ui/dist/`, which is gitignored. The
 Vite dev server proxies `/api` to a running `etsy-listings ui`. The typed
 client is generated: `scripts/export_openapi.py` writes `docs/openapi.json`
 from the FastAPI app and `npm run gen:api` turns it into
-`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011).
+`src/ui/src/api/schema.ts`; neither is hand-edited (ADR-0011). Only the modules
+under `src/ui/src/api/` call the server: everything above them works in domain
+types and never touches `fetch`, URLs or the generated schema.
 
 `hatch_build.py` is a wheel-only hook configured in `pyproject.toml`. For a
 release wheel it always runs `npm ci` and `npm run build` in `src/ui`, so an

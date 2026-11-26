@@ -186,6 +186,15 @@ describe("what the dropdown offers", () => {
     ]);
   });
 
+  it("offers a hand-edited label once, as first written, in its lower-case group", () => {
+    render(<Box items={[["Theme:Xmas"], ["theme:xmas", "theme:summer"]]} />);
+    clickBox();
+    const list = within(screen.getByRole("listbox")).getAllByText(/./, {
+      selector: ".label-search__group, [role=option] > span:first-child",
+    });
+    expect(list.map((el) => el.textContent)).toEqual(["theme", "Theme:Xmas", "theme:summer"]);
+  });
+
   it("shows no headings when nothing on offer has a prefix", () => {
     render(<Box items={[["cosy", "theme:c"], ["bright"]]} />);
     type("o");
