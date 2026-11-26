@@ -67,21 +67,21 @@ from etsy_listings.core.workspace.workspace import (
     WorkspaceNotFoundError,
 )
 
-__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
-    "Workspace",
+__all__ = [
+    "AmbiguousColourSuffixError",
     "DescriptionResolution",
-    "ScenePhoto",
+    "InvalidNameError",
+    "InvalidRefError",
     "MaskSource",
+    "PathEscapesWorkspaceError",
+    "ScenePhoto",
+    "Workspace",
     "WorkspaceFacts",
-    "template_info",
+    "WorkspaceNotFoundError",
+    "layout",
     # A video file's facts, never an exception.
     "probe_video",
-    "WorkspaceNotFoundError",
-    "PathEscapesWorkspaceError",
-    "InvalidRefError",
-    "InvalidNameError",
-    "AmbiguousColourSuffixError",
-    "layout",
+    "template_info",
     # Cygwin/Windows path translation, for user-supplied path options (--root).
     "to_native_path",
 ]
