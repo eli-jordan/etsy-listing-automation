@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MediaFileSummary, ListingDetail, MediaEntry, TemplateSummary } from "../../types";
-import { type Focus, focusRef, isFocusRef, restoreFocus, viewFocus } from "./focus";
+import { type Focus, firstFocus, focusRef, isFocusRef, restoreFocus, viewFocus } from "./focus";
 
 /**
  * What the preview pane is pointing at.
@@ -157,5 +157,21 @@ describe("a focus remembered across a refresh", () => {
     expect(isFocusRef({ kind: "file" })).toBe(false);
     expect(isFocusRef("a.png")).toBe(false);
     expect(isFocusRef(null)).toBe(false);
+  });
+});
+
+describe("the focus the stage opens on", () => {
+  it("is the reel's first template entry", () => {
+    const media: MediaEntry[] = [{ template: "flat-lay-01", colour: "black" }, SIZING.ref];
+    expect(firstFocus(media, [FLAT_LAY], [SIZING])).toEqual(ON_TEMPLATE);
+  });
+
+  it("is the reel's first file, with its summary", () => {
+    expect(firstFocus([SIZING.ref], [FLAT_LAY], [SIZING])).toEqual(ON_SHARED);
+  });
+
+  it("is nothing for an empty reel, or a first entry not listed yet", () => {
+    expect(firstFocus([], [FLAT_LAY], [SIZING])).toBeNull();
+    expect(firstFocus([{ template: "flat-lay-01", colour: "black" }], [], [])).toBeNull();
   });
 });

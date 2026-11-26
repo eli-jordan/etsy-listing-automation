@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
@@ -246,6 +246,24 @@ describe("ImagesTab", () => {
     expect(screen.queryByRole("button", { name: /Add all/ })).not.toBeInTheDocument();
   });
 
+  it("opens the preview on the reel's first image before anything is clicked", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    render(
+      <ImagesTab
+        detail={detail({
+          colors: ["black", "white"],
+          media: [
+            { template: "flat-lay-01", colour: "white" },
+            { template: "flat-lay-01", colour: "black" },
+          ],
+        })}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("mockup-templates/flat-lay-01/white.png")).toBeInTheDocument();
+  });
+
   it("previews what the pointer is over, naming the file it would render from", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
     render(<ImagesTab detail={detail({ colors: ["black"] })} onUpdate={vi.fn()} />);
@@ -443,7 +461,9 @@ describe("ImagesTab's shared images (common-media/)", () => {
     renderShared({ media: ["common-media/size-guide.png"] });
     await screen.findByText("flat-lay-01");
 
-    expect(screen.getByAltText("size-guide")).toHaveAttribute(
+    const reel = document.querySelector<HTMLElement>(".reel__track");
+    if (reel === null) throw new Error("no reel");
+    expect(within(reel).getByAltText("size-guide")).toHaveAttribute(
       "src",
       "/api/common-media/size-guide.png/thumbnail",
     );
