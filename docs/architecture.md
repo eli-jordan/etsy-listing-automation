@@ -262,8 +262,9 @@ After each successful stage, execute records the folded lockfile. Later stages
 receive newly minted remote ids while still comparing against the previous
 run's applied documents. A failure retains progress with an incomplete marker
 so the next run can resume. Reviewed browser applies replan and verify the
-plan fingerprint before executing; run resources stream progress and allow a
-browser to reattach.
+plan fingerprint before executing, which leaves out a stage chosen at apply
+(`etsy_activate`, ADR-0039's amendment); run resources stream progress and
+allow a browser to reattach.
 
 ## The three-way comparison
 

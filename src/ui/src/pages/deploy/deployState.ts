@@ -112,10 +112,13 @@ export type ControlPhase =
   | "failed"
   | "cancelled";
 
-export function controlPhase(state: DeployState): ControlPhase {
+/** `publish` is the seller's opt-in to publishing, chosen at apply: a draft
+ * with nothing else to change still has work then -- going live. */
+export function controlPhase(state: DeployState, publish = false): ControlPhase {
   if (state.phase === "ready") {
     const stagePlans = state.plan?.stage_plans ?? [];
     if (stagePlans.some(stageWillRun)) return "ready-work";
+    if (publish && state.plan?.publishable === true) return "ready-work";
     if (stagePlans.some((stage) => stageBlocked(stage) !== null)) return "ready-blocked";
     return "ready-clean";
   }

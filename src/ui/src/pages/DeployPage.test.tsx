@@ -55,6 +55,7 @@ function plan(stagePlans: StagePlanDTO[]): PlanDTO {
     listing: "take-a-hike",
     is_live: true,
     etsy_listing_id: 1698234512,
+    publishable: false,
     stage_plans: stagePlans,
   };
 }
@@ -642,36 +643,41 @@ describe("DeployPage: when the connection fails", () => {
 });
 
 describe("DeployPage: publishing new listings (opt-in)", () => {
-  function newListingPlan(): PlanDTO {
+  function newListingPlan(stagePlans?: StagePlanDTO[]): PlanDTO {
     return {
-      ...plan([stage({ stage: "render", will_run: true, reason: "referenced scenes changed" })]),
+      ...plan(
+        stagePlans ?? [
+          stage({ stage: "render", will_run: true, reason: "referenced scenes changed" }),
+        ],
+      ),
       is_live: false,
       etsy_listing_id: null,
+      publishable: true,
     };
   }
 
-  function readyPlan(handle: { onEvent: (e: RunEvent) => void }, fingerprint: string) {
+  function readyPlan(
+    handle: { onEvent: (e: RunEvent) => void },
+    fingerprint: string,
+    listingPlan: PlanDTO = newListingPlan(),
+  ) {
     handle.onEvent({ type: "phase", id: 1, phase: "planning" });
     handle.onEvent({
       type: "listing_planned",
       id: 2,
       listing: "take-a-hike",
-      plan: newListingPlan(),
+      plan: listingPlan,
       fingerprint,
     });
     handle.onEvent({ type: "phase", id: 3, phase: "ready" });
   }
 
-  it("is off by default, and turning it on plans again with publish before Apply sends it", async () => {
+  it("is off by default, plans nothing when turned on, and Apply sends it", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ etsy_listing_id: null }));
     vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
     const create = vi
       .spyOn(runsApi, "createRun")
       .mockResolvedValueOnce({ kind: "created", run: runSummary({ id: "plan-1" }) })
-      .mockResolvedValueOnce({
-        kind: "created",
-        run: runSummary({ id: "plan-2", publish: true }),
-      })
       .mockResolvedValueOnce({
         kind: "created",
         run: runSummary({ id: "apply-1", kind: "apply", publish: true }),
@@ -680,35 +686,60 @@ describe("DeployPage: publishing new listings (opt-in)", () => {
 
     renderPage();
     await waitFor(() => expect(handles).toHaveLength(1));
+    expect(create).toHaveBeenLastCalledWith({
+      kind: "plan",
+      scope: "listings",
+      listings: ["take-a-hike"],
+      publish: false,
+    });
     readyPlan(streamAt(handles, 0), "fp-1");
 
-    const toggle = await screen.findByRole("checkbox", { name: /Publish new listings on Etsy/ });
+    const toggle = await screen.findByRole("checkbox", { name: /Publish on Etsy/ });
     expect(toggle).not.toBeChecked();
 
     await userEvent.click(toggle);
 
-    await waitFor(() =>
-      expect(create).toHaveBeenLastCalledWith({
-        kind: "plan",
-        scope: "listings",
-        listings: ["take-a-hike"],
-        publish: true,
-      }),
-    );
-    await waitFor(() => expect(handles).toHaveLength(2));
-    readyPlan(streamAt(handles, 1), "fp-2");
+    expect(toggle).toBeChecked();
+    expect(screen.getByText(/It goes live once every step has run/)).toBeInTheDocument();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(handles).toHaveLength(1);
 
     await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
 
+    // The reviewed fingerprint: the publish step is left out of it.
     await waitFor(() =>
       expect(create).toHaveBeenLastCalledWith({
         kind: "apply",
         scope: "listings",
         listings: ["take-a-hike"],
-        expect: { "take-a-hike": "fp-2" },
+        expect: { "take-a-hike": "fp-1" },
         publish: true,
       }),
     );
+  });
+
+  it("lets a draft with nothing else to change be applied, to publish it", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ etsy_listing_id: null }));
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    vi.spyOn(runsApi, "createRun").mockResolvedValue({
+      kind: "created",
+      run: runSummary({ id: "plan-1" }),
+    });
+    const handles = stubStream();
+
+    renderPage();
+    await waitFor(() => expect(handles).toHaveLength(1));
+    readyPlan(
+      streamAt(handles, 0),
+      "fp-1",
+      newListingPlan([stage({ stage: "render", will_run: false })]),
+    );
+
+    expect(await screen.findByText("There is nothing to apply.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Publish on Etsy/ }));
+
+    expect(screen.queryByText("There is nothing to apply.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
   });
 
   it("is not offered for a listing already live on Etsy", async () => {

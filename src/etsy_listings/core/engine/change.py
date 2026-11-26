@@ -267,6 +267,11 @@ class StagePlan(_OutcomeView):
     """Stable execution inputs not expressed by changes/actions (ADR-0039).
     Separate from display snapshots, so preview availability cannot stale a review."""
 
+    chosen_at_apply: bool = False
+    """The stage is one the apply adds by the seller's choice
+    (``Stage.chosen_at_apply``), stamped by the engine like ``group``. Left
+    out of the ADR-0039 fingerprint, plan and all."""
+
     @classmethod
     def no_work(
         cls,
@@ -289,8 +294,20 @@ class StagePlan(_OutcomeView):
         return cls(stage=stage, outcome=work, drift=drift, snapshot=snapshot)
 
     @classmethod
-    def block(cls, stage: str, message: str, *, group: str | None = None) -> StagePlan:
-        return cls(stage=stage, outcome=StageBlocked(message=message), group=group)
+    def block(
+        cls,
+        stage: str,
+        message: str,
+        *,
+        group: str | None = None,
+        chosen_at_apply: bool = False,
+    ) -> StagePlan:
+        return cls(
+            stage=stage,
+            outcome=StageBlocked(message=message),
+            group=group,
+            chosen_at_apply=chosen_at_apply,
+        )
 
     @property
     def blocked(self) -> str | None:
@@ -303,6 +320,11 @@ class Plan:
     is_live: bool
     etsy_listing_id: int | None
     stage_plans: tuple[StagePlan, ...]
+    publishable: bool = False
+    """An apply that opts in to publishing would make this listing live on
+    Etsy: it is new or still a draft, has no ``lifecycle`` verb, and no stage
+    before ``etsy_activate`` is blocked. What a review shows for the publish
+    choice, which the apply makes without planning again."""
 
     @property
     def has_changes(self) -> bool:

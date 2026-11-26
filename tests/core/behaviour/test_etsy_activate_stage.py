@@ -17,6 +17,7 @@ from etsy_listings.core.engine.change import StagePlan
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, build_plan
+from etsy_listings.core.engine.run import plan_fingerprint
 from etsy_listings.core.engine.stage import AnyStage
 from etsy_listings.core.engine.stages import (
     STAGES,
@@ -163,3 +164,63 @@ def test_an_earlier_blocked_stage_keeps_the_listing_a_draft(
     assert stage_plan.blocked is not None
     assert "stay a draft" in stage_plan.blocked
     assert "etsy_listing" in stage_plan.blocked
+
+
+# ------------------------------------------- chosen at apply, not at review
+
+
+def test_the_fingerprint_leaves_the_publish_step_out(
+    root: Path, etsy: FakeEtsyListingClient
+) -> None:
+    """A review plans without ``etsy_activate``; the apply that opts in plans
+    with it, and must still match the review (ADR-0039)."""
+    etsy.seed_listing(ETSY_LISTING_ID, shop_id=SHOP_ID, state="draft")
+    ctx = _ctx(root, etsy)
+
+    reviewed = _plan(ctx, _lock(), [EtsyListingStage()])
+    applying = _plan(ctx, _lock(), publishing_pipeline([EtsyListingStage()], publish=True))
+
+    assert _activate_plan(applying).chosen_at_apply
+    assert plan_fingerprint(applying.plan) == plan_fingerprint(reviewed.plan)
+
+
+@pytest.mark.parametrize(
+    ("state", "publishable"),
+    [("draft", True), ("active", False), ("inactive", False), ("sold_out", False)],
+)
+def test_a_review_says_whether_an_opt_in_would_publish_the_listing(
+    root: Path, etsy: FakeEtsyListingClient, state: str, *, publishable: bool
+) -> None:
+    etsy.seed_listing(ETSY_LISTING_ID, shop_id=SHOP_ID, state=state)
+
+    planned = _plan(_ctx(root, etsy), _lock(), [EtsyListingStage()])
+
+    assert planned.plan.publishable is publishable
+
+
+def test_a_listing_not_on_etsy_yet_is_publishable(root: Path, etsy: FakeEtsyListingClient) -> None:
+    planned = _plan(_ctx(root, etsy), a_lock(), [EtsyListingStage()])
+
+    assert planned.plan.publishable
+
+
+def test_a_blocked_stage_makes_the_listing_unpublishable(
+    root: Path, etsy: FakeEtsyListingClient
+) -> None:
+    """The review shows what the apply's held-back ``etsy_activate`` would do."""
+    etsy.seed_listing(ETSY_LISTING_ID, shop_id=SHOP_ID, state="draft")
+    edit_listing(root, etsy={"title": "", "description": {"lead": ""}})
+
+    planned = _plan(_ctx(root, etsy), _lock(), [EtsyListingStage()])
+
+    assert not planned.plan.publishable
+
+
+def test_a_listing_marked_for_deletion_is_not_publishable(
+    root: Path, etsy: FakeEtsyListingClient
+) -> None:
+    edit_listing(root, lifecycle="deleted")
+
+    planned = _plan(_ctx(root, etsy), a_lock(), [EtsyListingStage()])
+
+    assert not planned.plan.publishable

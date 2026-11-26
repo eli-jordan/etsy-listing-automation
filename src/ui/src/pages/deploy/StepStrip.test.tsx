@@ -13,7 +13,13 @@ function stage<Name extends StagePlanDTO["stage"]>(
 }
 
 function plan(stagePlans: StagePlanDTO[]): PlanDTO {
-  return { listing: "x", is_live: true, etsy_listing_id: 1, stage_plans: stagePlans };
+  return {
+    listing: "x",
+    is_live: true,
+    etsy_listing_id: 1,
+    publishable: false,
+    stage_plans: stagePlans,
+  };
 }
 
 describe("StepStrip", () => {

@@ -195,21 +195,18 @@ def test_a_workspace_apply_differing_from_the_reviewed_set_is_refused(
 
 
 @pytest.mark.parametrize("planned", [False, True], ids=["apply-adds-publish", "apply-drops-it"])
-def test_a_workspace_apply_must_repeat_its_reviews_publish_choice(
+def test_a_workspace_apply_makes_its_own_publish_choice(
     idle: Deployments, *, planned: bool
 ) -> None:
+    """The seller opts in when applying: the publish step is left out of the
+    fingerprint, so the review need not have planned it (spec 12)."""
     reviewed = _reviewed_workspace_plan(idle, "a", publish=planned)
 
-    with pytest.raises(ReviewedPlanRefusedError, match="publish drafts exactly when"):
+    run = _run(
         idle.submit(WorkspaceApply(("a",), {"a": FINGERPRINT}, reviewed.id, publish=not planned))
+    )
 
-
-def test_a_workspace_apply_that_publishes_as_reviewed_is_queued(idle: Deployments) -> None:
-    reviewed = _reviewed_workspace_plan(idle, "a", publish=True)
-
-    run = _run(idle.submit(WorkspaceApply(("a",), {"a": FINGERPRINT}, reviewed.id, publish=True)))
-
-    assert run.publish is True
+    assert run.publish is not planned
 
 
 def test_a_listing_planned_again_after_its_previews_is_reviewed_at_its_later_fingerprint(

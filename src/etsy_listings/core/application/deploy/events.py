@@ -414,6 +414,9 @@ class PlanDTO(BaseModel):
     is_live: bool
     etsy_listing_id: int | None
     stage_plans: tuple[StagePlanDTO, ...]
+    publishable: bool = False
+    """An apply that opts in to publishing would make this listing live on
+    Etsy (``Plan.publishable``)."""
 
 
 def plan_dto(plan: Plan) -> PlanDTO:
@@ -422,6 +425,7 @@ def plan_dto(plan: Plan) -> PlanDTO:
         is_live=plan.is_live,
         etsy_listing_id=plan.etsy_listing_id,
         stage_plans=tuple(stage_plan_dto(sp) for sp in plan.stage_plans),
+        publishable=plan.publishable,
     )
 
 

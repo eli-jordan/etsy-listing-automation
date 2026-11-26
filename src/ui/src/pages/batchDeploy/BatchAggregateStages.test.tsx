@@ -10,7 +10,7 @@ function stage(stageName: StagePlanDTO["stage"], willRun = false): StagePlanDTO 
 }
 
 function plan(listing: string, stages: StagePlanDTO[]): PlanDTO {
-  return { listing, is_live: true, etsy_listing_id: 1, stage_plans: stages };
+  return { listing, is_live: true, etsy_listing_id: 1, publishable: false, stage_plans: stages };
 }
 
 function listingState(

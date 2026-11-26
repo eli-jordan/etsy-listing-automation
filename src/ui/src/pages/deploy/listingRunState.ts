@@ -18,6 +18,25 @@ export interface ListingRunState {
 
 export type ListingPlanMode = "review" | "replace" | "runtime-only";
 
+/** Stages an apply adds by the seller's choice, which its review was planned
+ * without: `etsy_activate` (`Stage.chosen_at_apply` on the server). */
+const CHOSEN_AT_APPLY: ReadonlySet<string> = new Set(["etsy_activate"]);
+
+/** The reviewed plan, plus any stage the apply chose to add, so it has a row
+ * to run in. The apply only started because its fresh plan matched the
+ * review's fingerprint, which leaves exactly those stages out: they are the
+ * one way the two can differ. */
+function withStagesChosenAtApply(reviewed: PlanDTO | null, fresh: PlanDTO): PlanDTO | null {
+  if (reviewed === null) return null;
+  const present = new Set(reviewed.stage_plans.map((stage) => stage.stage));
+  const added = fresh.stage_plans.filter(
+    (stage) => CHOSEN_AT_APPLY.has(stage.stage) && !present.has(stage.stage),
+  );
+  return added.length === 0
+    ? reviewed
+    : { ...reviewed, stage_plans: [...reviewed.stage_plans, ...added] };
+}
+
 export function initialListingRunState(): ListingRunState {
   return {
     reviewedPlan: null,
@@ -58,7 +77,12 @@ function withListingPlanned(
   planMode: ListingPlanMode,
 ): ListingRunState {
   if (planMode === "runtime-only") {
-    return { ...state, planFailure: null, checkingStage: null };
+    return {
+      ...state,
+      plan: withStagesChosenAtApply(state.plan, event.plan),
+      planFailure: null,
+      checkingStage: null,
+    };
   }
   return {
     ...state,

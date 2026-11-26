@@ -27,7 +27,7 @@ Nothing here formats, and nothing here decides an exit code -- that is
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -151,6 +151,11 @@ def plan_fingerprint(plan: Plan) -> str:
     listing would recognise (``"349 NOK"``) rather than a ``Decimal``
     ``json.dumps`` cannot serialise.
 
+    A stage the apply added by the seller's choice (``StagePlan.chosen_at_apply``,
+    ``etsy_activate``) is left out too, plan and all: a review planned without
+    it, and the apply that opts in must still match that review. Its effect is
+    reviewed as ``Plan.publishable``, which is hashed.
+
     Snapshots are excluded deliberately: they carry things that can change
     between two otherwise-identical plans -- an Etsy CDN URL, whether a
     preview has rendered yet -- and hashing one would make ``apply`` refuse a
@@ -161,9 +166,18 @@ def plan_fingerprint(plan: Plan) -> str:
     and apply, applying without a fresh review would revert something the
     user never saw reverted.
     """
-    canonical = _canonical(plan)
+    reviewed = replace(
+        plan, stage_plans=tuple(sp for sp in plan.stage_plans if not sp.chosen_at_apply)
+    )
+    canonical = _canonical(reviewed)
     assert isinstance(canonical, dict)  # `Plan` is a dataclass; see `_canonical`
     return canonical_hash(canonical)
+
+
+_UNHASHED_FIELDS = frozenset({"snapshot", "chosen_at_apply"})
+"""``StagePlan`` fields left out of the fingerprint by name. ``chosen_at_apply``
+is always ``False`` on what is left once those stage plans are dropped, and
+leaving it out keeps every other fingerprint as it was before the field."""
 
 
 def _canonical(value: Any) -> Any:  # a generic tree walk, by construction
@@ -187,7 +201,7 @@ def _canonical(value: Any) -> Any:  # a generic tree walk, by construction
         return {
             f.name: _canonical(getattr(value, f.name))
             for f in fields(value)
-            if f.name != "snapshot"
+            if f.name not in _UNHASHED_FIELDS
         }
     if isinstance(value, list | tuple):
         return [_canonical(item) for item in value]
