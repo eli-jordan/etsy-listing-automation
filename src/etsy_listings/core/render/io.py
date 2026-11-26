@@ -31,12 +31,7 @@ def load_template_base(path: Path) -> RGB:
 
 
 def encode_png(image: Image.Image, *, compression: int = 6) -> bytes:
-    """Deterministic PNG encode: 8-bit sRGB, no ``pnginfo`` (so no ``tIME`` or
-    other timestamp/metadata chunk enters the file), fixed compression level so
-    the same pixels always produce the same bytes on a given Pillow version --
-    across versions, a changed byte stream is a real output-hash change that must remain visible,
-    not something to paper over here.
-    """
+    """No ``pnginfo``, so no ``tIME`` chunk: equal pixels give equal bytes on one Pillow."""
     if image.mode != "RGB":
         image = image.convert("RGB")
     buffer = io.BytesIO()

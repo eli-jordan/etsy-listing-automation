@@ -126,8 +126,7 @@ def filtered_sample(
     result = np.zeros((*material.shape[:2], 4), np.float32)
     first = int(low.min())
     last = min(levels, int(np.ceil(lod.max())))
-    # Levels outside the observed footprint range have identically zero
-    # weights. Do not allocate their full-photo weight arrays or smaller mips.
+    # Levels below the footprint range weigh zero: halve the mip, allocate no weights.
     for level in range(last + 1):
         if level < first:
             packed = _half_size(packed)
@@ -168,11 +167,7 @@ class MaterialLayer:
 def render_marigold_scene(
     base: RGB, layers: Sequence[MaterialLayer], *, appearance: MarigoldAppearance | None = None
 ) -> Image.Image:
-    """Compose in caller's placement order, retaining one linear colour buffer.
-
-    Map acquisition validates the reference identity. This pure boundary also
-    refuses colour photos with different dimensions. Artwork never uses albedo.
-    """
+    """Layers in the caller's order over one linear colour buffer; artwork never uses albedo."""
     settings = appearance or MarigoldAppearance()
     if base.ndim != IMAGE_NDIM or base.shape[2] != RGB_CHANNELS or base.dtype != np.uint8:
         raise ValueError("Background must be uint8 RGB")
@@ -206,9 +201,8 @@ def _visible_regions(maps: MaterialMaps) -> tuple[Region, Region] | None:
     visible = maps.visibility > 0
     if not visible.any():
         return None
-    # Mip footprints use immediate neighbours, including invisible ones.
-    # Keep a one-pixel halo so every visible derivative matches the full
-    # frame exactly. All sampling/lighting inside the region is unchanged.
+    # Mip footprints read immediate neighbours, visible or not: a one-pixel halo keeps
+    # every visible derivative equal to the full frame's.
     x, y, width, height = cv2.boundingRect(visible.astype(np.uint8))
     region = (
         slice(max(0, y - 1), min(maps.visibility.shape[0], y + height + 1)),

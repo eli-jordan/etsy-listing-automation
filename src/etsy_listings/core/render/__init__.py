@@ -1,20 +1,14 @@
-"""Turning a design and a blank mockup photo into a composite. ADR-0012.
+"""Turning a design and a blank mockup photo into a composite (ADR-0012).
 
 Pure: ndarrays and frozen config in, an image out. No I/O outside
 :mod:`~etsy_listings.core.render.io` and :class:`DerivedMapCache`, no globals, no
-clock -- which is what makes both the lockfile's input hash and the golden
-suite meaningful. Nothing here knows a workspace, a listing or a Printify
-product exists; callers own opening files and handing over arrays.
+clock, which is what makes the lockfile's input hash and the golden suite
+meaningful. Nothing here knows a workspace, a listing or a Printify product.
 
-``template.yaml``'s models live here too, rather than in ``config``: that file
-is render geometry and render settings from top to bottom. ``workspace.template_state``
-reads it and ``CalibrationStore`` writes it (``load_template_config`` here only parses data
-already in hand).
-
-``positions`` (ADR-0058) is not re-exported: import it directly. Its
-``PositionLimits``/``ScaleLimits`` are structural protocols, so
-``config.settings.TemplatePositionLimits`` satisfies them without making render
-depend on settings.
+``template.yaml``'s models live here, since that file is render geometry and
+settings throughout; ``workspace.template_state`` reads it and
+``CalibrationStore`` writes it. ``positions`` (ADR-0058) is not re-exported:
+import it directly.
 """
 
 from etsy_listings.core.render.config import (

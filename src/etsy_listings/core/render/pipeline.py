@@ -56,9 +56,8 @@ def _shaded(layer: RGBA, cfg: RenderConfig, luminance: FloatMap | None) -> RGBA:
         return layer
     if luminance is None:
         raise ValueError("shade is enabled but no luminance map was provided")
-    # Shade only where the layer prints. Outside, alpha is zero and
-    # export_many takes none of the layer's colour, so leaving it unshaded
-    # changes no output pixel and saves float work over the whole photo.
+    # Outside the print, alpha is zero and export_many takes none of the layer's colour,
+    # so shading only the print region changes no output pixel.
     region = print_bounds(layer)
     if region is None:
         return layer

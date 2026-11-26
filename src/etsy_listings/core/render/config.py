@@ -34,9 +34,6 @@ quad, not x/y/w/h, so angled and draped photos are representable)."""
 
 
 class DisplaceConfig(BaseModel):
-    """Implemented but off by default -- over-strong displacement looks
-    melted, so it's tuned per template in the calibrator's live preview."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     enabled: bool = False
@@ -192,10 +189,6 @@ class Placement(BaseModel):
 
 
 class MultipleTemplate(BaseModel):
-    """Several garments in one photo. ``displace``/``shade`` are scene-level
-    only -- one photo, one lighting pass; a placement needing different
-    rendering treatment belongs in its own template instead."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: Literal["multiple"] = "multiple"
@@ -266,19 +259,6 @@ _NO_BOXES: LayerBoxes = {}
 def scene_layers(
     template: AnyTemplate, colour: str | None, boxes: LayerBoxes = _NO_BOXES
 ) -> list[tuple[str | None, RenderConfig]]:
-    """``(depicted colour, render config)`` per layer of one scene, in paint
-    order -- the colour each layer's artwork resolves by (A35, PRD 30).
-
-    A ``colour-matrix`` scene depicts the colour it is rendered for, a
-    ``single`` scene its own ``colour`` (``None`` when it names none), and a
-    ``multiple`` scene one colour per placement. Here, beside the three
-    shapes, because the render stage and the editor's scene preview both need
-    it and a second copy is how the two would come to show different files.
-
-    ``boxes`` is the listing's saved position (spec *Rendering → Photo warp*):
-    the listing's box replaces the template's in that layer's config, which is
-    what the lockfile hashes, so only the scenes it moves render again.
-    """
     renderer = template.renderer
     return [
         (depicted, photo_warp_config(renderer, box))
@@ -315,10 +295,6 @@ def load_template_config(data: object) -> AnyTemplate:
 
 
 def dump_template_config(config: AnyTemplate) -> dict[str, object]:
-    """``config`` as ``template.yaml`` holds it. No labels means no key: an empty
-    list here would change every calibration revision and write the key into
-    every new file, and removing a template's last label removes it from the
-    file."""
     result: dict[str, object] = _TEMPLATE_CONFIG_ADAPTER.dump_python(config, mode="json")
     if not config.labels:
         del result["labels"]
