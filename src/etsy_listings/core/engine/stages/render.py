@@ -157,20 +157,7 @@ SceneRender = PhotoWarpRender | PreparedRender
 
 @dataclass(frozen=True)
 class SceneWork:
-    """One render: everything it needs, resolved exactly once.
-
-    This is the whole reason the stage no longer branches on template kind
-    twice. ``desired()`` used to compute a hash payload and ``apply()`` then
-    re-derived the same base image, artwork and output path from the config a
-    second time, through a second set of three ``isinstance`` branches. The
-    two agreeing was an invariant maintained by hand: an edit to artwork
-    resolution landing in one branch and not the other would write a lockfile
-    describing a render that never happened, and ``plan`` would report "No
-    changes." over it forever.
-
-    Now the kind is consulted once, here, and ``apply()`` is a loop over these
-    with no branching left in it.
-    """
+    """One render: everything it needs, resolved exactly once."""
 
     key: str  # "template/colour" for colour-matrix, "template" otherwise
     template: str
@@ -618,11 +605,7 @@ def _resolve_scenes(
             return work
         works.append(work)
 
-        # Per scene, not per template. A colour-matrix set has one photo
-        # per colour, and hashing only the first one (which is what
-        # `setdefault` over the template name used to do) meant replacing
-        # any *other* colour's photo changed no hash at all -- so `plan`
-        # reported "No changes." and the stale render stayed in the cache.
+        # Per scene, not per template: a colour-matrix set has one photo per colour.
         base_hash[work.key] = hash_file(work.base_image)
     return works, base_hash
 

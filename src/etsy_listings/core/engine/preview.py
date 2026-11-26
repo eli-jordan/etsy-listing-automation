@@ -1,12 +1,4 @@
-"""Render-stage previews as one surface.
-
-ADR-0038: only the stage that produced a type looks inside it. Preview is
-render-specific -- not on ``Stage`` -- and then three callers peeked anyway:
-``preview_listing`` found the ``RenderStage``, the executor re-opened the
-snapshot, and the listings GET rebuilt ``desired`` and rehashed. One module
-answers the three questions those callers actually have: does this plan still
-need a preview; render them; the current-hash file for a scene.
-"""
+"""The render stage's preview questions, answered in one place."""
 
 from __future__ import annotations
 

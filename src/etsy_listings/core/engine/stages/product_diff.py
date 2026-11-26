@@ -1,26 +1,4 @@
-"""The product stage's three-way comparison, as a function of three values.
-
-ADR-0008 says each stage writes its own ``plan()``; this is the product stage's,
-lifted out of it. Nothing here touches a workspace, a client, a lockfile or a
-clock -- :func:`compare` takes the desired document, the applied one and the
-live product, and answers what a run would do about them.
-
-It was already pure, and it was already about a hundred and twenty lines. What
-it was not was *reachable*: every function carried a leading underscore inside
-the stage module, so the only route to a price diff was a fixture workspace,
-two fake clients and a `build_plan` call. That is a behaviour test's setup
-being paid to ask a unit question, and it is why the price maths went
-unasserted -- ``PriceChange`` was checked for its *type* and never for its
-before, its after, or its currency.
-
-**One entry point, not four.** ``changes``, ``drift``, ``reason`` and
-``actions`` were computed by four separate calls whose results had to agree,
-and two of them did not: ``_reason`` restated ``will_run``'s predicate in a
-second form, so a rule that existed once could be edited in one place and not
-the other. :class:`ProductComparison` computes the rule once and reports every
-view of it, which is what makes "will it run?" and "why?" incapable of
-disagreeing.
-"""
+"""The product stage's pure three-way comparison."""
 
 from __future__ import annotations
 
@@ -153,17 +131,7 @@ def _colour_change(wanted: AppliedProduct, was: AppliedProduct) -> Change | None
 
 
 def _print_area_changes(wanted: AppliedProduct, was: AppliedProduct) -> list[Change]:
-    """Print areas matched by design hash, never by position.
-
-    Positional matching read ``was.print_areas[index]``, and the list's order
-    came from the order the listing wrote its colours in -- so moving a colour
-    to the top of ``colors:`` reported every print area as changed and
-    re-uploaded artwork nothing about which had moved. The content hash is the
-    key the groups were partitioned on (ADR-0053), so it identifies an area across
-    any ordering, any rename and any reshaping of ``design:`` -- including the
-    areas already written into lockfiles by versions that keyed them by
-    artwork name, whose hashes are the same.
-    """
+    """Print areas matched by design hash (ADR-0053), never by position."""
     previous = {area.design_hash: area for area in was.print_areas}
     changes: list[Change] = []
     for area in wanted.print_areas:
@@ -177,8 +145,6 @@ def _print_area_changes(wanted: AppliedProduct, was: AppliedProduct) -> list[Cha
                 )
             )
     wanted_hashes = {area.design_hash for area in wanted.print_areas}
-    # A file that no longer prints on anything. Positional matching could
-    # not see this at all: a shorter list simply stopped being compared.
     changes.extend(
         FieldChange(path=_area_path(digest), before=digest, after=None)
         for digest in sorted(set(previous) - wanted_hashes)

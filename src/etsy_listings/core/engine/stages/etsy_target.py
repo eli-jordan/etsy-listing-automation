@@ -1,33 +1,8 @@
-"""Which listing, on which shop -- the preamble all three Etsy stages share.
+"""Which listing, on which shop: the preamble the Etsy stages share.
 
-`publish` mints the Etsy listing id; `etsy_listing` and `etsy_media` both
-PATCH it. So three stages need the same two facts before they can do anything,
-and each had written out its own answer to both: four ``lock.remote.get(...)``
-lookups with a hand-written falsy check, two shop gates, and three
-near-identical "no id on record" errors.
-
-The copies had already drifted, in the way a copied refusal always does.
-``Blocked``'s contract is that the first line is the consequence in the user's
-terms and any further lines are the remedy -- ``cli.render`` indents one under
-the other -- and one of the two shop refusals opened with the *cause* instead
-("no Etsy shop is configured..."), so it rendered as a fact about the
-workspace where its neighbour rendered as a fact about the listing. Building
-the sentence from the caller's own phrase makes that shape structural rather
-than remembered.
-
-This module lives beside:mod:`~etsy_listings.core.engine.stages.gates` on the same
-argument: it is stage-level knowledge that belongs to no single stage. It owns
-:data:`ETSY_LISTING_ID_KEY` for the same reason -- the key was `publish`'s only
-by accident of who writes it first, and two stages that merely *read* it had
-to import from the stage that does (ADR-0034 still holds: the ``etsy_*`` prefix is
-this module's, and `publish` is still the only writer).
-
-:class:`~etsy_listings.core.engine.stages.publish.PublishWithoutProductError` is
-deliberately not folded in here, despite looking like a third copy. It is
-about the *Printify* product id, it is a
-:class:`~etsy_listings.core.errors.UserFacingError` rather than a wiring defect,
-and it names a genuine gap between two independently-gated stages -- three
-differences that the shared shape would flatten.
+:class:`~etsy_listings.core.engine.stages.publish.PublishWithoutProductError`
+stays separate: it is about the Printify product id, and it is a
+:class:`~etsy_listings.core.errors.UserFacingError` rather than a wiring defect.
 """
 
 from __future__ import annotations

@@ -143,18 +143,8 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedProduct | None
     ) -> PrintifyProductDesired | Blocked:
-        """The product this listing wants, or why there cannot be one.
-
-        Every reason this stage cannot run comes back as a
-        :class:`~etsy_listings.core.engine.stage.Blocked` -- the unconfigured
-        workspace, the gate refusals and the garment check alike. One
-        vocabulary, and now one *place*: the garment check used to refuse from
-        ``plan()``, so a stage had two ways to say the same thing and the
-        second one arrived with a fully resolved desired document behind it.
-        It runs here as soon as the two ids it compares are known -- after the
-        blueprint and provider lookups it needs, before the variant matrix and
-        the pricing plan it does not.
-        """
+        """The garment check runs as soon as the blueprint and provider ids it
+        compares are known, before the variant matrix and pricing plan."""
         workspace = ctx.workspace
         if workspace.defaults.printify.shop_id is None:
             return NO_SHOP_BLOCKED
@@ -266,14 +256,6 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
         live: Product | None,
         lock: Lockfile,
     ) -> StageApplyResult:
-        """``live`` is the product ``read_live`` already fetched during
-        planning, not a second ``GET`` for the same id.
-
-        ``desired`` is a document, never a refusal: a blocked stage is never
-        flagged to run, so the ``isinstance`` branch that used to open this
-        method -- unreachable, and marked ``no cover`` to say so -- is gone
-        along with the union it was testing.
-        """
         client = ctx.require_printify()
         shop_id = _shop_id(ctx)
 

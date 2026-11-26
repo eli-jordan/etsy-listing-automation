@@ -67,14 +67,7 @@ class Lockfile(BaseModel):
         return canonical_hash(self.applied)
 
     def applied_for(self, stage: str) -> dict[str, Any] | None:
-        """One stage's last-applied document, or ``None`` if it has never run.
-
-        The lookup every stage used to write for itself as
-        ``lock.applied.get(self.name)``. Doing it here is what lets the
-        ``Stage`` protocol drop its ``last_applied`` method: a stage is handed
-        its own subtree and parses it, instead of being handed the whole
-        lockfile and trusted to take only its own key out of it.
-        """
+        """One stage's last-applied document, or ``None`` if it has never run."""
         data: dict[str, Any] | None = self.applied.get(stage)
         return data
 
@@ -122,10 +115,5 @@ class Lockfile(BaseModel):
     def write(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        # `exclude_none`: the only field that can be `None` today is
-        # `incomplete`, and ADR-0037 needs it gone from the file entirely when
-        # unset -- not written as `"incomplete": null` -- so that a clean
-        # lockfile stays byte-identical to one written before this field
-        # existed.
         tmp.write_text(self.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
         tmp.replace(path)

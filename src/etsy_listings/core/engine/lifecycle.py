@@ -1,13 +1,6 @@
 """Listing-level lifecycle orchestration.
 
-Delete, retire and renew are one product concept, and they used to be a
-scavenger hunt: ``plan`` chose the pipeline, ``run`` wiped files and edited
-``lifecycle: renew`` out of the yaml, ``Plan.is_live`` read a lockfile key no
-stage writes, and the listings DELETE reconstructed "published?" from a
-different predicate. The copies could not even be compared in production,
-because one never saw a value.
-
-This module owns the questions those call sites were each answering:
+Delete, retire and renew are one product concept. This module owns its questions:
 
 * which stages to walk (retract-only, the normal pipeline, or all blocked)
 * whether the listing has left Etsy ``draft`` -- one GET, one fact
@@ -15,8 +8,7 @@ This module owns the questions those call sites were each answering:
 
 It does **not** own the retract stage's HTTP, ``listing_validation``'s
 sentences, or the pure badge table in ``status.py``. ``Plan.is_live`` is this
-module's published fact, threaded through ``build_plan``; a key that does not
-exist is not a fact.
+module's published fact, threaded through ``build_plan``.
 """
 
 from __future__ import annotations

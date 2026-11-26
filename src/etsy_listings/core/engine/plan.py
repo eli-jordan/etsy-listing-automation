@@ -1,20 +1,3 @@
-"""Builds a :class:`Plan` by walking the stage pipeline. ADR-0007, ADR-0008, ADR-0009.
-
-Only this module (and ``apply``) may compute a diff -- the CLI renderer and the
-UI's JSON serialiser both consume the resulting :class:`Plan` /
-:class:`StagePlan` / ``Change`` objects without comparing state themselves. That
-is what keeps the CLI and UI enforcing identical rules.
-
-Planning **keeps** what it resolved. It used to hand back the ``Plan`` alone
-and drop the desired and live states it had just built, so ``execute`` asked
-every stage for them a second time: one ``apply`` parsed the listing and its
-garment profile five times over, hashed every design four times, resolved the variant
-matrix twice and issued two ``GET``s for one product. Worse than the cost, the
-hash written to the lockfile came from a different ``desired()`` call than the
-payload that went to Printify -- two answers that had to agree, kept in
-agreement by hand. :class:`PlannedRun` carries them across instead.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -170,12 +153,6 @@ def _all_blocked(
 def _walk(
     ctx: RunContext, listing: str, lock: Lockfile, stage: AnyStage, *, on_event: EngineEventSink
 ) -> StageState:
-    """One stage's three states, and the plan comparing them.
-
-    Every line of bookkeeping a stage used to do for itself lives here: the
-    subtree lookup, the decode, the refusal, and the stage's own name. What
-    the stage is left with is three questions about three states.
-    """
     on_event(EngineStageChecking(listing, stage.name))
     applied = lock.parse_applied_for(stage.name, stage.applied_model)
     desired = stage.desired(ctx, listing, applied)

@@ -43,13 +43,7 @@ class ArtworkGroup:
 
 class AppliedPrintArea(BaseModel):
     """One print area as last applied: the file's content hash and the
-    variants that print it (ADR-0053).
-
-    A lockfile written before ADR-0053 also carries the ``artwork`` key each area
-    was grouped by. ``extra="ignore"`` reads it past, and since that
-    document's hash and variant ids are the ones this version computes for an
-    unchanged listing, an upgrade sends Printify nothing.
-    """
+    variants that print it (ADR-0053)."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -75,15 +69,7 @@ class AppliedProduct(BaseModel):
 
 @dataclass(frozen=True)
 class PricedVariant:
-    """One colour x size cell, and what it sells for.
-
-    A :class:`~etsy_listings.core.clients.printify.resolve.ResolvedVariant` plus a
-    price, which is the whole of what this stage needs about a variant. It
-    replaces three parallel structures that between them described exactly
-    this: ``prices`` keyed by id, ``price_labels`` keyed by id, and the full
-    ``VariantResolution``. ``price_labels`` existed only because ``prices``
-    had thrown away the colour and size the resolution was still carrying.
-    """
+    """One colour x size cell, and what it sells for."""
 
     id: int
     colour_slug: str
