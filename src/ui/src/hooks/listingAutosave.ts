@@ -13,10 +13,7 @@ export type SaveState =
   | { kind: "name-taken"; name: string }
   | { kind: "save-failed" };
 
-/** What one write came to. `saved: false` is a document the server would
- * not write -- nothing on disk changed -- carrying what to show about why:
- * the field errors, and the issues where they describe the candidate (a
- * listing template's valid-only save, template completeness) rather than something else. */
+/** `saved: false`: the server wrote nothing, and says why. */
 export type SaveOutcome =
   | { saved: true; detail: ListingDetail }
   | { saved: false; issues: Issue[] | null; field_errors: Record<string, string> };
@@ -26,14 +23,12 @@ export interface AutosaveTransport {
   document: (detail: ListingDetail) => Patch;
   describe: ((candidate: Patch) => Promise<ListingDetail>) | null;
   create: (name: string, candidate: Patch) => Promise<SaveOutcome>;
-  /** `patch` is the edits since the last save; `candidate` the whole
-   * document with them applied. A transport sends whichever it writes. */
+  /** `patch`: the edits since the last save; `candidate`: the whole document with them. */
   save: (name: string, patch: Patch, candidate: Patch) => Promise<SaveOutcome>;
   rename: (from: string, to: string) => Promise<ListingDetail>;
 }
 
 export interface AutosaveView {
-  /** The server's last response, with any not-yet-saved edits merged in. */
   detail: ListingDetail;
   save: SaveState;
 }
@@ -101,18 +96,9 @@ export class ListingAutosave {
   private view: AutosaveView;
   private listeners = new Set<() => void>();
   private name: string | null;
-  /** A name typed for a listing that is not on disk yet. It outlives a refused
-   * create, which is what lets the next edit retry it rather than asking the
-   * user to type the name again. */
   private draftName = "";
   private naming = false;
-  /** What `adopt` has shown since the last save *sent* after it. A response
-   * to a request sent earlier describes the file as it was before the server
-   * wrote these values -- an AI run's brief lands while an autosave is in
-   * flight -- so they are laid back over that response rather than blanked
-   * by it. A new object on every adopt, so a request can tell whether one
-   * happened while it was out. */
-  private adopted: Patch | null = null;
+  private adoptedSinceLastSend: Patch | null = null;
   private onNamed: ((name: string, fresh: ListingDetail) => void) | undefined = undefined;
   private readonly transport: AutosaveTransport;
   private readonly loop: WriteLoop<Patch>;
@@ -150,13 +136,9 @@ export class ListingAutosave {
     this.loop.edit(patch);
   };
 
-  /** Shows a value the server has already written -- an AI run's drafted
-   * brief (features/market-seo-20260924/spec.md, *AI runs*) -- without saving it again: local
-   * state only, nothing pending, the save state untouched. Sending it back
-   * would be a second write of the same value, and would race the seller's
-   * own next edit to that field. */
+  /** Shows a value the server has already written, without saving it again. */
   adopt = (patch: Patch) => {
-    this.adopted = mergePatch(this.adopted ?? {}, patch);
+    this.adoptedSinceLastSend = mergePatch(this.adoptedSinceLastSend ?? {}, patch);
     this.show({ detail: this.merged(patch) });
   };
 
@@ -185,11 +167,11 @@ export class ListingAutosave {
     return this.loop.afterWrite(async () => {
       const from = this.name;
       if (from === null) return;
-      const sentWith = this.adopted;
+      const adoptedWhenSent = this.adoptedSinceLastSend;
       try {
         const fresh = await this.transport.rename(from, next);
         this.name = next;
-        this.landed(fresh, sentWith);
+        this.landed(fresh, adoptedWhenSent);
         this.onNamed?.(next, fresh);
       } catch {
         this.show({ save: { kind: "name-taken", name: next } });
@@ -199,41 +181,35 @@ export class ListingAutosave {
 
   private send(patch: Patch): Promise<Settled> {
     if (this.name !== null) return this.save(this.name, patch);
-    // Named, but refused once already: every edit is another attempt at the
-    // document the server would not write, so it retries rather than settling
-    // for a description of it.
     if (this.draftName !== "") return this.createNamed(this.draftName, patch);
     return this.describe(patch);
   }
 
   private async save(name: string, patch: Patch): Promise<Settled> {
     this.show({ save: SAVING });
-    const sentWith = this.adopted;
+    const adoptedWhenSent = this.adoptedSinceLastSend;
     const outcome = await this.transport.save(name, patch, this.candidate(patch));
     if (!outcome.saved) return this.refused(outcome);
-    this.landed(outcome.detail, sentWith);
+    this.landed(outcome.detail, adoptedWhenSent);
     return WRITTEN;
   }
 
   private async createNamed(next: string, patch: Patch): Promise<Settled> {
     this.show({ save: SAVING });
-    const sentWith = this.adopted;
+    const adoptedWhenSent = this.adoptedSinceLastSend;
     const outcome = await this.transport.create(next, this.candidate(patch));
     if (!outcome.saved) return this.refused(outcome);
     this.name = next;
-    this.landed(outcome.detail, sentWith);
+    this.landed(outcome.detail, adoptedWhenSent);
     this.onNamed?.(next, outcome.detail);
     return WRITTEN;
   }
 
-  /** Not on disk and not named: describes the candidate so the issues banner
-   * stays true. Nothing is written, so the edit comes back to the loop -- it is
-   * what the create will carry once a name arrives. */
   private async describe(patch: Patch): Promise<Settled> {
     if (this.transport.describe === null) return NOT_ON_DISK;
-    const sentWith = this.adopted;
+    const adoptedWhenSent = this.adoptedSinceLastSend;
     const fresh = await this.transport.describe(this.candidate(patch));
-    this.show({ detail: this.answered(fresh, sentWith, patch) });
+    this.show({ detail: this.answered(fresh, adoptedWhenSent, patch) });
     return NOT_ON_DISK;
   }
 
@@ -241,20 +217,15 @@ export class ListingAutosave {
     return mergePatch(this.transport.document(this.view.detail), patch);
   }
 
-  /** `fresh` is on disk. Saved only when nothing is waiting: a newer edit
-   * would be hidden until its own write began. */
-  private landed(fresh: ListingDetail, sentWith: Patch | null) {
-    const detail = this.answered(fresh, sentWith);
+  private landed(fresh: ListingDetail, adoptedWhenSent: Patch | null) {
+    const detail = this.answered(fresh, adoptedWhenSent);
     this.show(this.loop.held === null ? { detail, save: saved() } : { detail });
   }
 
-  /** `fresh` laid under whatever it cannot know about. `sentWith` is `adopted`
-   * as it stood when the request was sent, and `unwritten` what that request
-   * carried if it wrote nothing. */
   private answered(
     fresh: ListingDetail,
-    sentWith: Patch | null,
-    unwritten: Patch = {},
+    adoptedWhenSent: Patch | null,
+    unwrittenPatch: Patch = {},
   ): ListingDetail {
     // A response carrying field errors describes the *empty* draft alongside
     // them (there is no listing to describe), so only the errors are news --
@@ -262,12 +233,11 @@ export class ListingAutosave {
     if (Object.keys(fresh.field_errors ?? {}).length > 0) {
       return { ...this.view.detail, field_errors: fresh.field_errors };
     }
-    // Sent after the last adopt: the response already carries what was
-    // adopted, and from here the file is the word on it.
-    if (this.adopted === sentWith) this.adopted = null;
-    // Keep edits made while a save was in flight visible, over anything
-    // adopted meanwhile: the seller's own typing wins.
-    const overlay = mergePatch(mergePatch(this.adopted ?? {}, unwritten), this.loop.held ?? {});
+    if (this.adoptedSinceLastSend === adoptedWhenSent) this.adoptedSinceLastSend = null;
+    const overlay = mergePatch(
+      mergePatch(this.adoptedSinceLastSend ?? {}, unwrittenPatch),
+      this.loop.held ?? {},
+    );
     if (Object.keys(overlay).length === 0) return fresh;
     return coerceDesign(mergePatch(fresh, overlay)) as ListingDetail;
   }
@@ -287,9 +257,6 @@ export class ListingAutosave {
     return { written: false, message: refusalMessage(outcome.field_errors) };
   }
 
-  /** A request that rejected, reported through `save` as every other outcome
-   * is. A draft being described has nothing to report: nothing was to be
-   * written, so the banner keeps what it last knew until the next edit. */
   private failed(error: unknown): string {
     if (this.name !== null) this.show({ save: { kind: "save-failed" } });
     else if (this.draftName !== "") {

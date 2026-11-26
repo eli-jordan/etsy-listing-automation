@@ -1116,7 +1116,12 @@ transport and a manual clock.
 Two owners sit on it. `ListingAutosave` (`hooks/listingAutosave.ts`, bound by
 `useAutosave`) adds the listing editor's three states, unnamed, named but not on
 disk and on disk, chosen when a write goes, so an edit made during a create or
-rename is sent under the name it settled on. A listing template uses the same
+rename is sent under the name it settled on. A value the server has already
+written, such as an AI run's drafted brief, is adopted: shown without being sent
+back, since sending it would write it twice and race the seller's next edit to
+that field. A save sent before the adopt answers with the file as it was, so the
+adopted values are laid over every response until a save sent after them answers,
+and the seller's own unsent edits win over both. A listing template uses the same
 class through its own `AutosaveTransport`. A rename runs through the loop's
 `afterWrite`: it waits for any write out, drains under the old name, and runs
 only if that wrote, with no write going out during it. `useTemplateSession` keeps
