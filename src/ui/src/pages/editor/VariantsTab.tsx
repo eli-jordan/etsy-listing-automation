@@ -67,7 +67,10 @@ export function VariantsTab({
   const [profiles, setProfiles] = useState<GarmentProfileSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [library, setLibrary] = useState<ListingDesignSummary[]>([]);
-  const [swatches, setSwatches] = useState<Record<string, string>>({});
+  const [fetchedSwatches, setFetchedSwatches] = useState<{
+    template: string;
+    hexes: Record<string, string>;
+  } | null>(null);
   const [status, setStatus] = useState("");
   const [picking, setPicking] = useState<string | null>(null);
   const phone = useIsPhone();
@@ -114,38 +117,32 @@ export function VariantsTab({
     template === null ? [] : colourNames.map((colour) => templatePicture(template, colour, scene)),
   );
 
-  // One request per colour, fired once the preview template and colour list
-  // are known -- not per row-render, so scrolling or re-toggling a switch
-  // never refetches a dot this effect has already resolved. Routed through
-  // `Promise.all` even for "no template" so `setSwatches` is always called
-  // from a `.then()`, never synchronously in the effect body.
   useEffect(() => {
+    if (template === null) return;
     let current = true;
-    const fetches =
-      template === null
-        ? []
-        : colourNames.map((colour) =>
-            getTemplateSwatch(template, colour)
-              .then((hex) => [colour, hex] as const)
-              .catch(() => null),
-          );
-    Promise.all(fetches).then((results) => {
+    const fetches = colourNames.map((colour) =>
+      getTemplateSwatch(template, colour)
+        .then((hex) => [colour, hex] as const)
+        .catch(() => null),
+    );
+    void Promise.all(fetches).then((results) => {
       if (!current) return;
-      setSwatches(Object.fromEntries(results.filter((r) => r !== null)));
+      setFetchedSwatches({
+        template,
+        hexes: Object.fromEntries(results.filter((r) => r !== null)),
+      });
     });
     return () => {
       current = false;
     };
   }, [template, colourNames]);
+  const swatches = fetchedSwatches?.template === template ? fetchedSwatches.hexes : NO_SWATCHES;
 
-  /** The one write path for `colors:`. Reports what else the edit took with
-   * it, since a bulk switch can drop a reel somebody spent a while building
-   * and the reel is on a different tab. */
+  /** Reports what else the edit took with it: a bulk switch can drop a reel
+   * somebody spent a while building, on a different tab. */
   function setColours(next: string[]) {
-    const lost = mediaLostBy(detail, next);
+    setStatus(lostMediaStatus(mediaLostBy(detail, next)));
     onUpdate(selectColours(detail, next));
-    const mediaKind = lost === 1 ? "image" : "images";
-    setStatus(lost === 0 ? "" : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`);
   }
 
   function pickOwn(colour: string, ref: string) {
@@ -161,10 +158,8 @@ export function VariantsTab({
   function pickProfile(name: string) {
     const chosen = profiles.find((p) => p.name === name);
     const colours = chosen === undefined ? [] : Object.keys(chosen.colors).sort();
-    const lost = mediaLostBy(detail, colours);
+    setStatus(lostMediaStatus(mediaLostBy(detail, colours)));
     onUpdate(selectGarmentProfile(detail, name, colours));
-    const mediaKind = lost === 1 ? "image" : "images";
-    setStatus(lost === 0 ? "" : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`);
   }
 
   function onlyShade(shade: "dark" | "light") {
@@ -337,7 +332,7 @@ export function VariantsTab({
             swatch={swatches[shown]}
             onChooseSlot={onChooseSlot}
             onPickColour={() => setPicking(shown)}
-            onAutomatic={() => onUpdate({ design: automatic(detail.design, shown) })}
+            onUseAutomatic={() => onUpdate({ design: automatic(detail.design, shown) })}
           />
         )}
         <p className="variants-preview__hint">
@@ -354,7 +349,7 @@ export function VariantsTab({
         <ArtworkPicker
           title={`Design for ${cap(picking)}`}
           hint={ownDesignHint(detail.design, picking, detail.colors, tones)}
-          tile={clothFor(picking, swatches[picking], detail.design, tones)}
+          cloth={clothFor(picking, swatches[picking], detail.design, tones)}
           current={resolvedFile(detail.design, picking, tones)}
           library={library}
           onPick={(ref) => pickOwn(picking, ref)}
@@ -391,3 +386,10 @@ function ownDesignHint(
   const what = linked ? "the design for all shirts" : toneDesign;
   return `${only} ${listNames(siblings)} keep${siblings.length === 1 ? "s" : ""} ${what}.`;
 }
+
+function lostMediaStatus(lost: number): string {
+  if (lost === 0) return "";
+  return `Removed ${lost} listing ${lost === 1 ? "image" : "images"} for colours no longer sold.`;
+}
+
+const NO_SWATCHES: Record<string, string> = {};

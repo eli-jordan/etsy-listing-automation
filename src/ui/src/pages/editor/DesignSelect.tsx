@@ -9,9 +9,7 @@ interface Props {
   onPreview: (preview: PreviewDesign) => void;
 }
 
-/** How many recent workspace designs the picker offers beside the test
- * designs. Four fills one row of the picker grid. */
-const RECENT = 4;
+const RECENT_DESIGNS_OFFERED = 4;
 
 export function DesignSelect({ preview, onPreview }: Props) {
   const [tests, setTests] = useState<DesignSummary[]>([]);
@@ -107,7 +105,7 @@ export function DesignSelect({ preview, onPreview }: Props) {
                 </button>
               );
             })}
-            {designs.slice(0, RECENT).map((d) => {
+            {designs.slice(0, RECENT_DESIGNS_OFFERED).map((d) => {
               const candidate: PreviewDesign = { kind: "design", name: d.name, file: d.file };
               return (
                 <button

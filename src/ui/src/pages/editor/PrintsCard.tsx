@@ -20,8 +20,7 @@ interface Props {
   swatch: string | undefined;
   onChooseSlot: (tone: Tone) => void;
   onPickColour: () => void;
-  /** Removes the colour's own design. */
-  onAutomatic: () => void;
+  onUseAutomatic: () => void;
 }
 
 type Resolution = ReturnType<typeof resolve>;
@@ -78,14 +77,14 @@ function PrintsActions({
   name,
   onChooseSlot,
   onPickColour,
-  onAutomatic,
+  onUseAutomatic,
 }: {
   own: boolean;
   emptySlot: Tone | null;
   name: string;
   onChooseSlot: (tone: Tone) => void;
   onPickColour: () => void;
-  onAutomatic: () => void;
+  onUseAutomatic: () => void;
 }) {
   if (own) {
     return (
@@ -96,7 +95,7 @@ function PrintsActions({
         <button
           type="button"
           className="btn-like btn-like--ghost btn-sm color-prints__btn"
-          onClick={onAutomatic}
+          onClick={onUseAutomatic}
         >
           Use automatic design
         </button>
@@ -143,7 +142,7 @@ export function PrintsCard({
   swatch,
   onChooseSlot,
   onPickColour,
-  onAutomatic,
+  onUseAutomatic,
 }: Props) {
   const name = cap(colour);
   if (!enabled) {
@@ -190,7 +189,7 @@ export function PrintsCard({
             name={name}
             onChooseSlot={onChooseSlot}
             onPickColour={onPickColour}
-            onAutomatic={onAutomatic}
+            onUseAutomatic={onUseAutomatic}
           />
         </div>
       )}

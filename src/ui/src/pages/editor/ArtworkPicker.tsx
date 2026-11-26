@@ -10,15 +10,14 @@ import type { ListingDesignSummary } from "../../types";
 interface Props {
   title: string;
   hint: string;
-  /** The cloth each thumbnail sits on. */
-  tile: string;
+  cloth: string;
   current: string | null;
   library: readonly ListingDesignSummary[];
   onPick: (ref: string) => void;
   onClose: () => void;
 }
 
-export function ArtworkPicker({ title, hint, tile, current, library, onPick, onClose }: Props) {
+export function ArtworkPicker({ title, hint, cloth, current, library, onPick, onClose }: Props) {
   const [query, setQuery] = useState("");
   const sheet = useRef<HTMLDivElement>(null);
   const phone = useIsPhone();
@@ -68,7 +67,7 @@ export function ArtworkPicker({ title, hint, tile, current, library, onPick, onC
                 }
                 onClick={() => onPick(d.file)}
               >
-                <span className="modal-design-row__thumb design-tile" style={{ background: tile }}>
+                <span className="modal-design-row__thumb design-tile" style={{ background: cloth }}>
                   <img src={listingDesignThumbnailUrl(d.name)} alt="" loading="lazy" />
                 </span>
                 <span className="design-picker__text">

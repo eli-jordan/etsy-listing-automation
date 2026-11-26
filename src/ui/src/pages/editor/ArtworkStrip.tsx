@@ -177,7 +177,7 @@ export function ArtworkStrip({
       tones: tone === null ? (["light", "dark"] as const) : [tone],
       usedBy: used,
       open: sameTarget(open, target),
-      missing: tone !== null && file === null && users[tone].length > 0,
+      neededButEmpty: tone !== null && file === null && users[tone].length > 0,
       emptyText: tone === null ? "No design selected" : `Choose the design for ${toneLabel(tone)}`,
       holding,
       uploading: uploading !== null && sameTarget(uploading.target, target) ? uploading.name : null,
@@ -323,7 +323,7 @@ export function ArtworkStrip({
         <ArtworkPicker
           title={`Design for ${targetLabel(finding)}`}
           hint={finderHint(finding, users)}
-          tile={finding.kind === "one" ? TILE.neutral : TILE[finding.tone]}
+          cloth={finding.kind === "one" ? TILE.neutral : TILE[finding.tone]}
           current={slotFile(design, finding)}
           library={library}
           onPick={(ref) => pick(finding, ref)}
@@ -374,7 +374,7 @@ function Slot({
   tones,
   usedBy,
   open,
-  missing,
+  neededButEmpty,
   emptyText,
   holding,
   uploading,
@@ -387,8 +387,7 @@ function Slot({
   tones: readonly Tone[];
   usedBy: string | null;
   open: boolean;
-  /** Empty, and a colour the listing sells needs it. */
-  missing: boolean;
+  neededButEmpty: boolean;
   emptyText: string;
   holding: boolean;
   uploading: string | null;
@@ -402,7 +401,7 @@ function Slot({
   const cls = [
     "design-row",
     "design-row--slot",
-    missing ? "design-row--missing" : "",
+    neededButEmpty ? "design-row--missing" : "",
     open ? "design-row--open" : "",
     holding ? "design-row--target" : "",
     over ? "design-row--over" : "",

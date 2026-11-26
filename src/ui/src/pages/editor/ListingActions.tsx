@@ -110,7 +110,6 @@ export function ListingActions({
         onDeleted();
         return;
       }
-      // Already written: shown, not saved again.
       adopt({ lifecycle: "deleted", status: row.status, gestures: row.gestures });
     } catch {
       setError(`Could not ${deleteLabel(detail).toLowerCase()} ${name}`);

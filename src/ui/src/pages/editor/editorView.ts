@@ -87,8 +87,7 @@ function isNumber(value: unknown): value is number {
 /** How long a refreshed page may take to grow back to where it was. */
 export const SCROLL_RESTORE_MS = 5000;
 
-/** What says the seller has taken over the scrolling themselves. */
-const SCROLL_INPUTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+const USER_SCROLL_INPUTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
 
 /**
  * The page's scroll position, remembered under `scope` and returned to on mount.
@@ -109,7 +108,7 @@ export function useViewScroll(scope: ViewScope) {
     function stopWaiting() {
       if (frame !== null) cancelAnimationFrame(frame);
       frame = null;
-      SCROLL_INPUTS.forEach((input) => window.removeEventListener(input, stopWaiting));
+      USER_SCROLL_INPUTS.forEach((input) => window.removeEventListener(input, stopWaiting));
     }
 
     function returnWhenTallEnough() {
@@ -130,7 +129,7 @@ export function useViewScroll(scope: ViewScope) {
     }
 
     if (target > 0) {
-      SCROLL_INPUTS.forEach((input) =>
+      USER_SCROLL_INPUTS.forEach((input) =>
         window.addEventListener(input, stopWaiting, { passive: true }),
       );
       frame = requestAnimationFrame(returnWhenTallEnough);
