@@ -85,8 +85,6 @@ class RenderedScene:
 
 @dataclass(frozen=True)
 class SceneFrame:
-    """A disposable editor-size image: never cached, so it has no identity."""
-
     image: Image.Image
     interactive: bool = False
     """A Marigold draft's approximate composite, not the render it predicts."""
@@ -97,8 +95,7 @@ ScenePicture = RenderedScene | SceneFrame
 
 @dataclass(frozen=True)
 class EditorCanvas:
-    """What a Photo warp frame composites over: the photo as the decoder sized
-    it, that size as a fraction of the true one, and its derived maps."""
+    """``scale`` is the decoded size as a fraction of the photo's true size."""
 
     base: RGB
     scale: float
@@ -106,8 +103,6 @@ class EditorCanvas:
 
 
 class SceneImages(Protocol):
-    """How a scene's files become arrays. A fake needs no files at all."""
-
     def photo(self, path: Path) -> RGB: ...
 
     def design(self, path: Path) -> RGBA: ...
@@ -120,9 +115,6 @@ class SceneImages(Protocol):
 
 
 class _DiskImages:
-    """Each file read as it is asked for, at full size: nothing is remembered,
-    and an editor frame is simply not downscaled."""
-
     def photo(self, path: Path) -> RGB:
         return load_template_base(path)
 
@@ -151,10 +143,6 @@ DISK_IMAGES: SceneImages = _DiskImages()
 
 @dataclass(frozen=True)
 class SceneLayers:
-    """What a saved scene paints: the colour it depicts, each layer's design,
-    and the listing's saved position (ADR-0058). A layer ``boxes`` positions
-    shows its position fit, never the template's maps (option B)."""
-
     colour: str | None
     design: LayerDesign
     boxes: LayerBoxes = field(default_factory=dict)
@@ -162,12 +150,8 @@ class SceneLayers:
 
 @dataclass(frozen=True)
 class SceneDraft:
-    """The calibrator's unsaved scene. ``geometry`` is what a Photo warp frame
-    needs, and ``document`` the whole template as drawn, which a Marigold one
-    parses: a drag may pass through a shape no ``template.yaml`` could hold,
-    and Photo warp has never had to refuse it. ``revision`` is the calibration
-    it was drawn against, ``mask_edits`` the strokes not yet saved, and
-    ``design`` resolves the one file every layer shows, and may refuse."""
+    """``document`` is the whole template as drawn: a drag may pass through
+    a shape no ``template.yaml`` could hold, which only Marigold refuses."""
 
     geometry: PreviewGeometry
     document: Mapping[str, object]
@@ -184,13 +168,6 @@ def saved_scene(
     size: SceneSize,
     images: SceneImages,
 ) -> ScenePicture:
-    """``name``'s saved scene with ``layers.design`` asked once per layer, as
-    :func:`~etsy_listings.core.application.mockup_templates.saved_preview`
-    asks it. Either renderer renders at the listing's ``boxes`` where it holds
-    a position -- Marigold with a fit of each posed quad, waiting for one being
-    fitted (option B). Refusals: :class:`TemplateMissingError`, the template
-    state's own, :class:`TemplatePhotoMissingError`,
-    :class:`PreparationRequiredError`."""
     return _saved_scene(workspace, name, layers, _Asked(size, images, remembered=False))
 
 
@@ -244,10 +221,6 @@ def _saved_scene(
 def layer_artwork(
     workspace: Workspace, name: str, layers: SceneLayers, placement: str | None
 ) -> Path | None:
-    """The file :func:`saved_scene` prints on ``placement``'s layer, for an
-    editor drawing that layer itself: ``None`` for a layer left bare, or a
-    placement the template does not have. Refusals: :class:`TemplateMissingError`
-    and the template state's own."""
     require_template(workspace, name)
     config = CalibrationStore(workspace).state(name).require()
     for depicted, layer in scene_colours(config, layers.colour):
@@ -264,9 +237,6 @@ def draft_scene(
     size: SceneSize,
     images: SceneImages,
 ) -> ScenePicture:
-    """``draft`` composited at ``size``. A Photo warp draft renders whatever it
-    draws. A Marigold one must still be drawn against the saved calibration,
-    and at full size must match the prepared inputs, with no unsaved strokes."""
     if not isinstance(draft.geometry.renderer, MarigoldRenderer):
         scene = unsaved_preview(workspace, name, draft.geometry, design=draft.design)
         return _photo_warp(workspace, scene, size, images)
@@ -282,8 +252,6 @@ def draft_scene(
 def _editor_frame(
     workspace: Workspace, name: str, draft: SceneDraft, config: AnyTemplate, images: SceneImages
 ) -> SceneFrame:
-    """The interactive composite of an unsaved draft: never cached, and
-    refused rather than prepared when its maps are not ready."""
     with _unusable_files_need_preparation(ArtifactError, PredictionError, OSError):
         image = editor_preview(
             workspace,
@@ -348,9 +316,7 @@ def _remember(workspace: Workspace, photo: Path, designs: list[Path]) -> None:
 def _full_photo_warp(
     workspace: Workspace, scene: PreviewScene, images: SceneImages, *, remembered: bool
 ) -> RenderedScene:
-    """``scene`` at full size, from the cache when every file's pixel digest
-    is still known, else composed from ``images`` and stored. The composition
-    uses the very arrays its identity was computed from."""
+    """Composes from the very arrays its identity was computed from."""
     painted = [
         (cfg, path)
         for cfg, path in zip(scene.layers, scene.designs, strict=True)
@@ -419,8 +385,7 @@ def _prepared_preview(
     require_template(workspace, name)
     store = CalibrationStore(workspace)
     artifacts = Artifacts(workspace)
-    # Capture saved geometry/masks/reference and the selected target once;
-    # lease_scene re-checks them after the images are decoded.
+    # Captured once under the lock; lease_scene re-checks them after decoding.
     with store.lock(name):
         saved = store.read(name)
         requested = config if config is not None else saved.config
@@ -479,9 +444,6 @@ def _unusable_files_need_preparation(*unusable: type[Exception]) -> Iterator[Non
 
 @dataclass(frozen=True)
 class _SceneFiles:
-    """A composition named by its files, before any is decoded: the photo,
-    each layer's design and placement, and the appearance."""
-
     photo: Path
     sources: list[tuple[Path, str | None]]
     appearance: MarigoldAppearance
@@ -497,10 +459,7 @@ def _cached(
     files: _SceneFiles,
     recall: _Recall,
 ) -> tuple[bytes, str, str] | None:
-    """The cached scene, without decoding, when every file's pixel digest is
-    still known: ``(png, identity, generation_id)``, else ``None``. The
-    identity is the one :func:`lease_scene` would compute from the decoded
-    pixels, so an entry found under it is exactly that composition."""
+    """``(png, identity, generation_id)``; the identity is the one :func:`lease_scene` computes."""
     sources = files.sources
     photo_pixels = recall.photo(files.photo)
     artwork = [recall.design(path) for path, _ in sources]
@@ -536,8 +495,6 @@ def _layer_sources(
 
 
 def _layers(sources: list[tuple[Path, str | None]]) -> list[PreparedLayer]:
-    """Each layer's decoded design with the digest the decode already
-    named it by, so composing does not hash it again."""
     decoded: dict[Path, tuple[RGBA, str]] = {}
     layers = []
     for path, placement in sources:

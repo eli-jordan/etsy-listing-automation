@@ -39,9 +39,6 @@ def gallery_scenes(workspace: Workspace, name: str) -> list[Scene]:
 
 
 def warm_scene(workspace: Workspace, name: str, template: str, colour: str | None) -> None:
-    """Compose one of ``name``'s scenes at full size into the scene cache,
-    or find it there, at the listing's saved position. Refusals are the
-    preview endpoint's."""
     listing = listing_scenes(workspace, name)
     saved_scene(
         workspace,
@@ -80,8 +77,7 @@ class SceneWarmer:
         self._thread.start()
 
     def stop(self, *, timeout: float = 10.0) -> None:
-        """Start nothing more; the scene in hand finishes or is abandoned
-        with the daemon thread when it outlasts ``timeout``."""
+        """A scene outlasting ``timeout`` is abandoned with the daemon thread."""
         with self._wake:
             self._stopping = True
             self._queued.clear()
@@ -98,8 +94,6 @@ class SceneWarmer:
             self._wake.notify_all()
 
     def wait_idle(self, *, timeout: float) -> bool:
-        """Block until every request so far is warmed. What a test waits on
-        instead of a sleep; ``False`` on timeout."""
         return self._idle.wait(timeout)
 
     def _loop(self) -> None:
@@ -122,10 +116,7 @@ class SceneWarmer:
                 self._settle()
 
     def _take(self) -> tuple[str, Ticket] | None:
-        """The next listing and its gate ticket, once one is queued and the
-        gate admits its pass; ``None`` on stopping. Only this thread takes
-        from the queue, so the listing the ticket names stays first until
-        it is taken here, under the queue's lock."""
+        """Only this thread pops the queue, so the name peeked here stays first."""
         while True:
             with self._wake:
                 self._wake.wait_for(lambda: bool(self._queued) or self._stopping)
@@ -141,7 +132,6 @@ class SceneWarmer:
             ticket.release()
 
     def _settle(self) -> None:
-        """Prune once the queue has drained, then report idle if it still has."""
         with self._wake:
             if self._queued:
                 return
