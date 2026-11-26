@@ -27,14 +27,8 @@ encrypted with it."""
 
 
 class MissingCredentialError(UserFacingError):
-    """A credential this run needs is not set anywhere.
-
-    A :class:`~etsy_listings.core.errors.UserFacingError`, because the message
-    below *is* the whole useful output -- it names the variable, the file and
-    the way to get one. Typed as anything else it reaches ``--all`` as a
-    traceback that ends the batch on its first unconfigured listing, which is
-    the outcome continue-on-error exists to prevent.
-    """
+    """A :class:`~etsy_listings.core.errors.UserFacingError` because the message is the whole useful
+    output; any other type ends an ``--all`` batch with a traceback."""
 
     def __init__(self, variable: str, env_file: Path, needed_for: str, how_to_get: str) -> None:
         self.variable = variable

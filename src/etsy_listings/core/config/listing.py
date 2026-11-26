@@ -208,25 +208,18 @@ class Listing(BaseModel):
     field's error lands on ``design`` itself (``_design_keys``)."""
     brief: str
     prices: dict[str, Money] = {}
-    """Per-size overrides on top of ``pricing_plan`` -- optional and partial.
-    A listing with no ``pricing_plan`` must cover every size it needs here,
-    exactly as before this field became optional."""
+    """Per-size overrides on top of ``pricing_plan``; without a plan they must cover every size."""
     pricing_plan: str | None = None
-    """Workspace-relative path to a ``pricing-plans/*.yaml`` file, resolved
-    the same way ``design`` is (not a bare name against a fixed directory,
-    unlike ``garment_profile``/``media[].template``) -- see docs/reference/listing-configuration.md.
-    Resolution and
-    loading are the caller's job; ``Listing`` never touches ``Workspace``."""
+    """Workspace-relative path to a ``pricing-plans/*.yaml`` file, resolved like ``design`` (see
+    docs/reference/listing-configuration.md); ``Listing`` never resolves or loads it."""
     price_overrides: dict[str, dict[str, Money]] = {}
     etsy: EtsyListingConfig = EtsyListingConfig()
     media: list[MediaEntry]
     template_positions: TemplatePositions | None = None
     """Absolute photo corners for mockups only (ADR-0058). Absent means template geometry."""
     lifecycle: Literal["retired", "deleted", "renew"] | None = None
-    """Desired end-of-life. Omitted on a working listing, including
-    after Un-retire. ``plan`` never writes this key; wrong verb is ``Blocked``,
-    never rewritten as the right one. Named ``lifecycle``, not ``status``,
-    because the listings table already has a Status column."""
+    """Desired end-of-life, omitted on a working listing. ``plan`` never writes it: a wrong verb is
+    ``Blocked``, not rewritten."""
 
     @field_validator("design")
     @classmethod
@@ -249,11 +242,7 @@ class Listing(BaseModel):
 
     @classmethod
     def empty_draft(cls, *, currency: str) -> Self:
-        """:data:`EMPTY_DRAFT` as a ``Listing``: what `+ New listing` opens on.
-
-        Answers ``Self`` rather than ``Listing`` because the UI's
-        ``ListingDetail`` *is* a ``Listing`` with display fields hung off it.
-        """
+        """:data:`EMPTY_DRAFT` as a ``Listing``: what `+ New listing` opens on."""
         return cls.model_validate(dict(EMPTY_DRAFT), context={"currency": currency})
 
     @classmethod

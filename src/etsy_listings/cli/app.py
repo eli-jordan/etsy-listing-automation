@@ -90,12 +90,9 @@ SWATCH_FALLBACK = "##"
 
 
 def _swatch_glyph() -> str | None:
-    """The block to print per colour, or ``None`` when swatches are off.
-
-    ``FORCE_COLOR`` overrides a non-terminal stdout because a cygwin pty is a
-    named pipe: native-Windows Python reports ``isatty()`` false inside one
-    even though the terminal on the other end renders colour.
-    """
+    """The block to print per colour, or ``None`` when swatches are off. ``FORCE_COLOR``
+    overrides a non-terminal stdout: inside a cygwin pty, a named pipe, native-Windows Python
+    reports ``isatty()`` false although the terminal renders colour."""
     if os.environ.get("NO_COLOR"):
         return None
     if not (os.environ.get("FORCE_COLOR") or sys.stdout.isatty()):

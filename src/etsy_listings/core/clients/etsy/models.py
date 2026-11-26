@@ -79,11 +79,8 @@ class ListingImage(BaseModel):
     rank: int | None = None
     alt_text: str | None = None
     url_570xN: str | None = None  # noqa: N815 -- Etsy's ListingImage field name
-    """A thumbnail up to 570px wide, variable height -- Etsy's own field name
-    (the API's `ListingImage` schema). What the deploy review's "On Etsy now"
-    column shows: the URL a draft or a hand-uploaded image already has,
-    with no local render to fall back on for either. Absent unless the read
-    asked for images (`include_images=True`), same as `rank`."""
+    """A thumbnail up to 570px wide, variable height: what the deploy review's "On Etsy now" column
+    shows. Absent unless the read asked for images (`include_images=True`), like `rank`."""
 
 
 class ListingVideo(BaseModel):
@@ -220,9 +217,7 @@ class MarketCandidate(BaseModel):
     num_favorers: int = 0
     views: int = 0
     original_creation_timestamp: int | None = None
-    """Epoch seconds. The listing's *first* creation -- a renewal resets
-    `creation_timestamp` but not this, and a listing's age is what turns
-    favourites and views into per-day rates. Falls back to
+    """Epoch seconds of the listing's first creation, which a renewal does not reset;
     `creation_timestamp` when Etsy leaves it out."""
     url: str | None = None
 

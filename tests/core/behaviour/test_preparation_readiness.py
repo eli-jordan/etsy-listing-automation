@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 
-from etsy_listings.core.preparation.readiness import catalog_readiness, template_readiness
+from etsy_listings.core.preparation.readiness import maps_required, template_readiness
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.template_state import template_state
 
@@ -19,7 +19,7 @@ def test_photo_warp_needs_no_preparation_and_reads_no_maps(workspace_root) -> No
     workspace.template_maps_dir("flat-lay-01").mkdir(parents=True)
     workspace.template_map_current("flat-lay-01").write_text("not a pointer")
 
-    assert catalog_readiness(config) is not None
+    assert not maps_required(config)
     readiness = template_readiness(workspace, "flat-lay-01", config)
 
     assert readiness.state == "not_required"
@@ -30,7 +30,7 @@ def test_marigold_must_be_validated_and_reports_missing_maps(workspace_root) -> 
     workspace = marigold_template(workspace_root)
     config = template_state(workspace, "shirt").require()
 
-    assert catalog_readiness(config) is None
+    assert maps_required(config)
     readiness = template_readiness(workspace, "shirt", config)
 
     assert (readiness.state, readiness.reason) == ("needs_preparation", "missing_maps")

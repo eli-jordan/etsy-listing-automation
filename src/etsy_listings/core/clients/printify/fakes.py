@@ -15,6 +15,7 @@ from etsy_listings.core.clients.printify.models import (
     ShippingRates,
     Shop,
     Upload,
+    UsdCents,
     VariantSet,
 )
 from etsy_listings.core.clients.printify.protocol import CatalogClient, PrintifyClient
@@ -222,11 +223,11 @@ class FakePrintifyClient(PrintifyClient):
     @staticmethod
     def _matrix(wanted: dict[int, int]) -> tuple[ProductVariant, ...]:
         enabled = [
-            ProductVariant(id=vid, price=price, is_enabled=True, cost=1304)
+            ProductVariant(id=vid, price=price, is_enabled=True, cost=UsdCents(1304))
             for vid, price in wanted.items()
         ]
         padding = [
-            ProductVariant(id=vid, price=1304, is_enabled=False, cost=1304)
+            ProductVariant(id=vid, price=1304, is_enabled=False, cost=UsdCents(1304))
             for vid in BLUEPRINT_MATRIX_PADDING
             if vid not in wanted
         ]

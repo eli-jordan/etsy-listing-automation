@@ -43,7 +43,6 @@ def wait_for_redirect(
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     monotonic: Any = time.monotonic,
 ) -> Callback:
-    """Serve until Etsy redirects the browser here, then answer with the code."""
     split = urlsplit(redirect_uri)
     path = split.path or "/"
     port = split.port

@@ -82,8 +82,6 @@ TemplateState = TemplateLoaded | TemplateAbsent | TemplateUnreadable | TemplateN
 
 
 def template_state(workspace: Workspace, name: str) -> TemplateState:
-    """The observer's read, which writes nothing: a transaction on disk may be
-    another process's live save, so it reads as needing repair."""
     with locks.hold(workspace, "mockup-template", name):
         if workspace.template_calibration_transaction(name).exists():
             return TemplateNeedsRepair(

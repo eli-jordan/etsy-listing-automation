@@ -21,11 +21,8 @@ without scrolling the prompt off the top."""
 
 @cache
 def prompt_toolkit_works() -> bool:
-    """Can prompt_toolkit drive this terminal at all?
-
-    Probed, not inferred: the failure depends on the console handle behind
-    stdout, which ``platform``/``isatty``/``TERM`` do not describe reliably.
-    """
+    """Probed, not inferred: the failure depends on the console handle behind stdout, which
+    ``platform``, ``isatty`` and ``TERM`` do not describe reliably."""
     try:
         from prompt_toolkit.output.defaults import (  # noqa: PLC0415 -- startup cost: loads only to probe a prompt
             create_output,
@@ -167,7 +164,6 @@ def pick[T](
     marker_hint: str = "",
     host: PromptHost | None = None,
 ) -> T:
-    """Choose one of ``options``, offered by the label ``label`` gives it."""
     by_label = {label(option): option for option in options}
     return by_label[ask_choice(message, list(by_label), marker_hint=marker_hint, host=host)]
 

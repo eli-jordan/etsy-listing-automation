@@ -5,7 +5,11 @@ Every model ignores keys it does not name: Printify adds fields without warning.
 
 from __future__ import annotations
 
+from typing import NewType
+
 from pydantic import BaseModel, ConfigDict, model_validator
+
+UsdCents = NewType("UsdCents", int)
 
 
 class Blueprint(BaseModel):
@@ -50,15 +54,9 @@ class Variant(BaseModel):
     title: str
     options: VariantOptions
     placeholders: tuple[PrintAreaPlaceholder, ...] = ()
-    """**Per variant, which is where Printify actually puts them.** The
-    variants endpoint has no top-level ``placeholders`` key; each variant
-    carries its own list. Reading the response as though it did is how every
-    profile came out with no ``front`` placeholder and ``new`` died on
-    "Available: (none)".
-
-    They are per-variant because they genuinely differ: on Comfort Colors
-    1717 / Monster Digital, ``front`` is 3461x3955 on the small sizes and
-    4200x4800 on the large ones."""
+    """Per variant, where Printify puts them: the variants endpoint has no top-level
+    ``placeholders`` key. They differ by size: on Comfort Colors 1717 / Monster Digital,
+    ``front`` is 3461x3955 on the small sizes and 4200x4800 on the large ones."""
 
 
 class VariantSet(BaseModel):
@@ -100,10 +98,8 @@ class ShippingCost(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     currency: str
-    cost: int
-    """Cents, as Printify sends it -- not a ``Money`` (that type wants a
-    workspace-currency-checked amount; this is a raw USD catalog figure a
-    caller converts, it doesn't validate against ``shop.yaml`` itself)."""
+    cost: UsdCents
+    """A raw catalog figure, not a workspace-currency ``Money``."""
 
 
 class ShippingProfile(BaseModel):
@@ -119,7 +115,7 @@ class ShippingRates(BaseModel):
 
     profiles: tuple[ShippingProfile, ...]
 
-    def first_item_cost_cents(self, variant_id: int) -> int | None:
+    def first_item_cost_cents(self, variant_id: int) -> UsdCents | None:
         for profile in self.profiles:
             if variant_id in profile.variant_ids:
                 return profile.first_item.cost
@@ -180,11 +176,9 @@ class ProductVariant(BaseModel):
     id: int
     price: int
     is_enabled: bool = False
-    cost: int = 0
-    """Printify's per-variant manufacturing cost, in minor units of USD. Read
-    only, and not part of any comparison -- it is Printify's fact, not our
-    desired state. The publish stage asserts the retail price clears it
-    (ADR-0020, amended), which is the one place it matters."""
+    cost: UsdCents = UsdCents(0)
+    """Printify's manufacturing cost; read only, never compared. The publish stage checks the retail
+    price clears it (ADR-0020)."""
     is_available: bool = True
 
 
@@ -213,9 +207,7 @@ class Product(BaseModel):
     is_locked: bool = False
     is_deleted: bool = False
     external: ProductExternal | None = None
-    """Absent from the response until a publish succeeds -- decoded as
-    optional-*missing*, not optional-null, because that is how Printify sends
-    it."""
+    """Absent until a publish succeeds: Printify omits the key rather than sending null."""
 
     @model_validator(mode="after")
     def _drop_empty_placeholders(self) -> Product:

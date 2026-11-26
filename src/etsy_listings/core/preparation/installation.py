@@ -227,10 +227,8 @@ class NativeInstaller:
         return stamps
 
     def inspect(self, target: Path, weights: Path, version: str) -> Capability:
-        """Everyday check: compare sizes and modification times against the last
-        full verification. Hashing ~7 GB of weights and starting the worker took
-        ~30 s, so that only happens again when a file has changed, or through
-        :meth:`verify` from setup and update."""
+        """Everyday check: compare sizes and modification times against the last full
+        verification, as hashing ~7 GB of weights and starting the worker takes ~30 s."""
         try:
             stamps = self._stamps(target, weights)
             record_file = target / VERIFIED_FILE

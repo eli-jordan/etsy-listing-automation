@@ -161,9 +161,6 @@ class _HeightSystem:
 
 @dataclass(frozen=True)
 class _Equations:
-    """One height solve's edge weights, right-hand side and preconditioner
-    diagonal."""
-
     edge_weight: NDArray[Any]
     rhs: NDArray[Any]
     diagonal: NDArray[Any]

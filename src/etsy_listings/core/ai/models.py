@@ -20,13 +20,8 @@ RATIONALE_ENTRIES = 7
 
 @dataclass(frozen=True)
 class ProviderTask:
-    """One complete unit of work for a provider CLI, with nothing in it that
-    says which AI feature asked.
-
-    ``prompt_text`` is already complete -- seller prose, delimited context,
-    schema and all. A repair call appends to it (`ai/repair.py`); nothing
-    else ever rewrites it.
-    """
+    """One unit of work for a provider CLI, saying nothing of which AI feature asked.
+    ``prompt_text`` is complete; only a repair call appends to it (`ai/repair.py`)."""
 
     prompt_text: str
     response_schema: Mapping[str, Any]
@@ -49,10 +44,8 @@ class SeoRequest:
     garment: GarmentContext
     design_image: Path
     market_block: str = ""
-    """`market.market_block()`'s delimited market data (features/market-seo-20260924/spec.md, *What
-    the proposal sees*), appended after the listing context. Empty when a
-    search found nothing comparable -- the one case a proposal goes ahead
-    without market data -- and then no block is sent at all."""
+    """`market.market_block()`'s delimited market data, appended after the listing context;
+    empty, and not sent, when a search found nothing comparable."""
 
 
 @dataclass(frozen=True)

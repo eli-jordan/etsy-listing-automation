@@ -1,11 +1,8 @@
-"""User-typed Cygwin paths (``--root /home/Admin/x``, ``ETSY_LISTINGS_ROOT``),
-translated for this Windows-native process.
+"""User-typed Cygwin paths (``--root /home/Admin/x``, ``ETSY_LISTINGS_ROOT``), translated for this
+Windows-native process.
 
-Translate the raw string, before ``pathlib`` sees it: on Windows
-``str(Path("/home/Admin"))`` is already ``\\home\\Admin``, which can no longer
-be told apart from a root-relative Windows path. That is why ``--root`` is a
-``str``.
-"""
+Translate the raw string: on Windows ``str(Path("/home/Admin"))`` is already ``\\home\\Admin``, a
+root-relative Windows path, which is why ``--root`` is a ``str``."""
 
 from __future__ import annotations
 

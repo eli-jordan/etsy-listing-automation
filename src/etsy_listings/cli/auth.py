@@ -74,10 +74,8 @@ def run_auth(
     if "printify" in parts:
         _printify_token(root, back)
     if "etsy" in parts:
-        # The key pair and the sign-in are one part, not two: the browser flow
-        # needs the keystring, and a `auth etsy` that captured a key pair
-        # without signing in would leave the half-configured state the whole
-        # command exists to avoid.
+        # One part, not two: the browser flow needs the keystring, and a key pair captured without a
+        # sign-in is the half-configured state this command exists to avoid.
         app_key = _etsy_app_key(root, back)
         _etsy_sign_in(app_key, store, back)
 
@@ -121,7 +119,6 @@ def _etsy_app_key(root: Path, back: Backends) -> EtsyAppKey:
 
 
 def _etsy_sign_in(app_key: EtsyAppKey, store: TokenStore, back: Backends) -> None:
-    """The browser round trip, or a reason not to make it."""
     summary = core_credentials.summarise(store.load(), now=back.now())
     if summary.present:
         typer.echo("")

@@ -424,7 +424,7 @@ def check_scene_preview(
 
 
 def _scene_layers(target: Target, template: str, colour: str | None) -> SceneLayers:
-    """What ``template``'s scene paints for the *saved* listing (A35)."""
+    """What ``template``'s scene paints for the *saved* listing."""
     try:
         listing = listing_scenes(target.workspace, target.name)
     except ConfigLoadError as exc:

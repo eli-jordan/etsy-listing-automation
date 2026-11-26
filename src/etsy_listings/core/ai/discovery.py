@@ -40,16 +40,12 @@ class ModelCatalogs(BaseModel):
 
 
 class ModelDiscovery:
-    """One process's discovery owner. Concurrent reads share a single refresh.
+    """One process's discovery owner: concurrent reads share a single refresh.
 
-    A failure is cached too, preventing repeated probes on every page read.
-    Explicit Refresh retries immediately. Last successful choices survive a
-    failure, marked with its problem; saved choices belong to settings alone.
-
-    ``host`` is where the CLIs are found and run. ``None`` is this machine,
-    read when the owner is constructed rather than bound as a default, so
-    host tests can make every server's discovery hermetic at once.
-    """
+    A failure is cached too, so page reads do not re-probe; Refresh retries at once, and the
+    last good choices survive a failure, marked with its problem. A ``host`` of ``None`` is
+    this machine, read at construction rather than bound as a default, so host tests can make
+    every server's discovery hermetic."""
 
     def __init__(
         self, *, monotonic: Callable[[], float] = time.monotonic, host: CliHost | None = None

@@ -14,19 +14,13 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 def move_listing(workspace: Workspace, old: str, new: str) -> None:
-    """Move listing ``old``, whole, to ``new``.
-
-    The directory move carries ``listing.yaml``, ``state.lock.json`` and the
-    generated copy. The caches and the proposal move beside it. Leftover
-    caches already at ``new`` belong to no listing, since ``new`` is free, so
-    they are replaced. The lockfile's ``outputs`` keys still spell the old
-    path afterwards, deliberately. Nothing reads them, the next apply makes
-    them true again, and rewriting them here would breach "only the lockfile
-    merges a lockfile".
+    """Move listing ``old``, whole, to ``new``: the directory, its caches and its proposal.
+    Caches already at ``new`` belong to no listing, so they are replaced. The lockfile's
+    ``outputs`` keys keep the old path: nothing reads them, the next apply rewrites them, and
+    only the lockfile merges a lockfile.
 
     Raises :class:`ListingMissingError`, also after waiting for the lock, and
-    :class:`ListingNameTakenError` when ``new`` is not free.
-    """
+    :class:`ListingNameTakenError` when ``new`` is not free."""
     documents = ListingDocuments(workspace)
     with documents.lock(old, new):
         if not documents.exists(old):

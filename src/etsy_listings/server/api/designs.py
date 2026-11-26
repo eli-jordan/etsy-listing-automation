@@ -37,7 +37,6 @@ from a menu while looking at a photograph."""
 
 
 def resolve_design(workspace: Workspace, design: str) -> Path:
-    """Turn an id from the library into a file on disk."""
     bundled = BUNDLED_DESIGNS.get(design)
     if bundled is not None:
         return bundled

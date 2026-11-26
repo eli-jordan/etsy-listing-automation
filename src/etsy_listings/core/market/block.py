@@ -45,7 +45,6 @@ def lead(description: str) -> str:
 
 
 def market_block(result: MarketResult) -> str:
-    """The delimited block, or ``""`` for an empty result."""
     if result.empty:
         return ""
     payload = {
