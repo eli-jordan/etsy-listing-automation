@@ -68,8 +68,9 @@ def _ask_password(source: Source) -> str:
 
 @app.command()
 def init(root: RootOption = None) -> None:
-    """Create the repository backup.repository names in settings.yaml, or,
-    when a destination already holds a backup, copy that one there and use it.
+    """Create the backup repository settings.yaml names, or adopt a destination's.
+
+    When a destination already holds a backup, copies that one there and uses it.
 
     Uses the password in the workspace .env, or asks for one and stores it
     there. Downloads the pinned restic when no other is configured."""
@@ -141,9 +142,10 @@ class _ProgressLines:
 
 @app.command()
 def run(root: RootOption = None) -> None:
-    """Back up the workspace now and apply the retention; prune and check the
-    repository once a week. For when the app is stopped: it pauses no jobs
-    in a running server."""
+    """Back up the workspace now and apply the retention.
+
+    Once a week it also prunes and checks the repository. Use it while the app
+    is stopped: it does not pause a running server's jobs."""
     workspace = open_workspace(root)
     with _reported():
         record = BackupRunner(workspace, ResticBinaries()).run(progress=_ProgressLines())

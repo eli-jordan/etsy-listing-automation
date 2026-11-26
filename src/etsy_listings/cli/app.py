@@ -28,7 +28,6 @@ from etsy_listings.core.clients.printify import (
 )
 from etsy_listings.core.config.defaults import MissingDefaultError
 from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     BACKUP_PASSWORD_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
@@ -50,21 +49,26 @@ from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.core.workspace.workspace import Workspace
 
+_ENVIRONMENT = {
+    layout.ROOT_ENV_VAR: "the workspace, as --root sets it (--root wins)",
+    PRINTIFY_TOKEN_VAR: "the Printify API token",
+    BACKUP_PASSWORD_VAR: "the backup repository's password",
+    RESTIC_BINARY_ENV_VAR: "a restic to run instead of the pinned download",
+    "NO_COLOR": "turn off the colour swatches apply prints",
+    "FORCE_COLOR": "print them when stdout is not a terminal, as in cygwin",
+}
+_NAME_WIDTH = max(map(len, _ENVIRONMENT))
+_VARIABLES = "\n".join(
+    f"  [cyan]{name.ljust(_NAME_WIDTH)}[/cyan]  {text}" for name, text in _ENVIRONMENT.items()
+)
+
 EPILOG = f"""
 [bold]Environment variables[/bold]
 
-  [cyan]{layout.ROOT_ENV_VAR}[/cyan]  workspace root, same as --root (--root wins).
-  [cyan]{PRINTIFY_TOKEN_VAR}[/cyan]  Printify token, [cyan]catalog.read[/cyan] scope.
-  [cyan]{ANTHROPIC_KEY_VAR}[/cyan]   Anthropic key for copy generation (Phase 4).
-  [cyan]{BACKUP_PASSWORD_VAR}[/cyan]  restic repository password.
-  [cyan]{RESTIC_BINARY_ENV_VAR}[/cyan]  restic to run instead of the pinned download.
-  [cyan]NO_COLOR[/cyan]            suppress the colour swatches [cyan]apply[/cyan] prints.
-  [cyan]FORCE_COLOR[/cyan]         print them even when stdout looks non-interactive
-                      (a cygwin pty is reported as a pipe, not a terminal).
+{_VARIABLES}
 
-Root paths accept cygwin, /cygdrive and native Windows forms.
-Secrets live in the [bold]workspace[/bold] .env (gitignored), never in this repo;
-the process environment overrides that file. See docs/guides/setup.md.
+Paths accept cygwin, /cygdrive and Windows forms. Secrets live in the
+workspace .env, which the process environment overrides. See docs/guides/setup.md.
 """
 
 app = typer.Typer(no_args_is_help=True, epilog=EPILOG)
@@ -74,11 +78,10 @@ app.add_typer(backup_app, name="backup")
 
 @app.callback(epilog=EPILOG)
 def _root_callback() -> None:
-    """Etsy print-on-demand listing automation.
+    """Turn print-on-demand designs into Etsy listings.
 
-    Renders mockups locally, configures the product in Printify, publishes it
-    and patches the resulting Etsy listing's copy and media. Idempotent:
-    re-running against unchanged inputs makes no remote changes.
+    Renders mockups locally, sets up each product in Printify and updates its
+    Etsy listing. Re-running on unchanged files makes no remote changes.
     """
 
 
@@ -154,11 +157,7 @@ def setup(
     root: str | None = typer.Option(
         None,
         "--root",
-        help=(
-            "Where to create the workspace. Defaults to the current directory. "
-            "Unlike every other command, this one does not need a shop.yaml to "
-            "exist there already -- it is the command that writes one."
-        ),
+        help="Where to create the workspace. Defaults to the current directory.",
         envvar=layout.ROOT_ENV_VAR,
         show_envvar=True,
         metavar="PATH",
@@ -169,22 +168,19 @@ def setup(
         typer.Option(
             "--replace-prompts",
             help=(
-                "Overwrite every prompt in prompts/ that differs from its packaged "
-                "default, keeping yours as <name>.md.bak (replacing an older .bak). "
-                "Without it, a differing prompt is kept and named in a warning."
+                "Replace each prompt in prompts/ that differs from its packaged "
+                "default, keeping yours as <name>.md.bak."
             ),
         ),
     ] = False,
 ) -> None:
-    """Initialise a workspace: directories, shop.yaml, and the Printify token.
+    """Create a workspace, or fill in what one is missing.
 
-    Safe to re-run: it fills in what is missing and leaves existing answers
-    alone -- prompts included, unless --replace-prompts asks otherwise.
-    Verifies the token against Printify before storing it, and reads the shop
-    id back from the same call rather than asking you to find one.
-
-    With Etsy credentials stored (`auth etsy`), it also looks up the Etsy shop
-    and its return policy.
+    Writes the folders and shop.yaml, and stores the Printify token once
+    Printify accepts it, taking the shop id from that answer. Safe to re-run: existing answers and
+    edited prompts are kept, and an edited prompt is named in a warning. With
+    Etsy credentials stored (`auth etsy`), it also looks up the Etsy shop and
+    its return policy.
     """
 
     target = to_native_path(root) if root else Path.cwd()
@@ -195,7 +191,6 @@ def setup(
 auth_app = typer.Typer(
     epilog=EPILOG,
     invoke_without_command=True,
-    help="Capture every credential: Printify, Etsy, and the Anthropic key.",
 )
 app.add_typer(auth_app, name="auth")
 
@@ -204,7 +199,7 @@ CheckOption = Annotated[
     bool,
     typer.Option(
         "--check",
-        help="Report what is stored and how long the Etsy consent has left. Writes nothing.",
+        help="Report what is stored and how long the Etsy sign-in has left, writing nothing.",
     ),
 ]
 
@@ -213,11 +208,7 @@ AuthRootOption = Annotated[
     str | None,
     typer.Option(
         "--root",
-        help=(
-            "Which workspace to store credentials in. Defaults to the current "
-            "directory; unlike most commands this one does not need a shop.yaml "
-            "to exist there yet."
-        ),
+        help="Which workspace to store credentials in. Defaults to the current directory.",
         envvar=layout.ROOT_ENV_VAR,
         show_envvar=True,
         metavar="PATH",
@@ -239,15 +230,12 @@ def auth(
     *,
     check: CheckOption = False,
 ) -> None:
-    """Capture every credential: Printify, Etsy, and the Anthropic key.
+    """Store and check the Printify and Etsy credentials.
 
-    Verifies each one against its own API before storing it, and signs in to
-    Etsy through the browser. Keys go to the workspace's .env, OAuth tokens to
-    .auth/, and both are gitignored before the first one is written.
-
-    Run one at a time with `auth printify`, `auth etsy` or `auth anthropic`.
-    Safe to re-run: it fills in what is missing, leaves what is present alone,
-    and is how you renew the Etsy consent before its 90 days are up.
+    Checks each one with its own API before storing it, and signs in to Etsy
+    in the browser. Keys go to the workspace .env and the Etsy sign-in to
+    .auth/, both gitignored. Safe to re-run: it fills in what is missing, and
+    renews the Etsy sign-in before it expires.
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -260,7 +248,7 @@ def auth_printify(
     *,
     check: CheckOption = False,
 ) -> None:
-    """Capture just the Printify API token, verified against the live API."""
+    """Store the Printify API token, checked with Printify."""
     _run_auth(root, ["printify"], check=check)
 
 
@@ -270,7 +258,7 @@ def auth_etsy(
     *,
     check: CheckOption = False,
 ) -> None:
-    """Capture just the Etsy app key pair and sign in through the browser."""
+    """Store the Etsy app key pair, then sign in to Etsy in the browser."""
     _run_auth(root, ["etsy"], check=check)
 
 
@@ -289,8 +277,8 @@ PublishOption = Annotated[
     typer.Option(
         "--publish",
         help=(
-            "Publish new and still-draft listings on Etsy (Etsy charges its listing fee) "
-            "instead of leaving them drafts. Paused and retired listings are never touched."
+            "Publish new and draft listings on Etsy, which charges its listing fee, "
+            "rather than leave them drafts. Paused and retired listings are never touched."
         ),
     ),
 ]
@@ -298,19 +286,19 @@ PublishOption = Annotated[
 
 @app.command(epilog=EPILOG)
 def plan(
-    listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
+    listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike."),
     *,
     all_: Annotated[
-        bool, typer.Option("--all", help="Plan every listing in the workspace")
+        bool, typer.Option("--all", help="Plan every listing in the workspace.")
     ] = False,
     publish: PublishOption = False,
     root: RootOption = None,
 ) -> None:
-    """Three-way diff against live state; decides which stages need to run.
+    """Show what apply would change, without changing anything.
 
-    Reports every action each stage would take, with the files it reads and
-    the files it writes. Reads only -- nothing is created, uploaded or
-    published.
+    Compares each listing with what was last applied and with Printify and
+    Etsy, and lists every step apply would take with the files it reads and
+    writes.
     """
     workspace = open_workspace(root)
 
@@ -333,21 +321,19 @@ def plan(
 
 @app.command(epilog=EPILOG)
 def apply(
-    listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
+    listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike."),
     *,
     all_: Annotated[
-        bool, typer.Option("--all", help="Apply every listing in the workspace")
+        bool, typer.Option("--all", help="Apply every listing in the workspace.")
     ] = False,
     publish: PublishOption = False,
     root: RootOption = None,
 ) -> None:
-    """Execute every stage the plan identified: render, create or update the
-    Printify product, publish it, and patch the resulting Etsy listing's
-    copy and media. A stage a workspace has not configured (no Printify or
-    Etsy shop id) reports itself blocked rather than running.
+    """Make the changes plan shows: render, update Printify, then Etsy.
 
-    New listings are left as Etsy drafts unless `--publish` is given; plan
-    with the same flag to see which listings it would publish."""
+    A step the workspace has not configured (no Printify or Etsy shop id) is
+    reported as blocked and skipped. New listings stay Etsy drafts unless you
+    pass --publish; `plan --publish` shows which it would publish."""
     workspace = open_workspace(root)
 
     def announce(event: EngineRunEvent) -> None:
@@ -369,15 +355,13 @@ def apply(
 
 @app.command(epilog=EPILOG)
 def unlock(
-    listing: str = typer.Argument(help="Listing name, e.g. take-a-hike"),
+    listing: str = typer.Argument(help="Listing name, e.g. take-a-hike."),
     root: RootOption = None,
 ) -> None:
-    """Clear a Printify product stuck publishing (`is_locked: true`).
+    """Clear a Printify product stuck publishing.
 
-    `publish` polls for up to ~10 minutes before giving up; this calls
-    Printify's own remedy (`publishing_failed.json`) for the product that
-    poll named. It only asks Printify to clear the lock and does not touch
-    the lockfile, so re-run `apply` afterwards.
+    Asks Printify to release the product's publish lock and changes nothing
+    else, so run `apply` again afterwards.
     """
     unlock_listing(open_workspace(root), listing, connections.printify_client)
 
@@ -407,17 +391,19 @@ def unlock_listing(
 @app.command(epilog=EPILOG)
 def new(
     design: str | None = typer.Argument(
-        None, help="Design name, matching designs/<name>.png. Omit to pick from designs/"
+        None, help="Design name, as in designs/<name>.png. Omit it to pick one."
     ),
     category: str = typer.Option(
-        "tshirt", "--category", help="Blueprint category filter, matched against title/brand/model"
+        "tshirt",
+        "--category",
+        help="Offer only Printify products whose title, brand or model contains this.",
     ),
     root: RootOption = None,
 ) -> None:
-    """Interactive design/garment/provider picker; writes garment profile (if absent) + listing.
+    """Create a listing by picking a design, a garment and a print provider.
 
-    Reads Printify's catalog, so it needs PRINTIFY_API_TOKEN with the
-    `catalog.read` scope (see the environment variables below).
+    Also writes the garment's profile when it has none. Reads Printify's
+    catalog, so it needs a Printify token with the catalog.read scope.
     """
 
     workspace = open_workspace(root)

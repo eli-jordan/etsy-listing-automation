@@ -9,7 +9,8 @@ import typer
 from etsy_listings.core.preparation.runtime import Capability, Runtime, SetupError
 
 app = typer.Typer(
-    no_args_is_help=True, help="Install and inspect the native Windows Marigold worker."
+    no_args_is_help=True,
+    help="Install and check Marigold, the Windows GPU worker that prepares templates.",
 )
 
 
@@ -28,17 +29,15 @@ def _show(report: Capability, *, as_json: bool) -> None:
         typer.echo(report.problem)
 
 
-@app.command()
-def status(
-    *,
-    json_output: Annotated[
-        bool, typer.Option("--json", help="Return the capability report as JSON.")
-    ] = False,
-) -> None:
-    """Inspect installation, pinned weights and CUDA. Never download or install.
+JsonOption = Annotated[bool, typer.Option("--json", help="Print the report as JSON.")]
 
-    Answers from the last full verification unless a file has changed since;
-    setup and update always re-verify every file."""
+
+@app.command()
+def status(*, json_output: JsonOption = False) -> None:
+    """Report whether the worker, its model weights and CUDA are ready.
+
+    Installs nothing. Uses the last full check unless a file has changed since; setup and
+    update always check every file."""
     _show(Runtime().inspect(), as_json=json_output)
 
 
@@ -57,12 +56,12 @@ def _install(*, update: bool, as_json: bool) -> None:
 
 
 @app.command()
-def setup(*, json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
-    """Explicitly install locked dependencies and verified weights, then run smoke inference."""
+def setup(*, json_output: JsonOption = False) -> None:
+    """Install the worker and its model weights, then test it."""
     _install(update=False, as_json=json_output)
 
 
 @app.command()
-def update(*, json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
-    """Verify and select the required engine, retaining previously installed versions."""
+def update(*, json_output: JsonOption = False) -> None:
+    """Install the engine version this release needs, keeping older ones."""
     _install(update=True, as_json=json_output)
