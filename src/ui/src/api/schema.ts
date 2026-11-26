@@ -3428,8 +3428,7 @@ export interface components {
     };
     /**
      * EtsyListingFacts
-     * @description One side of the review: the fields the mock shows unchanged
-     *     context for, named rather than left as an id.
+     * @description One side of the review, its section and shipping profile named rather than left as ids.
      */
     EtsyListingFacts: {
       /** Description */
@@ -3453,8 +3452,7 @@ export interface components {
     };
     /**
      * EtsyListingSnapshot
-     * @description Both sides, in full -- the ``Plan`` this stage also returns carries
-     *     only what changed.
+     * @description Both sides of the review, in full.
      */
     EtsyListingSnapshot: {
       desired: components["schemas"]["EtsyListingFacts"];
