@@ -26,9 +26,7 @@ import type { RefusedValue } from "./useSaveQueue";
 
 type Lookups = ReturnType<typeof useShopLookups>;
 type Save = (changes: ShopChanges) => Promise<SaveOutcome | null>;
-/** How a field's intent was answered: written, already held by the file,
- * refused by validation, or not known to have reached the file. */
-type Answer = "saved" | "unchanged" | "refused" | "failed";
+type Answer = "saved" | "unchanged" | "refused" | "unconfirmed";
 type CommitOptions = { unchanged?: boolean };
 type Commit = (changes: ShopChanges, options?: CommitOptions) => Promise<Answer>;
 type Refusal = (value: string) => number | null;
@@ -63,7 +61,7 @@ export function ListingDefaults({
       discard(changes);
       return Promise.resolve("unchanged");
     }
-    return save(changes).then(answerFor, (): Answer => "failed");
+    return save(changes).then(answerFor, (): Answer => "unconfirmed");
   };
 
   const choosePod = () => {
@@ -306,7 +304,7 @@ function held(shop: ShopSettings, pending: ShopChanges): ShopSettings {
 
 function answerFor(outcome: SaveOutcome | null): Answer {
   if (outcome?.kind === "saved") return "saved";
-  return outcome?.kind === "refused" ? "refused" : "failed";
+  return outcome?.kind === "refused" ? "refused" : "unconfirmed";
 }
 
 function lookupStatus(lookups: Lookups): string {
@@ -429,7 +427,7 @@ function ListField({
             type="button"
             className="sp-use"
             disabled={locked}
-            onClick={() => draft.choose(found.value, found.label)}
+            onClick={() => draft.chooseAndSend(found.value, found.label)}
           >
             Use it
           </button>
@@ -442,12 +440,9 @@ function ListField({
 type Draft = {
   shown: string;
   label: string | null;
-  /** The seller changed the select; nothing is sent yet. */
-  change: (value: string, label: string) => void;
-  /** The seller left the select: send its draft if it changes the file. */
-  leave: () => void;
-  /** A choice made and sent at once, such as Use it. */
-  choose: (value: string, label: string) => void;
+  editLocally: (value: string, label: string) => void;
+  sendOnLeave: () => void;
+  chooseAndSend: (value: string, label: string) => void;
 };
 
 function useDraft(
@@ -482,11 +477,11 @@ function useDraft(
   return {
     shown: draft?.value ?? saved,
     label: draft?.label ?? null,
-    change: edit,
-    leave: () => {
+    editLocally: edit,
+    sendOnLeave: () => {
       if (draft !== null) send(draft.value);
     },
-    choose: (value, label) => {
+    chooseAndSend: (value, label) => {
       edit(value, label);
       send(value);
     },
@@ -534,9 +529,9 @@ function DraftSelect({
       value={draft.shown}
       onChange={(e) => {
         const select = e.currentTarget;
-        draft.change(select.value, select.selectedOptions[0]?.label ?? select.value);
+        draft.editLocally(select.value, select.selectedOptions[0]?.label ?? select.value);
       }}
-      onBlur={draft.leave}
+      onBlur={draft.sendOnLeave}
     >
       {visible.map((o) => (
         <option key={o.value} value={o.value}>

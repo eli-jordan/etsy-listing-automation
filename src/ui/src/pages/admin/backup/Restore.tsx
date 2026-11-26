@@ -4,7 +4,16 @@ import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { type ReactNode, useState } from "react";
 import type { BackupSnapshot, BackupSnapshots, RestoreStatus } from "../../../api/backup";
-import { ago, bytes, joined, restoreFigures, restoreNote, samePath, when } from "./backupText";
+import {
+  ago,
+  bytes,
+  joined,
+  restoreFigures,
+  restoreNote,
+  samePath,
+  type SubmitFailure,
+  when,
+} from "./backupText";
 import type { RestoreFlow } from "./useRestore";
 import { BackupDialog } from "./BackupDialog";
 
@@ -34,8 +43,7 @@ function RestoreDialog({
   initial: string | undefined;
   now: number;
   onCancel: () => void;
-  /** Starts the restore; a refusal's message, or null once it has started. */
-  onRestore: (snapshot: string, target: string) => Promise<string | null>;
+  onRestore: (snapshot: string, target: string) => Promise<SubmitFailure>;
 }) {
   const pick = (id: string | undefined) =>
     choices.snapshots.find((s) => s.id === id) ?? choices.snapshots[0];
@@ -252,12 +260,16 @@ function Strip({ children, actions }: { children: ReactNode; actions: ReactNode 
   );
 }
 
-/** The restore in the status panel: its progress while the dialog is
- * closed, then a note once it has ended. */
+/** A restore that ended badly shows here even under its open dialog. */
+function stripShows(flow: RestoreFlow): boolean {
+  const { restore } = flow;
+  if (restore === null) return false;
+  return !flow.dialogOpen || restore.outcome === "failed" || restore.outcome === "stopped";
+}
+
 export function RestoreStrip({ flow }: { flow: RestoreFlow }) {
   const { restore } = flow;
-  if (!restore || (flow.shown && restore.outcome !== "failed" && restore.outcome !== "stopped"))
-    return null;
+  if (restore === null || !stripShows(flow)) return null;
   if (restore.outcome === "running") {
     const f = restoreFigures(restore);
     return (
@@ -316,10 +328,10 @@ export function RestoreDialogs({ flow, now }: { flow: RestoreFlow; now: number }
           onRestore={flow.start}
         />
       )}
-      {flow.shown && restore?.outcome === "running" && (
+      {flow.dialogOpen && restore?.outcome === "running" && (
         <RestoringDialog restore={restore} onHide={flow.hide} onStop={flow.stop} />
       )}
-      {flow.shown && restore?.outcome === "succeeded" && (
+      {flow.dialogOpen && restore?.outcome === "succeeded" && (
         <RestoredDialog restore={restore} onDone={() => flow.dismiss(restore)} />
       )}
     </>

@@ -15,8 +15,8 @@ export function CurrencyDialog({
   /** What the live Etsy shop sells in, when a lookup read it. */
   shopCurrency: string | null;
   onCancel: () => void;
-  /** Resolves once saved; rejects with the reason to show. */
-  onConfirm: (code: string) => Promise<void>;
+  /** The refusal to show, or null once saved. */
+  onConfirm: (code: string) => Promise<string | null>;
 }) {
   const offered = currencies.filter((c) => c.code !== current);
   const [next, setNext] = useState(offered[0]?.code ?? current);
@@ -30,10 +30,11 @@ export function CurrencyDialog({
   const confirm = async () => {
     setBusy(true);
     setError(null);
-    try {
-      await onConfirm(next);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "could not save shop.yaml");
+    const failure = await onConfirm(next).catch((reason: unknown) =>
+      reason instanceof Error ? reason.message : "could not save shop.yaml",
+    );
+    if (failure !== null) {
+      setError(failure);
       setBusy(false);
     }
   };

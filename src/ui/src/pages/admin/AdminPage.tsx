@@ -14,7 +14,14 @@ import { CurrencyDialog } from "./CurrencyDialog";
 import type { InfoState } from "./Info";
 import { ListingDefaults } from "./ListingDefaults";
 import { SettingsPanel } from "./SettingsPanel";
-import { address, BACKUP_PAGES, isSettings, type Section, SECTIONS } from "./adminSections";
+import {
+  address,
+  BACKUP_PAGES,
+  isSettings,
+  type Section,
+  SECTION_LABELS,
+  SECTIONS,
+} from "./adminSections";
 import { PhoneSections } from "./PhoneSections";
 import { usePager } from "../../phone/usePager";
 import { useIsPhone } from "../../phone/usePhone";
@@ -73,19 +80,19 @@ export function AdminPage() {
     if (!target.closest(".s-info-btn") && !target.closest(".s-info")) setOpenInfo(null);
   };
 
-  const closeCurrency = useCallback(() => {
-    setCurrencyOpen(false);
-    // The trigger is re-rendered enabled by then; focus it after the commit.
-    queueMicrotask(() => currencyButton.current?.focus());
-  }, [setCurrencyOpen]);
+  const closeCurrency = useCallback(() => setCurrencyOpen(false), [setCurrencyOpen]);
+  const currencyWasOpen = useRef(false);
+  useEffect(() => {
+    if (currencyWasOpen.current && !currencyOpen) currencyButton.current?.focus();
+    currencyWasOpen.current = currencyOpen;
+  }, [currencyOpen]);
 
   const { shop, save } = settings;
   const changeCurrency = async (code: string) => {
     const outcome = await save({ currency: code }, { retain: false });
-    if (outcome?.kind === "saved") closeCurrency();
-    else if (outcome?.kind === "refused")
-      throw new Error(outcome.fieldErrors.currency ?? outcome.message);
-    else if (outcome?.kind === "stale") closeCurrency();
+    if (outcome?.kind === "refused") return outcome.fieldErrors.currency ?? outcome.message;
+    if (outcome?.kind === "saved" || outcome?.kind === "stale") closeCurrency();
+    return null;
   };
 
   return (
@@ -261,6 +268,10 @@ function PhoneSaveToast({
   );
 }
 
+const SHOP_SECTIONS = SECTIONS.filter((id) => !isSettings(id));
+/** Backup has its own entry below these. */
+const SETTINGS_SECTIONS = SECTIONS.filter((id) => isSettings(id) && id !== "backup");
+
 function Nav({
   section,
   backupPage,
@@ -274,10 +285,6 @@ function Nav({
   const on = view.state === "on";
   const warn = view.banner !== null;
   const inBackup = section === "backup";
-  const sub: { id: Section; label: string }[] = [
-    { id: "connected", label: "Connected shops" },
-    { id: "defaults", label: "Listing defaults" },
-  ];
   return (
     <nav className="adm-sections adm-sections--described" aria-label="Admin sections">
       <a
@@ -296,7 +303,7 @@ function Nav({
           <span className="adm-sections__hint">shop.yaml</span>
         </span>
       </a>
-      <SubNav items={sub} section={section} onPick={onPick} />
+      <SubNav items={SHOP_SECTIONS} section={section} onPick={onPick} />
       <a
         href={address("ai")}
         className={`adm-sections__item${isSettings(section) ? " adm-sections__item--active" : ""}`}
@@ -313,14 +320,7 @@ function Nav({
           <span className="adm-sections__hint">settings.yaml</span>
         </span>
       </a>
-      <SubNav
-        items={[
-          { id: "ai", label: "AI" },
-          { id: "rendering", label: "Template rendering" },
-        ]}
-        section={section}
-        onPick={onPick}
-      >
+      <SubNav items={SETTINGS_SECTIONS} section={section} onPick={onPick}>
         <a
           href={address("backup")}
           className={`s-subnav__item bk-subnav-backup${inBackup && !on ? " is-active" : ""}`}
@@ -370,25 +370,25 @@ function SubNav({
   onPick,
   children,
 }: {
-  items: { id: Section; label: string }[];
+  items: readonly Section[];
   section: Section;
   onPick: (s: Section) => void;
   children?: ReactNode;
 }) {
   return (
     <div className="s-subnav">
-      {items.map((s) => (
+      {items.map((id) => (
         <a
-          key={s.id}
-          href={address(s.id)}
-          className={s.id === section ? "s-subnav__item is-active" : "s-subnav__item"}
-          aria-current={s.id === section ? "page" : undefined}
+          key={id}
+          href={address(id)}
+          className={id === section ? "s-subnav__item is-active" : "s-subnav__item"}
+          aria-current={id === section ? "page" : undefined}
           onClick={(e) => {
             e.preventDefault();
-            onPick(s.id);
+            onPick(id);
           }}
         >
-          {s.label}
+          {SECTION_LABELS[id]}
         </a>
       ))}
       {children}

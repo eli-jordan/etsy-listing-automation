@@ -24,16 +24,21 @@ const send = (revision: string, changes: SettingsChanges) =>
     outcome.kind === "saved" ? { ...outcome, revision: outcome.settings.revision } : outcome,
   );
 
-/** Which change answers a field error: the server names `settings.yaml`
- * keys, the page sends its own change names. */
-const clears = (key: string, changes: SettingsChanges) =>
-  (key.startsWith("batch_ai") && "concurrency" in changes) ||
-  (key.startsWith("ai.providers") && "providers" in changes) ||
-  (key === "ai.step_limit_minutes" && "step_limit_minutes" in changes) ||
-  (key === "ai.run_limit_minutes" && "run_limit_minutes" in changes) ||
-  (key.startsWith("market_seo") && "weights" in changes) ||
-  (key.startsWith("template_positions") && "template_positions" in changes) ||
-  (key.startsWith("backup") && Object.keys(changes).some((change) => change.startsWith("backup")));
+const CHANGE_FOR_ERROR_PREFIX: Record<string, string> = {
+  batch_ai: "concurrency",
+  "ai.providers": "providers",
+  "ai.step_limit_minutes": "step_limit_minutes",
+  "ai.run_limit_minutes": "run_limit_minutes",
+  market_seo: "weights",
+  template_positions: "template_positions",
+};
+
+const answersError = (errorKey: string, changes: SettingsChanges) =>
+  errorKey.startsWith("backup")
+    ? Object.keys(changes).some((change) => change.startsWith("backup"))
+    : Object.entries(CHANGE_FOR_ERROR_PREFIX).some(
+        ([prefix, change]) => errorKey.startsWith(prefix) && change in changes,
+      );
 
 export type RepositoryAction =
   | { kind: "create"; body: Omit<NewRepository, "revision"> }
@@ -41,8 +46,12 @@ export type RepositoryAction =
 
 export function useWorkspaceSettings() {
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
-  const queue = useSaveQueue({ send, clears, fallback: "Could not save settings.yaml" });
-  const { save: enqueue, retry: resend } = queue;
+  const queue = useSaveQueue({
+    send,
+    answersError,
+    fallbackMessage: "Could not save settings.yaml",
+  });
+  const { save: enqueue, writeOutside } = queue;
   const clear = useCallback(() => setSettings(null), []);
   const { loadedVersion, loadError, reload } = useQueuedFile({
     load: loadSettings,
@@ -52,26 +61,19 @@ export function useWorkspaceSettings() {
     fallback: "Could not read settings.yaml",
   });
 
-  // The status line reports failures; a caller has nothing to await.
-  const save = useCallback(
-    (changes: SettingsChanges) => void enqueue(changes).catch(() => undefined),
-    [enqueue],
-  );
-  const retry = useCallback(() => void resend().catch(() => undefined), [resend]);
   const confirmSave = useCallback(
     (changes: SettingsChanges) => enqueue(changes, { retain: false }),
     [enqueue],
   );
 
-  const { afterSaves, currentRevision } = queue;
   const outsideQueue = useCallback(
     (send: (revision: string) => Promise<SetUpOutcome>) =>
-      afterSaves(async () => {
-        const outcome = await send(currentRevision() ?? "");
+      writeOutside(async (revision) => {
+        const outcome = await send(revision);
         if (outcome.kind === "started") await reload();
         return outcome;
       }),
-    [afterSaves, currentRevision, reload],
+    [writeOutside, reload],
   );
   const setUp = useCallback(
     (answers: Omit<BackupSetUp, "revision">) =>
@@ -97,9 +99,9 @@ export function useWorkspaceSettings() {
     fieldErrors: queue.fieldErrors as Record<string, string>,
     loadError,
     reload,
-    save,
+    save: queue.queueSave,
     confirmSave,
-    retry,
+    retry: queue.queueRetry,
     locked: queue.locked,
   };
 }

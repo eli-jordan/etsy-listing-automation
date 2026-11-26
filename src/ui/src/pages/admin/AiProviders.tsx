@@ -272,13 +272,10 @@ function ProvidersLede() {
  * Down buttons. */
 function ReorderControl({
   label,
-  dataName,
   locked,
   drag,
 }: {
   label: string;
-  /** What a native drag carries: the provider's name. */
-  dataName: string;
   locked: boolean;
   drag: RowDrag;
 }) {
@@ -316,7 +313,7 @@ function ReorderControl({
       onDragStart={(event) => {
         drag.start();
         event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", dataName);
+        event.dataTransfer.setData("text/plain", label);
       }}
       onDragEnd={drag.end}
       onKeyDown={(event) => {
@@ -386,7 +383,7 @@ function ProviderRow({
       </button>
       <div className="b-step__body">
         <div className="b-step__top">
-          <ReorderControl label={label} dataName={p.name} locked={locked} drag={drag} />
+          <ReorderControl label={label} locked={locked} drag={drag} />
           <span className="b-step__name">{label}</span>
           <span className="b-step__spacer" />
           {!enabled && <span className="b-step__off-note">Off — runs skip it</span>}

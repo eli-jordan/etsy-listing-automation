@@ -17,7 +17,7 @@ import type { SettingsChanges } from "../../../api/workspaceSettings";
 import type { BackupsOn } from "../../../shell/backupAttention";
 import { FAST_POLL_MS, useBackupStatus } from "../../../shell/backupStatus";
 import type { RepositoryAction } from "../useWorkspaceSettings";
-import { type Answer, BackupForm } from "./BackupForm";
+import { BackupForm } from "./BackupForm";
 import {
   ChangedFilesBanner,
   History,
@@ -40,6 +40,7 @@ import {
   NEW_BACKUP,
   repairNote,
   runningLine,
+  type SubmitFailure,
   summary,
 } from "./backupText";
 import "./backup.css";
@@ -99,7 +100,7 @@ export function BackupSection({
 
   if (view.state === "off") {
     if (!creating) return <NotSetUp onStart={() => setCreating(true)} />;
-    const create = async (answers: BackupAnswers, password: string): Answer => {
+    const create = async (answers: BackupAnswers, password: string): Promise<SubmitFailure> => {
       // A destination that already holds a backup is connected, which can
       // take minutes; the status says so while the request runs.
       const polling = setInterval(() => void refresh(), FAST_POLL_MS);
@@ -129,7 +130,7 @@ export function BackupSection({
 
   if (page === "setup") {
     if (!saved) return <p role="status">Loading settings…</p>;
-    const edit = async (answers: BackupAnswers, base: BackupAnswers): Answer => {
+    const edit = async (answers: BackupAnswers, base: BackupAnswers): Promise<SubmitFailure> => {
       try {
         const answer = await save(changes(answers, base));
         if (answer === null) return RELOAD;

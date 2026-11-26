@@ -20,8 +20,8 @@ export function TemplateLimitsDialog({
   saved: LimitDraft;
   draft: LimitDraft;
   onCancel: () => void;
-  /** Resolves once saved; rejects with the reason to show. */
-  onSave: () => Promise<void>;
+  /** The refusal to show, or null once saved. */
+  onSave: () => Promise<string | null>;
 }) {
   const [impact, setImpact] = useState<Impact>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
@@ -54,10 +54,11 @@ export function TemplateLimitsDialog({
   const confirm = async () => {
     setBusy(true);
     setError(null);
-    try {
-      await onSave();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save settings.yaml");
+    const failure = await onSave().catch((reason: unknown) =>
+      reason instanceof Error ? reason.message : "Could not save settings.yaml",
+    );
+    if (failure !== null) {
+      setError(failure);
       setBusy(false);
     }
   };
@@ -145,8 +146,8 @@ function templates(count: number): string {
   return count === 1 ? "1 Marigold template" : `${count} Marigold templates`;
 }
 
-/** "a", "a and b", "a, b and c". */
+const listFormat = new Intl.ListFormat("en-GB", { type: "conjunction" });
+
 function listed(names: readonly string[]): string {
-  if (names.length < 2) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return listFormat.format(names);
 }

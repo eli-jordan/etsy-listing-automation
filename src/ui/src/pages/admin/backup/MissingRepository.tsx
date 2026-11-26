@@ -77,7 +77,11 @@ export function RepositoryDialog({
   const text = TEXT[mode];
   const [folder, setFolder] = useState(repository);
   const [source, setSource] = useState("");
-  const [password, setPassword] = useState<Password>({ pw: "", pw2: "", stored: false });
+  const [password, setPassword] = useState<Password>({
+    typed: "",
+    repeated: "",
+    savedInManager: false,
+  });
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<Refused | null>(null);
   const edit =
@@ -87,12 +91,14 @@ export function RepositoryDialog({
       setError(null);
     };
 
-  const given = passwordStored ? null : password.pw;
+  const given = passwordStored ? null : password.typed;
   let ready = folder.trim() !== "";
-  if (mode === "connect") ready &&= source.trim() !== "" && (passwordStored || password.pw !== "");
+  if (mode === "connect")
+    ready &&= source.trim() !== "" && (passwordStored || password.typed !== "");
   else
     ready &&=
-      passwordStored || (passwordProblem(password, passwordMinLength) === null && password.stored);
+      passwordStored ||
+      (passwordProblem(password, passwordMinLength) === null && password.savedInManager);
 
   const submit = async () => {
     setWorking(true);
@@ -161,8 +167,8 @@ export function RepositoryDialog({
             type="password"
             aria-label="Password"
             placeholder="The repository's password"
-            value={password.pw}
-            onChange={(e) => edit(setPassword)({ ...password, pw: e.target.value })}
+            value={password.typed}
+            onChange={(e) => edit(setPassword)({ ...password, typed: e.target.value })}
           />
         )}
       </div>

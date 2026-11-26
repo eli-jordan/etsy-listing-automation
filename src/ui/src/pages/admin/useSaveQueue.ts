@@ -17,6 +17,11 @@ export type RefusedValue<T> = { value: T; attempt: number };
 
 type Changes = Record<string, unknown>;
 
+/** The value a key's newest save carried, and why it failed. */
+type RetainedFailure = { value: unknown; message: string; refusal: number | null };
+
+const ignore = () => undefined;
+
 /**
  * `save` resolves with the outcome, `null` when a conflict skipped it, and
  * rejects when the request itself failed. A caller that reports its own
@@ -26,17 +31,15 @@ type Changes = Record<string, unknown>;
  */
 export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   send,
-  clears,
-  fallback,
+  answersError,
+  fallbackMessage,
   onSaved,
 }: {
   send: (revision: string, changes: C) => Promise<O>;
   onSaved?: (outcome: Extract<O, { kind: "saved" }>) => void;
-  /** Whether `changes` answers the error at `key`. Also called with a
-   * single-key patch to attribute a validation refusal to that change. */
-  clears: (key: string, changes: C) => boolean;
-  /** The status message for a failure that brought none. */
-  fallback: string;
+  /** Also called with a single-key patch, to attribute a refusal to that change. */
+  answersError: (errorKey: string, changes: C) => boolean;
+  fallbackMessage: string;
 }) {
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -50,25 +53,21 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   const waiting = useRef(0);
   const conflicted = useRef(false);
   const sequence = useRef(0);
-  /** The sequence of the newest save of each key. */
-  const latest = useRef(new Map<string, number>());
-  /** Keys whose newest save failed: the value it carried and why. */
-  const failed = useRef(
-    new Map<string, { value: unknown; message: string; refusal: number | null }>(),
-  );
+  const newestSaveByKey = useRef(new Map<string, number>());
+  const failedByKey = useRef(new Map<string, RetainedFailure>());
   const acknowledged = useRef(false);
 
   const settle = useCallback((remaining: number) => {
     if (conflicted.current) return;
-    const outstanding = [...failed.current.values()].pop();
+    const outstanding = [...failedByKey.current.values()].pop();
     setStatus(settledStatus(outstanding?.message, remaining, acknowledged.current));
   }, []);
 
   const reset = useCallback((loaded: string) => {
     revision.current = loaded;
     conflicted.current = false;
-    latest.current = new Map();
-    failed.current = new Map();
+    newestSaveByKey.current = new Map();
+    failedByKey.current = new Map();
     acknowledged.current = false;
     setPending({});
     setFieldErrors({});
@@ -78,7 +77,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   const afterSaves = useCallback(<T>(next: () => Promise<T>) => queue.current.then(next), []);
 
   const refusal = useCallback(<K extends keyof C & string>(field: K): RefusedValue<C[K]> | null => {
-    const held = failed.current.get(field);
+    const held = failedByKey.current.get(field);
     return held && held.refusal !== null
       ? { value: held.value as C[K], attempt: held.refusal }
       : null;
@@ -87,13 +86,13 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   const discard = useCallback(
     (changes: C) => {
       if (conflicted.current) return;
-      for (const key of Object.keys(changes)) failed.current.delete(key);
+      for (const key of Object.keys(changes)) failedByKey.current.delete(key);
       setFieldErrors((errors) =>
-        Object.fromEntries(Object.entries(errors).filter(([key]) => !clears(key, changes))),
+        Object.fromEntries(Object.entries(errors).filter(([key]) => !answersError(key, changes))),
       );
       settle(waiting.current);
     },
-    [clears, settle],
+    [answersError, settle],
   );
 
   const save = useCallback(
@@ -101,12 +100,14 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
       if (conflicted.current) return Promise.resolve(null);
       const mine = ++sequence.current;
       for (const key of Object.keys(changes)) {
-        latest.current.set(key, mine);
-        failed.current.delete(key);
+        newestSaveByKey.current.set(key, mine);
+        failedByKey.current.delete(key);
       }
       setPending((held) => ({ ...held, ...changes }));
       const answered = () => {
-        const keys = Object.keys(changes).filter((key) => latest.current.get(key) === mine);
+        const keys = Object.keys(changes).filter(
+          (key) => newestSaveByKey.current.get(key) === mine,
+        );
         setPending(
           (held) =>
             Object.fromEntries(
@@ -116,7 +117,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
       };
       const fail = (message: string, errors: FieldErrors = {}) => {
         const each = Object.entries(changes).map(([key, value]) => ({
-          current: latest.current.get(key) === mine,
+          current: newestSaveByKey.current.get(key) === mine,
           changed: { [key]: value } as C,
         }));
         if (!retain || !each.some(({ current }) => current)) {
@@ -124,18 +125,18 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
           return;
         }
         const stale = (field: string) =>
-          each.some(({ changed }) => clears(field, changed)) &&
-          !each.some(({ current, changed }) => current && clears(field, changed));
+          each.some(({ changed }) => answersError(field, changed)) &&
+          !each.some(({ current, changed }) => current && answersError(field, changed));
         setFieldErrors((held) => ({
           ...held,
           ...Object.fromEntries(Object.entries(errors).filter(([field]) => !stale(field))),
         }));
         const refusedFields = Object.keys(errors);
         for (const [key, value] of Object.entries(changes)) {
-          if (latest.current.get(key) !== mine) continue;
+          if (newestSaveByKey.current.get(key) !== mine) continue;
           const changed = { [key]: value } as C;
-          const refused = refusedFields.some((field) => clears(field, changed));
-          failed.current.set(key, { value, message, refusal: refused ? mine : null });
+          const refused = refusedFields.some((field) => answersError(field, changed));
+          failedByKey.current.set(key, { value, message, refusal: refused ? mine : null });
         }
         acknowledged.current = false;
         setStatus({ kind: "error", message });
@@ -152,7 +153,9 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
             revision.current = outcome.revision;
             adopt.current?.(outcome as Extract<O, { kind: "saved" }>);
             setFieldErrors((errors) =>
-              Object.fromEntries(Object.entries(errors).filter(([key]) => !clears(key, changes))),
+              Object.fromEntries(
+                Object.entries(errors).filter(([key]) => !answersError(key, changes)),
+              ),
             );
             if (waiting.current === 1) settle(0);
           } else if (outcome.kind === "stale") {
@@ -163,7 +166,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
           }
           return outcome;
         } catch (error) {
-          fail(error instanceof Error ? error.message : fallback);
+          fail(error instanceof Error ? error.message : fallbackMessage);
           throw error;
         } finally {
           answered();
@@ -174,16 +177,26 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
       queue.current = next.catch(() => undefined);
       return next;
     },
-    [send, clears, fallback, settle],
+    [send, answersError, fallbackMessage, settle],
   );
 
   const retry = useCallback(() => {
-    if (!failed.current.size) return Promise.resolve(null);
+    if (!failedByKey.current.size) return Promise.resolve(null);
     const changes = Object.fromEntries(
-      [...failed.current].map(([key, { value }]) => [key, value]),
+      [...failedByKey.current].map(([key, { value }]) => [key, value]),
     ) as C;
     return save(changes);
   }, [save]);
+
+  /** `status` reports what these fail with, so they never reject. */
+  const queueSave = useCallback((changes: C) => void save(changes).catch(ignore), [save]);
+  const queueRetry = useCallback(() => void retry().catch(ignore), [retry]);
+
+  /** Runs after every queued save, naming the revision they left. */
+  const writeOutside = useCallback(
+    <T>(write: (revision: string) => Promise<T>) => afterSaves(() => write(revision.current ?? "")),
+    [afterSaves],
+  );
 
   return {
     status,
@@ -194,9 +207,10 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
     refusal,
     retry,
     reset,
+    queueSave,
+    queueRetry,
     afterSaves,
-    /** The revision the next save names, for a write outside the queue. */
-    currentRevision: useCallback(() => revision.current, []),
+    writeOutside,
     locked: status.kind === "conflict",
   };
 }

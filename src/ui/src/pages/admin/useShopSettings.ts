@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import {
   getShop,
   saveShop,
@@ -20,14 +20,14 @@ const send = (revision: string, changes: ShopChanges) =>
   saveShop(revision, changes).then((outcome) =>
     outcome.kind === "saved" ? { ...outcome, revision: outcome.shop.revision } : outcome,
   );
-const clears = (field: string, changes: ShopChanges) => field in changes;
+const answersError = (field: string, changes: ShopChanges) => field in changes;
 
 export function useShopSettings() {
   const [shop, setShop] = useState<ShopSettings | null>(null);
   const queue = useSaveQueue({
     send,
-    clears,
-    fallback: "could not save shop.yaml",
+    answersError,
+    fallbackMessage: "could not save shop.yaml",
     onSaved: (outcome) => setShop(outcome.shop),
   });
   const { loadedVersion, loadError, reload } = useQueuedFile({
@@ -37,9 +37,7 @@ export function useShopSettings() {
     fallback: "could not read shop.yaml",
   });
 
-  const { save, retry: resend } = queue;
-  // The queue owns failure status, so an event handler need not catch.
-  const retry = useCallback(() => void resend().catch(() => undefined), [resend]);
+  const { save } = queue;
 
   return {
     shop,
@@ -54,7 +52,7 @@ export function useShopSettings() {
       changes: ShopChanges,
       options?: { retain?: boolean },
     ) => Promise<SaveOutcome | null>,
-    retry,
+    retry: queue.queueRetry,
     reload,
     locked: queue.locked,
   };

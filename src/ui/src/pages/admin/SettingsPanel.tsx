@@ -108,7 +108,7 @@ export function SettingsPanel({
         <TemplatePositions
           key={`positions-${state.loadedVersion}`}
           limits={settings.template_positions}
-          active={section === "rendering"}
+          shown={section === "rendering"}
           onConfirm={state.confirmSave}
         />
       </fieldset>

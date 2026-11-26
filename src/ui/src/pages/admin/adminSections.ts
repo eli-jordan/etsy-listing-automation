@@ -1,11 +1,6 @@
 import type { BackupPage } from "./backup/BackupSection";
 import type { SettingsSection } from "./SettingsPanel";
 
-/**
- * Admin's sections, in the order the desktop list shows them and the phone
- * chips run (and swipe) through them.
- */
-
 export type Section = "connected" | "defaults" | SettingsSection;
 
 export const SECTIONS: readonly Section[] = ["connected", "defaults", "ai", "rendering", "backup"];

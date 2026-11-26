@@ -12,6 +12,9 @@ import type {
 import type { BackupsOn } from "../../../shell/backupAttention";
 import { timeAgo } from "../../editor/timeAgo";
 
+/** The message a refused submit shows; null when it went through. */
+export type SubmitFailure = string | null;
+
 export const INTERVALS = [4, 6, 12, 24, 48] as const;
 
 /** What Set up and Setup edit: settings.yaml's `backup:` block. */
@@ -62,7 +65,6 @@ export function ago(iso: string, now: number): string {
   return timeAgo(Date.parse(iso), now);
 }
 
-/** "Mon 23 Nov, 09:12", in the seller's time zone. */
 export function when(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", {
     weekday: "short",
@@ -73,6 +75,9 @@ export function when(iso: string): string {
   });
 }
 
+/** Values from here up drop the tenth. */
+const WHOLE_FROM = 100;
+
 export function bytes(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -82,8 +87,7 @@ export function bytes(n: number | null | undefined): string {
     value /= 1000;
     unit += 1;
   }
-  // "16.8 MB", "41 MB", "312 MB": a tenth only while it still says something.
-  const shown = unit === 0 || value >= 100 ? Math.round(value) : Number(value.toFixed(1));
+  const shown = unit === 0 || value >= WHOLE_FROM ? Math.round(value) : Number(value.toFixed(1));
   return `${shown} ${units[unit]}`;
 }
 
@@ -225,7 +229,7 @@ export function restoreFigures(restore: RestoreStatus) {
   const count = (n: number) => n.toLocaleString("en-GB");
   return {
     pctText: `${Math.round(restore.percent * 100)}%`,
-    bytes: total == null ? "" : bytesOf(restore.bytes_done ?? 0, total),
+    bytes: total == null ? "" : bytesProgress(restore.bytes_done ?? 0, total),
     files: files == null ? "" : `${count(restore.files_done ?? 0)} of ${count(files)} files`,
     left:
       left == null
@@ -234,8 +238,7 @@ export function restoreFigures(restore: RestoreStatus) {
   };
 }
 
-/** "7.6 of 20.1 GB": the unit once when both share it, as the prototype words it. */
-function bytesOf(done: number, total: number): string {
+export function bytesProgress(done: number, total: number): string {
   const [part, whole] = [bytes(done), bytes(total)];
   const unit = whole.slice(whole.indexOf(" "));
   return part.endsWith(unit) ? `${part.slice(0, -unit.length)} of ${whole}` : `${part} of ${whole}`;
@@ -265,15 +268,14 @@ export function restoreNote(restore: RestoreStatus): string {
   return `The restore failed at ${at}: ${restore.message ?? "no reason was given"} ${left}`;
 }
 
-/** The set-up form's password, typed twice, and the saved-it checkbox. */
 export interface Password {
-  pw: string;
-  pw2: string;
-  stored: boolean;
+  typed: string;
+  repeated: string;
+  savedInManager: boolean;
 }
 
-export function passwordProblem({ pw, pw2 }: Password, minLength: number): string | null {
-  if (pw.length < minLength) return `Use at least ${minLength} characters.`;
-  if (pw !== pw2) return "The two passwords don't match.";
+export function passwordProblem({ typed, repeated }: Password, minLength: number): string | null {
+  if (typed.length < minLength) return `Use at least ${minLength} characters.`;
+  if (typed !== repeated) return "The two passwords don't match.";
   return null;
 }
